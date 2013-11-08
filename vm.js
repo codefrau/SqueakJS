@@ -83,18 +83,18 @@ Object.subclass('lib.squeak.vm.Image',
 },
 'reading', {
     readFromBuffer: function(buffer) {
-        var bytes = new Uint8Array(buffer);
-        var doSwap = false,
+        var data = new DataView(buffer),
+            littleEndian = false,
             pos = 0;
         var readInt = function() {
-            return doSwap
-                ? (bytes[pos++] + (bytes[pos++] << 8) + (bytes[pos++] << 16) + (bytes[pos++] << 24))
-                : ((bytes[pos++] << 24) + (bytes[pos++] << 16) + (bytes[pos++] << 8) + bytes[pos++]);
+            var int = data.getInt32(pos, littleEndian);
+            pos += 4;
+            return int;
         };
         // read version
         var version = readInt();
         if (version != 6502) {
-            doSwap = true; pos = 0;
+            littleEndian = true; pos = 0;
             version = readInt();
             if (version != 6502) throw "bad image version";
         }
@@ -138,17 +138,17 @@ Object.subclass('lib.squeak.vm.Image',
             }
             var baseAddr = i - 4; //0-rel byte oop of this object (base header)
             nWords--;  //length includes base header which we have already read
-            var format= ((header>>8) & 15);
-            var hash= ((header>>17) & 4095);
+            var format = ((header>>8) & 15);
+            var hash = ((header>>17) & 4095);
             
-            // Note classInt and data are just raw data; no base addr adjustment and no int conversion
-            var data = new Array(nWords);
+            // Note classInt and bits are just raw data; no base addr adjustment and no int conversion
+            var bits = new Array(nWords);
             for (var j = 0; j<nWords; j++)
-                data[j] = readInt();
+                bits[j] = readInt();
             i += nWords*4;
 
             var object = new lib.squeak.vm.Object();
-            object.initFromImage(classInt, format, hash, data);
+            object.initFromImage(classInt, format, hash, bits);
             //oopMap is from old oops to new objects
             oopMap[oldBaseAddr + baseAddr] = object;
         }

@@ -153,26 +153,14 @@ Object.subclass('lib.squeak.vm.Image',
             oopMap[oldBaseAddr + baseAddr] = object;
         }
         show("objects: "+ Object.keys(oopMap).length);
-        //temp version of spl objs needed for makeCCArray; not a good object yet
-        var splObs = oopMap[specialObjectsOopInt];
-        var ccArray = this.makeCCArray(oopMap, splObs);
-        var floatClass= oopMap[splObs.bits[this.splOb_ClassFloat]];
-        //create proper objects now
+        //create proper objects
+        var splObs         = oopMap[specialObjectsOopInt];
+        var compactClasses = oopMap[splObs.bits[this.splOb_CompactClasses]].bits;
+        var floatClass     = oopMap[splObs.bits[this.splOb_ClassFloat]];
         for (var oop in oopMap)
-            oopMap[oop].installFromImage(oopMap, ccArray, floatClass);
-        //proper version of spl objs -- it's a good object
+            oopMap[oop].installFromImage(oopMap, compactClasses, floatClass);
         this.specialObjectsArray = splObs;
      },
-    makeCCArray: function(oopMap, splObs) {
-        //Makes an array of the compact classes as oldOops (still need to be mapped)
-        var ccArrayOop = splObs.bits[this.splOb_CompactClasses];
-        var ccArrayObj = oopMap[ccArrayOop];
-        var ccArray = new Array(31);
-        for (var i = 0; i<31; i++)
-            ccArray[i] = ccArrayObj.bits[i];
-        return ccArray;
-    }
-
 });
 Object.subclass('lib.squeak.vm.Object',
 'initialization', {

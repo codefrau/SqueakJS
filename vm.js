@@ -243,16 +243,33 @@ Object.subclass('lib.squeak.vm.Object',
 'printing', {
     toString: function() {
         return Strings.format('sqObj(%s)',
-            this.sqClass.constructor == lib.squeak.vm.Object ? this.sqClassName() : this.sqClass);
+            this.sqClass.constructor == lib.squeak.vm.Object ? this.sqInstName() : this.sqClass);
+    },
+    bitsAsString: function() {
+        return this.bits.map(function(char) { return String.fromCharCode(char); }).join('');
     },
     sqClassName: function() {
         // the 7th inst var of a class holds either the name, or the non-meta class if this is a metaclass
         var nameOrNonMetaClass = this.sqClass.pointers[6];
         var isMeta = nameOrNonMetaClass.bits == undefined;
         var nameObj = isMeta ? nameOrNonMetaClass.pointers[6] : nameOrNonMetaClass;
-        var name = nameObj.bits.map(function(char) { return String.fromCharCode(char); }).join('');
+        var name = nameObj.bitsAsString();
         return isMeta ? name + " class" : name;
     }
+
+    sqInstName: function() {
+        var className = this.sqClassName();
+        if (/ /.test(className))
+            return className;
+        var inst = '';
+        switch (className) {
+            case 'ByteString':
+            case 'WideString':
+            case 'Symbol': inst = ' "'+this.bitsAsString()+'"'; break;            
+        }
+        return  (/^[aeiou]/i.test(className) ? 'an ' + className : 'a ' + className) + inst;
+    }
+
 
 });
 

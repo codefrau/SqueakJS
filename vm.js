@@ -109,6 +109,7 @@ Object.subclass('lib.squeak.vm.Image',
         var extraVMMemory = readInt();
         pos += headerSize - (9 * 4); //skip to end of header
         // read objects
+        this.objectTable = new Array();
         var oopMap = {};
         for (var i = 0; i < endOfMemory; ) {
             var nWords = 0;
@@ -149,6 +150,7 @@ Object.subclass('lib.squeak.vm.Image',
 
             var object = new lib.squeak.vm.Object();
             object.initFromImage(classInt, format, hash, bits);
+            this.registerObject(object);
             //oopMap is from old oops to new objects
             oopMap[oldBaseAddr + baseAddr] = object;
         }
@@ -160,7 +162,22 @@ Object.subclass('lib.squeak.vm.Image',
         for (var oop in oopMap)
             oopMap[oop].installFromImage(oopMap, compactClasses, floatClass);
         this.specialObjectsArray = splObs;
+        this.decorateKnownObjects();
      },
+    decorateKnownObjects: function() {
+        var splObjs = this.specialObjectsArray.pointers;
+        splObjs[this.splOb_NilObject].isNil = true;
+        splObjs[this.splOb_TrueObject].isTrue = true;
+        splObjs[this.splOb_FalseObject].isFalse = true;
+    }
+
+},
+'object table', {
+    registerObject: function(obj) {
+        this.objectTable.push(obj);
+    	this.lastHash = (13849 + (27181 * this.lastHash)) & 0xFFFFFFFF;
+        return this.lastHash & 0xFFF;
+    }
 });
 Object.subclass('lib.squeak.vm.Object',
 'initialization', {
@@ -192,11 +209,12 @@ Object.subclass('lib.squeak.vm.Object',
         if (this.format < 5) {
             //Formats 0...4 -- Pointer fields
             this.pointers = this.decodePointers(nWords, this.bits, oopMap);
-            this.bits = undefined; }
+            delete this.bits; }
         else if (this.format >= 12) {
             //Formats 12-15 -- CompiledMethods both pointers and bits
             var methodHeader = this.bits[0];
             var numLits = (methodHeader>>10) & 255;
+            this.isCompiledMethod = true;
             this.pointers = this.decodePointers(numLits+1, this.bits, oopMap); //header+lits
             this.bits = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this.format & 3); }
         else if (this.format >= 8) {
@@ -205,6 +223,7 @@ Object.subclass('lib.squeak.vm.Object',
         //Format 6 word objects are already OK (except Floats...)
         else if (this.sqClass == floatClass) {
             //Floats need two ints to be converted to double
+            this.isFloat = true;
             this.bits = this.decodeFloat(this.bits); }
     },
 

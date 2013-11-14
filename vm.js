@@ -196,7 +196,6 @@ Object.subclass('lib.squeak.vm.Object',
         var float = data.getFloat64(0, false);
         return float;
     },
-
     installFromImage: function(oopMap, ccArray, floatClass) {
         //Install this object by decoding format, and rectifying pointers
         var ccInt = this.sqClass;
@@ -226,8 +225,6 @@ Object.subclass('lib.squeak.vm.Object',
             this.isFloat = true;
             this.bits = this.decodeFloat(this.bits); }
     },
-
-
     decodePointers: function(nWords, theBits, oopMap) {
         //Convert small ints and look up object pointers in oopMap
         if (nWords == 0)
@@ -257,8 +254,6 @@ Object.subclass('lib.squeak.vm.Object',
         }
         return newBits;
     }
-
-
 },
 'printing', {
     toString: function() {
@@ -284,8 +279,6 @@ Object.subclass('lib.squeak.vm.Object',
         else
             return (index - instSize).toString();
     },
-
-
     sqInstName: function() {
         if (this.isNil) return "nil";
         if (this.isTrue) return "true";
@@ -305,8 +298,6 @@ Object.subclass('lib.squeak.vm.Object',
         }
         return  (/^[aeiou]/i.test(className) ? 'an ' + className : 'a ' + className) + inst;
     },
-
-
 },
 'as class', {
     instSize: function() {
@@ -319,15 +310,16 @@ Object.subclass('lib.squeak.vm.Object',
             return each.bitsAsString();
         });
     },
-
     allInstVarNames: function() {
         var superclass = this.superclass();
         if (superclass.isNil)
             return this.instVarNames();
         else
             return superclass.allInstVarNames().concat(this.instVarNames());
+    },
+    superclass: function() {
+        return this.pointers[0];
     }
-
 });
 
 }) // end of module

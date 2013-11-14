@@ -22,6 +22,32 @@ module('lib.squeak.vm').requires().toRun(function() {
  */
 
 Object.subclass('lib.squeak.vm.Image',
+'documentation', {
+    about: function() {
+    /*
+    Object Format
+    =============
+    Each Squeak object is a JavaScript object, only SmallIntegers are JS numbers.
+    Instance variables/fields reference other objects directly.
+    {
+        sqClass: reference to class object
+        format: format word as in Squeak oop header
+        hash: identity hash integer
+        pointers: Array referencing inst vars + indexable fields
+        bits: Array of numbers (bytes or words)
+        isNil: present and true if this is the nil object
+        isTrue: present and true if this is the true object
+        isFalse: present and true if this is the false object
+        isFloat: present and true if this is a Float object
+    }
+
+    Object Table
+    ============
+    Used for enumerating objects and GC.
+
+    */    
+    }
+},
 'initialization', {
     initialize: function() {
         // object headers

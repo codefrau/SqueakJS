@@ -230,18 +230,22 @@ Object.subclass('lib.squeak.vm.Object',
 
     decodePointers: function(nWords, theBits, oopMap) {
         //Convert small ints and look up object pointers in oopMap
+        if (nWords == 0)
+            return null;
         var ptrs = new Array(nWords);
         for (var i=0; i<nWords; i++) {
             var oldOop = theBits[i];
             if ((oldOop&1) == 1)
-                ptrs[i] = oldOop >> 1;
+                ptrs[i] = oldOop >> 1;      // SmallInteger
             else
-                ptrs[i] = oopMap[oldOop];
+                ptrs[i] = oopMap[oldOop];   // Object
         }
         return ptrs;        
     },
     decodeBytes: function(nWords, theBits, wordOffset, fmtLowBits) {
         //Adjust size for low bits and extract bytes from ints
+        if (nWords == 0)
+            return null;
         var nBytes = (nWords*4) - fmtLowBits;
         var newBits = new Array(nBytes);
         var wordIx = wordOffset;
@@ -249,10 +253,7 @@ Object.subclass('lib.squeak.vm.Object',
         for (var i=0; i<nBytes; i++) {
             if ((i&3)==0)
                 fourBytes = theBits[wordIx++];
-            var pickByte = (fourBytes>>(8*(3-(i&3))))&255;
-            if (pickByte>=128)
-                pickByte = pickByte-256;
-            newBits[i]= pickByte;
+            newBits[i]= (fourBytes>>(8*(3-(i&3))))&255;
         }
         return newBits;
     }
@@ -270,7 +271,7 @@ Object.subclass('lib.squeak.vm.Object',
     sqClassName: function() {
         // the 7th inst var of a class holds either the name, or the non-meta class if this is a metaclass
         var nameOrNonMetaClass = this.sqClass.pointers[6];
-        var isMeta = nameOrNonMetaClass.bits == undefined;
+        var isMeta = !nameOrNonMetaClass.bits;
         var nameObj = isMeta ? nameOrNonMetaClass.pointers[6] : nameOrNonMetaClass;
         var name = nameObj.bitsAsString();
         return isMeta ? name + " class" : name;

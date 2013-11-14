@@ -275,21 +275,58 @@ Object.subclass('lib.squeak.vm.Object',
         var nameObj = isMeta ? nameOrNonMetaClass.pointers[6] : nameOrNonMetaClass;
         var name = nameObj.bitsAsString();
         return isMeta ? name + " class" : name;
-    }
+    },
+    slotNameAt: function(index) {
+        // one-based index
+        var instSize = this.sqClass.instSize();
+        if (index <= instSize)
+            return this.sqClass.allInstVarNames()[index - 1];
+        else
+            return (index - instSize).toString();
+    },
+
 
     sqInstName: function() {
+        if (this.isNil) return "nil";
+        if (this.isTrue) return "true";
+        if (this.isFalse) return "false";
         var className = this.sqClassName();
         if (/ /.test(className))
-            return className;
+            return 'the ' + className;
         var inst = '';
         switch (className) {
+            case 'String':
             case 'ByteString':
             case 'WideString':
-            case 'Symbol': inst = ' "'+this.bitsAsString()+'"'; break;            
+            case 'Symbol':
+            case 'WideSymbol':
+            case 'ByteSymbol':
+                inst = ' "'+this.bitsAsString()+'"'; break;            
         }
         return  (/^[aeiou]/i.test(className) ? 'an ' + className : 'a ' + className) + inst;
-    }
+    },
 
+
+},
+'as class', {
+    instSize: function() {
+        // this is a class, answer number of named inst vars
+        var format = this.pointers[2];
+        return ((format >> 10) & 0xC0) + ((format >> 1) & 0x3F) - 1;
+    },
+    instVarNames: function() {
+        return (this.pointers[4].pointers || []).map(function(each) {
+            return each.bitsAsString();
+        });
+    },
+
+    allInstVarNames: function() {
+        var superclass = this.superclass();
+        if (superclass.isNil)
+            return this.instVarNames();
+        else
+            return superclass.allInstVarNames().concat(this.instVarNames());
+    }
 
 });
 

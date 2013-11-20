@@ -292,9 +292,9 @@ Object.subclass('lib.squeak.vm.Object',
     },
     sqClassName: function() {
         // the 7th inst var of a class holds either the name, or the non-meta class if this is a metaclass
-        var nameOrNonMetaClass = this.sqClass.pointers[6];
+        var nameOrNonMetaClass = this.sqClass.getPointer(6);
         var isMeta = !nameOrNonMetaClass.bits;
-        var nameObj = isMeta ? nameOrNonMetaClass.pointers[6] : nameOrNonMetaClass;
+        var nameObj = isMeta ? nameOrNonMetaClass.getPointer(6) : nameOrNonMetaClass;
         var name = nameObj.bitsAsString();
         return isMeta ? name + " class" : name;
     },
@@ -326,14 +326,19 @@ Object.subclass('lib.squeak.vm.Object',
         return  (/^[aeiou]/i.test(className) ? 'an ' + className : 'a ' + className) + inst;
     },
 },
+'accessing', {
+    getPointer: function(zeroBasedIndex){
+        return this.pointers[zeroBasedIndex];
+    }
+},
 'as class', {
     instSize: function() {
         // this is a class, answer number of named inst vars
-        var format = this.pointers[2];
+        var format = this.getPointer(2);
         return ((format >> 10) & 0xC0) + ((format >> 1) & 0x3F) - 1;
     },
     instVarNames: function() {
-        return (this.pointers[4].pointers || []).map(function(each) {
+        return (this.getPointer(4).pointers || []).map(function(each) {
             return each.bitsAsString();
         });
     },
@@ -345,7 +350,7 @@ Object.subclass('lib.squeak.vm.Object',
             return superclass.allInstVarNames().concat(this.instVarNames());
     },
     superclass: function() {
-        return this.pointers[0];
+        return this.getPointer(0);
     }
 });
 

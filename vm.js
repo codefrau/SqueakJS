@@ -33,12 +33,13 @@ Object.subclass('lib.squeak.vm.Image',
         sqClass: reference to class object
         format: format word as in Squeak oop header
         hash: identity hash integer
-        pointers: Array referencing inst vars + indexable fields
-        bits: Array of numbers (bytes or words)
-        isNil: present and true if this is the nil object
-        isTrue: present and true if this is the true object
-        isFalse: present and true if this is the false object
-        isFloat: present and true if this is a Float object
+        pointers: (optional) Array referencing inst vars + indexable fields
+        bits: (optional) Array of numbers (bytes or words)
+        float: (optional) float value if this is a Float object
+        isNil: (optional) true if this is the nil object
+        isTrue: (optional) true if this is the true object
+        isFalse: (optional) true if this is the false object
+        isFloat: (optional) true if this is a Float object
     }
 
     Object Table
@@ -233,7 +234,8 @@ Object.subclass('lib.squeak.vm.Object',
         var nWords= this.bits.length;
         if (this.format < 5) {
             //Formats 0...4 -- Pointer fields
-            this.pointers = this.decodePointers(nWords, this.bits, oopMap);
+            if (nWords > 0)
+                this.pointers = this.decodePointers(nWords, this.bits, oopMap);
             delete this.bits; }
         else if (this.format >= 12) {
             //Formats 12-15 -- CompiledMethods both pointers and bits
@@ -249,12 +251,11 @@ Object.subclass('lib.squeak.vm.Object',
         else if (this.sqClass == floatClass) {
             //Floats need two ints to be converted to double
             this.isFloat = true;
-            this.bits = this.decodeFloat(this.bits); }
+            this.float = this.decodeFloat(this.bits);
+            delete this.bits }
     },
     decodePointers: function(nWords, theBits, oopMap) {
         //Convert small ints and look up object pointers in oopMap
-        if (nWords == 0)
-            return null;
         var ptrs = new Array(nWords);
         for (var i=0; i<nWords; i++) {
             var oldOop = theBits[i];

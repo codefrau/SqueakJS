@@ -21,6 +21,147 @@ module('lib.squeak.vm').requires().toRun(function() {
  * THE SOFTWARE.
  */
 
+Object.subclass('lib.squeak.vm.Constants',
+'initialization', {
+    initialize: function() {
+        // object headers
+        this.HeaderTypeMask = 3;
+        this.HeaderTypeSizeAndClass = 0; //3-word header
+        this.HeaderTypeClass = 1;        //2-word header
+        this.HeaderTypeFree = 2;         //free block
+        this.HeaderTypeShort = 3;        //1-word header
+	    
+        // Indices into SpecialObjects array
+        this.splOb_NilObject = 0;
+        this.splOb_FalseObject = 1;
+        this.splOb_TrueObject = 2;
+        this.splOb_SchedulerAssociation = 3;
+        this.splOb_ClassBitmap = 4;
+        this.splOb_ClassInteger = 5;
+        this.splOb_ClassString = 6;
+        this.splOb_ClassArray = 7;
+        //this.splOb_SmalltalkDictionary = 8;  old slot 8
+        this.splOb_ClassFloat = 9;
+        this.splOb_ClassMethodContext = 10;
+        this.splOb_ClassBlockContext = 11;
+        this.splOb_ClassPoint = 12;
+        this.splOb_ClassLargePositiveInteger = 13;
+        this.splOb_TheDisplay = 14;
+        this.splOb_ClassMessage = 15;
+        this.splOb_ClassCompiledMethod = 16;
+        this.splOb_TheLowSpaceSemaphore = 17;
+        this.splOb_ClassSemaphore = 18;
+        this.splOb_ClassCharacter = 19;
+        this.splOb_SelectorDoesNotUnderstand = 20;
+        this.splOb_SelectorCannotReturn = 21;
+        this.splOb_TheInputSemaphore = 22;
+        this.splOb_SpecialSelectors = 23;
+        this.splOb_CharacterTable = 24;
+        this.splOb_SelectorMustBeBoolean = 25;
+        this.splOb_ClassByteArray = 26;
+        this.splOb_ClassProcess = 27;
+        this.splOb_CompactClasses = 28;
+        this.splOb_TheTimerSemaphore = 29;
+        this.splOb_TheInterruptSemaphore = 30;
+        this.splOb_FloatProto = 31;
+        this.splOb_SelectorCannotInterpret = 34;
+        this.splOb_MethodContextProto = 35;
+        this.splOb_BlockContextProto = 37;
+        this.splOb_ExternalObjectsArray = 38;
+        this.splOb_ClassPseudoContext = 39;
+        this.splOb_ClassTranslatedMethod = 40;
+        this.splOb_TheFinalizationSemaphore = 41;
+        this.splOb_ClassLargeNegativeInteger = 42;
+        this.splOb_ClassExternalAddress = 43;
+        this.splOb_ClassExternalStructure = 44;
+        this.splOb_ClassExternalData = 45;
+        this.splOb_ClassExternalFunction = 46;
+        this.splOb_ClassExternalLibrary = 47;
+        this.splOb_SelectorAboutToReturn = 48;
+        
+        // Class layout:
+        this.Class_superclass = 0;
+        this.Class_mdict = 1;
+        this.Class_format = 2;
+        this.Class_name = 6;
+        // Context layout:
+        this.Context_sender = 0;
+        this.Context_instructionPointer = 1;
+        this.Context_stackPointer = 2;
+        this.Context_method = 3;
+        this.Context_receiver = 5;
+        this.Context_tempFrameStart = 6;
+        this.Context_smallFrameSize = 17;
+        this.Context_largeFrameSize = 57;
+        this.BlockContext_caller = 0;
+        this.BlockContext_argumentCount = 3;
+        this.BlockContext_initialIP = 4;
+        this.BlockContext_home = 5;
+        // Stream layout:
+        this.Stream_array = 0;
+        this.Stream_position = 1;
+        this.Stream_limit = 2;
+        //ProcessorScheduler layout:
+        this.ProcSched_processLists = 0;
+        this.ProcSched_activeProcess = 1;
+        //Link layout:
+        this.Link_nextLink = 0;
+        //LinkedList layout:
+        this.LinkedList_firstLink = 0;
+        this.LinkedList_lastLink = 1;
+        //Semaphore layout:
+        this.Semaphore_excessSignals = 2;
+        //Process layout:
+        this.Proc_suspendedContext = 1;
+        this.Proc_priority = 2;
+        this.Proc_myList = 3;	
+        // Association layout:
+        this.Assn_key = 0;
+        this.Assn_value = 1;
+        // MethodDict layout:
+        this.MethodDict_array = 1;
+        this.MethodDict_selectorStart = 2;
+        // Message layout
+        this.Message_selector = 0;
+        this.Message_arguments = 1;
+        this.Message_lookupClass = 2;
+        // Point layout:
+        this.Point_x = 0;
+        this.Point_y = 1;
+        // LargetInteger layout:
+        this.LargeInteger_bytes = 0;
+        this.LargeInteger_neg = 1;
+        // BitBlt layout:
+        this.BitBlt_function = 0;
+        this.BitBlt_gray = 1;
+        this.BitBlt_destbits = 2;
+        this.BitBlt_destraster = 3;
+        this.BitBlt_destx = 4;
+        this.BitBlt_desty = 5;
+        this.BitBlt_width = 6;
+        this.BitBlt_height = 7;
+        this.BitBlt_sourcebits = 8;
+        this.BitBlt_sourceraster = 9;
+        this.BitBlt_sourcex = 10;
+        this.BitBlt_sourcey = 11;
+        this.BitBlt_clipx = 12;
+        this.BitBlt_clipy = 13;
+        this.BitBlt_clipwidth = 14;
+        this.BitBlt_clipheight = 15;
+        this.BitBlt_sourcefield = 16;
+        this.BitBlt_destfield = 17;
+        this.BitBlt_source = 18;
+        this.BitBlt_dest = 19;
+        // Form layout:
+        this.Form_bits = 0;
+        this.Form_width = 1;
+        this.Form_height = 2;
+        this.Form_depth = 3;
+    },
+});
+
+var Constants = new lib.squeak.vm.Constants();
+
 Object.subclass('lib.squeak.vm.Image',
 'documentation', {
     about: function() {
@@ -48,65 +189,6 @@ Object.subclass('lib.squeak.vm.Image',
 
     */    
     }
-},
-'initialization', {
-    initialize: function() {
-        // object headers
-    	this.HeaderTypeMask = 3;
-    	this.HeaderTypeSizeAndClass = 0; //3-word header
-    	this.HeaderTypeClass = 1;        //2-word header
-    	this.HeaderTypeFree = 2;         //free block
-	    this.HeaderTypeShort = 3;        //1-word header
-	    
-        // Indices into SpecialObjects array
-        this.splOb_NilObject = 0;
-    	this.splOb_FalseObject = 1;
-    	this.splOb_TrueObject = 2;
-    	this.splOb_SchedulerAssociation = 3;
-    	this.splOb_ClassBitmap = 4;
-    	this.splOb_ClassInteger = 5;
-    	this.splOb_ClassString = 6;
-    	this.splOb_ClassArray = 7;
-    	//this.splOb_SmalltalkDictionary = 8;  old slot 8
-    	this.splOb_ClassFloat = 9;
-    	this.splOb_ClassMethodContext = 10;
-    	this.splOb_ClassBlockContext = 11;
-    	this.splOb_ClassPoint = 12;
-    	this.splOb_ClassLargePositiveInteger = 13;
-    	this.splOb_TheDisplay = 14;
-    	this.splOb_ClassMessage = 15;
-    	this.splOb_ClassCompiledMethod = 16;
-    	this.splOb_TheLowSpaceSemaphore = 17;
-    	this.splOb_ClassSemaphore = 18;
-    	this.splOb_ClassCharacter = 19;
-    	this.splOb_SelectorDoesNotUnderstand = 20;
-    	this.splOb_SelectorCannotReturn = 21;
-    	this.splOb_TheInputSemaphore = 22;
-    	this.splOb_SpecialSelectors = 23;
-    	this.splOb_CharacterTable = 24;
-    	this.splOb_SelectorMustBeBoolean = 25;
-    	this.splOb_ClassByteArray = 26;
-    	this.splOb_ClassProcess = 27;
-    	this.splOb_CompactClasses = 28;
-    	this.splOb_TheTimerSemaphore = 29;
-    	this.splOb_TheInterruptSemaphore = 30;
-    	this.splOb_FloatProto = 31;
-    	this.splOb_SelectorCannotInterpret = 34;
-    	this.splOb_MethodContextProto = 35;
-    	this.splOb_BlockContextProto = 37;
-    	this.splOb_ExternalObjectsArray = 38;
-    	this.splOb_ClassPseudoContext = 39;
-    	this.splOb_ClassTranslatedMethod = 40;
-    	this.splOb_TheFinalizationSemaphore = 41;
-    	this.splOb_ClassLargeNegativeInteger = 42;
-    	this.splOb_ClassExternalAddress = 43;
-    	this.splOb_ClassExternalStructure = 44;
-    	this.splOb_ClassExternalData = 45;
-    	this.splOb_ClassExternalFunction = 46;
-    	this.splOb_ClassExternalLibrary = 47;
-    	this.splOb_SelectorAboutToReturn = 48;
-
-    },
 },
 'reading', {
     readFromBuffer: function(buffer) {
@@ -142,26 +224,26 @@ Object.subclass('lib.squeak.vm.Image',
             var nWords = 0;
             var classInt = 0;
             var header = readInt();
-            switch (header & this.HeaderTypeMask) {
-                case this.HeaderTypeSizeAndClass:
+            switch (header & Constants.HeaderTypeMask) {
+                case Constants.HeaderTypeSizeAndClass:
                     nWords = header >> 2;
                     classInt = readInt();
                     header = readInt();
                     i += 12;
                     break;
-                case this.HeaderTypeClass:
-                    classInt = header - this.HeaderTypeClass;
+                case Constants.HeaderTypeClass:
+                    classInt = header - Constants.HeaderTypeClass;
                     header = readInt();
                     nWords = (header >> 2) & 63;
                     i += 8;
                     break;
-                case this.HeaderTypeShort:
+                case Constants.HeaderTypeShort:
                     nWords = (header >> 2) & 63;
                     classInt = (header >> 12) & 31; //compact class index
                     //Note classInt<32 implies compact class index
                     i += 4;
                     break;
-                case this.HeaderTypeFree:
+                case Constants.HeaderTypeFree:
                     throw "Unexpected free block";
             }
             var baseAddr = i - 4; //0-rel byte oop of this object (base header)
@@ -184,8 +266,8 @@ Object.subclass('lib.squeak.vm.Image',
         show("objects: "+ Object.keys(oopMap).length);
         //create proper objects
         var splObs         = oopMap[specialObjectsOopInt];
-        var compactClasses = oopMap[splObs.bits[this.splOb_CompactClasses]].bits;
-        var floatClass     = oopMap[splObs.bits[this.splOb_ClassFloat]];
+        var compactClasses = oopMap[splObs.bits[Constants.splOb_CompactClasses]].bits;
+        var floatClass     = oopMap[splObs.bits[Constants.splOb_ClassFloat]];
         for (var oop in oopMap)
             oopMap[oop].installFromImage(oopMap, compactClasses, floatClass);
         this.specialObjectsArray = splObs;
@@ -193,9 +275,9 @@ Object.subclass('lib.squeak.vm.Image',
      },
     decorateKnownObjects: function() {
         var splObjs = this.specialObjectsArray.pointers;
-        splObjs[this.splOb_NilObject].isNil = true;
-        splObjs[this.splOb_TrueObject].isTrue = true;
-        splObjs[this.splOb_FalseObject].isFalse = true;
+        splObjs[Constants.splOb_NilObject].isNil = true;
+        splObjs[Constants.splOb_TrueObject].isTrue = true;
+        splObjs[Constants.splOb_FalseObject].isFalse = true;
     }
 
 },
@@ -206,6 +288,7 @@ Object.subclass('lib.squeak.vm.Image',
         return this.lastHash & 0xFFF;
     }
 });
+
 Object.subclass('lib.squeak.vm.Object',
 'initialization', {
     initFromImage: function(cls, fmt, hsh, data) {
@@ -292,9 +375,9 @@ Object.subclass('lib.squeak.vm.Object',
     },
     sqClassName: function() {
         // the 7th inst var of a class holds either the name, or the non-meta class if this is a metaclass
-        var nameOrNonMetaClass = this.sqClass.getPointer(6);
+        var nameOrNonMetaClass = this.sqClass.getPointer(Constants.Class_name);
         var isMeta = !nameOrNonMetaClass.bits;
-        var nameObj = isMeta ? nameOrNonMetaClass.getPointer(6) : nameOrNonMetaClass;
+        var nameObj = isMeta ? nameOrNonMetaClass.getPointer(Constants.Class_name) : nameOrNonMetaClass;
         var name = nameObj.bitsAsString();
         return isMeta ? name + " class" : name;
     },
@@ -334,7 +417,7 @@ Object.subclass('lib.squeak.vm.Object',
 'as class', {
     instSize: function() {
         // this is a class, answer number of named inst vars
-        var format = this.getPointer(2);
+        var format = this.getPointer(Constants.Class_format);
         return ((format >> 10) & 0xC0) + ((format >> 1) & 0x3F) - 1;
     },
     instVarNames: function() {

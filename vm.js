@@ -427,6 +427,9 @@ Object.subclass('lib.squeak.vm.Object',
     bitsAsString: function() {
         return this.bits.map(function(char) { return String.fromCharCode(char); }).join('');
     },
+    assnKeyAsString: function() {
+        return this.getPointer(Constants.Assn_key).bitsAsString();  
+    },
     slotNameAt: function(index) {
         // one-based index
         var instSize = this.instSize();
@@ -544,6 +547,19 @@ Object.subclass('lib.squeak.vm.Object',
     methodSetLiteral: function(zeroBasedIndex, value) {
         this.setPointer(1+zeroBasedIndex, value); // step over header
     },
+    methodEndPC: function() {
+    	// index after the last bytecode
+    	var length = this.bits.length;
+    	var flagByte = this.bits[length - 1];
+    	if (flagByte === 0) // If last byte == 0, may be either 0, 0, 0, 0 or just 0
+    		for (var i = 2; i <= 5 ; i++) 
+    		    if (this.bits[length - i] !== 0)
+    		        return length - i + 1;
+    	if (flagByte < 252) // Magic sources (tempnames encoded in last few bytes)
+    	    return length - flagByte - 1;
+    	// Normal 4-byte source pointer
+    	return length - 4;
+    }
 });
 
 Object.subclass('lib.squeak.vm.Interpreter',
@@ -747,7 +763,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
             this.interpretOne();
     },
     nextByte: function() {
-        return this.methodBytes[++this.pc] & 0xFF;
+        return this.methodBytes[this.pc++] & 0xFF;
     },
     nono: function() {
         throw "Oh No!";
@@ -857,9 +873,8 @@ Object.subclass('lib.squeak.vm.Interpreter',
                 return;  //Primitive succeeded -- end of story
         var newContext = this.allocateOrRecycleContext(newMethod.methodNeedsLargeFrame());
         var methodNumLits = this.method.methodNumLits();
-        //Our initial IP is -1, so first fetch gets bits[0]
         //The stored IP should be 1-based index of *next* instruction, offset by hdr and lits
-        var newPC = -1;
+        var newPC = 0;
     	var tempCount = newMethod.methodTempCount();
         var newSP = tempCount;
         newSP += Constants.Context_tempFrameStart - 1; //-1 for z-rel addressing
@@ -1019,11 +1034,11 @@ Object.subclass('lib.squeak.vm.Interpreter',
     },
     encodeSqueakPC: function(intPC, method) {
         // Squeak pc is offset by header and literals
-        // and 1 for z-rel addressing, and 1 for pre-increment of fetch
-        return intPC + (((method.methodNumLits()+1)*4) + 1 + 1);
+        // and 1 for z-rel addressing
+        return intPC + (((method.methodNumLits()+1)*4) + 1);
     },
     decodeSqueakPC: function(squeakPC, method) {
-        return squeakPC - (((method.methodNumLits()+1)*4) + 1 + 1);
+        return squeakPC - (((method.methodNumLits()+1)*4) + 1);
     },
     encodeSqueakSP: function(intSP) {
         // sp is offset by tempFrameStart, -1 for z-rel addressing
@@ -1241,6 +1256,220 @@ Object.subclass('lib.squeak.vm.Primitives',
             return 1.0;
         }
         return dividend / divisor;
+    }
+});
+
+Object.subclass('lib.squeak.vm.InstructionPrinter',
+'initialization', {
+    initialize: function(method, vm) {
+        this.method = method;
+        this.vm = vm;
+    },
+},
+'printing', {
+    printInstructions: function(indent, highlight, highlightPC) {
+        // all args are optional
+        this.indent = indent;           // prepend to every line except if highlighted
+        this.highlight = highlight;     // prepend to highlighted line
+        this.highlightPC = highlightPC; // PC of highlighted line
+        this.result = '';
+        this.scanner = new lib.squeak.vm.InstructionStream(this.method, this.vm);
+        this.oldPC = this.scanner.pc;
+        var end = this.method.methodEndPC();
+    	while (this.scanner.pc < end)
+        	this.scanner.interpretNextInstructionFor(this);
+        return this.result;
+    },
+    print: function(instruction) {
+        if (this.oldPC === this.highlightPC) {
+            if (this.highlight) this.result += this.highlight;
+        } else {
+            if (this.indent) this.result += this.indent;
+        }
+    	this.result += this.oldPC + " <";
+    	for (var i = this.oldPC; i < this.scanner.pc; i++) {
+    	    if (i > this.oldPC) this.result += " ";
+    		this.result += this.method.bits[i];
+    	}
+    	this.result += "> " + instruction + "\n";
+    	this.oldPC = this.scanner.pc;
+    }
+},
+'decoding', {
+    blockReturnTop: function() {
+    	this.print('blockReturn');
+    },
+    doDup: function() {
+    	this.print('dup');
+    },
+    doPop: function() {
+    	this.print('pop');
+    },
+	jump: function(offset) {
+        this.print('jumpTo: ' + (this.scanner.pc + offset));
+    },
+    jumpIf: function(condition, offset) {
+        this.print((condition ? 'jumpIfTrue: ' : 'jumpIfFalse: ') + (this.scanner.pc + offset));
+    },
+    methodReturnReceiver: function() {
+	    this.print('return: receiver');
+    },
+    methodReturnTop: function() {
+	    this.print('return: topOfStack');
+    },
+    methodReturnConstant: function(obj) {
+    	this.print('returnConst: ' + obj.toString());
+    },
+    popIntoLiteralVariable: function(anAssociation) { 
+    	this.print('popIntoBinding: ' + anAssociation.assnKeyAsString());
+    },
+    popIntoReceiverVariable: function(offset) { 
+    	this.print('popIntoInstVar: ' + offset);
+    },
+    popIntoTemporaryVariable: function(offset) { 
+    	this.print('popIntoTemp: ' + offset);
+    },
+	pushActiveContext: function() {
+	    this.print('push: thisContext');
+    },
+    pushConstant: function(obj) {
+    	this.print('pushConst: ' + obj.toString());
+    },
+    pushLiteralVariable: function(anAssociation) {
+    	this.print('pushBinding: ' + anAssociation.assnKeyAsString());
+    },
+	pushReceiver: function() {
+	    this.print('push: self');
+    },
+    pushReceiverVariable: function(offset) { 
+    	this.print('pushInstVar: ' + offset);
+    },
+	pushTemporaryVariable: function(offset) {
+	    this.print('pushTemp: ' + offset);
+    },
+    send: function(selector, numberArguments, supered) {
+    	this.print( (supered ? 'superSend: #' : 'send: #') + (selector.bitsAsString ? selector.bitsAsString() : selector));
+    },
+    storeIntoLiteralVariable: function(anAssociation) {
+    	this.print('storeIntoBinding: ' + anAssociation.assnKeyAsString());
+    },
+    storeIntoReceiverVariable: function(offset) { 
+    	this.print('storeIntoInstVar: ' + offset);
+    },
+	storeIntoTemporaryVariable: function(offset) {
+	    this.print('storeIntoTemp: ' + offset);
+    },
+});
+
+Object.subclass('lib.squeak.vm.InstructionStream',
+'initialization', {
+    initialize: function(method, vm) {
+        this.vm = vm;
+        this.method = method;
+        this.pc = 0;
+        this.specialConstants = ['true', 'false', 'nil', '-1', '0', '1', '2'];
+        this.specialSelectors = ['+', '-', '<', '>', '<=', '>=', '=', '~=', '*', '/', '\\', '@',
+            'bitShift:', '//', 'bitAnd:', 'bitOr:', 'at:', 'at:put:', 'size', 'next', 'nextPut:',
+            'atEnd', '==', 'class', 'blockCopy:', 'value', 'value:', 'do:', 'new', 'new:', 'x', 'y'];
+        this.specialSelectorsNArgs = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 0, 0, 1,
+            0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 0];
+    },
+},
+'decoding',
+{
+    interpretNextInstructionFor: function(client) {
+    	// Send to the argument, client, a message that specifies the type of the next instruction.
+    	var method = this.method;
+    	var byte = method.bits[this.pc++];
+    	var type = (byte / 16) | 0;  
+    	var offset = byte % 16;
+    	if (type === 0) return client.pushReceiverVariable(offset);
+    	if (type === 1) return client.pushTemporaryVariable(offset);
+    	if (type === 2) return client.pushConstant(method.methodGetLiteral(offset));
+    	if (type === 3) return client.pushConstant(method.methodGetLiteral(offset + 16));
+    	if (type === 4) return client.pushLiteralVariable(method.methodGetLiteral(offset));
+    	if (type === 5) return client.pushLiteralVariable(method.methodGetLiteral(offset + 16));
+    	if (type === 6)
+    		if (offset<8) return client.popIntoReceiverVariable(offset)
+    		else return client.popIntoTemporaryVariable(offset-8);
+    	if (type === 7) {
+            if (offset===0) return client.pushReceiver()
+			if (offset < 8) return client.pushConstant(this.specialConstants[offset - 1])
+			if (offset===8) return client.methodReturnReceiver();
+			if (offset < 12) return client.methodReturnConstant(this.specialConstants[offset - 9]);
+			if (offset===12) return client.methodReturnTop();
+			if (offset===13) return client.blockReturnTop();
+			if (offset > 13) throw "unusedBytecode";
+    	}
+    	if (type === 8) return this.interpretExtension(offset, method, client);
+    	if (type === 9) // short jumps
+    			if (offset<8) return client.jump(offset+1);
+    			else return client.jumpIf(false, offset-8+1);
+    	if (type === 10) {// long jumps
+    		byte = this.method.bits[this.pc++];
+			if (offset<8) return client.jump((offset-4)*256 + byte);
+			else return client.jumpIf(offset<12, (offset & 3)*256 + byte);
+    	}
+    	if (type === 11)
+            return client.send(this.specialSelectors[offset], 
+				this.specialSelectorsNArgs[offset],
+				false);
+    	if (type === 12)
+            return client.send(this.specialSelectors[offset+16], 
+				this.specialSelectorsNArgs[offset+16],
+				false);
+    	if (type > 12)
+    		return client.send(method.methodGetLiteral(offset), type-13, false);
+    },
+    interpretExtension: function(offset, method, client) {
+    	if (offset <= 6) { // Extended op codes 128-134
+    		var byte2 = this.method.bits[this.pc++];
+    		if (offset <= 2) { // 128-130:  extended pushes and pops
+    			var type = byte2 / 64 | 0;
+    			var offset2 = byte2 % 64;
+    			if (offset === 0) {
+    			    if (type === 0) return client.pushReceiverVariable(offset2);
+    				if (type === 1) return client.pushTemporaryVariable(offset2);
+    				if (type === 2) return client.pushConstant(this.method.methodGetLiteral(offset2));
+    				if (type === 3) return client.pushLiteralVariable(this.method.methodGetLiteral(offset2));
+    			}
+    			if (offset === 1) {
+    			    if (type === 0) return client.storeIntoReceiverVariable(offset2);
+    				if (type === 1) return client.storeIntoTemporaryVariable(offset2);
+    				if (type === 2) throw "illegalStore";
+    				if (type === 3) return client.storeIntoLiteralVariable(this.method.methodGetLiteral(offset2));
+    			}
+    			if (offset === 2) {
+        			if (type === 0) return client.popIntoReceiverVariable(offset2);
+    				if (type === 1) return client.popIntoTemporaryVariable(offset2);
+    				if (type === 2) throw "illegalStore";
+    				if (type === 3) return client.popIntoLiteralVariable(this.method.methodGetLiteral(offset2));
+    			}
+    		}
+    		// 131-134 (extended sends)
+    		if (offset === 3) // Single extended send
+    			return client.send(this.method.methodGetLiteral(byte2 % 32), byte2 / 32 | 0, false);
+    		if (offset === 4) { // Double extended do-anything
+    			var byte3 = this.method.bits[this.pc++];
+    			var type = byte2 / 32 | 0;
+    			if (type === 0) return client.send(this.method.methodGetLiteral(byte3), byte2 % 32, false);
+    			if (type === 1) return client.send(this.method.methodGetLiteral(byte3), byte2 % 32, true);
+    			if (type === 2) return client.pushReceiverVariable(byte3);
+    			if (type === 3) return client.pushConstant(this.method.methodGetLiteral(byte3));
+    			if (type === 4) return client.pushLiteralVariable(this.method.methodGetLiteral(byte3));
+    			if (type === 5) return client.storeIntoReceiverVariable(byte3);
+    			if (type === 6) return client.popIntoReceiverVariable(byte3);
+    			if (type === 7) return client.storeIntoLiteralVariable(this.method.methodGetLiteral(byte3));
+    		}
+    		if (offset === 5) // Single extended send to super
+    			return client.send(this.method.methodGetLiteral(byte2 % 32), byte2 % 32, true);
+    		if (offset === 6) // Second extended super send
+    			return client.send(this.method.methodGetLiteral(byte2 % 64), byte2 % 64, true);
+    	}
+    	if (offset === 7) return client.doPop();
+    	if (offset === 8) return client.doDup();
+    	if (offset === 9) return client.pushActiveContext();
+    	throw "unusedBytecode";
     }
 });
 

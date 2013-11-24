@@ -181,6 +181,7 @@ Object.subclass('lib.squeak.vm.Image',
         isTrue: (optional) true if this is the true object
         isFalse: (optional) true if this is the false object
         isFloat: (optional) true if this is a Float object
+        isFloatClass: (optional) true if this is the Float class
     }
 
     Object Table
@@ -278,6 +279,7 @@ Object.subclass('lib.squeak.vm.Image',
         splObjs[Constants.splOb_NilObject].isNil = true;
         splObjs[Constants.splOb_TrueObject].isTrue = true;
         splObjs[Constants.splOb_FalseObject].isFalse = true;
+        splObjs[Constants.splOb_ClassFloat].isFloatClass = true;
     }
 
 },
@@ -312,12 +314,11 @@ Object.subclass('lib.squeak.vm.Object',
                     this.pointers = this.fillArray(instSize + indexableSize, filler);
             } else // Words
                 if (indexableSize > 0)
-                    if (aClass !== this.floatClass)
-                        this.bits = this.fillArray(indexableSize, 0); 
-                    else {
+                    if (aClass.isFloatClass) {
                         this.isFloat = true;
                         this.float = 0.0;
-                    }
+                    } else
+                        this.bits = this.fillArray(indexableSize, 0); 
         } else // Bytes
             if (indexableSize > 0)
                 this.bits = this.fillArray(indexableSize, 0); //Methods require further init of pointers

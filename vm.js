@@ -1289,7 +1289,7 @@ Object.subclass('lib.squeak.vm.InstructionPrinter',
     	this.result += this.oldPC + " <";
     	for (var i = this.oldPC; i < this.scanner.pc; i++) {
     	    if (i > this.oldPC) this.result += " ";
-    		this.result += this.method.bits[i];
+    		this.result += (this.method.bits[i]+0x100).toString(16).substr(-2).toUpperCase(); // padded hex
     	}
     	this.result += "> " + instruction + "\n";
     	this.oldPC = this.scanner.pc;

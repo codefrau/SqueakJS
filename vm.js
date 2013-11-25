@@ -297,6 +297,12 @@ Object.subclass('lib.squeak.vm.Image',
         newObject.initInstanceOf(aClass, indexableSize, hash, filler);
         return newObject;
     },
+    clone: function(object) {
+        var newObject = new lib.squeak.vm.Object();
+        var hash = this.registerObject(newObject);
+        newObject.initAsClone(object, hash);
+        return newObject;
+    },
 });
 
 Object.subclass('lib.squeak.vm.Object',
@@ -340,6 +346,18 @@ Object.subclass('lib.squeak.vm.Object',
 //       12-15   compiled methods:
 //               # of literal oops specified in method header,
 //               followed by indexable bytes (same interpretation of low 2 bits as above)
+    },
+    initAsClone: function(original, hash) {
+        this.sqClass = original.sqClass;
+        this.hash = hash;
+        this.format = original.format;
+        if (original.isFloat) {
+            this.isFloat = original.isFloat;
+            this.float = original.float;
+        } else {
+            if (original.pointers) this.pointers = original.pointers.slice(0);   // copy
+            if (original.bits) this.bits = original.bits.slice(0);               // copy
+        }
     },
     initFromImage: function(cls, fmt, hsh, data) {
         // initial creation from Image, with unmapped data
@@ -565,13 +583,20 @@ Object.subclass('lib.squeak.vm.Object',
 
 Object.subclass('lib.squeak.vm.Interpreter',
 'initialization', {
-    initialize: function(image) {
+    initialize: function(image, display) {
         this.image = image;
         //this.image.bindVM(this);
-        this.primHandler = new lib.squeak.vm.Primitives(this);
+        this.initConstants();
+        this.primHandler = new lib.squeak.vm.Primitives(this, display);
         this.loadImageState();
         this.initVMState();
         this.loadInitialContext();
+    },
+    initConstants: function() {
+        this.minSmallInt = -0x40000000;
+        this.maxSmallInt =  0x3FFFFFFF;
+        this.nonSmallInt = -0x50000000; //non-small and neg (so non pos32 too)
+        this.millisecondClockMask = this.maxSmallInt >> 1; //keeps ms logic in small int range
     },
     loadImageState: function() {
         this.specialObjects = this.image.specialObjectsArray.pointers;
@@ -648,15 +673,15 @@ Object.subclass('lib.squeak.vm.Interpreter',
             case 104: case 105: case 106: case 107: case 108: case 109: case 110: case 111: 
                 this.homeContext.setPointer(Constants.Context_tempFrameStart+(b&7), this.pop()); break;
 
-            // Quick push constant
+            // Quick push
             case 112: this.push(this.receiver); break;
             case 113: this.push(this.trueObj); break;
             case 114: this.push(this.falseObj); break;
             case 115: this.push(this.nilObj); break;
-            case 116: this.push(this.smallFromInt(-1)); break;
-            case 117: this.push(this.smallFromInt(0)); break;
-            case 118: this.push(this.smallFromInt(1)); break;
-            case 119: this.push(this.smallFromInt(2)); break;
+            case 116: this.push(-1); break;
+            case 117: this.push(0); break;
+            case 118: this.push(1); break;
+            case 119: this.push(2); break;
 
             // Quick return
             case 120: this.doReturn(this.receiver, this.homeContext.getPointer(Constants.Context_sender)); break;
@@ -731,7 +756,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
             case 186: this.success = true;
                 if(!this.pop2AndPushIntResult(this.mod(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); break;  // MOD \\
             case 187: this.success = true;
-                if(!this.primHandler.primitiveMakePoint()) this.sendSpecial(b&0xF); break;  // MakePt int@int
+                if(!this.primHandler.primitiveMakePoint(1)) this.sendSpecial(b&0xF); break;  // MakePt int@int
             case 188: this.success = true;
                 if(!this.pop2AndPushIntResult(this.safeShift(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); break; // bitShift:
             case 189: this.success = true;
@@ -804,6 +829,11 @@ Object.subclass('lib.squeak.vm.Interpreter',
         this.push(top); //Uh-oh it's not even a boolean (that we know of ;-).  Restore stack...
         this.send(this.specialObjects[Constants.splOb_SelectorMustBeBoolean], 1, false);
     },
+    sendSpecial: function(lobits) {
+        this.send(this.specialSelectors[lobits*2],
+            this.specialSelectors[(lobits*2)+1],
+            false);  //specialSelectors is  {...sel,nArgs,sel,nArgs,...)
+    },
     send: function(selector, argCount, doSuper) {
         var newRcvr = this.stackValue(argCount);
         var lookupClass = this.getClass(newRcvr);
@@ -842,6 +872,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
     	var dnuSel = this.specialObjects[Constants.splOb_SelectorDoesNotUnderstand];
         if (selector === dnuSel) // Cannot find #doesNotUnderstand: -- unrecoverable error.
 	    	throw "Recursive not understood error encountered";
+	    debugger;
     	var dnuMsg = this.createActualMessage(selector, argCount, startingClass); //The argument to doesNotUnderstand:
     	this.popNandPush(argCount, dnuMsg);
         return this.findSelectorInClass(dnuSel, 1, startingClass);
@@ -1141,8 +1172,9 @@ Object.subclass('lib.squeak.vm.Interpreter',
 
 Object.subclass('lib.squeak.vm.Primitives',
 'initialization', {
-    initialize: function(vm) {
+    initialize: function(vm, display) {
         this.vm = vm;
+        this.theDisplay = display;
     }
 },
 'dispatch', {
@@ -1152,7 +1184,7 @@ Object.subclass('lib.squeak.vm.Primitives',
         switch (lobits) {
             //case 0x0: // at:
             //case 0x1: // at:put:
-            //case 0x2: // size
+            case 0x2: return this.primitiveSize(0); // size
             //case 0x3: // next
             //case 0x4: // nextPut:
             //case 0x5: // atEnd
@@ -1160,18 +1192,18 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 0x7: return this.popNandPushIfOK(1,this.vm.getClass(this.vm.top())); // class
             //case 0x8: return this.popNandPushIfOK(2,this.primitiveBlockCopy()); // blockCopy:
             //case 0x9: return this.primitiveBlockValue(0); // value
-            //case 0xa: return this.primitiveBlockValue(1); // value:
-            //case 0xb: // do:
-            //case 0xc: // new
-            //case 0xd: // new:
-            //case 0xe: // x
-            //case 0xf: // y
+            //case 0xA: return this.primitiveBlockValue(1); // value:
+            case 0xB: return false; // do:
+            case 0xC: return false; // new
+            case 0xD: return false; // new:
+            case 0xE: return false; // x
+            case 0xF: return false; // y
         }
         throw "quick prim " + lobits + " not implemented yet";
         return false;
     },
     doPrimitive: function(index, argCount) {
-        this.success= true;
+        this.success = true;
         switch (index) {
             case 1: return this.popNandPushIntIfOK(2,this.stackInteger(1) + this.stackInteger(0));  // Integer.add
             case 2: return this.popNandPushIntIfOK(2,this.stackInteger(1) - this.stackInteger(0));  // Integer.subtract
@@ -1202,10 +1234,15 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 48: return this.pop2andPushBoolIfOK(this.stackFloat(1)!==this.stackFloat(0));  // Float !=
             case 49: return this.popNandPushFloatIfOK(2,this.stackFloat(1)*this.stackFloat(0));  // Float.mul
             case 50: return this.popNandPushFloatIfOK(2,this.safeFDiv(this.stackFloat(1),this.stackFloat(0)));  // Float.div
+            case 70: return this.popNandPushIfOK(1, this.vm.instantiateClass(this.stackNonInteger(0), 0)); // Class.new
+            case 71: return this.popNandPushIfOK(2, this.vm.instantiateClass(this.stackNonInteger(1), this.stack32BitWord(0))); // Class.new:
             case 101: return this.primitiveBeCursor(argCount); // Cursor.beCursor
             case 102: return this.primitiveBeDisplay(argCount); // DisplayScreen.beDisplay
+            case 106: return this.popNandPushIfOK(1, this.makePointWithXandY(this.theDisplay.width, this.theDisplay.height)); // actualScreenSize
+            case 121: return this.popNandPushIfOK(1, this.makeStString("/home/bert/mini.image")); //imageName
+            case 148: return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); //shallowCopy
         }
-        throw "primitive " + index + " not implemented yet"
+        throw "primitive " + index + " not implemented yet";
         return false;
     },
 },
@@ -1233,6 +1270,30 @@ Object.subclass('lib.squeak.vm.Primitives',
         newFloat.float = value;
         return newFloat;
 	},
+    makePointWithXandY: function(x, y) {
+        var pointClass = this.vm.specialObjects[Constants.splOb_ClassPoint];
+        var newPoint = this.vm.instantiateClass(pointClass,0);
+        newPoint.setPointer(Constants.Point_x, x);
+        newPoint.setPointer(Constants.Point_y, y);
+        return newPoint;
+    },
+    makeStString: function(jsString) {
+        var bytes = [];
+        for (var i = 0; i < jsString.length; ++i)
+            bytes.push(jsString.charCodeAt(i) & 0xFF);
+        var stString = this.vm.instantiateClass(this.vm.specialObjects[Constants.splOb_ClassString], bytes.length);
+        stString.bits = bytes;
+        return stString;
+    },
+    stackNonInteger: function(nDeep) {
+        return this.checkNonInteger(this.vm.stackValue(nDeep));
+    },
+    checkNonInteger: function(obj) { // returns a SqObj and sets success
+        if (!this.vm.isSmallInt(obj))
+            return obj;
+        this.success = false;
+        return this.vm.nilObj;
+    },
     stackInteger: function(nDeep) {
         return this.checkSmallInt(this.vm.stackValue(nDeep));
     },
@@ -1241,6 +1302,35 @@ Object.subclass('lib.squeak.vm.Primitives',
             return maybeSmall;
         this.success = false;
         return 0;
+    },
+    stack32BitWord: function(nDeep) {
+        var stackVal = this.vm.stackValue(nDeep);
+        if (this.vm.isSmallInt(stackVal)) {
+            if (stackVal >= 0)
+                return stackVal;
+            this.success = false;
+            return 0;
+        }
+        if (!this.isA(stackVal, Constants.splOb_ClassLargePositiveInteger)) {
+            this.success = false;
+            return 0;
+        }
+        var bytes = stackVal.bits;
+        var value = 0;
+        for (var i=0; i<4; i++)
+            value += ((bytes[i]&255)<<(8*i));
+        return value;
+    },
+    pos32BitIntFor: function(pos32Val) {
+        // Return the 32-bit quantity as a positive 32-bit integer
+        if (pos32Val >= 0)
+            if (this.vm.canBeSmallInt(pos32Val)) return pos32Val;
+        var lgIntClass= this.vm.specialObjects[Squeak.splOb_ClassLargePositiveInteger];
+        var lgIntObj= vm.instantiateClass(lgIntClass, 4);
+        var bytes = lgIntObj.bits;
+        for (var i=0; i<4; i++)
+            bytes[i] = (pos32Val>>>(8*i))&255;
+        return lgIntObj;
     },
     stackFloat: function(nDeep) {
         return this.checkFloat(this.vm.stackValue(nDeep));
@@ -1258,6 +1348,56 @@ Object.subclass('lib.squeak.vm.Primitives',
         }
         return dividend / divisor;
     }
+},
+'utils', {
+    indexableSize: function(obj) {
+        if (this.vm.isSmallInt(obj)) return -1; // -1 means not indexable
+        var fmt = obj.format;
+        if (fmt<2) return -1; //not indexable
+        if (fmt===3 && this.vm.isContext(obj))
+            return obj.getPointer(Constants.Context_stackPointer); // no access beyond top of stack?
+        if (fmt<6) return obj.pointersSize() - obj.instSize(); // pointers
+        if (fmt<12) return obj.bitsSize(); // words or bytes
+        return obj.bitsSize() + (4 * obj.pointersSize()); // methods
+    },
+    isA: function(obj, knownClass) {
+        return obj.sqClass === this.vm.specialObjects[knownClass];
+    },
+    isKindOf: function(obj, knownClass) {
+        var classOrSuper = obj.sqClass;
+        var theClass = this.vm.specialObjects[knownClass];
+        while (!classOrSuper.isNil) {
+            if (classOrSuper === theClass) return true;
+            classOrSuper = classOrSuper.pointers[Constants.Class_superclass];
+        }
+        return false;
+    },
+},
+'essential', {
+    primitiveSize: function(argCount) {
+        var rcvr = this.vm.stackValue(0);
+        var size = this.indexableSize(rcvr);
+        if (size == -1) success = false; //not indexable
+        return this.popNandPushIfOK(1+argCount, this.pos32BitIntFor(size));
+    },
+    primitiveMakePoint: function(argCount) {
+        var x = this.vm.stackValue(1);
+        var y = this.vm.stackValue(0);
+        this.vm.popNandPush(1+argCount, this.makePointWithXandY(x, y));
+        return true;
+    },
+},
+'display', {
+    primitiveBeCursor: function(argCount) {
+        this.vm.popN(argCount); // return self
+        return true;
+    },
+    primitiveBeDisplay: function(argCount) {
+        var displayObj = this.vm.stackValue(0);
+        this.vm.specialObjects[Constants.splOb_TheDisplay] = displayObj;
+        this.vm.popN(argCount); // return self
+	    return true;
+	},
 });
 
 Object.subclass('lib.squeak.vm.InstructionPrinter',

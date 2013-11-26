@@ -160,7 +160,7 @@ Object.subclass('lib.squeak.vm.Constants',
     },
 });
 
-var Constants = new lib.squeak.vm.Constants();
+Squeak = new lib.squeak.vm.Constants();
 
 Object.subclass('lib.squeak.vm.Image',
 'documentation', {
@@ -225,26 +225,26 @@ Object.subclass('lib.squeak.vm.Image',
             var nWords = 0;
             var classInt = 0;
             var header = readInt();
-            switch (header & Constants.HeaderTypeMask) {
-                case Constants.HeaderTypeSizeAndClass:
+            switch (header & Squeak.HeaderTypeMask) {
+                case Squeak.HeaderTypeSizeAndClass:
                     nWords = header >> 2;
                     classInt = readInt();
                     header = readInt();
                     i += 12;
                     break;
-                case Constants.HeaderTypeClass:
-                    classInt = header - Constants.HeaderTypeClass;
+                case Squeak.HeaderTypeClass:
+                    classInt = header - Squeak.HeaderTypeClass;
                     header = readInt();
                     nWords = (header >> 2) & 63;
                     i += 8;
                     break;
-                case Constants.HeaderTypeShort:
+                case Squeak.HeaderTypeShort:
                     nWords = (header >> 2) & 63;
                     classInt = (header >> 12) & 31; //compact class index
                     //Note classInt<32 implies compact class index
                     i += 4;
                     break;
-                case Constants.HeaderTypeFree:
+                case Squeak.HeaderTypeFree:
                     throw "Unexpected free block";
             }
             var baseAddr = i - 4; //0-rel byte oop of this object (base header)
@@ -267,19 +267,19 @@ Object.subclass('lib.squeak.vm.Image',
         show("objects: "+ Object.keys(oopMap).length);
         //create proper objects
         var splObs         = oopMap[specialObjectsOopInt];
-        var compactClasses = oopMap[splObs.bits[Constants.splOb_CompactClasses]].bits;
-        var floatClass     = oopMap[splObs.bits[Constants.splOb_ClassFloat]];
+        var compactClasses = oopMap[splObs.bits[Squeak.splOb_CompactClasses]].bits;
+        var floatClass     = oopMap[splObs.bits[Squeak.splOb_ClassFloat]];
         for (var oop in oopMap)
-            oopMap[oop].installFromImage(oopMap, compactClasses, floatClass);
+            oopMap[oop].installFromImage(oopMap, compactClasses, floatClass, littleEndian);
         this.specialObjectsArray = splObs;
         this.decorateKnownObjects();
      },
     decorateKnownObjects: function() {
         var splObjs = this.specialObjectsArray.pointers;
-        splObjs[Constants.splOb_NilObject].isNil = true;
-        splObjs[Constants.splOb_TrueObject].isTrue = true;
-        splObjs[Constants.splOb_FalseObject].isFalse = true;
-        splObjs[Constants.splOb_ClassFloat].isFloatClass = true;
+        splObjs[Squeak.splOb_NilObject].isNil = true;
+        splObjs[Squeak.splOb_TrueObject].isTrue = true;
+        splObjs[Squeak.splOb_FalseObject].isFalse = true;
+        splObjs[Squeak.splOb_ClassFloat].isFloatClass = true;
     }
 
 },
@@ -317,7 +317,7 @@ Object.subclass('lib.squeak.vm.Object',
     initInstanceOf: function(aClass, indexableSize, hash, filler) {
         this.sqClass = aClass;
         this.hash = hash;
-        var instSpec = aClass.getPointer(Constants.Class_format);
+        var instSpec = aClass.getPointer(Squeak.Class_format);
         var instSize = ((instSpec>>1) & 0x3F) + ((instSpec>>10) & 0xC0) - 1; //0-255
         this.format = (instSpec>>7) & 0xF; //This is the 0-15 code
 
@@ -373,7 +373,7 @@ Object.subclass('lib.squeak.vm.Object',
         this.hash = hsh;
         this.bits = data;
     },
-    installFromImage: function(oopMap, ccArray, floatClass) {
+    installFromImage: function(oopMap, ccArray, floatClass, littleEndian) {
         //Install this object by decoding format, and rectifying pointers
         var ccInt = this.sqClass;
         // map compact classes
@@ -393,10 +393,10 @@ Object.subclass('lib.squeak.vm.Object',
             var numLits = (methodHeader>>10) & 255;
             this.isCompiledMethod = true;
             this.pointers = this.decodePointers(numLits+1, this.bits, oopMap); //header+lits
-            this.bits = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this.format & 3); }
+            this.bits = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this.format & 3, littleEndian); }
         else if (this.format >= 8) {
             //Formats 8..11 -- ByteArrays (and Strings)
-            this.bits = this.decodeBytes(nWords, this.bits, 0, this.format & 3); }
+            this.bits = this.decodeBytes(nWords, this.bits, 0, this.format & 3, littleEndian); }
         //Format 6 word objects are already OK (except Floats...)
         else if (this.sqClass == floatClass) {
             //Floats need two ints to be converted to double
@@ -416,7 +416,7 @@ Object.subclass('lib.squeak.vm.Object',
         }
         return ptrs;        
     },
-    decodeBytes: function(nWords, theBits, wordOffset, fmtLowBits) {
+    decodeBytes: function(nWords, theBits, wordOffset, fmtLowBits, littleEndian) {
         //Adjust size for low bits and extract bytes from ints
         if (nWords == 0)
             return null;
@@ -427,7 +427,9 @@ Object.subclass('lib.squeak.vm.Object',
         for (var i = 0; i < nBytes; i++) {
             if ((i & 3) === 0)
                 fourBytes = theBits[wordIx++];
-            newBits[i] = (fourBytes>>(8*(3-(i&3))))&255;
+            newBits[i] = littleEndian
+                ? (fourBytes>>(8*(i&3)))&255        // little endian
+                : (fourBytes>>(8*(3-(i&3))))&255;   // big endian
         }
         return newBits;
     },
@@ -463,7 +465,7 @@ Object.subclass('lib.squeak.vm.Object',
         return this.bits.map(function(char) { return String.fromCharCode(char); }).join('');
     },
     assnKeyAsString: function() {
-        return this.getPointer(Constants.Assn_key).bitsAsString();  
+        return this.getPointer(Squeak.Assn_key).bitsAsString();  
     },
     slotNameAt: function(index) {
         // one-based index
@@ -517,7 +519,7 @@ Object.subclass('lib.squeak.vm.Object',
 'as class', {
     classInstSize: function() {
         // this is a class, answer number of named inst vars
-        var format = this.getPointer(Constants.Class_format);
+        var format = this.getPointer(Squeak.Class_format);
         return ((format >> 10) & 0xC0) + ((format >> 1) & 0x3F) - 1;
     },
     instVarNames: function() {
@@ -536,9 +538,9 @@ Object.subclass('lib.squeak.vm.Object',
         return this.getPointer(0);
     },
     className: function() {
-        var nameOrNonMetaClass = this.getPointer(Constants.Class_name);
+        var nameOrNonMetaClass = this.getPointer(Squeak.Class_name);
         var isMeta = !nameOrNonMetaClass.bits;
-        var nameObj = isMeta ? nameOrNonMetaClass.getPointer(Constants.Class_name) : nameOrNonMetaClass;
+        var nameObj = isMeta ? nameOrNonMetaClass.getPointer(Squeak.Class_name) : nameOrNonMetaClass;
         var name = nameObj.bitsAsString();
         return isMeta ? name + " class" : name;
     }
@@ -562,7 +564,7 @@ Object.subclass('lib.squeak.vm.Object',
     },
     methodClassForSuper: function() {//assn found in last literal
         var assn = this.getPointer(this.methodNumLits());
-        return assn.getPointer(Constants.Assn_value);
+        return assn.getPointer(Squeak.Assn_value);
     },
     methodNeedsLargeFrame: function() {
         return (this.methodHeader() & 0x20000) > 0; 
@@ -616,10 +618,10 @@ Object.subclass('lib.squeak.vm.Interpreter',
     },
     loadImageState: function() {
         this.specialObjects = this.image.specialObjectsArray.pointers;
-        this.specialSelectors = this.specialObjects[Constants.splOb_SpecialSelectors].pointers;
-        this.nilObj = this.specialObjects[Constants.splOb_NilObject];
-        this.falseObj = this.specialObjects[Constants.splOb_FalseObject];
-        this.trueObj = this.specialObjects[Constants.splOb_TrueObject];
+        this.specialSelectors = this.specialObjects[Squeak.splOb_SpecialSelectors].pointers;
+        this.nilObj = this.specialObjects[Squeak.splOb_NilObject];
+        this.falseObj = this.specialObjects[Squeak.splOb_FalseObject];
+        this.trueObj = this.specialObjects[Squeak.splOb_TrueObject];
     },
     initVMState: function() {
         this.byteCodeCount = 0;
@@ -645,10 +647,10 @@ Object.subclass('lib.squeak.vm.Interpreter',
         this.startupTime = new Date().getTime(); // base for millisecond clock
     },
     loadInitialContext: function() {
-        var schedAssn = this.specialObjects[Constants.splOb_SchedulerAssociation];
-        var sched = schedAssn.getPointer(Constants.Assn_value);
-        var proc = sched.getPointer(Constants.ProcSched_activeProcess);
-        this.activeContext = proc.getPointer(Constants.Proc_suspendedContext);
+        var schedAssn = this.specialObjects[Squeak.splOb_SchedulerAssociation];
+        var sched = schedAssn.getPointer(Squeak.Assn_value);
+        var proc = sched.getPointer(Squeak.ProcSched_activeProcess);
+        this.activeContext = proc.getPointer(Squeak.Proc_suspendedContext);
         this.fetchContextRegisters(this.activeContext);
         this.reclaimableContextCount = 0;
     },
@@ -668,7 +670,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
             // load temporary variable
             case 16: case 17: case 18: case 19: case 20: case 21: case 22: case 23: 
             case 24: case 25: case 26: case 27: case 28: case 29: case 30: case 31: 
-                this.push(this.homeContext.getPointer(Constants.Context_tempFrameStart+(b&0xF))); break;
+                this.push(this.homeContext.getPointer(Squeak.Context_tempFrameStart+(b&0xF))); break;
 
             // loadLiteral
             case 32: case 33: case 34: case 35: case 36: case 37: case 38: case 39: 
@@ -682,13 +684,13 @@ Object.subclass('lib.squeak.vm.Interpreter',
             case 72: case 73: case 74: case 75: case 76: case 77: case 78: case 79: 
             case 80: case 81: case 82: case 83: case 84: case 85: case 86: case 87: 
             case 88: case 89: case 90: case 91: case 92: case 93: case 94: case 95: 
-                this.push((this.method.methodGetLiteral(b&0x1F)).getPointer(Constants.Assn_value)); break;
+                this.push((this.method.methodGetLiteral(b&0x1F)).getPointer(Squeak.Assn_value)); break;
 
             // storeAndPop rcvr, temp
             case 96: case 97: case 98: case 99: case 100: case 101: case 102: case 103: 
                 this.receiver.setPointer(b&7, this.pop()); break;
             case 104: case 105: case 106: case 107: case 108: case 109: case 110: case 111: 
-                this.homeContext.setPointer(Constants.Context_tempFrameStart+(b&7), this.pop()); break;
+                this.homeContext.setPointer(Squeak.Context_tempFrameStart+(b&7), this.pop()); break;
 
             // Quick push
             case 112: this.push(this.receiver); break;
@@ -701,12 +703,12 @@ Object.subclass('lib.squeak.vm.Interpreter',
             case 119: this.push(2); break;
 
             // Quick return
-            case 120: this.doReturn(this.receiver, this.homeContext.getPointer(Constants.Context_sender)); break;
-            case 121: this.doReturn(this.trueObj, this.homeContext.getPointer(Constants.Context_sender)); break;
-            case 122: this.doReturn(this.falseObj, this.homeContext.getPointer(Constants.Context_sender)); break;
-            case 123: this.doReturn(this.nilObj, this.homeContext.getPointer(Constants.Context_sender)); break;
-            case 124: this.doReturn(this.pop(), this.homeContext.getPointer(Constants.Context_sender)); break;
-            case 125: this.doReturn(this.pop(), this.activeContext.getPointer(Constants.BlockContext_caller)); break; // blockReturn
+            case 120: this.doReturn(this.receiver, this.homeContext.getPointer(Squeak.Context_sender)); break;
+            case 121: this.doReturn(this.trueObj, this.homeContext.getPointer(Squeak.Context_sender)); break;
+            case 122: this.doReturn(this.falseObj, this.homeContext.getPointer(Squeak.Context_sender)); break;
+            case 123: this.doReturn(this.nilObj, this.homeContext.getPointer(Squeak.Context_sender)); break;
+            case 124: this.doReturn(this.pop(), this.homeContext.getPointer(Squeak.Context_sender)); break;
+            case 125: this.doReturn(this.pop(), this.activeContext.getPointer(Squeak.BlockContext_caller)); break; // blockReturn
             case 126: this.nono(); break;
             case 127: this.nono(); break;
 
@@ -814,22 +816,31 @@ Object.subclass('lib.squeak.vm.Interpreter',
     checkForInterrupts: function() {
         // TODO
     },
+    extendedPush: function(nextByte) {
+        var lobits = nextByte & 63;
+        switch (nextByte>>6) {
+            case 0: this.push(this.receiver.getPointer(lobits));break;
+            case 1: this.push(this.homeContext.getPointer(Squeak.Context_tempFrameStart+lobits)); break;
+            case 2: this.push(this.method.methodGetLiteral(lobits)); break;
+            case 3: this.push(this.method.methodGetLiteral(lobits).getPointer(Squeak.Assn_value)); break;
+        }
+    },
     extendedStore: function( nextByte) {
         var lobits = nextByte & 63;
         switch (nextByte>>6) {
             case 0: this.receiver.setPointer(lobits, this.top()); break;
-            case 1: this.homeContext.setPointer(Constants.Context_tempFrameStart+lobits, this.top()); break;
+            case 1: this.homeContext.setPointer(Squeak.Context_tempFrameStart+lobits, this.top()); break;
             case 2: this.nono(); break;
-            case 3: this.method.methodGetLiteral(lobits).setPointer(Constants.Assn_value, this.top()); break;
+            case 3: this.method.methodGetLiteral(lobits).setPointer(Squeak.Assn_value, this.top()); break;
         }
     },
     extendedStorePop: function( nextByte) {
         var lobits = nextByte & 63;
         switch (nextByte>>6) {
             case 0: this.receiver.setPointer(lobits, this.pop()); break;
-            case 1: this.homeContext.setPointer(Constants.Context_tempFrameStart+lobits, this.pop()); break;
+            case 1: this.homeContext.setPointer(Squeak.Context_tempFrameStart+lobits, this.pop()); break;
             case 2: this.nono(); break;
-            case 3: this.method.methodGetLiteral(lobits).setPointer(Constants.Assn_value, this.pop()); break;
+            case 3: this.method.methodGetLiteral(lobits).setPointer(Squeak.Assn_value, this.pop()); break;
         }
     },
     jumpIfTrue: function(delta) {
@@ -837,14 +848,14 @@ Object.subclass('lib.squeak.vm.Interpreter',
         if (top.isTrue) {this.pc += delta; return;}
         if (top.isFalse) return;
         this.push(top); //Uh-oh it's not even a boolean (that we know of ;-).  Restore stack...
-        this.send(this.specialObjects[Constants.splOb_SelectorMustBeBoolean], 1, false);
+        this.send(this.specialObjects[Squeak.splOb_SelectorMustBeBoolean], 1, false);
     },
     jumpIfFalse: function(delta) {
         var top = this.pop();
         if (top.isFalse) {this.pc += delta; return;}
         if (top.isTrue) return;
         this.push(top); //Uh-oh it's not even a boolean (that we know of ;-).  Restore stack...
-        this.send(this.specialObjects[Constants.splOb_SelectorMustBeBoolean], 1, false);
+        this.send(this.specialObjects[Squeak.splOb_SelectorMustBeBoolean], 1, false);
     },
     sendSpecial: function(lobits) {
         this.send(this.specialSelectors[lobits*2],
@@ -856,7 +867,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
         var lookupClass = this.getClass(newRcvr);
         if (doSuper) {
             lookupClass = this.method.methodClassForSuper();
-            lookupClass = lookupClass.getPointer(Constants.Class_superclass);
+            lookupClass = lookupClass.getPointer(Squeak.Class_superclass);
         }
         var entry = this.findSelectorInClass(selector, argCount, lookupClass);
         if (entry.primIndex) {
@@ -872,7 +883,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
         var currentClass = startingClass;
         var mDict;
         while (!currentClass.isNil) {
-            mDict = currentClass.getPointer(Constants.Class_mdict);
+            mDict = currentClass.getPointer(Squeak.Class_mdict);
             if (mDict.isNil) {
 //                ["MethodDict pointer is nil (hopefully due a swapped out stub)
 //                        -- raise exception #cannotInterpret:."
@@ -888,10 +899,10 @@ Object.subclass('lib.squeak.vm.Interpreter',
                 cacheEntry.primIndex = newMethod.methodPrimitiveIndex();
                 return cacheEntry;
             }  
-            currentClass = currentClass.getPointer(Constants.Class_superclass);
+            currentClass = currentClass.getPointer(Squeak.Class_superclass);
         }
     	//Cound not find a normal message -- send #doesNotUnderstand:
-    	var dnuSel = this.specialObjects[Constants.splOb_SelectorDoesNotUnderstand];
+    	var dnuSel = this.specialObjects[Squeak.splOb_SelectorDoesNotUnderstand];
         if (selector === dnuSel) // Cannot find #doesNotUnderstand: -- unrecoverable error.
 	    	throw "Recursive not understood error encountered";
 	    debugger;
@@ -902,20 +913,20 @@ Object.subclass('lib.squeak.vm.Interpreter',
     lookupSelectorInDict: function(mDict, messageSelector) {
         //Returns a method or nilObject
         var dictSize = mDict.pointersSize();
-        var mask = (dictSize - Constants.MethodDict_selectorStart) - 1;
-        var index = (mask & messageSelector.hash) + Constants.MethodDict_selectorStart;
+        var mask = (dictSize - Squeak.MethodDict_selectorStart) - 1;
+        var index = (mask & messageSelector.hash) + Squeak.MethodDict_selectorStart;
     	// If there are no nils (should always be), then stop looping on second wrap.
     	var hasWrapped = false;
         while (true) {
             var nextSelector = mDict.getPointer(index);
             if (nextSelector === messageSelector) {
-                var methArray = mDict.getPointer(Constants.MethodDict_array);
-                return methArray.getPointer(index - Constants.MethodDict_selectorStart);
+                var methArray = mDict.getPointer(Squeak.MethodDict_array);
+                return methArray.getPointer(index - Squeak.MethodDict_selectorStart);
             }
             if (nextSelector.isNil) return this.nilObj;
             if (++index === dictSize) {
                 if (hasWrapped) return this.nilObj;
-                index = Constants.MethodDict_selectorStart;
+                index = Squeak.MethodDict_selectorStart;
                 hasWrapped = true;
             }
         }
@@ -931,16 +942,16 @@ Object.subclass('lib.squeak.vm.Interpreter',
         var newPC = 0;
     	var tempCount = newMethod.methodTempCount();
         var newSP = tempCount;
-        newSP += Constants.Context_tempFrameStart - 1; //-1 for z-rel addressing
-        newContext.setPointer(Constants.Context_method, newMethod);
+        newSP += Squeak.Context_tempFrameStart - 1; //-1 for z-rel addressing
+        newContext.setPointer(Squeak.Context_method, newMethod);
         //Following store is in case we alloc without init; all other fields get stored
-        newContext.setPointer(Constants.BlockContext_initialIP, this.nilObj);
-        newContext.setPointer(Constants.Context_sender, this.activeContext);
+        newContext.setPointer(Squeak.BlockContext_initialIP, this.nilObj);
+        newContext.setPointer(Squeak.Context_sender, this.activeContext);
         //Copy receiver and args to new context
         //Note this statement relies on the receiver slot being contiguous with args...
-        this.arrayCopy(this.activeContext.pointers, this.sp-argumentCount, newContext.pointers, Constants.Context_tempFrameStart-1, argumentCount+1);
+        this.arrayCopy(this.activeContext.pointers, this.sp-argumentCount, newContext.pointers, Squeak.Context_tempFrameStart-1, argumentCount+1);
         //...and fill the remaining temps with nil
-        this.arrayFill(newContext.pointers, Constants.Context_tempFrameStart+argumentCount, Constants.Context_tempFrameStart+tempCount, this.nilObj);
+        this.arrayFill(newContext.pointers, Squeak.Context_tempFrameStart+argumentCount, Squeak.Context_tempFrameStart+tempCount, this.nilObj);
         this.popN(argumentCount+1);
 	    this.reclaimableContextCount++;
         this.storeContextRegisters();
@@ -953,13 +964,13 @@ Object.subclass('lib.squeak.vm.Interpreter',
         this.pc = newPC;
         this.sp = newSP;
         this.storeContextRegisters(); // not really necessary, I claim
-        this.receiver = newContext.getPointer(Constants.Context_receiver);
+        this.receiver = newContext.getPointer(Squeak.Context_receiver);
         if (this.receiver !== newRcvr)
             throw "receivers don't match";
         this.checkForInterrupts();
     },
     doReturn: function(returnValue, targetContext) {
-        if (targetContext.isNil || targetContext.getPointer(Constants.Context_instructionPointer).isNil)
+        if (targetContext.isNil || targetContext.getPointer(Squeak.Context_instructionPointer).isNil)
             this.cannotReturn();
         // search up stack for unwind
         var thisContext = this.activeContext;
@@ -968,15 +979,15 @@ Object.subclass('lib.squeak.vm.Interpreter',
                 this.cannotReturn();
             if (this.isUnwindMarked(thisContext))
                 this.aboutToReturn(returnValue,thisContext);
-            thisContext = thisContext.getPointer(Constants.Context_sender);
+            thisContext = thisContext.getPointer(Squeak.Context_sender);
         }
         // no unwind to worry about, just peel back the stack (usually just to sender)
         var nextContext;
         thisContext = this.activeContext;
         while (thisContext !== targetContext) {
-            nextContext = thisContext.getPointer(Constants.Context_sender);
-            thisContext.setPointer(Constants.Context_sender, this.nilObj);
-            thisContext.setPointer(Constants.Context_instructionPointer, this.nilObj);
+            nextContext = thisContext.getPointer(Squeak.Context_sender);
+            thisContext.setPointer(Squeak.Context_sender, this.nilObj);
+            thisContext.setPointer(Squeak.Context_instructionPointer, this.nilObj);
             if (this.reclaimableContextCount > 0) {
                 this.reclaimableContextCount--;
                 this.recycleIfPossible(thisContext);
@@ -1011,12 +1022,12 @@ Object.subclass('lib.squeak.vm.Interpreter',
     },
     recycleIfPossible: function(ctxt) {
         if (!this.isMethodContext(ctxt)) return;
-        if (ctxt.pointersSize() === (Constants.Context_tempFrameStart+Constants.Context_smallFrameSize)) {
+        if (ctxt.pointersSize() === (Squeak.Context_tempFrameStart+Squeak.Context_smallFrameSize)) {
             // Recycle small contexts
             ctxt.setPointer(0, this.freeContexts);
             this.freeContexts = ctxt;
         } else { // Recycle large contexts
-            if (ctxt.pointersSize() !== (Constants.Context_tempFrameStart+Constants.Context_largeFrameSize))
+            if (ctxt.pointersSize() !== (Squeak.Context_tempFrameStart+Squeak.Context_largeFrameSize))
                 return;
             ctxt.setPointer(0, this.freeLargeContexts);
             this.freeLargeContexts = ctxt;
@@ -1033,7 +1044,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
                 return freebie;
             }
             this.nAllocatedContexts++;
-            return this.instantiateClass(this.specialObjects[Constants.splOb_ClassMethodContext], Constants.Context_largeFrameSize);
+            return this.instantiateClass(this.specialObjects[Squeak.splOb_ClassMethodContext], Squeak.Context_largeFrameSize);
         } else {
             if (!this.freeContexts.isNil) {
                 freebie = this.freeContexts;
@@ -1042,7 +1053,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
                 return freebie;
             }
             this.nAllocatedContexts++;
-            return this.instantiateClass(this.specialObjects[Constants.splOb_ClassMethodContext], Constants.Context_smallFrameSize);
+            return this.instantiateClass(this.specialObjects[Squeak.splOb_ClassMethodContext], Squeak.Context_smallFrameSize);
         }
     },
     instantiateClass: function(aClass, indexableSize) {
@@ -1050,24 +1061,24 @@ Object.subclass('lib.squeak.vm.Interpreter',
     },
     createActualMessage: function(selector, argCount, cls) {
         //Bundle up receiver, args and selector as a messageObject
-        var message = this.instantiateClass(this.specialObjects[Constants.splOb_ClassMessage], 0);
-        var argArray = this.instantiateClass(this.specialObjects[Constants.splOb_ClassArray], argCount);
+        var message = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassMessage], 0);
+        var argArray = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassArray], argCount);
         this.arrayCopy(this.activeContext.pointers, this.sp-argCount+1, argArray.pointers, 0, argCount); //copy args from stack
-        message.setPointer(Constants.Message_selector, selector);
-        message.setPointer(Constants.Message_arguments, argArray);
-        if (message.pointers.length > Constants.Message_lookupClass) //Early versions don't have lookupClass
-            message.setPointer(Constants.Message_lookupClass, cls);
+        message.setPointer(Squeak.Message_selector, selector);
+        message.setPointer(Squeak.Message_arguments, argArray);
+        if (message.pointers.length > Squeak.Message_lookupClass) //Early versions don't have lookupClass
+            message.setPointer(Squeak.Message_lookupClass, cls);
         return message;
     },
 },
 'contexts', {
     isContext: function(obj) {//either block or methodContext
-        if (obj.sqClass === this.specialObjects[Constants.splOb_ClassMethodContext]) return true;
-        if (obj.sqClass === this.specialObjects[Constants.splOb_ClassBlockContext]) return true;
+        if (obj.sqClass === this.specialObjects[Squeak.splOb_ClassMethodContext]) return true;
+        if (obj.sqClass === this.specialObjects[Squeak.splOb_ClassBlockContext]) return true;
         return false;
     },
     isMethodContext: function(obj) {
-        if (obj.sqClass === this.specialObjects[Constants.splOb_ClassMethodContext]) return true;
+        if (obj.sqClass === this.specialObjects[Squeak.splOb_ClassMethodContext]) return true;
         return false;
     },
     isUnwindMarked: function(ctx) {
@@ -1079,27 +1090,27 @@ Object.subclass('lib.squeak.vm.Interpreter',
         this.fetchContextRegisters(newContext);
     },
     fetchContextRegisters: function(ctxt) {
-        var meth = ctxt.getPointer(Constants.Context_method);
+        var meth = ctxt.getPointer(Squeak.Context_method);
         if (this.isSmallInt(meth)) { //if the Method field is an integer, activeCntx is a block context
-            this.homeContext = ctxt.getPointer(Constants.BlockContext_home);
-            meth = this.homeContext.getPointer(Constants.Context_method);
+            this.homeContext = ctxt.getPointer(Squeak.BlockContext_home);
+            meth = this.homeContext.getPointer(Squeak.Context_method);
         } else { //otherwise home==ctxt
             this.homeContext = ctxt;
         }
-        this.receiver = this.homeContext.getPointer(Constants.Context_receiver);
+        this.receiver = this.homeContext.getPointer(Squeak.Context_receiver);
         this.method = meth;
         this.methodBytes = meth.bits;
-        this.pc = this.decodeSqueakPC(ctxt.getPointer(Constants.Context_instructionPointer), meth);
+        this.pc = this.decodeSqueakPC(ctxt.getPointer(Squeak.Context_instructionPointer), meth);
         if (this.pc < -1)
             throw "error";
-        this.sp = this.decodeSqueakSP(ctxt.getPointer(Constants.Context_stackPointer));
+        this.sp = this.decodeSqueakSP(ctxt.getPointer(Squeak.Context_stackPointer));
     },
     storeContextRegisters: function() {
         //Save pc, sp into activeContext object, prior to change of context
         //   see fetchContextRegisters for symmetry
         //   expects activeContext, pc, sp, and method state vars to still be valid
-        this.activeContext.setPointer(Constants.Context_instructionPointer,this.encodeSqueakPC(this.pc, this.method));
-        this.activeContext.setPointer(Constants.Context_stackPointer,this.encodeSqueakSP(this.sp));
+        this.activeContext.setPointer(Squeak.Context_instructionPointer,this.encodeSqueakPC(this.pc, this.method));
+        this.activeContext.setPointer(Squeak.Context_stackPointer,this.encodeSqueakSP(this.sp));
     },
     encodeSqueakPC: function(intPC, method) {
         // Squeak pc is offset by header and literals
@@ -1111,10 +1122,10 @@ Object.subclass('lib.squeak.vm.Interpreter',
     },
     encodeSqueakSP: function(intSP) {
         // sp is offset by tempFrameStart, -1 for z-rel addressing
-        return intSP - (Constants.Context_tempFrameStart - 1);
+        return intSP - (Squeak.Context_tempFrameStart - 1);
     },
     decodeSqueakSP: function(squeakPC) {
-        return squeakPC + (Constants.Context_tempFrameStart - 1);
+        return squeakPC + (Squeak.Context_tempFrameStart - 1);
     },
 },
 'stack frame access', {
@@ -1156,7 +1167,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
 'numbers', {
     getClass: function(obj) {
         if (this.isSmallInt(obj))
-            return this.specialObjects[Constants.splOb_ClassInteger];
+            return this.specialObjects[Squeak.splOb_ClassInteger];
         return obj.sqClass;
     },
     canBeSmallInt: function(anInt) {
@@ -1319,11 +1330,11 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 106: return this.popNandPushIfOK(1, this.makePointWithXandY(this.theDisplay.width, this.theDisplay.height)); // actualScreenSize
             case 110: return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
             case 121: return this.popNandPushIfOK(1, this.makeStString("/home/bert/mini.image")); //imageName
-            case 124: return this.popNandPushIfOK(2, this.registerSemaphore(Constants.splOb_TheLowSpaceSemaphore));
+            case 124: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore));
             case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
             case 130: return this.popNandPushIfOK(1, this.vm.image.fullGC()); // GC
             case 131: return this.popNandPushIfOK(1, this.vm.image.partialGC()); // GCmost
-            case 134: return this.popNandPushIfOK(2, this.registerSemaphore(Constants.splOb_TheInterruptSemaphore));
+            case 134: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheInterruptSemaphore));
             case 135: return this.popNandPushIfOK(1, this.millisecondClockValue());
             case 142: return this.popNandPushIfOK(1, this.makeStString("/users/bert/squeakvm/")); //vmPath
             case 148: return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); //shallowCopy
@@ -1354,23 +1365,23 @@ Object.subclass('lib.squeak.vm.Primitives',
         return this.popNandPushIfOK(nToPop, this.makeFloat(returnValue));
     },
     makeFloat: function(value) {
-        var floatClass = this.vm.specialObjects[Constants.splOb_ClassFloat];
+        var floatClass = this.vm.specialObjects[Squeak.splOb_ClassFloat];
         var newFloat = this.vm.instantiateClass(floatClass, 2);
         newFloat.float = value;
         return newFloat;
 	},
     makePointWithXandY: function(x, y) {
-        var pointClass = this.vm.specialObjects[Constants.splOb_ClassPoint];
+        var pointClass = this.vm.specialObjects[Squeak.splOb_ClassPoint];
         var newPoint = this.vm.instantiateClass(pointClass,0);
-        newPoint.setPointer(Constants.Point_x, x);
-        newPoint.setPointer(Constants.Point_y, y);
+        newPoint.setPointer(Squeak.Point_x, x);
+        newPoint.setPointer(Squeak.Point_y, y);
         return newPoint;
     },
     makeStString: function(jsString) {
         var bytes = [];
         for (var i = 0; i < jsString.length; ++i)
             bytes.push(jsString.charCodeAt(i) & 0xFF);
-        var stString = this.vm.instantiateClass(this.vm.specialObjects[Constants.splOb_ClassString], bytes.length);
+        var stString = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassString], bytes.length);
         stString.bits = bytes;
         return stString;
     },
@@ -1401,7 +1412,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             return 0;
         }
         debugger;
-        if (!this.isA(stackVal, Constants.splOb_ClassLargePositiveInteger)) {
+        if (!this.isA(stackVal, Squeak.splOb_ClassLargePositiveInteger)) {
             this.success = false;
             return 0;
         }
@@ -1416,7 +1427,7 @@ Object.subclass('lib.squeak.vm.Primitives',
         if (pos32Val >= 0)
             if (this.vm.canBeSmallInt(pos32Val)) return pos32Val;
         debugger;
-        var lgIntClass = this.vm.specialObjects[Constants.splOb_ClassLargePositiveInteger];
+        var lgIntClass = this.vm.specialObjects[Squeak.splOb_ClassLargePositiveInteger];
         var lgIntObj = this.vm.instantiateClass(lgIntClass, 4);
         var bytes = lgIntObj.bits;
         for (var i=0; i<4; i++)
@@ -1424,7 +1435,7 @@ Object.subclass('lib.squeak.vm.Primitives',
         return lgIntObj;
     },
     charFromInt: function(ascii) {
-        var charTable = this.vm.specialObjects[Constants.splOb_CharacterTable];
+        var charTable = this.vm.specialObjects[Squeak.splOb_CharacterTable];
         return charTable.getPointer(ascii);
     },
     stackFloat: function(nDeep) {
@@ -1450,7 +1461,7 @@ Object.subclass('lib.squeak.vm.Primitives',
         var fmt = obj.format;
         if (fmt<2) return -1; //not indexable
         if (fmt===3 && this.vm.isContext(obj))
-            return obj.getPointer(Constants.Context_stackPointer); // no access beyond top of stack?
+            return obj.getPointer(Squeak.Context_stackPointer); // no access beyond top of stack?
         if (fmt<6) return obj.pointersSize() - obj.instSize(); // pointers
         if (fmt<12) return obj.bitsSize(); // words or bytes
         return obj.bitsSize() + (4 * obj.pointersSize()); // methods
@@ -1463,7 +1474,7 @@ Object.subclass('lib.squeak.vm.Primitives',
         var theClass = this.vm.specialObjects[knownClass];
         while (!classOrSuper.isNil) {
             if (classOrSuper === theClass) return true;
-            classOrSuper = classOrSuper.pointers[Constants.Class_superclass];
+            classOrSuper = classOrSuper.pointers[Squeak.Class_superclass];
         }
         return false;
     },
@@ -1537,12 +1548,12 @@ Object.subclass('lib.squeak.vm.Primitives',
         if (convertChars) {
             // put a character...
             if (this.vm.isSmallInt(objToPut)) {this.success = false; return objToPut;}
-            if (objToPut.sqClass !== this.vm.specialObjects[Constants.splOb_ClassCharacter])
+            if (objToPut.sqClass !== this.vm.specialObjects[Squeak.splOb_ClassCharacter])
                 {this.success = false; return objToPut;}
             intToPut = objToPut.getPointer(0);
             if (!(this.vm.isSmallInt(intToPut))) {this.success = false; return objToPut;}
         } else { // put a byte...
-            if(!(vm.isSmallInt(objToPut))) {this.success = false; return objToPut;}
+            if(!(this.vm.isSmallInt(objToPut))) {this.success = false; return objToPut;}
             intToPut = objToPut;
         }
         if (intToPut<0 || intToPut>255) {this.success = false; return objToPut;}
@@ -1657,33 +1668,33 @@ Object.subclass('lib.squeak.vm.Primitives',
         var homeCtxt = rcvr;
         if(!this.vm.isContext(homeCtxt)) this.success = false;
         if(!this.success) return rcvr;
-        if (this.vm.isSmallInt(homeCtxt.getPointer(Constants.Context_method)))
+        if (this.vm.isSmallInt(homeCtxt.getPointer(Squeak.Context_method)))
             // ctxt is itself a block; get the context for its enclosing method
-            homeCtxt = homeCtxt.getPointer(Constants.BlockContext_home);
+            homeCtxt = homeCtxt.getPointer(Squeak.BlockContext_home);
         var blockSize = homeCtxt.pointersSize() - homeCtxt.instSize(); // could use a const for instSize
-        var newBlock = this.vm.instantiateClass(this.vm.specialObjects[Constants.splOb_ClassBlockContext], blockSize);
+        var newBlock = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassBlockContext], blockSize);
         var initialPC = this.vm.encodeSqueakPC(this.vm.pc + 2, this.vm.method); //*** check this...
-        newBlock.setPointer(Constants.BlockContext_initialIP, initialPC);
-        newBlock.setPointer(Constants.Context_instructionPointer, initialPC); // claim not needed; value will set it
-        newBlock.setPointer(Constants.Context_stackPointer, 0);
-        newBlock.setPointer(Constants.BlockContext_argumentCount, sqArgCount);
-        newBlock.setPointer(Constants.BlockContext_home, homeCtxt);
-        newBlock.setPointer(Constants.Context_sender, this.vm.nilObj); // claim not needed; just initialized
+        newBlock.setPointer(Squeak.BlockContext_initialIP, initialPC);
+        newBlock.setPointer(Squeak.Context_instructionPointer, initialPC); // claim not needed; value will set it
+        newBlock.setPointer(Squeak.Context_stackPointer, 0);
+        newBlock.setPointer(Squeak.BlockContext_argumentCount, sqArgCount);
+        newBlock.setPointer(Squeak.BlockContext_home, homeCtxt);
+        newBlock.setPointer(Squeak.Context_sender, this.vm.nilObj); // claim not needed; just initialized
         return newBlock;
     },
     primitiveBlockValue: function(argCount) {
         var rcvr = this.vm.stackValue(argCount);
-        if (!this.isA(rcvr, Constants.splOb_ClassBlockContext)) return false;
+        if (!this.isA(rcvr, Squeak.splOb_ClassBlockContext)) return false;
         var block = rcvr;
-        var blockArgCount = block.getPointer(Constants.BlockContext_argumentCount);
+        var blockArgCount = block.getPointer(Squeak.BlockContext_argumentCount);
         if (!this.vm.isSmallInt(blockArgCount)) return false;
         if (blockArgCount != argCount) return false;
-        if (!block.getPointer(Constants.BlockContext_caller).isNil) return false;
-        this.vm.arrayCopy(this.vm.activeContext.pointers, this.vm.sp-argCount+1, block.pointers, Constants.Context_tempFrameStart, argCount);
-        var initialIP = block.getPointer(Constants.BlockContext_initialIP);
-        block.setPointer(Constants.Context_instructionPointer, initialIP);
-        block.setPointer(Constants.Context_stackPointer, argCount);
-        block.setPointer(Constants.BlockContext_caller, this.vm.activeContext);
+        if (!block.getPointer(Squeak.BlockContext_caller).isNil) return false;
+        this.vm.arrayCopy(this.vm.activeContext.pointers, this.vm.sp-argCount+1, block.pointers, Squeak.Context_tempFrameStart, argCount);
+        var initialIP = block.getPointer(Squeak.BlockContext_initialIP);
+        block.setPointer(Squeak.Context_instructionPointer, initialIP);
+        block.setPointer(Squeak.Context_stackPointer, argCount);
+        block.setPointer(Squeak.BlockContext_caller, this.vm.activeContext);
         this.vm.popN(argCount+1);
         this.vm.newActiveContext(block);
         return true;
@@ -1697,20 +1708,20 @@ Object.subclass('lib.squeak.vm.Primitives',
 	},
     primitiveSuspend: function() {
         debugger;
-        var activeProc = this.getScheduler().getPointer(Constants.ProcSched_activeProcess);
+        var activeProc = this.getScheduler().getPointer(Squeak.ProcSched_activeProcess);
         if (this.vm.top() !== activeProc) return false;
         this.vm.popNandPush(1, this.vm.nilObj);
         this.transferTo(this.pickTopProcess());
         return true;
     },
     getScheduler: function() {
-        var assn = this.vm.specialObjects[Constants.splOb_SchedulerAssociation];
-        return assn.getPointer(Constants.Assn_value);
+        var assn = this.vm.specialObjects[Squeak.splOb_SchedulerAssociation];
+        return assn.getPointer(Squeak.Assn_value);
     },
     resume: function(newProc) {
-        var activeProc = this.getScheduler().getPointer(Constants.ProcSched_activeProcess);
-        var activePriority = activeProc.getPointer(Constants.Proc_priority);
-        var newPriority = newProc.getPointer(Constants.Proc_priority);
+        var activeProc = this.getScheduler().getPointer(Squeak.ProcSched_activeProcess);
+        var activePriority = activeProc.getPointer(Squeak.Proc_priority);
+        var newPriority = newProc.getPointer(Squeak.Proc_priority);
         if (newPriority > activePriority) {
             this.putToSleep(activeProc);
             this.transferTo(newProc);
@@ -1720,25 +1731,25 @@ Object.subclass('lib.squeak.vm.Primitives',
     },
     putToSleep: function(aProcess) {
         //Save the given process on the scheduler process list for its priority.
-        var priority = aProcess.getPointer(Constants.Proc_priority);
-        var processLists = this.getScheduler().getPointer(Constants.ProcSched_processLists);
+        var priority = aProcess.getPointer(Squeak.Proc_priority);
+        var processLists = this.getScheduler().getPointer(Squeak.ProcSched_processLists);
         var processList = processLists.getPointer(priority - 1);
         this.linkProcessToList(aProcess, processList);
     },
     transferTo: function(newProc) {
         //Record a process to be awakened on the next interpreter cycle.
         var sched = this.getScheduler();
-        var oldProc = sched.getPointer(Constants.ProcSched_activeProcess);
-        sched.setPointer(Constants.ProcSched_activeProcess, newProc);
-        oldProc.setPointer(Constants.Proc_suspendedContext, this.vm.activeContext);
-        this.vm.newActiveContext(newProc.getPointer(Constants.Proc_suspendedContext));
-        newProc.setPointer(Constants.Proc_suspendedContext, this.vm.nilObj);
+        var oldProc = sched.getPointer(Squeak.ProcSched_activeProcess);
+        sched.setPointer(Squeak.ProcSched_activeProcess, newProc);
+        oldProc.setPointer(Squeak.Proc_suspendedContext, this.vm.activeContext);
+        this.vm.newActiveContext(newProc.getPointer(Squeak.Proc_suspendedContext));
+        newProc.setPointer(Squeak.Proc_suspendedContext, this.vm.nilObj);
         this.vm.reclaimableContextCount = 0;
     },
     pickTopProcess: function() { // aka wakeHighestPriority
         //Return the highest priority process that is ready to run.
         //Note: It is a fatal VM error if there is no runnable process.
-        var schedLists = this.getScheduler().getPointer(Constants.ProcSched_processLists);
+        var schedLists = this.getScheduler().getPointer(Squeak.ProcSched_processLists);
         var p = schedLists.pointersSize() - 1;  // index of last indexable field
         var processList;
         do {
@@ -1751,34 +1762,34 @@ Object.subclass('lib.squeak.vm.Primitives',
         // Add the given process to the given linked list and set the backpointer
         // of process to its new list.
         if (this.isEmptyList(aList))
-            aList.setPointer(Constants.LinkedList_firstLink, proc);
+            aList.setPointer(Squeak.LinkedList_firstLink, proc);
         else {
-            var lastLink = aList.getPointer(Constants.LinkedList_lastLink);
-            lastLink.setPointer(Constants.Link_nextLink, proc);
+            var lastLink = aList.getPointer(Squeak.LinkedList_lastLink);
+            lastLink.setPointer(Squeak.Link_nextLink, proc);
         }
-        aList.setPointer(Constants.LinkedList_lastLink, proc);
-        proc.setPointer(Constants.Proc_myList, aList);
+        aList.setPointer(Squeak.LinkedList_lastLink, proc);
+        proc.setPointer(Squeak.Proc_myList, aList);
     },
     isEmptyList: function(aLinkedList) {
-        return aLinkedList.getPointer(Constants.LinkedList_firstLink).isNil;
+        return aLinkedList.getPointer(Squeak.LinkedList_firstLink).isNil;
     },
     removeFirstLinkOfList: function(aList) {
         //Remove the first process from the given linked list."
-        var first = aList.getPointer(Constants.LinkedList_firstLink);
-        var last = aList.getPointer(Constants.LinkedList_lastLink);
+        var first = aList.getPointer(Squeak.LinkedList_firstLink);
+        var last = aList.getPointer(Squeak.LinkedList_lastLink);
         if (first === last) {
-            aList.setPointer(Constants.LinkedList_firstLink, this.vm.nilObj);
-            aList.setPointer(Constants.LinkedList_lastLink, this.vm.nilObj);
+            aList.setPointer(Squeak.LinkedList_firstLink, this.vm.nilObj);
+            aList.setPointer(Squeak.LinkedList_lastLink, this.vm.nilObj);
         } else {
-            var next = first.getPointer(Constants.Link_nextLink);
-            aList.setPointer(Constants.LinkedList_firstLink, next);
+            var next = first.getPointer(Squeak.Link_nextLink);
+            aList.setPointer(Squeak.LinkedList_firstLink, next);
         }
-        first.setPointer(Constants.Link_nextLink, this.vm.nilObj);
+        first.setPointer(Squeak.Link_nextLink, this.vm.nilObj);
         return first;
     },
     registerSemaphore: function(specialObjIndex) {
         var sema = this.vm.top();
-        if (this.isA(sema, Constants.splOb_ClassSemaphore))
+        if (this.isA(sema, Squeak.splOb_ClassSemaphore))
             this.vm.specialObjects[specialObjIndex] = sema;
         else
             this.vm.specialObjects[specialObjIndex] = this.vm.nilObj;
@@ -1786,12 +1797,12 @@ Object.subclass('lib.squeak.vm.Primitives',
     },
     primitiveWait: function() {
     	var sema = this.vm.top();
-        if (!this.isA(sema, Constants.splOb_ClassSemaphore)) return false;
-        var excessSignals = sema.getPointer(Constants.Semaphore_excessSignals);
+        if (!this.isA(sema, Squeak.splOb_ClassSemaphore)) return false;
+        var excessSignals = sema.getPointer(Squeak.Semaphore_excessSignals);
         if (excessSignals > 0)
-            sema.setPointer(Constants.Semaphore_excessSignals, excessSignals - 1);
+            sema.setPointer(Squeak.Semaphore_excessSignals, excessSignals - 1);
         else {
-            var activeProc = this.getScheduler().getPointer(Constants.ProcSched_activeProcess);
+            var activeProc = this.getScheduler().getPointer(Squeak.ProcSched_activeProcess);
             this.linkProcessToList(activeProc, sema);
             this.transferTo(this.pickTopProcess());
         }
@@ -1799,15 +1810,15 @@ Object.subclass('lib.squeak.vm.Primitives',
     },
     primitiveSignal: function() {
 	    var sema = this.vm.top();
-        if (!this.isA(sema, Constants.splOb_ClassSemaphore)) return false;
+        if (!this.isA(sema, Squeak.splOb_ClassSemaphore)) return false;
         this.synchronousSignal(sema);
         return true;
     },
     synchronousSignal: function(sema) {
     	if (this.isEmptyList(sema)) {
             //no process is waiting on this semaphore"
-            var excessSignals = sema.getPointer(Constants.Semaphore_excessSignals);
-            sema.setPointer(Constants.Semaphore_excessSignals, excessSignals + 1);
+            var excessSignals = sema.getPointer(Squeak.Semaphore_excessSignals);
+            sema.setPointer(Squeak.Semaphore_excessSignals, excessSignals + 1);
         } else
             this.resume(this.removeFirstLinkOfList(sema));
         return;
@@ -1827,7 +1838,7 @@ Object.subclass('lib.squeak.vm.Primitives',
     },
     primitiveBeDisplay: function(argCount) {
         var displayObj = this.vm.stackValue(0);
-        this.vm.specialObjects[Constants.splOb_TheDisplay] = displayObj;
+        this.vm.specialObjects[Squeak.splOb_TheDisplay] = displayObj;
         this.vm.popN(argCount); // return self
 	    return true;
 	},

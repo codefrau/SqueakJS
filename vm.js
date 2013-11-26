@@ -642,6 +642,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
         this.reclaimableContextCount = 0;
         this.nRecycledContexts = 0;
         this.nAllocatedContexts = 0;
+        this.startupTime = new Date().getTime(); // base for millisecond clock
     },
     loadInitialContext: function() {
         var schedAssn = this.specialObjects[Constants.splOb_SchedulerAssociation];
@@ -1290,6 +1291,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 130: return this.popNandPushIfOK(1, this.vm.image.fullGC()); // GC
             case 131: return this.popNandPushIfOK(1, this.vm.image.partialGC()); // GCmost
             case 134: return this.popNandPushIfOK(2, this.registerSemaphore(Constants.splOb_TheInterruptSemaphore));
+            case 135: return this.popNandPushIfOK(1, this.millisecondClockValue());
             case 148: return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); //shallowCopy
             case 161: return this.popNandPushIfOK(1, this.charFromInt('/'.charCodeAt(0))); //path delimiter
         }
@@ -1783,7 +1785,7 @@ Object.subclass('lib.squeak.vm.Primitives',
         return this.vm.stackValue(1);
     },
 },
-'display', {
+'platform', {
     primitiveBeCursor: function(argCount) {
         this.vm.popN(argCount); // return self
         return true;
@@ -1794,6 +1796,14 @@ Object.subclass('lib.squeak.vm.Primitives',
         this.vm.popN(argCount); // return self
 	    return true;
 	},
+	millisecondClockValue: function() {
+        //Return the value of the millisecond clock as an integer.
+        //Note that the millisecond clock wraps around periodically.
+        //The range is limited to SmallInteger maxVal / 2 to allow
+        //delays of up to that length without overflowing a SmallInteger."
+        return (new Date().getTime() - this.vm.startupTime) & this.vm.millisecondClockMask;
+	},
+
 });
 
 Object.subclass('lib.squeak.vm.InstructionPrinter',

@@ -1049,6 +1049,11 @@ Object.subclass('lib.squeak.vm.Interpreter',
     isUnwindMarked: function(ctx) {
         return false;
     },
+    newActiveContext: function(newContext) {
+        this.storeContextRegisters();
+        this.activeContext = newContext; //We're off and running...            
+        this.fetchContextRegisters(newContext);
+    },
     fetchContextRegisters: function(ctxt) {
         var meth = ctxt.getPointer(Constants.Context_method);
         if (this.isSmallInt(meth)) { //if the Method field is an integer, activeCntx is a block context
@@ -1199,9 +1204,9 @@ Object.subclass('lib.squeak.vm.Primitives',
             //case 0x5: // atEnd
             case 0x6: return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
             case 0x7: return this.popNandPushIfOK(1,this.vm.getClass(this.vm.top())); // class
-            //case 0x8: return this.popNandPushIfOK(2,this.primitiveBlockCopy()); // blockCopy:
-            //case 0x9: return this.primitiveBlockValue(0); // value
-            //case 0xA: return this.primitiveBlockValue(1); // value:
+            case 0x8: return this.popNandPushIfOK(2,this.doBlockCopy()); // blockCopy:
+            case 0x9: return this.primitiveBlockValue(0); // value
+            case 0xA: return this.primitiveBlockValue(1); // value:
             case 0xB: return false; // do:
             case 0xC: return false; // new
             case 0xD: return false; // new:
@@ -1256,6 +1261,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 71: return this.popNandPushIfOK(2, this.vm.instantiateClass(this.stackNonInteger(1), this.stack32BitWord(0))); // Class.new:
             case 101: return this.primitiveBeCursor(argCount); // Cursor.beCursor
             case 102: return this.primitiveBeDisplay(argCount); // DisplayScreen.beDisplay
+            case 105: return this.popNandPushIfOK(5, this.doStringReplace()); // string and array replace
             case 106: return this.popNandPushIfOK(1, this.makePointWithXandY(this.theDisplay.width, this.theDisplay.height)); // actualScreenSize
             case 121: return this.popNandPushIfOK(1, this.makeStString("/home/bert/mini.image")); //imageName
             case 148: return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); //shallowCopy
@@ -1483,6 +1489,83 @@ Object.subclass('lib.squeak.vm.Primitives',
         var x = this.vm.stackValue(1);
         var y = this.vm.stackValue(0);
         this.vm.popNandPush(1+argCount, this.makePointWithXandY(x, y));
+        return true;
+    },
+    doStringReplace: function() {
+        var dst = this.vm.stackValue(4);
+        var dstPos = this.stackInteger(3) - 1;
+        var count = this.stackInteger(2) - dstPos;
+        //	if (count<=0) {this.success = false; return dst;} //fail for compat, later succeed
+        var src = this.vm.stackValue(1);
+        var srcPos = this.stackInteger(0) - 1;
+        if (!this.success) return dst; //some integer not right
+        var srcFmt = src.format;
+        var dstFmt = dst.format;
+    	if (dstFmt < 8)
+            if (dstFmt != srcFmt) {this.success = false; return dst;} //incompatible formats
+        else
+            if ((dstFmt&0xC) != (srcFmt&0xC)) {this.success = false; return dst;} //incompatible formats
+        if (srcFmt<4) {//pointer type objects
+            var totalLength = src.pointersSize();
+            var srcInstSize = src.instSize();
+            srcPos += srcInstSize;
+            if ((srcPos < 0) || (srcPos + count) > totalLength)
+                {this.success = false; return dst;} //would go out of bounds
+            totalLength = dst.pointersSize();
+            var dstInstSize= dst.instSize();
+            dstPos += dstInstSize;
+            if ((dstPos < 0) || (dstPos + count) > totalLength)
+                {this.success= false; return dst;} //would go out of bounds
+            this.vm.arrayCopy(src.pointers, srcPos, dst.pointers, dstPos, count);
+            return dst;
+        } else {//bits type objects
+            var totalLength = src.bitsSize();
+            if ((srcPos < 0) || (srcPos + count) > totalLength)
+                {this.success = false; return dst;} //would go out of bounds
+            totalLength = dst.bitsSize();
+            if ((dstPos < 0) || (dstPos + count) > totalLength)
+                {this.success = false; return dst;} //would go out of bounds
+            this.vm.arrayCopy(src.bits, srcPos, dst.bits, dstPos, count);
+            return dst;
+        }
+    },
+},
+'blocks', {
+    doBlockCopy: function() {
+        var rcvr = this.vm.stackValue(1);
+        var sqArgCount = this.stackInteger(0);
+        var homeCtxt = rcvr;
+        if(!this.vm.isContext(homeCtxt)) this.success = false;
+        if(!this.success) return rcvr;
+        if (this.vm.isSmallInt(homeCtxt.getPointer(Constants.Context_method)))
+            // ctxt is itself a block; get the context for its enclosing method
+            homeCtxt = homeCtxt.getPointer(Constants.BlockContext_home);
+        var blockSize = homeCtxt.pointersSize() - homeCtxt.instSize(); // could use a const for instSize
+        var newBlock = this.vm.instantiateClass(this.vm.specialObjects[Constants.splOb_ClassBlockContext], blockSize);
+        var initialPC = this.vm.encodeSqueakPC(this.vm.pc + 2, this.vm.method); //*** check this...
+        newBlock.setPointer(Constants.BlockContext_initialIP, initialPC);
+        newBlock.setPointer(Constants.Context_instructionPointer, initialPC); // claim not needed; value will set it
+        newBlock.setPointer(Constants.Context_stackPointer, 0);
+        newBlock.setPointer(Constants.BlockContext_argumentCount, sqArgCount);
+        newBlock.setPointer(Constants.BlockContext_home, homeCtxt);
+        newBlock.setPointer(Constants.Context_sender, this.vm.nilObj); // claim not needed; just initialized
+        return newBlock;
+    },
+    primitiveBlockValue: function(argCount) {
+        var rcvr = this.vm.stackValue(argCount);
+        if (!this.isA(rcvr, Constants.splOb_ClassBlockContext)) return false;
+        var block = rcvr;
+        var blockArgCount = block.getPointer(Constants.BlockContext_argumentCount);
+        if (!this.vm.isSmallInt(blockArgCount)) return false;
+        if (blockArgCount != argCount) return false;
+        if (!block.getPointer(Constants.BlockContext_caller).isNil) return false;
+        this.vm.arrayCopy(this.vm.activeContext.pointers, this.vm.sp-argCount+1, block.pointers, Constants.Context_tempFrameStart, argCount);
+        var initialIP = block.getPointer(Constants.BlockContext_initialIP);
+        block.setPointer(Constants.Context_instructionPointer, initialIP);
+        block.setPointer(Constants.Context_stackPointer, argCount);
+        block.setPointer(Constants.BlockContext_caller, this.vm.activeContext);
+        this.vm.popN(argCount+1);
+        this.vm.newActiveContext(block);
         return true;
     },
 },

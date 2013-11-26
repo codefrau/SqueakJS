@@ -288,7 +288,14 @@ Object.subclass('lib.squeak.vm.Image',
         //this.objectTable.push(obj);
     	this.lastHash = (13849 + (27181 * this.lastHash)) & 0xFFFFFFFF;
         return this.lastHash & 0xFFF;
-    }
+    },
+    fullGC: function() {
+        // to do
+        return 1000000;
+    },
+    partialGC: function() {
+        return this.fullGC();
+    },
 },
 'allocating', {
     instantiateClass: function(aClass, indexableSize, filler) {
@@ -1242,6 +1249,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 16: return this.popNandPushIfOK(2,this.doBitXor());  // SmallInt.bitXor
             case 17: return this.popNandPushIfOK(2,this.doBitShift());  // SmallInt.bitShift
             case 18: return this.primitiveMakePoint(argCount);
+            case 19: return false;                                 // Guard primitive for simulation -- *must* fail
             case 40: return this.primitiveAsFloat(argCount);
             case 41: return this.popNandPushFloatIfOK(2,this.stackFloat(1)+this.stackFloat(0));  // Float +
             case 42: return this.popNandPushFloatIfOK(2,this.stackFloat(1)-this.stackFloat(0));  // Float -	
@@ -1266,6 +1274,10 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 71: return this.popNandPushIfOK(2, this.vm.instantiateClass(this.stackNonInteger(1), this.stackPos32BitInt(0))); // Class.new:
             case 75: return this.popNandPushIfOK(1, this.stackNonInteger(0).hash); // identityHash
             case 81: return this.primitiveBlockValue(argCount); // BlockContext.value
+            case 85: return this.primitiveSignal(); // Semaphore.wait
+            case 86: return this.primitiveWait(); // Semaphore.wait
+            case 87: return this.primitiveResume(); // Process.resume
+            case 88: return this.primitiveSuspend(); // Process.suspend
 
             case 101: return this.primitiveBeCursor(argCount); // Cursor.beCursor
             case 102: return this.primitiveBeDisplay(argCount); // DisplayScreen.beDisplay
@@ -1273,7 +1285,11 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 106: return this.popNandPushIfOK(1, this.makePointWithXandY(this.theDisplay.width, this.theDisplay.height)); // actualScreenSize
             case 110: return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
             case 121: return this.popNandPushIfOK(1, this.makeStString("/home/bert/mini.image")); //imageName
+            case 124: return this.popNandPushIfOK(2, this.registerSemaphore(Constants.splOb_TheLowSpaceSemaphore));
             case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
+            case 130: return this.popNandPushIfOK(1, this.vm.image.fullGC()); // GC
+            case 131: return this.popNandPushIfOK(1, this.vm.image.partialGC()); // GCmost
+            case 134: return this.popNandPushIfOK(2, this.registerSemaphore(Constants.splOb_TheInterruptSemaphore));
             case 148: return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); //shallowCopy
             case 161: return this.popNandPushIfOK(1, this.charFromInt('/'.charCodeAt(0))); //path delimiter
         }
@@ -1632,6 +1648,132 @@ Object.subclass('lib.squeak.vm.Primitives',
         this.vm.popN(argCount+1);
         this.vm.newActiveContext(block);
         return true;
+    },
+},
+'scheduling',
+{
+    primitiveResume: function() {
+        this.resume(this.vm.top());
+        return true;
+	},
+    primitiveSuspend: function() {
+        debugger;
+        var activeProc = this.getScheduler().getPointer(Constants.ProcSched_activeProcess);
+        if (this.vm.top() !== activeProc) return false;
+        this.vm.popNandPush(1, this.vm.nilObj);
+        this.transferTo(this.pickTopProcess());
+        return true;
+    },
+    getScheduler: function() {
+        var assn = this.vm.specialObjects[Constants.splOb_SchedulerAssociation];
+        return assn.getPointer(Constants.Assn_value);
+    },
+    resume: function(newProc) {
+        debugger;
+        var activeProc = this.getScheduler().getPointer(Constants.ProcSched_activeProcess);
+        var activePriority = activeProc.getPointer(Constants.Proc_priority);
+        var newPriority = newProc.getPointer(Constants.Proc_priority);
+        if (newPriority > activePriority) {
+            this.putToSleep(activeProc);
+            this.transferTo(newProc);
+        } else {
+            this.putToSleep(newProc);
+        }
+    },
+    putToSleep: function(aProcess) {
+        //Save the given process on the scheduler process list for its priority.
+        var priority = aProcess.getPointer(Constants.Proc_priority);
+        var processLists = this.getScheduler().getPointer(Constants.ProcSched_processLists);
+        var processList = processLists.getPointer(priority - 1);
+        this.linkProcessToList(aProcess, processList);
+    },
+    transferTo: function(newProc) {
+        //Record a process to be awakened on the next interpreter cycle.
+        var sched = this.getScheduler();
+        var oldProc = sched.getPointer(Constants.ProcSched_activeProcess);
+        sched.setPointer(Constants.ProcSched_activeProcess, newProc);
+        oldProc.setPointer(Constants.Proc_suspendedContext, this.vm.activeContext);
+        this.vm.newActiveContext(newProc.getPointer(Constants.Proc_suspendedContext));
+        newProc.setPointer(Constants.Proc_suspendedContext, this.vm.nilObj);
+        this.vm.reclaimableContextCount = 0;
+    },
+    pickTopProcess: function() { // aka wakeHighestPriority
+        //Return the highest priority process that is ready to run.
+        //Note: It is a fatal VM error if there is no runnable process.
+        var schedLists = this.getScheduler().getPointer(Constants.ProcSched_processLists);
+        var p = schedLists.pointersSize() - 1;  // index of last indexable field
+        var processList;
+        debugger;
+        do {
+            processList = schedLists.getPointer(p--);
+            if (p < 0) throw "scheduler could not find a runnable process";
+        } while (this.isEmptyList(processList));
+        return this.removeFirstLinkOfList(processList);
+	},    
+    linkProcessToList: function(proc, aList) {
+        // Add the given process to the given linked list and set the backpointer
+        // of process to its new list.
+        if (this.isEmptyList(aList))
+            aList.setPointer(Constants.LinkedList_firstLink, proc);
+        else {
+            var lastLink = aList.getPointer(Constants.LinkedList_lastLink);
+            lastLink.setPointer(Constants.Link_nextLink, proc);
+        }
+        aList.setPointer(Constants.LinkedList_lastLink, proc);
+        proc.setPointer(Constants.Proc_myList, aList);
+    },
+    isEmptyList: function(aLinkedList) {
+        return aLinkedList.getPointer(Constants.LinkedList_firstLink).isNil;
+    },
+    removeFirstLinkOfList: function(aList) {
+        //Remove the first process from the given linked list."
+        var first = aList.getPointer(Constants.LinkedList_firstLink);
+        var last = aList.getPointer(Constants.LinkedList_lastLink);
+        if (first === last) {
+            aList.setPointer(Constants.LinkedList_firstLink, this.vm.nilObj);
+            aList.setPointer(Constants.LinkedList_lastLink, this.vm.nilObj);
+        } else {
+            var next = first.getPointer(Constants.Link_nextLink);
+            aList.setPointer(Constants.LinkedList_firstLink, next);
+        }
+        first.setPointer(Constants.Link_nextLink, this.vm.nilObj);
+        return first;
+    },
+    registerSemaphore: function(specialObjIndex) {
+        var sema = this.vm.top();
+        if (this.isA(sema, Constants.splOb_ClassSemaphore))
+            this.vm.specialObjects[specialObjIndex] = sema;
+        else
+            this.vm.specialObjects[specialObjIndex] = this.vm.nilObj;
+        return this.vm.stackValue(1);
+    },
+    primitiveWait: function() {
+    	var sema = this.vm.top();
+        if (!this.isA(sema, Constants.splOb_ClassSemaphore)) return false;
+        var excessSignals = sema.getPointer(Constants.Semaphore_excessSignals);
+        if (excessSignals > 0)
+            sema.setPointer(Constants.Semaphore_excessSignals, excessSignals - 1);
+        else {
+            var activeProc = this.getScheduler().getPointer(Constants.ProcSched_activeProcess);
+            this.linkProcessToList(activeProc, sema);
+            this.transferTo(this.pickTopProcess());
+        }
+        return true;
+    },
+    primitiveSignal: function() {
+	    var sema = this.vm.top();
+        if (!this.isA(sema, Constants.splOb_ClassSemaphore)) return false;
+        this.synchronousSignal(sema);
+        return true;
+    },
+    synchronousSignal: function(sema) {
+    	if (this.isEmptyList(sema)) {
+            //no process is waiting on this semaphore"
+            var excessSignals = sema.getPointer(Constants.Semaphore_excessSignals);
+            sema.setPointer(Constants.Semaphore_excessSignals, excessSignals + 1);
+        } else
+            this.resume(this.removeFirstLinkOfList(sema));
+        return;
     },
 },
 'memory', {

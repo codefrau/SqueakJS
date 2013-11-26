@@ -285,7 +285,7 @@ Object.subclass('lib.squeak.vm.Image',
 },
 'object table', {
     registerObject: function(obj) {
-        this.objectTable.push(obj);
+        //this.objectTable.push(obj);
     	this.lastHash = (13849 + (27181 * this.lastHash)) & 0xFFFFFFFF;
         return this.lastHash & 0xFFF;
     }
@@ -452,6 +452,7 @@ Object.subclass('lib.squeak.vm.Object',
             this.sqClass.constructor == lib.squeak.vm.Object ? this.sqInstName() : this.sqClass);
     },
     bitsAsString: function() {
+        if (!this.bits) return '';
         return this.bits.map(function(char) { return String.fromCharCode(char); }).join('');
     },
     assnKeyAsString: function() {
@@ -697,7 +698,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
             case 122: this.doReturn(this.falseObj, this.homeContext.getPointer(Constants.Context_sender)); break;
             case 123: this.doReturn(this.nilObj, this.homeContext.getPointer(Constants.Context_sender)); break;
             case 124: this.doReturn(this.pop(), this.homeContext.getPointer(Constants.Context_sender)); break;
-            case 125: this.doReturn(this.pop(), this.activeContext.getPointer(Constants.BlockContext_caller)); break;
+            case 125: this.doReturn(this.pop(), this.activeContext.getPointer(Constants.BlockContext_caller)); break; // blockReturn
             case 126: this.nono(); break;
             case 127: this.nono(); break;
 
@@ -850,6 +851,11 @@ Object.subclass('lib.squeak.vm.Interpreter',
             lookupClass = lookupClass.getPointer(Constants.Class_superclass);
         }
         var entry = this.findSelectorInClass(selector, argCount, lookupClass);
+        if (entry.primIndex) {
+            //note details for verification of at/atput primitives
+            this.verifyAtSelector = selector;
+            this.verifyAtClass = lookupClass;
+        }
         this.executeNewMethod(newRcvr, entry.method, argCount, entry.primIndex);
     },
     findSelectorInClass: function(selector, argCount, startingClass) {
@@ -972,7 +978,6 @@ Object.subclass('lib.squeak.vm.Interpreter',
         this.activeContext = thisContext;
         this.fetchContextRegisters(this.activeContext);
         this.push(returnValue);
-        console.log("***returning " + returnValue.toString());
     },
     tryPrimitive: function(primIndex, argCount) {
         if ((primIndex > 255) && (primIndex < 520)) {
@@ -1258,13 +1263,19 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 69: return this.popNandPushIfOK(3, this.objectAtPut(false,false,true)); // Method.objectAt:put:
 
             case 70: return this.popNandPushIfOK(1, this.vm.instantiateClass(this.stackNonInteger(0), 0)); // Class.new
-            case 71: return this.popNandPushIfOK(2, this.vm.instantiateClass(this.stackNonInteger(1), this.stack32BitWord(0))); // Class.new:
+            case 71: return this.popNandPushIfOK(2, this.vm.instantiateClass(this.stackNonInteger(1), this.stackPos32BitInt(0))); // Class.new:
+            case 75: return this.popNandPushIfOK(1, this.stackNonInteger(0).hash); // identityHash
+            case 81: return this.primitiveBlockValue(argCount); // BlockContext.value
+
             case 101: return this.primitiveBeCursor(argCount); // Cursor.beCursor
             case 102: return this.primitiveBeDisplay(argCount); // DisplayScreen.beDisplay
             case 105: return this.popNandPushIfOK(5, this.doStringReplace()); // string and array replace
             case 106: return this.popNandPushIfOK(1, this.makePointWithXandY(this.theDisplay.width, this.theDisplay.height)); // actualScreenSize
+            case 110: return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
             case 121: return this.popNandPushIfOK(1, this.makeStString("/home/bert/mini.image")); //imageName
+            case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
             case 148: return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); //shallowCopy
+            case 161: return this.popNandPushIfOK(1, this.charFromInt('/'.charCodeAt(0))); //path delimiter
         }
         throw "primitive " + index + " not implemented yet";
         return false;
@@ -1358,6 +1369,10 @@ Object.subclass('lib.squeak.vm.Primitives',
             bytes[i] = (pos32Val>>>(8*i))&255;
         return lgIntObj;
     },
+    charFromInt: function(ascii) {
+        var charTable = this.vm.specialObjects[Constants.splOb_CharacterTable];
+        return charTable.getPointer(ascii);
+    },
     stackFloat: function(nDeep) {
         return this.checkFloat(this.vm.stackValue(nDeep));
     },
@@ -1400,14 +1415,13 @@ Object.subclass('lib.squeak.vm.Primitives',
     },
 },
 'indexing', {
-    objectAt: function(cameFromAtBytecode, convertChars, includeInstVars) {
+    objectAt: function(cameFromBytecode, convertChars, includeInstVars) {
         //Returns result of at: or sets success false
-        debugger;
         var array = this.stackNonInteger(1);
         var index = this.stackPos32BitInt(0); //note non-int returns zero
         if (!this.success) return array;
         var info;
-        if (cameFromAtBytecode) {// fast entry checks cache
+        if (cameFromBytecode) {// fast entry checks cache
             info = this.atCache[array.hash & this.atCacheMask];
             if (info.array !== array) {this.success = false; return array;}
         } else {// slow entry installs in cache if appropriate
@@ -1417,7 +1431,7 @@ Object.subclass('lib.squeak.vm.Primitives',
                 if (index==2) return this.pos32BitIntFor(floatData.getUint32(4, false));
                 this.success = false; return array;
             }
-            info = this.makeAtCacheInfo(this.atCache, this.vm.specialSelectors[32], array, convertChars, includeInstVars);
+            info = this.makeAtCacheInfo(this.atCache, this.vm.specialSelectors[32], array, includeInstVars);
         }
         if (index < 1 || index > info.size) {this.success = false; return array;}
         if (includeInstVars)  //pointers...   instVarAt and objectAt
@@ -1427,12 +1441,64 @@ Object.subclass('lib.squeak.vm.Primitives',
         if (array.format<8) // words...
             return this.pos32BitIntFor(array.bits[index-1]);
         if (array.format<12) // bytes...
-            if (info.convertChars) return this.charFromInt(array.bits[index-1] && 0xFF);
+            if (convertChars) return this.charFromInt(array.bits[index-1] && 0xFF);
             else return array.bits[index-1] && 0xFF;
         // methods (format>=12) must simulate Squeak's method indexing
         var offset = array.pointersSize() * 4;
         if (index-1-offset < 0) {this.success = false; return array;} //reading lits as bytes
         return array.bits[index-1-offset] & 0xFF;
+    },
+    objectAtPut: function(cameFromBytecode, convertChars, includeInstVars) {
+        //Returns result of at:put: or sets success false
+        var array = this.stackNonInteger(2);
+        var index = this.stackPos32BitInt(1); //note non-int returns zero
+        if (!this.success) return array;
+        var info;
+        if (cameFromBytecode) {// fast entry checks cache
+            info = this.atCache[array.hash & this.atCacheMask];
+            if (info.array !== array) {this.success = false; return array;}
+        } else {// slow entry installs in cache if appropriate
+            if (array.isFloat) { // present float as word array
+                throw "not implemented yet"
+                var floatData = array.floatData();
+                if (index==1) return this.pos32BitIntFor(floatData.getUint32(0, false));
+                if (index==2) return this.pos32BitIntFor(floatData.getUint32(4, false));
+                this.success = false; return array;
+            }
+            info = this.makeAtCacheInfo(this.atCache, this.vm.specialSelectors[32], array, includeInstVars);
+        }
+        if (index<1 || index>info.size) {this.success = false; return array;}
+        var objToPut = this.vm.stackValue(0);
+        if (includeInstVars)  // pointers...   instVarAtPut and objectAtPut
+            return array.pointers[index-1] = objToPut; //eg, objectAt:
+        if (array.format<6)  // pointers...   normal atPut
+            return array.pointers[index-1+info.ivarOffset] = objToPut;
+        var intToPut;
+        if (array.format<8) {  // words...
+            intToPut = this.stackPos32BitValue(0);
+            if (this.success) array.bits[index-1] = intToPut;
+            return objToPut;
+        }
+        // bytes...
+        if (convertChars) {
+            // put a character...
+            if (this.vm.isSmallInt(objToPut)) {this.success = false; return objToPut;}
+            if (objToPut.sqClass !== this.vm.specialObjects[Constants.splOb_ClassCharacter])
+                {this.success = false; return objToPut;}
+            intToPut = objToPut.getPointer(0);
+            if (!(this.vm.isSmallInt(intToPut))) {this.success = false; return objToPut;}
+        } else { // put a byte...
+            if(!(vm.isSmallInt(objToPut))) {this.success = false; return objToPut;}
+            intToPut = objToPut;
+        }
+        if (intToPut<0 || intToPut>255) {this.success = false; return objToPut;}
+        if (array.format<8)  // bytes...
+            return array.bits[index-1] = intToPut;
+        // methods (format>=12) must simulate Squeak's method indexing
+        var offset = array.pointersSize() * 4;
+        if (index-1-offset < 0) {this.success = false; return array;} //writing lits as bytes
+        array.bits[index-1-offset] = intToPut;
+        return objToPut;
     },
     objectSize: function(argCount) {
         var rcvr = this.vm.stackValue(0);
@@ -1460,7 +1526,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             this.atPutCache[i].array = null;
         }
     },
-    makeAtCacheInfo: function(atOrPutCache, atOrPutSelector, array, convertChars, includeInstVars) {
+    makeAtCacheInfo: function(atOrPutCache, atOrPutSelector, array, includeInstVars) {
         //Make up an info object and store it in the atCache or the atPutCache.
         //If it's not cacheable (not a non-super send of at: or at:put:)
         //then return the info in nonCachedInfo.
@@ -1468,12 +1534,11 @@ Object.subclass('lib.squeak.vm.Primitives',
         //a zero ivarOffset, and a size that includes the extra instVars
         var info;
         var cacheable =
-            /*(this.vm.verifyAtSelector === atOrPutSelector)         //is at or atPut
-		    && (this.vm.verifyAtClass === array.sqClass)                //not a super send
-            &&*/ !(array.format === 3 && this.vm.isContext(array));  //not a context (size can change)
+            (this.vm.verifyAtSelector === atOrPutSelector)         //is at or atPut
+		    && (this.vm.verifyAtClass === array.sqClass)           //not a super send
+            && !(array.format === 3 && this.vm.isContext(array));  //not a context (size can change)
         info = cacheable ? atOrPutCache[array.hash & this.atCacheMask] : this.nonCachedInfo;
         info.array = array;
-        info.convertChars = convertChars; 
         if (includeInstVars) {
             info.size = array.instSize() + Math.max(0, this.indexableSize(array));
             info.ivarOffset = 0;
@@ -1567,6 +1632,13 @@ Object.subclass('lib.squeak.vm.Primitives',
         this.vm.popN(argCount+1);
         this.vm.newActiveContext(block);
         return true;
+    },
+},
+'memory', {
+    setLowSpaceThreshold: function() {
+        var nBytes = this.stackInteger(0);
+        if (this.success) this.vm.lowSpaceThreshold = nBytes;
+        return this.vm.stackValue(1);
     },
 },
 'display', {

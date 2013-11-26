@@ -955,7 +955,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
         this.storeContextRegisters(); // not really necessary, I claim
         this.receiver = newContext.getPointer(Constants.Context_receiver);
         if (this.receiver !== newRcvr)
-            throw "what?!";
+            throw "receivers don't match";
         this.checkForInterrupts();
     },
     doReturn: function(returnValue, targetContext) {
@@ -1027,8 +1027,8 @@ Object.subclass('lib.squeak.vm.Interpreter',
         var freebie;
         if (needsLarge) {
             if (!this.freeLargeContexts.isNil) {
-                freebie = freeLargeContexts;
-                freeLargeContexts = freebie.getPointer(0);
+                freebie = this.freeLargeContexts;
+                this.freeLargeContexts = freebie.getPointer(0);
                 this.nRecycledContexts++;
                 return freebie;
             }
@@ -1047,7 +1047,18 @@ Object.subclass('lib.squeak.vm.Interpreter',
     },
     instantiateClass: function(aClass, indexableSize) {
         return this.image.instantiateClass(aClass, indexableSize, this.nilObj);
-    }
+    },
+    createActualMessage: function(selector, argCount, cls) {
+        //Bundle up receiver, args and selector as a messageObject
+        var message = this.instantiateClass(this.specialObjects[Constants.splOb_ClassMessage], 0);
+        var argArray = this.instantiateClass(this.specialObjects[Constants.splOb_ClassArray], argCount);
+        this.arrayCopy(this.activeContext.pointers, this.sp-argCount+1, argArray.pointers, 0, argCount); //copy args from stack
+        message.setPointer(Constants.Message_selector, selector);
+        message.setPointer(Constants.Message_arguments, argArray);
+        if (message.pointers.length > Constants.Message_lookupClass) //Early versions don't have lookupClass
+            message.setPointer(Constants.Message_lookupClass, cls);
+        return message;
+    },
 },
 'contexts', {
     isContext: function(obj) {//either block or methodContext
@@ -1212,21 +1223,20 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 0x0: return this.popNandPushIfOK(2, this.objectAt(true,true,false)); // at:
             case 0x1: return this.popNandPushIfOK(3, this.objectAtPut(true,true,false)); // at:put:
             case 0x2: return this.popNandPushIfOK(1, this.objectSize(0)); // size
-            //case 0x3: // next
-            //case 0x4: // nextPut:
-            //case 0x5: // atEnd
+            //case 0x3: return false; // next
+            //case 0x4: return false; // nextPut:
+            //case 0x5: return false; // atEnd
             case 0x6: return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
             case 0x7: return this.popNandPushIfOK(1,this.vm.getClass(this.vm.top())); // class
             case 0x8: return this.popNandPushIfOK(2,this.doBlockCopy()); // blockCopy:
             case 0x9: return this.primitiveBlockValue(0); // value
             case 0xA: return this.primitiveBlockValue(1); // value:
-            case 0xB: return false; // do:
-            case 0xC: return false; // new
-            case 0xD: return false; // new:
-            case 0xE: return false; // x
-            case 0xF: return false; // y
+            //case 0xB: return false; // do:
+            //case 0xC: return false; // new
+            //case 0xD: return false; // new:
+            //case 0xE: return false; // x
+            //case 0xF: return false; // y
         }
-        throw "quick prim " + lobits + " not implemented yet";
         return false;
     },
     doPrimitive: function(index, argCount) {
@@ -1251,6 +1261,23 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 17: return this.popNandPushIfOK(2,this.doBitShift());  // SmallInt.bitShift
             case 18: return this.primitiveMakePoint(argCount);
             case 19: return false;                                 // Guard primitive for simulation -- *must* fail
+            case 21: return false; // primitiveAddLargeIntegers
+            case 22: return false; // primitiveSubtractLargeIntegers
+            case 23: return false; // primitiveLessThanLargeIntegers
+            case 24: return false; // primitiveGreaterThanLargeIntegers
+            case 25: return false; // primitiveLessOrEqualLargeIntegers
+            case 26: return false; // primitiveGreaterOrEqualLargeIntegers
+            case 27: return false; // primitiveEqualLargeIntegers
+            case 28: return false; // primitiveNotEqualLargeIntegers
+            case 29: return false; // primitiveMultiplyLargeIntegers
+            case 30: return false; // primitiveDivideLargeIntegers
+            case 31: return false; // primitiveModLargeIntegers
+            case 32: return false; // primitiveDivLargeIntegers
+            case 33: return false; // primitiveQuoLargeIntegers
+            case 34: return false; // primitiveBitAndLargeIntegers
+            case 35: return false; // primitiveBitOrLargeIntegers
+            case 36: return false; // primitiveBitXorLargeIntegers
+            case 37: return false; // primitiveBitShiftLargeIntegers
             case 40: return this.primitiveAsFloat(argCount);
             case 41: return this.popNandPushFloatIfOK(2,this.stackFloat(1)+this.stackFloat(0));  // Float +
             case 42: return this.popNandPushFloatIfOK(2,this.stackFloat(1)-this.stackFloat(0));  // Float -	
@@ -1268,11 +1295,17 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 62: return this.popNandPushIfOK(1, this.objectSize()); // size
             case 63: return this.popNandPushIfOK(2, this.objectAt(false,true,false)); // String.basicAt:
             case 64: return this.popNandPushIfOK(3, this.objectAtPut(false,true,false)); // String.basicAt:put:
+            case 65: return false; // primitiveNext
+            case 66: return false; // primitiveNextPut
+            case 67: return false; // primitiveAtEnd
             case 68: return this.popNandPushIfOK(2, this.objectAt(false,false,true)); // Method.objectAt:
             case 69: return this.popNandPushIfOK(3, this.objectAtPut(false,false,true)); // Method.objectAt:put:
 
             case 70: return this.popNandPushIfOK(1, this.vm.instantiateClass(this.stackNonInteger(0), 0)); // Class.new
             case 71: return this.popNandPushIfOK(2, this.vm.instantiateClass(this.stackNonInteger(1), this.stackPos32BitInt(0))); // Class.new:
+            case 73: return this.popNandPushIfOK(2, this.objectAt(false,false,true)); // instVarAt:
+            case 74: return this.popNandPushIfOK(3, this.objectAtPut(false,false,true)); // instVarAt:put:
+
             case 75: return this.popNandPushIfOK(1, this.stackNonInteger(0).hash); // identityHash
             case 81: return this.primitiveBlockValue(argCount); // BlockContext.value
             case 85: return this.primitiveSignal(); // Semaphore.wait
@@ -1292,8 +1325,11 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 131: return this.popNandPushIfOK(1, this.vm.image.partialGC()); // GCmost
             case 134: return this.popNandPushIfOK(2, this.registerSemaphore(Constants.splOb_TheInterruptSemaphore));
             case 135: return this.popNandPushIfOK(1, this.millisecondClockValue());
+            case 142: return this.popNandPushIfOK(1, this.makeStString("/users/bert/squeakvm/")); //vmPath
             case 148: return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); //shallowCopy
+            case 153: return false; //File.open 
             case 161: return this.popNandPushIfOK(1, this.charFromInt('/'.charCodeAt(0))); //path delimiter
+            case 235: return false;  // primStringcomparewithcollated
         }
         throw "primitive " + index + " not implemented yet";
         return false;
@@ -1380,7 +1416,7 @@ Object.subclass('lib.squeak.vm.Primitives',
         if (pos32Val >= 0)
             if (this.vm.canBeSmallInt(pos32Val)) return pos32Val;
         debugger;
-        var lgIntClass = this.vm.specialObjects[Squeak.splOb_ClassLargePositiveInteger];
+        var lgIntClass = this.vm.specialObjects[Constants.splOb_ClassLargePositiveInteger];
         var lgIntObj = this.vm.instantiateClass(lgIntClass, 4);
         var bytes = lgIntObj.bits;
         for (var i=0; i<4; i++)
@@ -1449,7 +1485,7 @@ Object.subclass('lib.squeak.vm.Primitives',
                 if (index==2) return this.pos32BitIntFor(floatData.getUint32(4, false));
                 this.success = false; return array;
             }
-            info = this.makeAtCacheInfo(this.atCache, this.vm.specialSelectors[32], array, includeInstVars);
+            info = this.makeAtCacheInfo(this.atCache, this.vm.specialSelectors[32], array, convertChars, includeInstVars);
         }
         if (index < 1 || index > info.size) {this.success = false; return array;}
         if (includeInstVars)  //pointers...   instVarAt and objectAt
@@ -1459,8 +1495,8 @@ Object.subclass('lib.squeak.vm.Primitives',
         if (array.format<8) // words...
             return this.pos32BitIntFor(array.bits[index-1]);
         if (array.format<12) // bytes...
-            if (convertChars) return this.charFromInt(array.bits[index-1] && 0xFF);
-            else return array.bits[index-1] && 0xFF;
+            if (info.convertChars) return this.charFromInt(array.bits[index-1] & 0xFF);
+            else return array.bits[index-1] & 0xFF;
         // methods (format>=12) must simulate Squeak's method indexing
         var offset = array.pointersSize() * 4;
         if (index-1-offset < 0) {this.success = false; return array;} //reading lits as bytes
@@ -1483,7 +1519,7 @@ Object.subclass('lib.squeak.vm.Primitives',
                 if (index==2) return this.pos32BitIntFor(floatData.getUint32(4, false));
                 this.success = false; return array;
             }
-            info = this.makeAtCacheInfo(this.atCache, this.vm.specialSelectors[32], array, includeInstVars);
+            info = this.makeAtCacheInfo(this.atCache, this.vm.specialSelectors[32], array, convertChars, includeInstVars);
         }
         if (index<1 || index>info.size) {this.success = false; return array;}
         var objToPut = this.vm.stackValue(0);
@@ -1521,7 +1557,7 @@ Object.subclass('lib.squeak.vm.Primitives',
     objectSize: function(argCount) {
         var rcvr = this.vm.stackValue(0);
         var size = this.indexableSize(rcvr);
-        if (size === -1) success = false; //not indexable
+        if (size === -1) {this.success = false; return -1}; //not indexable
         return this.pos32BitIntFor(size);
     },
     initAtCache: function() {
@@ -1544,7 +1580,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             this.atPutCache[i].array = null;
         }
     },
-    makeAtCacheInfo: function(atOrPutCache, atOrPutSelector, array, includeInstVars) {
+    makeAtCacheInfo: function(atOrPutCache, atOrPutSelector, array, convertChars, includeInstVars) {
         //Make up an info object and store it in the atCache or the atPutCache.
         //If it's not cacheable (not a non-super send of at: or at:put:)
         //then return the info in nonCachedInfo.
@@ -1557,6 +1593,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             && !(array.format === 3 && this.vm.isContext(array));  //not a context (size can change)
         info = cacheable ? atOrPutCache[array.hash & this.atCacheMask] : this.nonCachedInfo;
         info.array = array;
+        info.convertChars = convertChars;
         if (includeInstVars) {
             info.size = array.instSize() + Math.max(0, this.indexableSize(array));
             info.ivarOffset = 0;
@@ -1671,7 +1708,6 @@ Object.subclass('lib.squeak.vm.Primitives',
         return assn.getPointer(Constants.Assn_value);
     },
     resume: function(newProc) {
-        debugger;
         var activeProc = this.getScheduler().getPointer(Constants.ProcSched_activeProcess);
         var activePriority = activeProc.getPointer(Constants.Proc_priority);
         var newPriority = newProc.getPointer(Constants.Proc_priority);
@@ -1705,7 +1741,6 @@ Object.subclass('lib.squeak.vm.Primitives',
         var schedLists = this.getScheduler().getPointer(Constants.ProcSched_processLists);
         var p = schedLists.pointersSize() - 1;  // index of last indexable field
         var processList;
-        debugger;
         do {
             processList = schedLists.getPointer(p--);
             if (p < 0) throw "scheduler could not find a runnable process";

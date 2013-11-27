@@ -222,7 +222,7 @@ Object.subclass('lib.squeak.vm.Image',
         var extraVMMemory = readWord();
         pos += headerSize - (9 * 4); //skip to end of header
         // read objects
-        this.objectTable = new Array();
+        var prevObj;
         var oopMap = {};
         for (var ptr = 0; ptr < endOfMemory; ) {
             var nWords = 0;
@@ -260,6 +260,8 @@ Object.subclass('lib.squeak.vm.Image',
             var object = new lib.squeak.vm.Object();
             object.initFromImage(classInt, format, hash, bits);
             this.registerObject(object);
+            if (prevObj) prevObj.nextObject = object;
+            prevObj = object;
             //oopMap is from old oops to new objects
             oopMap[oldBaseAddr + baseAddr] = object;
         }
@@ -272,6 +274,9 @@ Object.subclass('lib.squeak.vm.Image',
             oopMap[oop].installFromImage(oopMap, compactClasses, floatClass, littleEndian);
         this.specialObjectsArray = splObs;
         this.decorateKnownObjects();
+        this.firstObject = oopMap[oldBaseAddr+4];
+        this.lastOldObject = prevObj;
+        this.newSpaceCount = 0; 
      },
     decorateKnownObjects: function() {
         var splObjs = this.specialObjectsArray.pointers;
@@ -282,21 +287,91 @@ Object.subclass('lib.squeak.vm.Image',
     }
 
 },
-'object table', {
+'garbage collection', {
+    fullGC: function() {
+        // Old space is a linked list of objects - each object has an "nextObject" reference.
+        // New space objects do not have that pointer, they are garbage-collected by JavaScript.
+        // But they have an allocation id so the survivors can be ordered on tenure.
+        // The "nextObject" references are created by collecting all new objects, 
+        // sorting them by id, and then linking them into old space.
+        
+        var newObjects = this.markAllUsedObjects();
+        var garbageCount = this.newSpaceCount - newObjects.length;
+        garbageCount += this.removeUnmarkedOldObjects();
+        this.appendToOldObjects(newObjects);
+        this.newSpaceCount = 0;
+        return 1000000 + garbageCount; // free space
+    },
+    appendToOldObjects: function(newObjects) {
+        // append new objects to linked list of old objects
+        var oldObj = this.lastOldObject;
+        for (var i = 1; i < newObjects.length; i++) {
+            var newObj = newObjects[i];
+            delete newObj.id;
+            oldObj.nextObject = newObj;
+            oldObj = newObj;
+        }
+        this.lastOldObject = oldObj;
+    },
+
+    removeUnmarkedOldObjects: function() {
+        // Unlink unmarked old objects from the nextObject linked list
+        // Reset marks of remaining objects
+        // Set this.lastOldObject to last old object
+        // Return count of removed old objects
+        var removed = 0;
+        var obj = this.firstObject;
+        while (true) {
+            var next = obj.nextObject;
+            if (!next) {
+                this.lastOldObject = obj;
+                return removed;
+            }
+            // if marked, go to next object
+            if (next.mark) {
+                next.mark = false;     // unmark for next GC
+                obj = next;
+            } else { // otherwise, store next object's successor 
+                removed++;
+                obj.nextObject = next.nextObject;
+            }
+        }
+    },
+    markAllUsedObjects: function() {
+        // visit all reachable objects and mark them
+        // return new objects sorted by creation time
+        var newObjects = [];
+        this.markUsed(this.specialObjectsArray, newObjects);
+        this.markUsed(this.vm.activeContext, newObjects);
+        return newObjects.sort(function(a,b){return a.id - b.id});
+    },
+    markUsed: function(object, newObjects) {
+        // recursively mark all objects reachable from object
+        // and add new objects to newObjects
+        if (typeof object !== "number" && !object.mark) {
+            object.mark = true;
+            if (!object.nextObject)
+                newObjects.push(object);
+            this.markUsed(object.sqClass, newObjects);
+            var ptrs = object.pointers;
+            if (ptrs) for (var i = 0; i < ptrs.length; i++)
+                this.markUsed(ptrs[i], newObjects);
+        }
+    },
+    partialGC: function() {
+        // no partial GC since new space uses the Javascript GC
+        return 1000000; 
+    },
+},
+'creating', {
     registerObject: function(obj) {
-        //this.objectTable.push(obj);
+        // We don't actually register the object yet, because that would prevent
+        // it from being garbage-collected. But we give it a mark to preserve
+        // object creation order when we move it to old space.
+        if (this.newSpaceCount != undefined) obj.id = ++this.newSpaceCount;
     	this.lastHash = (13849 + (27181 * this.lastHash)) & 0xFFFFFFFF;
         return this.lastHash & 0xFFF;
     },
-    fullGC: function() {
-        // to do
-        return 1000000;
-    },
-    partialGC: function() {
-        return this.fullGC();
-    },
-},
-'allocating', {
     instantiateClass: function(aClass, indexableSize, filler) {
         var newObject = new lib.squeak.vm.Object();
         var hash = this.registerObject(newObject);
@@ -406,6 +481,7 @@ Object.subclass('lib.squeak.vm.Object',
                 this.words = this.decodeWords(nWords, this.bits);
         }
         delete this.bits;
+        this.mark = false; // for GC
     },
     decodePointers: function(nWords, theBits, oopMap) {
         //Convert small ints and look up object pointers in oopMap
@@ -609,7 +685,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
 'initialization', {
     initialize: function(image, display) {
         this.image = image;
-        //this.image.bindVM(this);
+        this.image.vm = this;
         this.initConstants();
         this.primHandler = new lib.squeak.vm.Primitives(this, display);
         this.loadImageState();

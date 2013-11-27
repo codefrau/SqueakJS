@@ -1228,7 +1228,7 @@ Object.subclass('lib.squeak.vm.Primitives',
 'initialization', {
     initialize: function(vm, display) {
         this.vm = vm;
-        this.theDisplay = display;
+        this.display = display;
         this.initAtCache();
     }
 },
@@ -1333,7 +1333,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 101: return this.primitiveBeCursor(argCount); // Cursor.beCursor
             case 102: return this.primitiveBeDisplay(argCount); // DisplayScreen.beDisplay
             case 105: return this.popNandPushIfOK(5, this.doStringReplace()); // string and array replace
-            case 106: return this.popNandPushIfOK(1, this.makePointWithXandY(this.theDisplay.width, this.theDisplay.height)); // actualScreenSize
+            case 106: return this.popNandPushIfOK(1, this.makePointWithXandY(this.display.width, this.display.height)); // actualScreenSize
             case 110: return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
             case 121: return this.popNandPushIfOK(1, this.makeStString("/home/bert/mini.image")); //imageName
             case 124: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore));

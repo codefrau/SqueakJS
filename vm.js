@@ -159,7 +159,7 @@ Squeak = {
 };
 
 Object.subclass('lib.squeak.vm.Image',
-'documentation', {
+'about', {
     about: function() {
     /*
     Object Format
@@ -188,72 +188,74 @@ Object.subclass('lib.squeak.vm.Image',
     */    
     }
 },
-'reading', {
+'initializing', {
     readFromBuffer: function(buffer) {
         var data = new DataView(buffer),
             littleEndian = false,
             pos = 0;
-        var readInt = function() {
-            var int = data.getInt32(pos, littleEndian);
+        var readWord = function() {
+            var int = data.getUint32(pos, littleEndian);
             pos += 4;
             return int;
         };
+        var readWords = function(n) {
+            var words = [];
+            for (var j = 0; j < n; j++)
+                words.push(readWord());
+            return words;
+        };
         // read version
-        var version = readInt();
+        var version = readWord();
         if (version != 6502) {
             littleEndian = true; pos = 0;
-            version = readInt();
+            version = readWord();
             if (version != 6502) throw "bad image version";
         }
         // read header
-        var headerSize = readInt();
-        var endOfMemory = readInt(); //first unused location in heap
-        var oldBaseAddr = readInt(); //object memory base address of image
-        var specialObjectsOopInt = readInt(); //oop of array of special oops
-        this.lastHash = readInt(); //Should be loaded from, and saved to the image header
-        var savedWindowSize = readInt();
-        var fullScreenFlag = readInt();
-        var extraVMMemory = readInt();
+        var headerSize = readWord();
+        var endOfMemory = readWord(); //first unused location in heap
+        var oldBaseAddr = readWord(); //object memory base address of image
+        var specialObjectsOopInt = readWord(); //oop of array of special oops
+        this.lastHash = readWord(); //Should be loaded from, and saved to the image header
+        var savedWindowSize = readWord();
+        var fullScreenFlag = readWord();
+        var extraVMMemory = readWord();
         pos += headerSize - (9 * 4); //skip to end of header
         // read objects
         this.objectTable = new Array();
         var oopMap = {};
-        for (var i = 0; i < endOfMemory; ) {
+        for (var ptr = 0; ptr < endOfMemory; ) {
             var nWords = 0;
             var classInt = 0;
-            var header = readInt();
+            var header = readWord();
             switch (header & Squeak.HeaderTypeMask) {
                 case Squeak.HeaderTypeSizeAndClass:
                     nWords = header >> 2;
-                    classInt = readInt();
-                    header = readInt();
-                    i += 12;
+                    classInt = readWord();
+                    header = readWord();
+                    ptr += 12;
                     break;
                 case Squeak.HeaderTypeClass:
                     classInt = header - Squeak.HeaderTypeClass;
-                    header = readInt();
+                    header = readWord();
                     nWords = (header >> 2) & 63;
-                    i += 8;
+                    ptr += 8;
                     break;
                 case Squeak.HeaderTypeShort:
                     nWords = (header >> 2) & 63;
                     classInt = (header >> 12) & 31; //compact class index
                     //Note classInt<32 implies compact class index
-                    i += 4;
+                    ptr += 4;
                     break;
                 case Squeak.HeaderTypeFree:
                     throw "Unexpected free block";
             }
-            var baseAddr = i - 4; //0-rel byte oop of this object (base header)
+            var baseAddr = ptr - 4; //0-rel byte oop of this object (base header)
             nWords--;  //length includes base header which we have already read
             var format = ((header>>8) & 15);
             var hash = ((header>>17) & 4095);
-            
-            // Note classInt and bits are just raw data; no base addr adjustment and no int conversion
-            var bits = new Array(nWords);
-            for (var j = 0; j<nWords; j++)
-                bits[j] = readInt();
-            i += nWords*4;
+            var bits = readWords(nWords);
+            ptr += nWords * 4;
 
             var object = new lib.squeak.vm.Object();
             object.initFromImage(classInt, format, hash, bits);

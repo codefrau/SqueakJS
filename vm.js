@@ -288,6 +288,10 @@ Object.subclass('lib.squeak.vm.Image',
 
 },
 'garbage collection', {
+    partialGC: function() {
+        // no partial GC needed since new space uses the Javascript GC
+        return 1000000;
+    },
     fullGC: function() {
         // Old space is a linked list of objects - each object has an "nextObject" reference.
         // New space objects do not have that pointer, they are garbage-collected by JavaScript.
@@ -302,44 +306,9 @@ Object.subclass('lib.squeak.vm.Image',
         this.newSpaceCount = 0;
         return 1000000 + garbageCount; // free space
     },
-    appendToOldObjects: function(newObjects) {
-        // append new objects to linked list of old objects
-        var oldObj = this.lastOldObject;
-        for (var i = 1; i < newObjects.length; i++) {
-            var newObj = newObjects[i];
-            delete newObj.id;
-            oldObj.nextObject = newObj;
-            oldObj = newObj;
-        }
-        this.lastOldObject = oldObj;
-    },
-
-    removeUnmarkedOldObjects: function() {
-        // Unlink unmarked old objects from the nextObject linked list
-        // Reset marks of remaining objects
-        // Set this.lastOldObject to last old object
-        // Return count of removed old objects
-        var removed = 0;
-        var obj = this.firstObject;
-        while (true) {
-            var next = obj.nextObject;
-            if (!next) {
-                this.lastOldObject = obj;
-                return removed;
-            }
-            // if marked, go to next object
-            if (next.mark) {
-                next.mark = false;     // unmark for next GC
-                obj = next;
-            } else { // otherwise, store next object's successor 
-                removed++;
-                obj.nextObject = next.nextObject;
-            }
-        }
-    },
     markAllUsedObjects: function() {
-        // visit all reachable objects and mark them
-        // return new objects sorted by creation time
+        // Visit all reachable objects and mark them
+        // Return new objects sorted by creation time
         var newObjects = [];
         this.markUsed(this.specialObjectsArray, newObjects);
         this.markUsed(this.vm.activeContext, newObjects);
@@ -358,9 +327,39 @@ Object.subclass('lib.squeak.vm.Image',
                 this.markUsed(ptrs[i], newObjects);
         }
     },
-    partialGC: function() {
-        // no partial GC since new space uses the Javascript GC
-        return 1000000; 
+    removeUnmarkedOldObjects: function() {
+        // Unlink unmarked old objects from the nextObject linked list
+        // Reset marks of remaining objects
+        // Set this.lastOldObject to last old object
+        // Return count of removed old objects
+        var count = 0;
+        var obj = this.firstObject;
+        while (true) {
+            var next = obj.nextObject;
+            if (!next) { // we're done
+                this.lastOldObject = obj;
+                return count;
+            }
+            // if marked, continue with next object
+            if (next.mark) {
+                next.mark = false;     // unmark for next GC
+                obj = next;
+            } else { // otherwise, drop it
+                count++;
+                obj.nextObject = next.nextObject;
+            }
+        }
+    },
+    appendToOldObjects: function(newObjects) {
+        // append new objects to linked list of old objects
+        var oldObj = this.lastOldObject;
+        for (var i = 1; i < newObjects.length; i++) {
+            var newObj = newObjects[i];
+            delete newObj.id;
+            oldObj.nextObject = newObj;
+            oldObj = newObj;
+        }
+        this.lastOldObject = oldObj;
     },
 },
 'creating', {

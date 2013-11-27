@@ -175,7 +175,8 @@ Object.subclass('lib.squeak.vm.Image',
         format: format word as in Squeak oop header
         hash: identity hash integer
         pointers: (optional) Array referencing inst vars + indexable fields
-        bits: (optional) Array of numbers (bytes or words)
+        words: (optional) Array of numbers (words)
+        bytes: (optional) Array of numbers (bytes)
         float: (optional) float value if this is a Float object
         isNil: (optional) true if this is the nil object
         isTrue: (optional) true if this is the true object
@@ -331,10 +332,10 @@ Object.subclass('lib.squeak.vm.Object',
                         this.isFloat = true;
                         this.float = 0.0;
                     } else
-                        this.bits = this.fillArray(indexableSize, 0); 
+                        this.words = this.fillArray(indexableSize, 0); 
         } else // Bytes
             if (indexableSize > 0)
-                this.bits = this.fillArray(indexableSize, 0); //Methods require further init of pointers
+                this.bytes = this.fillArray(indexableSize, 0); //Methods require further init of pointers
 
 //      Definition of Squeak's format code...
 //
@@ -363,7 +364,8 @@ Object.subclass('lib.squeak.vm.Object',
             this.float = original.float;
         } else {
             if (original.pointers) this.pointers = original.pointers.slice(0);   // copy
-            if (original.bits) this.bits = original.bits.slice(0);               // copy
+            if (original.words) this.words = original.words.slice(0);            // copy
+            if (original.bytes) this.bytes = original.bytes.slice(0);            // copy
         }
     },
     initFromImage: function(cls, fmt, hsh, data) {
@@ -381,28 +383,31 @@ Object.subclass('lib.squeak.vm.Object',
             this.sqClass = oopMap[ccArray[ccInt-1]];
         else
             this.sqClass = oopMap[ccInt];
-        var nWords= this.bits.length;
+        var nWords = this.bits.length;
         if (this.format < 5) {
             //Formats 0...4 -- Pointer fields
             if (nWords > 0)
                 this.pointers = this.decodePointers(nWords, this.bits, oopMap);
-            delete this.bits; }
-        else if (this.format >= 12) {
+        } else if (this.format >= 12) {
             //Formats 12-15 -- CompiledMethods both pointers and bits
             var methodHeader = this.bits[0];
             var numLits = (methodHeader>>10) & 255;
             this.isCompiledMethod = true;
             this.pointers = this.decodePointers(numLits+1, this.bits, oopMap); //header+lits
-            this.bits = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this.format & 3, littleEndian); }
-        else if (this.format >= 8) {
-            //Formats 8..11 -- ByteArrays (and Strings)
-            this.bits = this.decodeBytes(nWords, this.bits, 0, this.format & 3, littleEndian); }
-        //Format 6 word objects are already OK (except Floats...)
-        else if (this.sqClass == floatClass) {
+            this.bytes = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this.format & 3, littleEndian);
+        } else if (this.format >= 8) {
+            //Formats 8..11 -- ByteArrays (and ByteStrings)
+            if (nWords > 0)
+                this.bytes = this.decodeBytes(nWords, this.bits, 0, this.format & 3, littleEndian);
+        } else if (this.sqClass == floatClass) {
             //Floats need two ints to be converted to double
             this.isFloat = true;
             this.float = this.decodeFloat(this.bits);
-            delete this.bits }
+        } else {
+            if (nWords > 0)
+                this.words = this.decodeWords(nWords, this.bits);
+        }
+        delete this.bits;
     },
     decodePointers: function(nWords, theBits, oopMap) {
         //Convert small ints and look up object pointers in oopMap
@@ -416,22 +421,8 @@ Object.subclass('lib.squeak.vm.Object',
         }
         return ptrs;        
     },
-    decodeBytes: function(nWords, theBits, wordOffset, fmtLowBits, littleEndian) {
-        //Adjust size for low bits and extract bytes from ints
-        if (nWords == 0)
-            return null;
-        var nBytes = (nWords * 4) - fmtLowBits;
-        var newBits = [];
-        var wordIx = wordOffset;
-        var fourBytes = 0;
-        for (var i = 0; i < nBytes; i++) {
-            if ((i & 3) === 0)
-                fourBytes = theBits[wordIx++];
-            newBits[i] = littleEndian
-                ? (fourBytes>>(8*(i&3)))&255        // little endian
-                : (fourBytes>>(8*(3-(i&3))))&255;   // big endian
-        }
-        return newBits;
+    decodeWords: function(nWords, theBits) {
+        return theBits;
     },
     decodeFloat: function(theBits) {
         var buffer = new ArrayBuffer(8);
@@ -460,12 +451,12 @@ Object.subclass('lib.squeak.vm.Object',
         return Strings.format('sqObj(%s)',
             this.sqClass.constructor == lib.squeak.vm.Object ? this.sqInstName() : this.sqClass);
     },
-    bitsAsString: function() {
-        if (!this.bits) return '';
-        return this.bits.map(function(char) { return String.fromCharCode(char); }).join('');
+    bytesAsString: function() {
+        if (!this.bytes) return '';
+        return this.bytes.map(function(char) { return String.fromCharCode(char); }).join('');
     },
     assnKeyAsString: function() {
-        return this.getPointer(Squeak.Assn_key).bitsAsString();  
+        return this.getPointer(Squeak.Assn_key).bytesAsString();  
     },
     slotNameAt: function(index) {
         // one-based index
@@ -490,7 +481,7 @@ Object.subclass('lib.squeak.vm.Object',
             case 'Symbol':
             case 'WideSymbol':
             case 'ByteSymbol':
-                inst = ' "'+this.bitsAsString()+'"'; break;            
+                inst = ' "'+this.bytesAsString()+'"'; break;            
         }
         return  (/^[aeiou]/i.test(className) ? 'an ' + className : 'a ' + className) + inst;
     },
@@ -505,10 +496,11 @@ Object.subclass('lib.squeak.vm.Object',
     pointersSize: function() {
     	return this.pointers ? this.pointers.length : 0;
     },
-    bitsSize: function() {
-        if (this.bits) return this.bits.length;
-        if (this.isFloat) return 2;
-        return 0;
+    bytesSize: function() {
+        return this.bytes ? this.bytes.length : 0;
+    },
+    wordsSize: function() {
+        return this.words ? this.words.length : this.isFloat ? 2 : 0;
     },
     instSize: function() {//same as class.classInstSize, but faster from format
         if (this.format>4 || this.format==2) return 0; //indexable fields only
@@ -524,7 +516,7 @@ Object.subclass('lib.squeak.vm.Object',
     },
     instVarNames: function() {
         return (this.getPointer(4).pointers || []).map(function(each) {
-            return each.bitsAsString();
+            return each.bytesAsString();
         });
     },
     allInstVarNames: function() {
@@ -539,9 +531,9 @@ Object.subclass('lib.squeak.vm.Object',
     },
     className: function() {
         var nameOrNonMetaClass = this.getPointer(Squeak.Class_name);
-        var isMeta = !nameOrNonMetaClass.bits;
+        var isMeta = !nameOrNonMetaClass.bytes;
         var nameObj = isMeta ? nameOrNonMetaClass.getPointer(Squeak.Class_name) : nameOrNonMetaClass;
-        var name = nameObj.bitsAsString();
+        var name = nameObj.bytesAsString();
         return isMeta ? name + " class" : name;
     }
 },
@@ -586,11 +578,11 @@ Object.subclass('lib.squeak.vm.Object',
     },
     methodEndPC: function() {
     	// index after the last bytecode
-    	var length = this.bits.length;
-    	var flagByte = this.bits[length - 1];
+    	var length = this.bytes.length;
+    	var flagByte = this.bytes[length - 1];
     	if (flagByte === 0) // If last byte == 0, may be either 0, 0, 0, 0 or just 0
     		for (var i = 2; i <= 5 ; i++) 
-    		    if (this.bits[length - i] !== 0)
+    		    if (this.bytes[length - i] !== 0)
     		        return length - i + 1;
     	if (flagByte < 252) // Magic sources (tempnames encoded in last few bytes)
     	    return length - flagByte - 1;
@@ -960,7 +952,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
         //Following are more efficient than fetchContextRegisters() in newActiveContext()
         this.homeContext = newContext;
         this.method = newMethod;
-        this.methodBytes = newMethod.bits;
+        this.methodBytes = newMethod.bytes;
         this.pc = newPC;
         this.sp = newSP;
         this.storeContextRegisters(); // not really necessary, I claim
@@ -1099,7 +1091,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
         }
         this.receiver = this.homeContext.getPointer(Squeak.Context_receiver);
         this.method = meth;
-        this.methodBytes = meth.bits;
+        this.methodBytes = meth.bytes;
         this.pc = this.decodeSqueakPC(ctxt.getPointer(Squeak.Context_instructionPointer), meth);
         if (this.pc < -1)
             throw "error";
@@ -1382,7 +1374,7 @@ Object.subclass('lib.squeak.vm.Primitives',
         for (var i = 0; i < jsString.length; ++i)
             bytes.push(jsString.charCodeAt(i) & 0xFF);
         var stString = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassString], bytes.length);
-        stString.bits = bytes;
+        stString.bytes = bytes;
         return stString;
     },
     stackNonInteger: function(nDeep) {
@@ -1416,7 +1408,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             this.success = false;
             return 0;
         }
-        var bytes = stackVal.bits;
+        var bytes = stackVal.bytes;
         var value = 0;
         for (var i=0; i<4; i++)
             value += ((bytes[i]&255)<<(8*i));
@@ -1429,7 +1421,7 @@ Object.subclass('lib.squeak.vm.Primitives',
         debugger;
         var lgIntClass = this.vm.specialObjects[Squeak.splOb_ClassLargePositiveInteger];
         var lgIntObj = this.vm.instantiateClass(lgIntClass, 4);
-        var bytes = lgIntObj.bits;
+        var bytes = lgIntObj.bytes;
         for (var i=0; i<4; i++)
             bytes[i] = (pos32Val>>>(8*i))&255;
         return lgIntObj;
@@ -1463,8 +1455,9 @@ Object.subclass('lib.squeak.vm.Primitives',
         if (fmt===3 && this.vm.isContext(obj))
             return obj.getPointer(Squeak.Context_stackPointer); // no access beyond top of stack?
         if (fmt<6) return obj.pointersSize() - obj.instSize(); // pointers
-        if (fmt<12) return obj.bitsSize(); // words or bytes
-        return obj.bitsSize() + (4 * obj.pointersSize()); // methods
+        if (fmt<8) return obj.wordsSize(); // words
+        if (fmt<12) return obj.bytesSize(); // bytes
+        return obj.bytesSize() + (4 * obj.pointersSize()); // methods
     },
     isA: function(obj, knownClass) {
         return obj.sqClass === this.vm.specialObjects[knownClass];
@@ -1504,14 +1497,14 @@ Object.subclass('lib.squeak.vm.Primitives',
         if (array.format<6)   //pointers...   normal at:
             return array.pointers[index-1+info.ivarOffset];
         if (array.format<8) // words...
-            return this.pos32BitIntFor(array.bits[index-1]);
+            return this.pos32BitIntFor(array.words[index-1]);
         if (array.format<12) // bytes...
-            if (info.convertChars) return this.charFromInt(array.bits[index-1] & 0xFF);
-            else return array.bits[index-1] & 0xFF;
+            if (info.convertChars) return this.charFromInt(array.bytes[index-1] & 0xFF);
+            else return array.bytes[index-1] & 0xFF;
         // methods (format>=12) must simulate Squeak's method indexing
         var offset = array.pointersSize() * 4;
         if (index-1-offset < 0) {this.success = false; return array;} //reading lits as bytes
-        return array.bits[index-1-offset] & 0xFF;
+        return array.bytes[index-1-offset] & 0xFF;
     },
     objectAtPut: function(cameFromBytecode, convertChars, includeInstVars) {
         //Returns result of at:put: or sets success false
@@ -1541,7 +1534,7 @@ Object.subclass('lib.squeak.vm.Primitives',
         var intToPut;
         if (array.format<8) {  // words...
             intToPut = this.stackPos32BitValue(0);
-            if (this.success) array.bits[index-1] = intToPut;
+            if (this.success) array.words[index-1] = intToPut;
             return objToPut;
         }
         // bytes...
@@ -1558,11 +1551,11 @@ Object.subclass('lib.squeak.vm.Primitives',
         }
         if (intToPut<0 || intToPut>255) {this.success = false; return objToPut;}
         if (array.format<8)  // bytes...
-            return array.bits[index-1] = intToPut;
+            return array.bytes[index-1] = intToPut;
         // methods (format>=12) must simulate Squeak's method indexing
         var offset = array.pointersSize() * 4;
         if (index-1-offset < 0) {this.success = false; return array;} //writing lits as bytes
-        array.bits[index-1-offset] = intToPut;
+        array.bytes[index-1-offset] = intToPut;
         return objToPut;
     },
     objectSize: function(argCount) {
@@ -1649,14 +1642,23 @@ Object.subclass('lib.squeak.vm.Primitives',
                 {this.success= false; return dst;} //would go out of bounds
             this.vm.arrayCopy(src.pointers, srcPos, dst.pointers, dstPos, count);
             return dst;
-        } else {//bits type objects
-            var totalLength = src.bitsSize();
+        } else if (srcFmt < 8) { //words type objects
+            var totalLength = src.wordsSize();
             if ((srcPos < 0) || (srcPos + count) > totalLength)
                 {this.success = false; return dst;} //would go out of bounds
-            totalLength = dst.bitsSize();
+            totalLength = dst.wordsSize();
             if ((dstPos < 0) || (dstPos + count) > totalLength)
                 {this.success = false; return dst;} //would go out of bounds
-            this.vm.arrayCopy(src.bits, srcPos, dst.bits, dstPos, count);
+            this.vm.arrayCopy(src.words, srcPos, dst.words, dstPos, count);
+            return dst;
+        } else { //bytes type objects
+            var totalLength = src.bytesSize();
+            if ((srcPos < 0) || (srcPos + count) > totalLength)
+                {this.success = false; return dst;} //would go out of bounds
+            totalLength = dst.bytesSize();
+            if ((dstPos < 0) || (dstPos + count) > totalLength)
+                {this.success = false; return dst;} //would go out of bounds
+            this.vm.arrayCopy(src.bytes, srcPos, dst.bytes, dstPos, count);
             return dst;
         }
     },
@@ -1882,7 +1884,7 @@ Object.subclass('lib.squeak.vm.InstructionPrinter',
     	this.result += this.oldPC + " <";
     	for (var i = this.oldPC; i < this.scanner.pc; i++) {
     	    if (i > this.oldPC) this.result += " ";
-    		this.result += (this.method.bits[i]+0x100).toString(16).substr(-2).toUpperCase(); // padded hex
+    		this.result += (this.method.bytes[i]+0x100).toString(16).substr(-2).toUpperCase(); // padded hex
     	}
     	this.result += "> " + instruction + "\n";
     	this.oldPC = this.scanner.pc;
@@ -1941,7 +1943,7 @@ Object.subclass('lib.squeak.vm.InstructionPrinter',
 	    this.print('pushTemp: ' + offset);
     },
     send: function(selector, numberArguments, supered) {
-    	this.print( (supered ? 'superSend: #' : 'send: #') + (selector.bitsAsString ? selector.bitsAsString() : selector));
+    	this.print( (supered ? 'superSend: #' : 'send: #') + (selector.bytesAsString ? selector.bytesAsString() : selector));
     },
     storeIntoLiteralVariable: function(anAssociation) {
     	this.print('storeIntoBinding: ' + anAssociation.assnKeyAsString());
@@ -1973,7 +1975,7 @@ Object.subclass('lib.squeak.vm.InstructionStream',
     interpretNextInstructionFor: function(client) {
     	// Send to the argument, client, a message that specifies the type of the next instruction.
     	var method = this.method;
-    	var byte = method.bits[this.pc++];
+    	var byte = method.bytes[this.pc++];
     	var type = (byte / 16) | 0;  
     	var offset = byte % 16;
     	if (type === 0) return client.pushReceiverVariable(offset);
@@ -1999,7 +2001,7 @@ Object.subclass('lib.squeak.vm.InstructionStream',
     			if (offset<8) return client.jump(offset+1);
     			else return client.jumpIf(false, offset-8+1);
     	if (type === 10) {// long jumps
-    		byte = this.method.bits[this.pc++];
+    		byte = this.method.bytes[this.pc++];
 			if (offset<8) return client.jump((offset-4)*256 + byte);
 			else return client.jumpIf(offset<12, (offset & 3)*256 + byte);
     	}
@@ -2016,7 +2018,7 @@ Object.subclass('lib.squeak.vm.InstructionStream',
     },
     interpretExtension: function(offset, method, client) {
     	if (offset <= 6) { // Extended op codes 128-134
-    		var byte2 = this.method.bits[this.pc++];
+    		var byte2 = this.method.bytes[this.pc++];
     		if (offset <= 2) { // 128-130:  extended pushes and pops
     			var type = byte2 / 64 | 0;
     			var offset2 = byte2 % 64;
@@ -2043,7 +2045,7 @@ Object.subclass('lib.squeak.vm.InstructionStream',
     		if (offset === 3) // Single extended send
     			return client.send(this.method.methodGetLiteral(byte2 % 32), byte2 / 32 | 0, false);
     		if (offset === 4) { // Double extended do-anything
-    			var byte3 = this.method.bits[this.pc++];
+    			var byte3 = this.method.bytes[this.pc++];
     			var type = byte2 / 32 | 0;
     			if (type === 0) return client.send(this.method.methodGetLiteral(byte3), byte2 % 32, false);
     			if (type === 1) return client.send(this.method.methodGetLiteral(byte3), byte2 % 32, true);

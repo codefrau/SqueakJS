@@ -21,146 +21,142 @@ module('lib.squeak.vm').requires().toRun(function() {
  * THE SOFTWARE.
  */
 
-Object.subclass('lib.squeak.vm.Constants',
-'initialization', {
-    initialize: function() {
-        // object headers
-        this.HeaderTypeMask = 3;
-        this.HeaderTypeSizeAndClass = 0; //3-word header
-        this.HeaderTypeClass = 1;        //2-word header
-        this.HeaderTypeFree = 2;         //free block
-        this.HeaderTypeShort = 3;        //1-word header
-	    
-        // Indices into SpecialObjects array
-        this.splOb_NilObject = 0;
-        this.splOb_FalseObject = 1;
-        this.splOb_TrueObject = 2;
-        this.splOb_SchedulerAssociation = 3;
-        this.splOb_ClassBitmap = 4;
-        this.splOb_ClassInteger = 5;
-        this.splOb_ClassString = 6;
-        this.splOb_ClassArray = 7;
-        //this.splOb_SmalltalkDictionary = 8;  old slot 8
-        this.splOb_ClassFloat = 9;
-        this.splOb_ClassMethodContext = 10;
-        this.splOb_ClassBlockContext = 11;
-        this.splOb_ClassPoint = 12;
-        this.splOb_ClassLargePositiveInteger = 13;
-        this.splOb_TheDisplay = 14;
-        this.splOb_ClassMessage = 15;
-        this.splOb_ClassCompiledMethod = 16;
-        this.splOb_TheLowSpaceSemaphore = 17;
-        this.splOb_ClassSemaphore = 18;
-        this.splOb_ClassCharacter = 19;
-        this.splOb_SelectorDoesNotUnderstand = 20;
-        this.splOb_SelectorCannotReturn = 21;
-        this.splOb_TheInputSemaphore = 22;
-        this.splOb_SpecialSelectors = 23;
-        this.splOb_CharacterTable = 24;
-        this.splOb_SelectorMustBeBoolean = 25;
-        this.splOb_ClassByteArray = 26;
-        this.splOb_ClassProcess = 27;
-        this.splOb_CompactClasses = 28;
-        this.splOb_TheTimerSemaphore = 29;
-        this.splOb_TheInterruptSemaphore = 30;
-        this.splOb_FloatProto = 31;
-        this.splOb_SelectorCannotInterpret = 34;
-        this.splOb_MethodContextProto = 35;
-        this.splOb_BlockContextProto = 37;
-        this.splOb_ExternalObjectsArray = 38;
-        this.splOb_ClassPseudoContext = 39;
-        this.splOb_ClassTranslatedMethod = 40;
-        this.splOb_TheFinalizationSemaphore = 41;
-        this.splOb_ClassLargeNegativeInteger = 42;
-        this.splOb_ClassExternalAddress = 43;
-        this.splOb_ClassExternalStructure = 44;
-        this.splOb_ClassExternalData = 45;
-        this.splOb_ClassExternalFunction = 46;
-        this.splOb_ClassExternalLibrary = 47;
-        this.splOb_SelectorAboutToReturn = 48;
-        
-        // Class layout:
-        this.Class_superclass = 0;
-        this.Class_mdict = 1;
-        this.Class_format = 2;
-        this.Class_name = 6;
-        // Context layout:
-        this.Context_sender = 0;
-        this.Context_instructionPointer = 1;
-        this.Context_stackPointer = 2;
-        this.Context_method = 3;
-        this.Context_receiver = 5;
-        this.Context_tempFrameStart = 6;
-        this.Context_smallFrameSize = 17;
-        this.Context_largeFrameSize = 57;
-        this.BlockContext_caller = 0;
-        this.BlockContext_argumentCount = 3;
-        this.BlockContext_initialIP = 4;
-        this.BlockContext_home = 5;
-        // Stream layout:
-        this.Stream_array = 0;
-        this.Stream_position = 1;
-        this.Stream_limit = 2;
-        //ProcessorScheduler layout:
-        this.ProcSched_processLists = 0;
-        this.ProcSched_activeProcess = 1;
-        //Link layout:
-        this.Link_nextLink = 0;
-        //LinkedList layout:
-        this.LinkedList_firstLink = 0;
-        this.LinkedList_lastLink = 1;
-        //Semaphore layout:
-        this.Semaphore_excessSignals = 2;
-        //Process layout:
-        this.Proc_suspendedContext = 1;
-        this.Proc_priority = 2;
-        this.Proc_myList = 3;	
-        // Association layout:
-        this.Assn_key = 0;
-        this.Assn_value = 1;
-        // MethodDict layout:
-        this.MethodDict_array = 1;
-        this.MethodDict_selectorStart = 2;
-        // Message layout
-        this.Message_selector = 0;
-        this.Message_arguments = 1;
-        this.Message_lookupClass = 2;
-        // Point layout:
-        this.Point_x = 0;
-        this.Point_y = 1;
-        // LargetInteger layout:
-        this.LargeInteger_bytes = 0;
-        this.LargeInteger_neg = 1;
-        // BitBlt layout:
-        this.BitBlt_function = 0;
-        this.BitBlt_gray = 1;
-        this.BitBlt_destbits = 2;
-        this.BitBlt_destraster = 3;
-        this.BitBlt_destx = 4;
-        this.BitBlt_desty = 5;
-        this.BitBlt_width = 6;
-        this.BitBlt_height = 7;
-        this.BitBlt_sourcebits = 8;
-        this.BitBlt_sourceraster = 9;
-        this.BitBlt_sourcex = 10;
-        this.BitBlt_sourcey = 11;
-        this.BitBlt_clipx = 12;
-        this.BitBlt_clipy = 13;
-        this.BitBlt_clipwidth = 14;
-        this.BitBlt_clipheight = 15;
-        this.BitBlt_sourcefield = 16;
-        this.BitBlt_destfield = 17;
-        this.BitBlt_source = 18;
-        this.BitBlt_dest = 19;
-        // Form layout:
-        this.Form_bits = 0;
-        this.Form_width = 1;
-        this.Form_height = 2;
-        this.Form_depth = 3;
-    },
-});
 
-Squeak = new lib.squeak.vm.Constants();
+Squeak = {
+    // object headers
+    HeaderTypeMask: 3,
+    HeaderTypeSizeAndClass: 0, //3-word header
+    HeaderTypeClass: 1,        //2-word header
+    HeaderTypeFree: 2,         //free block
+    HeaderTypeShort: 3,        //1-word header
+    
+    // Indices into SpecialObjects array
+    splOb_NilObject: 0,
+    splOb_FalseObject: 1,
+    splOb_TrueObject: 2,
+    splOb_SchedulerAssociation: 3,
+    splOb_ClassBitmap: 4,
+    splOb_ClassInteger: 5,
+    splOb_ClassString: 6,
+    splOb_ClassArray: 7,
+    splOb_SmalltalkDictionary: 8,
+    splOb_ClassFloat: 9,
+    splOb_ClassMethodContext: 10,
+    splOb_ClassBlockContext: 11,
+    splOb_ClassPoint: 12,
+    splOb_ClassLargePositiveInteger: 13,
+    splOb_TheDisplay: 14,
+    splOb_ClassMessage: 15,
+    splOb_ClassCompiledMethod: 16,
+    splOb_TheLowSpaceSemaphore: 17,
+    splOb_ClassSemaphore: 18,
+    splOb_ClassCharacter: 19,
+    splOb_SelectorDoesNotUnderstand: 20,
+    splOb_SelectorCannotReturn: 21,
+    splOb_TheInputSemaphore: 22,
+    splOb_SpecialSelectors: 23,
+    splOb_CharacterTable: 24,
+    splOb_SelectorMustBeBoolean: 25,
+    splOb_ClassByteArray: 26,
+    splOb_ClassProcess: 27,
+    splOb_CompactClasses: 28,
+    splOb_TheTimerSemaphore: 29,
+    splOb_TheInterruptSemaphore: 30,
+    splOb_FloatProto: 31,
+    splOb_SelectorCannotInterpret: 34,
+    splOb_MethodContextProto: 35,
+    splOb_BlockContextProto: 37,
+    splOb_ExternalObjectsArray: 38,
+    splOb_ClassPseudoContext: 39,
+    splOb_ClassTranslatedMethod: 40,
+    splOb_TheFinalizationSemaphore: 41,
+    splOb_ClassLargeNegativeInteger: 42,
+    splOb_ClassExternalAddress: 43,
+    splOb_ClassExternalStructure: 44,
+    splOb_ClassExternalData: 45,
+    splOb_ClassExternalFunction: 46,
+    splOb_ClassExternalLibrary: 47,
+    splOb_SelectorAboutToReturn: 48,
+    
+    // Class layout:
+    Class_superclass: 0,
+    Class_mdict: 1,
+    Class_format: 2,
+    Class_name: 6,
+    // Context layout:
+    Context_sender: 0,
+    Context_instructionPointer: 1,
+    Context_stackPointer: 2,
+    Context_method: 3,
+    Context_receiver: 5,
+    Context_tempFrameStart: 6,
+    Context_smallFrameSize: 17,
+    Context_largeFrameSize: 57,
+    BlockContext_caller: 0,
+    BlockContext_argumentCount: 3,
+    BlockContext_initialIP: 4,
+    BlockContext_home: 5,
+    // Stream layout:
+    Stream_array: 0,
+    Stream_position: 1,
+    Stream_limit: 2,
+    //ProcessorScheduler layout:
+    ProcSched_processLists: 0,
+    ProcSched_activeProcess: 1,
+    //Link layout:
+    Link_nextLink: 0,
+    //LinkedList layout:
+    LinkedList_firstLink: 0,
+    LinkedList_lastLink: 1,
+    //Semaphore layout:
+    Semaphore_excessSignals: 2,
+    //Process layout:
+    Proc_suspendedContext: 1,
+    Proc_priority: 2,
+    Proc_myList: 3,	
+    // Association layout:
+    Assn_key: 0,
+    Assn_value: 1,
+    // MethodDict layout:
+    MethodDict_array: 1,
+    MethodDict_selectorStart: 2,
+    // Message layout
+    Message_selector: 0,
+    Message_arguments: 1,
+    Message_lookupClass: 2,
+    // Point layout:
+    Point_x: 0,
+    Point_y: 1,
+    // LargetInteger layout:
+    LargeInteger_bytes: 0,
+    LargeInteger_neg: 1,
+    // BitBlt layout:
+    BitBlt_function: 0,
+    BitBlt_gray: 1,
+    BitBlt_destbits: 2,
+    BitBlt_destraster: 3,
+    BitBlt_destx: 4,
+    BitBlt_desty: 5,
+    BitBlt_width: 6,
+    BitBlt_height: 7,
+    BitBlt_sourcebits: 8,
+    BitBlt_sourceraster: 9,
+    BitBlt_sourcex: 10,
+    BitBlt_sourcey: 11,
+    BitBlt_clipx: 12,
+    BitBlt_clipy: 13,
+    BitBlt_clipwidth: 14,
+    BitBlt_clipheight: 15,
+    BitBlt_sourcefield: 16,
+    BitBlt_destfield: 17,
+    BitBlt_source: 18,
+    BitBlt_dest: 19,
+    // Form layout:
+    Form_bits: 0,
+    Form_width: 1,
+    Form_height: 2,
+    Form_depth: 3,
+};
 
 Object.subclass('lib.squeak.vm.Image',
 'documentation', {

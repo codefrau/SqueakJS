@@ -420,6 +420,22 @@ Object.subclass('lib.squeak.vm.Object',
     decodeWords: function(nWords, theBits) {
         return theBits;
     },
+    decodeBytes: function (nWords, theBits, wordOffset, fmtLowBits, littleEndian) {
+        //Adjust size for low bits and extract bytes from ints
+        var nBytes = (nWords * 4) - fmtLowBits;
+        var bytes = [];
+        var wordIx = wordOffset;
+        var fourBytes = 0;
+        for (var i = 0; i < nBytes; i++) {
+            if ((i & 3) === 0)
+                fourBytes = theBits[wordIx++];
+            bytes[i] = littleEndian
+                ? (fourBytes>>(8*(i&3)))&255        // little endian
+                : (fourBytes>>(8*(3-(i&3))))&255;   // big endian
+        }
+        return bytes;
+    },
+
     decodeFloat: function(theBits) {
         var buffer = new ArrayBuffer(8);
         var data = new DataView(buffer);

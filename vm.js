@@ -265,7 +265,6 @@ Object.subclass('lib.squeak.vm.Image',
             //oopMap is from old oops to new objects
             oopMap[oldBaseAddr + baseAddr] = object;
         }
-        show("objects: "+ Object.keys(oopMap).length);
         //create proper objects
         var splObs         = oopMap[specialObjectsOopInt];
         var compactClasses = oopMap[splObs.bits[Squeak.splOb_CompactClasses]].bits;
@@ -299,53 +298,55 @@ Object.subclass('lib.squeak.vm.Image',
         // The "nextObject" references are created by collecting all new objects, 
         // sorting them by id, and then linking them into old space.
         
-        var newObjects = this.markAllUsedObjects();
-        var garbageCount = this.newSpaceCount - newObjects.length;
-        garbageCount += this.removeUnmarkedOldObjects();
+        var newObjects = this.markReachableObjects();
+        var removedObjects = this.removeUnmarkedOldObjects();
         this.appendToOldObjects(newObjects);
+        var garbageCount = removedObjects.length        // reclaimed in old space
+            + this.newSpaceCount - newObjects.length;    // reclaimed in new space
         this.newSpaceCount = 0;
         return 1000000 + garbageCount; // free space
     },
-    markAllUsedObjects: function() {
-        // Visit all reachable objects and mark them
-        // Return new objects sorted by creation time
+    markReachableObjects: function() {
+        // Visit all reachable objects and mark them.
+        // Return new objects
+        var todo = [this.specialObjectsArray, this.vm.activeContext];
         var newObjects = [];
-        this.markUsed(this.specialObjectsArray, newObjects);
-        this.markUsed(this.vm.activeContext, newObjects);
+        while (todo.length > 0) {
+            var object = todo.pop();
+            if (!object.nextObject && object !== this.lastOldObject)       // it's a new object
+                newObjects.push(object);
+            object.mark = true;           // mark it
+            if (!object.sqClass.mark)     // trace class if not marked
+                todo.push(object.sqClass);
+            var ptrs = object.pointers;
+            if (ptrs)                     // trace all unmarked pointers
+                for (var i = 0; i < ptrs.length; i++)
+                    if (ptrs[i].sqClass && !ptrs[i].mark)   // except SmallInts
+                        todo.push(ptrs[i]);
+        }
+        // sort by id to preserve creation order
         return newObjects.sort(function(a,b){return a.id - b.id});
     },
-    markUsed: function(object, newObjects) {
-        // recursively mark all objects reachable from object
-        // and add new objects to newObjects
-        if (typeof object !== "number" && !object.mark) {
-            object.mark = true;
-            if (!object.nextObject)
-                newObjects.push(object);
-            this.markUsed(object.sqClass, newObjects);
-            var ptrs = object.pointers;
-            if (ptrs) for (var i = 0; i < ptrs.length; i++)
-                this.markUsed(ptrs[i], newObjects);
-        }
-    },
+
     removeUnmarkedOldObjects: function() {
         // Unlink unmarked old objects from the nextObject linked list
         // Reset marks of remaining objects
         // Set this.lastOldObject to last old object
-        // Return count of removed old objects
-        var count = 0;
+        // Return removed old objects (to support finalization later)
+        var removed = [];
         var obj = this.firstObject;
         while (true) {
             var next = obj.nextObject;
             if (!next) { // we're done
                 this.lastOldObject = obj;
-                return count;
+                return removed;
             }
             // if marked, continue with next object
             if (next.mark) {
                 next.mark = false;     // unmark for next GC
                 obj = next;
             } else { // otherwise, drop it
-                count++;
+                removed.push(next);
                 obj.nextObject = next.nextObject;
             }
         }

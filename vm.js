@@ -131,26 +131,21 @@ Squeak = {
     LargeInteger_bytes: 0,
     LargeInteger_neg: 1,
     // BitBlt layout:
-    BitBlt_function: 0,
-    BitBlt_gray: 1,
-    BitBlt_destbits: 2,
-    BitBlt_destraster: 3,
-    BitBlt_destx: 4,
-    BitBlt_desty: 5,
+    BitBlt_dest: 0,
+    BitBlt_source: 1,
+    BitBlt_halftone: 2,
+    BitBlt_combinationRule: 3,
+    BitBlt_destX: 4,
+    BitBlt_destY: 5,
     BitBlt_width: 6,
     BitBlt_height: 7,
-    BitBlt_sourcebits: 8,
-    BitBlt_sourceraster: 9,
-    BitBlt_sourcex: 10,
-    BitBlt_sourcey: 11,
-    BitBlt_clipx: 12,
-    BitBlt_clipy: 13,
-    BitBlt_clipwidth: 14,
-    BitBlt_clipheight: 15,
-    BitBlt_sourcefield: 16,
-    BitBlt_destfield: 17,
-    BitBlt_source: 18,
-    BitBlt_dest: 19,
+    BitBlt_sourceX: 8,
+    BitBlt_sourceY: 9,
+    BitBlt_clipX: 10,
+    BitBlt_clipY: 11,
+    BitBlt_clipW: 12,
+    BitBlt_clipH: 13,
+    BitBlt_colorMap: 14,
     // Form layout:
     Form_bits: 0,
     Form_width: 1,
@@ -1406,8 +1401,10 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 87: return this.primitiveResume(); // Process.resume
             case 88: return this.primitiveSuspend(); // Process.suspend
 
+            case 96: return this.primitiveCopyBits(argCount);  // BitBlt.copyBits
             case 101: return this.primitiveBeCursor(argCount); // Cursor.beCursor
             case 102: return this.primitiveBeDisplay(argCount); // DisplayScreen.beDisplay
+
             case 105: return this.popNandPushIfOK(5, this.doStringReplace()); // string and array replace
             case 106: return this.popNandPushIfOK(1, this.makePointWithXandY(this.display.width, this.display.height)); // actualScreenSize
             case 110: return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
@@ -1934,6 +1931,43 @@ Object.subclass('lib.squeak.vm.Primitives',
         this.vm.popN(argCount); // return self
 	    return true;
 	},
+	primitiveCopyBits: function(argCount) { // no rcvr class check, to allow unknown subclasses (e.g. under Turtle)
+	    var bitblt = new lib.squeak.vm.BitBlt(this.vm);
+        if (!bitblt.loadBitBlt(this.vm.receiver)) return false;
+        bitblt.copyBits();
+        if (bitblt.combinationRule == 22 || bitblt.combinationRule == 32)
+    		this.vm.popNandPush(argCount + 1, bitblt.bitCount);
+    	else if (this.vm.receiver.pointers[Squeak.BitBlt_dest] === this.vm.specialObjects[Squeak.splOb_TheDisplay])
+    	    this.showOnDisplay(bitblt.dest, bitblt.affectedRect());
+		return true;
+	},
+    showOnDisplay: function(form, rect) {
+        var ctx = this.display.ctx;
+        var pixels = ctx.createImageData(rect.w, rect.h);
+        var dest = new Uint32Array(pixels.data.buffer);
+        switch (form.depth) {
+            case 1:
+                var srcY = rect.y;
+                for (var y = 0; y < rect.h; y++) {
+                    var srcIndex = form.pitch * srcY + (rect.x / 32 | 0);
+                    var src = form.bits[srcIndex];
+                    var mask = 0x80000000;
+                    var dstIndex = pixels.width * y;
+                    for (var x = 0; x < rect.w; x++) {
+                        dest[dstIndex++] = src & mask ? 0xFF000000 : 0xFFFFFFFF; 
+                        mask = mask >>> 1;
+                        if (!mask) {
+                            mask = 0x80000000;
+                            src = form.bits[++srcIndex];
+                        }
+                    }
+                    srcY++;
+                };
+                break;
+            default: throw "not implemented yet";
+        };
+        ctx.putImageData(pixels, rect.x, rect.y);
+    },
 	millisecondClockValue: function() {
         //Return the value of the millisecond clock as an integer.
         //Note that the millisecond clock wraps around periodically.
@@ -1941,7 +1975,264 @@ Object.subclass('lib.squeak.vm.Primitives',
         //delays of up to that length without overflowing a SmallInteger."
         return (new Date().getTime() - this.vm.startupTime) & this.vm.millisecondClockMask;
 	},
+});
+Object.subclass('lib.squeak.vm.BitBlt',
+'initialization', {
+    initialize: function(vm) {
+        this.vm = vm;
+    },
+    loadBitBlt: function(bitbltObj) {
+        var bitblt = bitbltObj.pointers;
+        this.success = true;
+        this.dest = this.loadForm(bitblt[Squeak.BitBlt_dest]);
+        if (!this.dest) return false;
+        this.source = this.loadForm(bitblt[Squeak.BitBlt_source]);
+        this.halftone = this.loadHalftone(bitblt[Squeak.BitBlt_halftone])
+        this.combinationRule = bitblt[Squeak.BitBlt_combinationRule];
+        this.destX = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_destX], 0);
+        this.destY = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_destY], 0);
+        this.width = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_width], this.dest.width);
+        this.height = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_height], this.dest.height);
+        this.clipX = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_clipX], 0);
+        this.clipY = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_clipY], 0);
+        this.clipW = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_clipW], this.dest.width);
+        this.clipH = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_clipH], this.dest.height);
+        if (!this.success) return false;
+        if (!this.source)
+            this.sourceX = this.sourceY = 0;
+        else {
+            if (!this.loadColorMap()) return false;
+            if ((this.cmFlags & 8) == 0) this.setUpColorMasks();
+            this.sourceX = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_sourceX], 0);
+            this.sourceY = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_sourceY], 0);
+        }
+        this.mergeFn = this.makeMergeFn(this.combinationRule);
+        return true;
+    },
+    makeMergeFn: function(rule) {
+        switch(rule) {
+            case 0: return function(src, dst) { return 0 };
+            case 1: return function(src, dst) { return src & dst };
+            case 2: return function(src, dst) { return src & (~dst) };
+            case 3: return function(src, dst) { return src };
+            case 4: return function(src, dst) { return (~src) & dst };
+            case 5: return function(src, dst) { return dst };
+            case 6: return function(src, dst) { return src ^ dst };
+            case 7: return function(src, dst) { return src | dst };
+            case 8: return function(src, dst) { return (~src) & (~dst) };
+            case 9: return function(src, dst) { return (~src) ^ dst };
+            case 10: return function(src, dst) { return ~dst };
+            case 11: return function(src, dst) { return src | (~dst) };
+            case 12: return function(src, dst) { return ~src };
+            case 13: return function(src, dst) { return (~src) | dst };
+            case 14: return function(src, dst) { return (~src) | (~dst) };
+            case 15: return function(src, dst) { return dst };
+            case 16: return function(src, dst) { return dst };
+            case 17: return function(src, dst) { return dst };
+            case 18: return function(src, dst) { return src + dst };
+            case 19: return function(src, dst) { return src - dst };
+            case 20: return function(src, dst) { return src };
+            case 21: return function(src, dst) { return src };
+            case 22: return function(src, dst) { return src };
+            case 23: return function(src, dst) { return src };
+            case 24: return function(src, dst) { return src };
+            case 25: return function(src, dst) { return src === 0 ? dst
+                : src | this.partitionedANDtonBitsnPartitions(~src, dst, this.dest.depth, this.dest.pixPerWord) };
+            case 26: return function(src, dst) {
+                return this.partitionedANDtonBitsnPartitions(~src, dst, this.dest.depth, this.dest.pixPerWord) };
+        }
+        throw "bitblt rule not implemented yet";
+    },
 
+    loadHalftone: function(halftoneObj) {
+        return halftoneObj.words;
+    },
+    loadForm: function(formObj) {
+        if (formObj.isNil) return null;
+        var form = {};
+        form.bits = formObj.pointers[Squeak.Form_bits].words;
+        form.depth = formObj.pointers[Squeak.Form_depth];
+        form.width = formObj.pointers[Squeak.Form_width];
+        form.height = formObj.pointers[Squeak.Form_height];
+        if (!(form.width >= 0 && form.height >= 0)) return null; // checks for int
+        if (!form.bits) return null;    // checks for words
+        form.msb = form.depth > 0;
+        if (!form.msb) form.depth = -form.depth;
+        if (!(form.depth > 0)) return null; // happens if not int
+        form.pixPerWord = 32 / form.depth;
+        form.pitch = (form.width + (form.pixPerWord - 1)) / form.pixPerWord | 0;
+        if (form.bits.length !== (form.pitch * form.height)) return null;
+        return form;
+    },
+    intOrFloatIfNil: function(intOrFloat, valueIfNil) {
+        if (this.vm.isSmallInt(intOrFloat)) return intOrFloat;
+        if (intOrFloat.isNil) return valueIfNil;
+        if (intOrFloat.isFloat) {
+            var floatValue = intOrFloat.float;
+            if (floatValue >= -0x80000000 && floatValue <= 0x7FFFFFFF)
+                return floatValue | 0; // make int
+        }
+        this.success = false;
+        return 0;
+    },
+},
+'blitting', {
+    copyBits: function() {
+        this.bitCount = 0;
+        this.clipRange();
+        if (this.bbW <= 0 || this.bbH <= 0) return;
+        this.destMaskAndPointerInit();
+        /* Choose and perform the actual copy loop. */
+        if (!this.source) {
+            this.copyLoopNoSource();
+        } else {
+            this.checkSourceOverlap();
+            if (this.source.depth !== this.dest.depth) {
+                this.copyLoopPixMap();
+            } else {
+                this.sourceSkewAndPointerInit();
+                this.copyLoop();
+            }
+        }
+    },
+    copyLoopNoSource: function() {
+        //	Faster copyLoop when source not used.  hDir and vDir are both
+        //	positive, and perload and skew are unused
+        var halftoneWord = 0xFFFFFFFF;
+        for (var i = 0; i < this.bbH; i++) { // vertical loop
+            if (this.halftone) halftoneWord = this.halftone[(this.dy + i) % this.halftone.length];
+            // First word in row is masked
+            var destMask = this.mask1;
+            var destWord = this.dest.bits[this.destIndex];
+            var mergeWord = this.mergeFn(halftoneWord, destWord);
+            destWord = (destMask & mergeWord) | (destWord & (~destMask));
+            this.dest.bits[this.destIndex++] = destWord;
+            destMask = 0xFFFFFFFF;
+            //the central horizontal loop requires no store masking */
+            if (this.combinationRule === 3) // Store rule requires no dest merging
+                for (var word = 2; word < this.nWords; word++)
+                    this.dest.bits[this.destIndex++] = halftoneWord;
+            else
+                for (var word = 2; word < this.nWords; word++) {
+                        destWord = this.dest.bits[this.destIndex];
+                        mergeWord = this.mergeFn(halftoneWord, destWord);
+                        this.dest.bits[this.destIndex++] = mergeWord;
+                }
+            //last word in row is masked
+            if (this.nWords > 1) {
+                    destMask = this.mask2;
+                    destWord = this.dest.bits[this.destIndex];
+                    mergeWord = this.mergeFn(halftoneWord, destWord);
+                    destWord = (destMask & mergeWord) | (destWord & (~destMask));
+                    this.dest.bits[this.destIndex++] = destWord;
+            }
+            this.destIndex += this.destDelta;
+        }
+    },
+
+    sourceSkewAndPointerInit: function() {
+        var pixPerM1 = this.dest.pixPerWord - 1;  //Pix per word is power of two, so this makes a mask
+        var sxLowBits = this.sx & pixPerM1;
+        var dxLowBits = this.dx & pixPerM1;
+        // check if need to preload buffer
+        // (i.e., two words of source needed for first word of destination)
+        var dWid;
+        if (this.hDir > 0) {
+            dWid = ((this.bbW < (this.dest.pixPerWord - dxLowBits)) ? this.bbW : (this.dest.pixPerWord - dxLowBits));
+            this.preload = (sxLowBits + dWid) > pixPerM1;
+        } else {
+            dWid = ((this.bbW < (dxLowBits + 1)) ? this.bbW : (dxLowBits + 1));
+            this.preload = ((sxLowBits - dWid) + 1) < 0;
+        }
+        this.skew = (this.source.msb) ? (sxLowBits - dxLowBits) * this.dest.depth
+            : (dxLowBits - sxLowBits) * this.dest.depth;
+        if (this.preload) {
+            if (this.skew < 0) this.skew += 32;
+            else this.skew -= 32;
+        }
+        /* calculate increments from end of one line to start of next */
+        this.sourceIndex = (this.sy * this.source.pitch) + (this.sx / (32 / this.source.depth));
+        this.sourceDelta = (this.source.pitch * this.vDir) - (this.nWords * this.hDir);
+        if (this.preload) this.sourceDelta -= this.hDir;
+    },
+
+    destMaskAndPointerInit: function() {
+        var pixPerM1 = this.dest.pixPerWord - 1;  //Pix per word is power of two, so this makes a mask
+        var startBits = this.dest.pixPerWord - (this.dx & pixPerM1); //how many pixels in first word
+        var endBits = (((this.dx + this.bbW) - 1) & pixPerM1) + 1;
+        this.mask1 = this.dest.msb ? 0xFFFFFFFF >>> (32 - (startBits * this.dest.depth))
+            : 0xFFFFFFFF << (32 - (startBits * this.dest.depth));
+        this.mask2 = this.dest.msb ? 0xFFFFFFFF << (32 - (endBits * this.dest.depth))
+            : 0xFFFFFFFF >>> (32 - (endBits * this.dest.depth));
+        if (this.bbW < startBits) { //start and end in same word, so merge masks
+            this.mask1 = this.mask1 & this.mask2;
+            this.mask2 = 0;
+            this.nWords = 1;
+        } else
+            this.nWords = (((this.bbW - startBits) + pixPerM1) / this.dest.pixPerWord | 0) + 1;
+        this.hDir = this.vDir = 1; //defaults for no overlap with source
+        this.destIndex = (this.dy * this.dest.pitch) + (this.dx / this.dest.pixPerWord | 0); //both these in words, not bytes
+        this.destDelta = (this.dest.pitch * this.vDir) - (this.nWords * this.hDir);
+    },
+
+    clipRange: function() {
+        // initialize sx,sy, dx,dy, bbW,bbH to the intersection of source, dest, and clip
+        
+        // intersect with destForm bounds
+        if (this.clipX < 0) {this.clipW += this.clipX; this.clipX = 0; }
+        if (this.clipY < 0) {this.clipH += this.clipY; this.clipY = 0; }
+        if ((this.clipX + this.clipW) > this.dest.width) {this.clipW = this.dest.width - this.clipX; }
+        if ((this.clipY + this.clipH) > this.dest.height) {this.clipH = this.dest.height - this.clipY; }
+        // intersect with clipRect
+        var leftOffset = Math.max(this.clipX - this.destX, 0);
+        this.sx = this.sourceX + leftOffset;
+        this.dx = this.destX + leftOffset;
+        this.bbW = this.width - leftOffset;
+        var rightOffset = (this.dx + this.bbW) - (this.clipX + this.clipW);
+    	if (rightOffset > 0)
+    		this.bbW -= rightOffset;
+        var topOffset = Math.max(this.clipY - this.destY, 0);
+        this.sy = this.sourceY + topOffset;
+        this.dy = this.destY + topOffset;
+        this.bbH = this.height - topOffset;
+        var bottomOffset = (this.dy + this.bbH) - (this.clipY + this.clipH);
+    	if (bottomOffset > 0)
+    		this.bbH -= bottomOffset;
+        // intersect with sourceForm bounds
+    	if (!this.source) return;
+    	if (this.sx < 0) {
+    		this.dx -= this.sx;
+    		this.bbW += this.sx;
+    		this.sx = 0;
+    	}
+    	if ((this.sx + this.bbW) > this.source.width)
+    		this.bbW -= (this.sx + this.bbW) - this.source.width;
+    	if (this.sy < 0) {
+    		this.dy -= this.sy;
+    		this.bbH += this.sy;
+    		this.sy = 0;
+    	}
+    	if ((this.sy + this.bbH) > this.source.height)
+    		this.bbH -= (this.sy + this.bbH) - this.source.height;
+	},},
+'accessing', {
+    affectedRect: function() {
+        var affectedL, affectedR, affectedT, affectedB;
+        if (this.hDir > 0) {
+            affectedL = this.dx;
+            affectedR = this.dx + this.bbW;
+        } else {
+            affectedL = (this.dx - this.bbW) + 1;
+            affectedR = this.dx + 1;
+        }
+        if (this.vDir > 0) {
+            affectedT = this.dy;
+            affectedB = this.dy + this.bbH;
+        } else {
+            affectedT = (this.dy - this.bbH) + 1;
+            affectedB = this.dy + 1; }
+        return {x: affectedL, y: affectedT, w: affectedR-affectedL, h: affectedB-affectedT};
+    },
 });
 
 Object.subclass('lib.squeak.vm.InstructionPrinter',

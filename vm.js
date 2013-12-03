@@ -911,13 +911,26 @@ Object.subclass('lib.squeak.vm.Interpreter',
             case 3: this.method.methodGetLiteral(lobits).setPointer(Squeak.Assn_value, this.top()); break;
         }
     },
-    extendedStorePop: function( nextByte) {
+    extendedStorePop: function(nextByte) {
         var lobits = nextByte & 63;
         switch (nextByte>>6) {
             case 0: this.receiver.setPointer(lobits, this.pop()); break;
             case 1: this.homeContext.setPointer(Squeak.Context_tempFrameStart+lobits, this.pop()); break;
             case 2: this.nono(); break;
             case 3: this.method.methodGetLiteral(lobits).setPointer(Squeak.Assn_value, this.pop()); break;
+        }
+    },
+    doubleExtendedDoAnything: function(nextByte) {
+        var byte3 = this.nextByte();
+        switch (nextByte>>5) {
+            case 0: this.send(this.method.methodGetSelector(byte3), nextByte&31, false); break;
+            case 1: this.send(this.method.methodGetSelector(byte3), nextByte&31, true); break;
+            case 2: this.push(this.receiver.getPointer(byte3)); break;
+            case 3: this.push(this.method.methodGetLiteral(byte3)); break;
+            case 4: this.push(this.method.methodGetLiteral(byte3).getPointer(Squeak.Assn_key)); break;
+            case 5: this.receiver.setPointer(byte3, this.top()); break;
+            case 6: this.receiver.setPointer(byte3, this.pop()); break;
+            case 7: this.method.methodGetLiteral(byte3).setPointer(Squeak.Assn_key, this.top()); break;
         }
     },
     jumpIfTrue: function(delta) {

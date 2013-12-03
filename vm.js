@@ -1419,6 +1419,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 148: return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); //shallowCopy
             case 153: return false; //File.open 
             case 161: return this.popNandPushIfOK(1, this.charFromInt('/'.charCodeAt(0))); //path delimiter
+            case 234: return false; // primBitmapdecompressfromByteArrayat
             case 235: return false;  // primStringcomparewithcollated
         }
         throw "primitive " + index + " not implemented yet";
@@ -1490,8 +1491,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             this.success = false;
             return 0;
         }
-        debugger;
-        if (!this.isA(stackVal, Squeak.splOb_ClassLargePositiveInteger)) {
+        if (!this.isA(stackVal, Squeak.splOb_ClassLargePositiveInteger) || stackVal.bytesSize() !== 4) {
             this.success = false;
             return 0;
         }
@@ -1505,7 +1505,6 @@ Object.subclass('lib.squeak.vm.Primitives',
         // Return the 32-bit quantity as a positive 32-bit integer
         if (pos32Val >= 0)
             if (this.vm.canBeSmallInt(pos32Val)) return pos32Val;
-        debugger;
         var lgIntClass = this.vm.specialObjects[Squeak.splOb_ClassLargePositiveInteger];
         var lgIntObj = this.vm.instantiateClass(lgIntClass, 4);
         var bytes = lgIntObj.bytes;
@@ -1526,13 +1525,43 @@ Object.subclass('lib.squeak.vm.Primitives',
         this.success = false;
         return 0.0;
     },
+},
+'numbers', {
+    doBitAnd: function() {
+        var rcvr = this.stackPos32BitInt(1);
+        var arg = this.stackPos32BitInt(0);
+        if (!this.success) return 0;
+        return this.pos32BitIntFor(rcvr & arg);
+    },
+    doBitOr: function() {
+        var rcvr = this.stackPos32BitInt(1);
+        var arg = this.stackPos32BitInt(0);
+        if (!this.success) return 0;
+        return this.pos32BitIntFor(rcvr | arg);
+    },
+    doBitXor: function() {
+        var rcvr = this.stackPos32BitInt(1);
+        var arg = this.stackPos32BitInt(0);
+        if (!this.success) return 0;
+        return this.pos32BitIntFor(rcvr ^ arg);
+    },
+    doBitShift: function() {
+        var rcvr = this.stackPos32BitInt(1);
+        var arg = this.stackInteger(0);
+        if (!this.success) return 0;
+        var result = this.vm.safeShift(rcvr, arg); // returns negative result if failed
+        if (result > 0)
+            return this.pos32BitIntFor(this.vm.safeShift(rcvr, arg));
+        this.success = false;
+        return 0;
+    },
     safeFDiv: function(dividend, divisor) {
         if (divisor === 0.0) {
             this.success = false;
             return 1.0;
         }
         return dividend / divisor;
-    }
+    },
 },
 'utils', {
     indexableSize: function(obj) {
@@ -1620,7 +1649,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             return array.pointers[index-1+info.ivarOffset] = objToPut;
         var intToPut;
         if (array.format<8) {  // words...
-            intToPut = this.stackPos32BitValue(0);
+            intToPut = this.stackPos32BitInt(0);
             if (this.success) array.words[index-1] = intToPut;
             return objToPut;
         }
@@ -1703,11 +1732,11 @@ Object.subclass('lib.squeak.vm.Primitives',
         return true;
     },
     doStringReplace: function() {
-        var dst = this.vm.stackValue(4);
+        var dst = this.stackNonInteger(4);
         var dstPos = this.stackInteger(3) - 1;
         var count = this.stackInteger(2) - dstPos;
         //	if (count<=0) {this.success = false; return dst;} //fail for compat, later succeed
-        var src = this.vm.stackValue(1);
+        var src = this.stackNonInteger(1);
         var srcPos = this.stackInteger(0) - 1;
         if (!this.success) return dst; //some integer not right
         var srcFmt = src.format;
@@ -2262,13 +2291,13 @@ Object.subclass('lib.squeak.vm.InstructionPrinter',
         } else {
             if (this.indent) this.result += this.indent;
         }
-    	this.result += this.oldPC + " <";
-    	for (var i = this.oldPC; i < this.scanner.pc; i++) {
-    	    if (i > this.oldPC) this.result += " ";
-    		this.result += (this.method.bytes[i]+0x100).toString(16).substr(-2).toUpperCase(); // padded hex
-    	}
-    	this.result += "> " + instruction + "\n";
-    	this.oldPC = this.scanner.pc;
+        this.result += this.oldPC + " <";
+        for (var i = this.oldPC; i < this.scanner.pc; i++) {
+            if (i > this.oldPC) this.result += " ";
+            this.result += (this.method.bytes[i]+0x100).toString(16).substr(-2).toUpperCase(); // padded hex
+        }
+        this.result += "> " + instruction + "\n";
+        this.oldPC = this.scanner.pc;
     }
 },
 'decoding', {

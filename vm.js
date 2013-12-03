@@ -1961,16 +1961,19 @@ Object.subclass('lib.squeak.vm.Primitives',
 	    return true;
 	},
 	primitiveCopyBits: function(argCount) { // no rcvr class check, to allow unknown subclasses (e.g. under Turtle)
-	    var bitblt = new lib.squeak.vm.BitBlt(this.vm);
-        if (!bitblt.loadBitBlt(this.vm.receiver)) return false;
+	    var bitbltObj = this.vm.stackValue(argCount);
+        var bitblt = new lib.squeak.vm.BitBlt(this.vm);
+        debugger;
+        if (!bitblt.loadBitBlt(bitbltObj)) return false;
         bitblt.copyBits();
         if (bitblt.combinationRule == 22 || bitblt.combinationRule == 32)
-    		this.vm.popNandPush(argCount + 1, bitblt.bitCount);
-    	else if (this.vm.receiver.pointers[Squeak.BitBlt_dest] === this.vm.specialObjects[Squeak.splOb_TheDisplay])
-    	    this.showOnDisplay(bitblt.dest, bitblt.affectedRect());
+            this.vm.popNandPush(argCount + 1, bitblt.bitCount);
+        else if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay])
+            this.showOnDisplay(bitblt.dest, bitblt.affectedRect());
 		return true;
 	},
     showOnDisplay: function(form, rect) {
+        if (!rect) return;
         var ctx = this.display.ctx;
         var pixels = ctx.createImageData(rect.w, rect.h);
         var dest = new Uint32Array(pixels.data.buffer);
@@ -2013,9 +2016,11 @@ Object.subclass('lib.squeak.vm.BitBlt',
     loadBitBlt: function(bitbltObj) {
         var bitblt = bitbltObj.pointers;
         this.success = true;
-        this.dest = this.loadForm(bitblt[Squeak.BitBlt_dest]);
+        this.destForm = bitblt[Squeak.BitBlt_dest];
+        this.dest = this.loadForm(this.destForm);
         if (!this.dest) return false;
-        this.source = this.loadForm(bitblt[Squeak.BitBlt_source]);
+        this.sourceForm = bitblt[Squeak.BitBlt_source];
+        this.source = this.loadForm(this.sourceForm);
         this.halftone = this.loadHalftone(bitblt[Squeak.BitBlt_halftone])
         this.combinationRule = bitblt[Squeak.BitBlt_combinationRule];
         this.destX = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_destX], 0);
@@ -2030,8 +2035,8 @@ Object.subclass('lib.squeak.vm.BitBlt',
         if (!this.source)
             this.sourceX = this.sourceY = 0;
         else {
-            if (!this.loadColorMap()) return false;
-            if ((this.cmFlags & 8) == 0) this.setUpColorMasks();
+            //if (!this.loadColorMap()) return false;
+            //if ((this.cmFlags & 8) == 0) this.setUpColorMasks();
             this.sourceX = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_sourceX], 0);
             this.sourceY = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_sourceY], 0);
         }
@@ -2115,6 +2120,7 @@ Object.subclass('lib.squeak.vm.BitBlt',
         if (!this.source) {
             this.copyLoopNoSource();
         } else {
+            debugger;
             this.checkSourceOverlap();
             if (this.source.depth !== this.dest.depth) {
                 this.copyLoopPixMap();
@@ -2158,6 +2164,135 @@ Object.subclass('lib.squeak.vm.BitBlt',
             this.destIndex += this.destDelta;
         }
     },
+    copyLoop: function() {
+        // this version of the inner loop assumes we do have a source
+        var sourceLimit = this.source.bits.length;
+        var hInc = this.hDir;
+        // init skew (the difference in word alignment of source and dest)
+        var unskew;
+        var skewMask;
+        if (this.skew == -32) {
+            this.skew = unskew = skewMask = 0;
+        } else {
+            if (this.skew < 0) {
+                unskew = this.skew + 32;
+                skewMask = 0xFFFFFFFF << -this.skew;
+            } else {
+                if (this.skew === 0) {
+                    unskew = 0;
+                    skewMask = 0xFFFFFFFF;
+                } else {
+                    unskew = this.skew - 32;
+                    skewMask = 0xFFFFFFFF >>> this.skew;
+                }
+            }
+        }
+        var notSkewMask = ~skewMask;
+        // init halftones
+        var halftoneWord;
+        var halftoneHeight;
+       	if (this.halftone) {
+            halftoneWord = this.halftone[0];
+            halftoneHeight = this.halftone.length;
+        } else {
+            halftoneWord = 0xFFFFFFFF;
+            halftoneHeight = 0;
+        }
+        // now loop over all lines
+        var y = this.dy;
+        for (var i = 1; i <= this.bbH; i++) {
+            if (halftoneHeight > 1) {
+                halftoneWord = this.halftone.words[y % halftoneHeight];
+                y += this.vDir;
+            }
+            var prevWord;
+            if (this.preload) {
+                prevWord = this.source.bits[this.sourceIndex];
+                this.sourceIndex += hInc;
+            } else {
+                prevWord = 0;
+            }
+            var destMask = this.mask1;
+            /* pick up next word */
+            var thisWord = this.source.bits[this.sourceIndex];
+            this.sourceIndex += hInc;
+            /* 32-bit rotate */
+            var skewWord = ((unskew < 0 ? ( (prevWord & notSkewMask) >>> -unskew) : ( (prevWord & notSkewMask) << unskew)))
+                | (((this.skew < 0) ? ( (thisWord & skewMask) >>> -this.skew) : ( (thisWord & skewMask) << this.skew)));
+            prevWord = thisWord;
+            var destWord = this.dest.bits[this.destIndex];
+            var mergeWord = this.mergeFn(skewWord & halftoneWord, destWord);
+            destWord = (destMask & mergeWord) | (destWord & (~destMask));
+            this.dest.bits[this.destIndex] = destWord;
+            //The central horizontal loop requires no store masking */
+            this.destIndex += hInc;
+            destMask = 0xFFFFFFFF;
+            if (this.combinationRule == 3) { //Store mode avoids dest merge function
+                if ((this.skew === 0) && (halftoneWord === 0xFFFFFFFF)) {
+                    //Non-skewed with no halftone
+                    if (this.hDir == -1) {
+                        for (var word = 2; word < this.nWords; word++) {
+                            thisWord = this.source.bits[this.sourceIndex];
+                            this.dest.bits[this.destIndex] = thisWord;
+                            this.sourceIndex += hInc;
+                            this.destIndex += hInc;
+                        }
+                    } else {
+                        for (var word = 2; word < this.nWords; word++) {
+                            this.dest.bits[this.destIndex] = prevWord;
+                            prevWord = this.source.bits[this.sourceIndex];
+                            this.destIndex += hInc;
+                            this.sourceIndex += hInc;
+                        }
+                    }
+                } else {
+                    //skewed and/or halftoned
+                    for (var word = 2; word < this.nWords; word++) {
+                        thisWord = this.source.bits[this.sourceIndex];
+                        this.sourceIndex += hInc;
+                        /* 32-bit rotate */
+                        skewWord = (((unskew < 0) ? ( (prevWord & notSkewMask) >>> -unskew) : ( (prevWord & notSkewMask) << unskew)))
+                            | (((this.skew < 0) ? ( (thisWord & skewMask) >>> -this.skew) : ( (thisWord & skewMask) << this.skew)));
+                        prevWord = thisWord;
+                        this.dest.bits[this.destIndex] = skewWord & halftoneWord;
+                        this.destIndex += hInc;
+                    }
+                }
+            } else { //Dest merging here...
+                for (var word = 2; word < this.nWords; word++) {
+                    thisWord = this.source.bits[this.sourceIndex]; //pick up next word
+                    this.sourceIndex += hInc;
+                    /* 32-bit rotate */
+                    skewWord = (((unskew < 0) ? ( (prevWord & notSkewMask) >>> -unskew) : ( (prevWord & notSkewMask) << unskew)))
+                        | (((this.skew < 0) ? ( (thisWord & skewMask) >>> -this.skew) : ( (thisWord & skewMask) << this.skew)));
+                    prevWord = thisWord;
+                    mergeWord = this.mergeFn(skewWord & halftoneWord, this.dest.bits[this.destIndex]);
+                    this.dest.bits[this.destIndex] = mergeWord;
+                    this.destIndex += hInc;
+                }
+            } 
+            // last word with masking and all
+            if (this.nWords > 1) {
+                destMask = this.mask2;
+                if (this.sourceIndex >= 0 && this.sourceIndex < sourceLimit)
+                //NOTE: we are currently overrunning source bits in some cases
+                //this test makes up for it.
+                    thisWord = this.source.bits[this.sourceIndex]; //pick up next word
+                this.sourceIndex += hInc;
+                /* 32-bit rotate */
+                skewWord = (((unskew < 0) ? ((prevWord & notSkewMask) >>> -unskew) : ((prevWord & notSkewMask) << unskew)))
+                    | (((this.skew < 0) ? ( (thisWord & skewMask) >>> -this.skew) : ( (thisWord & skewMask) << this.skew)));
+                destWord = this.dest.bits[this.destIndex];
+                mergeWord = this.mergeFn(skewWord & halftoneWord, destWord);
+                destWord = (destMask & mergeWord) | (destWord & (~destMask));
+                this.dest.bits[this.destIndex] = destWord;
+                this.destIndex += hInc;
+            }
+            this.sourceIndex += this.sourceDelta;
+            this.destIndex += this.destDelta;
+        }
+    },
+
 
     sourceSkewAndPointerInit: function() {
         var pixPerM1 = this.dest.pixPerWord - 1;  //Pix per word is power of two, so this makes a mask
@@ -2243,9 +2378,33 @@ Object.subclass('lib.squeak.vm.BitBlt',
     	}
     	if ((this.sy + this.bbH) > this.source.height)
     		this.bbH -= (this.sy + this.bbH) - this.source.height;
-	},},
+	},
+    checkSourceOverlap: function() {
+        if (this.sourceForm === this.destForm && this.dy >= this.sy) {
+            if (this.dy > this.sy) {
+                this.vDir = -1;
+                this.sy = (this.sy + this.bbH) - 1;
+                this.dy = (this.dy + this.bbH) - 1;
+            } else {
+                if (this.dy === this.sy && this.dx > this.sx) {
+                    this.hDir = -1;
+                    this.sx = (this.sx + this.bbW) - 1; //start at right
+                    this.dx = (this.dx + this.bbW) - 1;
+                    if (this.nWords > 1) {
+                        var t = this.mask1; //and fix up masks
+                        this.mask1 = this.mask2;
+                        this.mask2 = t;
+                    }
+                }
+            }
+            this.destIndex = (this.dy * this.dest.pitch) + (this.dx / this.dest.pixPerWord); //recompute since dx, dy change
+            this.destDelta = (this.dest.pitch * this.vDir) - (this.nWords * this.hDir);
+		}
+    }
+},
 'accessing', {
     affectedRect: function() {
+        if (this.bbW <= 0 || this.bbH <= 0) return null;
         var affectedL, affectedR, affectedT, affectedB;
         if (this.hDir > 0) {
             affectedL = this.dx;

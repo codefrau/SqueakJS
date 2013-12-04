@@ -394,7 +394,6 @@ Object.subclass('lib.squeak.vm.Image',
 },
 'operations', {
     bulkBecome: function(fromArray, toArray, twoWay) {
-        debugger;
         var n = fromArray.length;
         if (n !== toArray.length)
             return false;
@@ -2491,7 +2490,7 @@ Object.subclass('lib.squeak.vm.BitBlt',
             else this.skew -= 32;
         }
         /* calculate increments from end of one line to start of next */
-        this.sourceIndex = (this.sy * this.source.pitch) + (this.sx / (32 / this.source.depth));
+        this.sourceIndex = (this.sy * this.source.pitch) + (this.sx / (32 / this.source.depth) |0);
         this.sourceDelta = (this.source.pitch * this.vDir) - (this.nWords * this.hDir);
         if (this.preload) this.sourceDelta -= this.hDir;
     },
@@ -2573,7 +2572,7 @@ Object.subclass('lib.squeak.vm.BitBlt',
                     }
                 }
             }
-            this.destIndex = (this.dy * this.dest.pitch) + (this.dx / this.dest.pixPerWord); //recompute since dx, dy change
+            this.destIndex = (this.dy * this.dest.pitch) + (this.dx / this.dest.pixPerWord | 0); //recompute since dx, dy change
             this.destDelta = (this.dest.pitch * this.vDir) - (this.nWords * this.hDir);
 		}
     }

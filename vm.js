@@ -174,7 +174,7 @@ Object.subclass('lib.squeak.vm.Image',
         isFalse: (optional) true if this is the false object
         isFloat: (optional) true if this is a Float object
         isFloatClass: (optional) true if this is the Float class
-        id: unique id integer (re-assigned on GC)
+        id: unique id integer
         mark: boolean (used only during GC, otherwise false)
         nextObject: linked list of objects in old space (new space objects do not have this yet)
     }
@@ -222,6 +222,7 @@ Object.subclass('lib.squeak.vm.Image',
         // read objects
         this.oldSpaceCount = 0;
         this.newSpaceCount = 0;
+        this.lastId = 0;
         var prevObj;
         var oopMap = {};
         for (var ptr = 0; ptr < endOfMemory; ) {
@@ -304,6 +305,7 @@ Object.subclass('lib.squeak.vm.Image',
         this.appendToOldObjects(newObjects);
         var garbageCount = removedObjects.length           // reclaimed in old space
             + (this.newSpaceCount - newObjects.length);    // reclaimed in new space
+        this.oldSpaceCount += newObjects.length - removedObjects.length;
         this.newSpaceCount = 0;
         return 1000000 + garbageCount; // free space
     },
@@ -332,14 +334,10 @@ Object.subclass('lib.squeak.vm.Image',
     removeUnmarkedOldObjects: function() {
         // Unlink unmarked old objects from the nextObject linked list
         // Reset marks of remaining objects
-        // Re-assign ids of remaining objects
         // Set this.lastOldObject to last old object
         // Return removed old objects (to support finalization later)
-        // Note: ids of removed objects are negated to distinguish them from current objects
-        this.oldSpaceCount = 0;
         var removed = [];
         var obj = this.firstOldObject;
-        obj.id = ++this.oldSpaceCount;
         while (true) {
             var next = obj.nextObject;
             if (!next) { // we're done
@@ -349,10 +347,8 @@ Object.subclass('lib.squeak.vm.Image',
             // if marked, continue with next object
             if (next.mark) {
                 next.mark = false;     // unmark for next GC
-                next.id = ++this.oldSpaceCount;
                 obj = next;
             } else { // otherwise, drop it
-                next.id = -next.id;    // 
                 removed.push(next);
                 obj.nextObject = next.nextObject;
             }
@@ -364,7 +360,6 @@ Object.subclass('lib.squeak.vm.Image',
         var oldObj = this.lastOldObject;
         for (var i = 0; i < newObjects.length; i++) {
             var newObj = newObjects[i];
-            newObj.id = ++this.oldSpaceCount;
             oldObj.nextObject = newObj;
             oldObj = newObj;
         }
@@ -375,7 +370,8 @@ Object.subclass('lib.squeak.vm.Image',
     registerObject: function(obj) {
         // We don't actually register the object yet, because that would prevent
         // it from being garbage-collected.
-        obj.id = ++this.newSpaceCount + this.oldSpaceCount;
+        obj.id = ++this.lastId; // this can become quite large, but won't overflow for many years
+        this.newSpaceCount++;
         this.lastHash = (13849 + (27181 * this.lastHash)) & 0xFFFFFFFF;
         return this.lastHash & 0xFFF;
     },
@@ -397,10 +393,6 @@ Object.subclass('lib.squeak.vm.Image',
         var n = fromArray.length;
         if (n !== toArray.length)
             return false;
-        // ensure new objects have nextObject pointers
-        if (this.newSpaceCount > 0)
-            this.fullGC();
-        // since GC may re-assign object ids, this had to go first
         var mutations = {};
         for (var i = 0; i < n; i++) {
             var obj = fromArray[i];
@@ -414,6 +406,9 @@ Object.subclass('lib.squeak.vm.Image',
             if (mutations[obj.id]) return false; //repeated oops in to array
             else mutations[obj.id] = fromArray[i];
         }
+        // ensure new objects have nextObject pointers
+        if (this.newSpaceCount > 0)
+            this.fullGC();
         // Now, for every object...
         var obj = this.firstOldObject;
         while (obj) {
@@ -1048,6 +1043,8 @@ Object.subclass('lib.squeak.vm.Interpreter',
             this.specialSelectors[(lobits*2)+1],
             false);  //specialSelectors is  {...sel,nArgs,sel,nArgs,...)
     },
+},
+'sending', {
     send: function(selector, argCount, doSuper) {
         var newRcvr = this.stackValue(argCount);
         var lookupClass = this.getClass(newRcvr);
@@ -1206,45 +1203,6 @@ Object.subclass('lib.squeak.vm.Interpreter',
         var success = this.primHandler.doPrimitive(primIndex, argCount);
         return success;
     },
-    recycleIfPossible: function(ctxt) {
-        if (!this.isMethodContext(ctxt)) return;
-        if (ctxt.pointersSize() === (Squeak.Context_tempFrameStart+Squeak.Context_smallFrameSize)) {
-            // Recycle small contexts
-            ctxt.setPointer(0, this.freeContexts);
-            this.freeContexts = ctxt;
-        } else { // Recycle large contexts
-            if (ctxt.pointersSize() !== (Squeak.Context_tempFrameStart+Squeak.Context_largeFrameSize))
-                return;
-            ctxt.setPointer(0, this.freeLargeContexts);
-            this.freeLargeContexts = ctxt;
-        }
-    },
-    allocateOrRecycleContext: function(needsLarge) {
-        //Return a recycled context or a newly allocated one if none is available for recycling."
-        var freebie;
-        if (needsLarge) {
-            if (!this.freeLargeContexts.isNil) {
-                freebie = this.freeLargeContexts;
-                this.freeLargeContexts = freebie.getPointer(0);
-                this.nRecycledContexts++;
-                return freebie;
-            }
-            this.nAllocatedContexts++;
-            return this.instantiateClass(this.specialObjects[Squeak.splOb_ClassMethodContext], Squeak.Context_largeFrameSize);
-        } else {
-            if (!this.freeContexts.isNil) {
-                freebie = this.freeContexts;
-                this.freeContexts = freebie.getPointer(0);
-                this.nRecycledContexts++;
-                return freebie;
-            }
-            this.nAllocatedContexts++;
-            return this.instantiateClass(this.specialObjects[Squeak.splOb_ClassMethodContext], Squeak.Context_smallFrameSize);
-        }
-    },
-    instantiateClass: function(aClass, indexableSize) {
-        return this.image.instantiateClass(aClass, indexableSize, this.nilObj);
-    },
     createActualMessage: function(selector, argCount, cls) {
         //Bundle up receiver, args and selector as a messageObject
         var message = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassMessage], 0);
@@ -1256,8 +1214,6 @@ Object.subclass('lib.squeak.vm.Interpreter',
             message.setPointer(Squeak.Message_lookupClass, cls);
         return message;
     },
-},
-'perform', {
     primitivePerform: function(argCount) {
         var selector = this.stackValue(argCount-1);
         var rcvr = this.stackValue(argCount);
@@ -1271,6 +1227,26 @@ Object.subclass('lib.squeak.vm.Interpreter',
         var entry = this.findSelectorInClass(selector,trueArgCount, this.getClass(rcvr));
         var newMethod = entry.method;
         this.executeNewMethod(rcvr, newMethod, newMethod.methodNumArgs(), entry.primIndex);
+        return true;
+    },
+    flushMethodCacheForSelector: function(selector) { //clear cache entries for selector (prim 119)
+        /*
+        for (var i = 0; i < this.methodCacheSize; i++)
+            if (this.methodCache[i].selector === selector) {
+                this.methodCache[i].selector = null;   // mark it free
+                this.methodCache[i].method = null;  // release the method
+            }
+        */
+        return true;
+    },
+    flushMethodCacheForMethod: function(method) { //clear cache entries for method (prim 116)
+        /*
+        for (var i = 0; i < this.methodCacheSize; i++)
+            if (this.methodCache[i].method === method) {
+                this.methodCache[i].selector = null;   // mark it free
+                this.methodCache[i].method = null;  // release the method
+            }
+        */
         return true;
     },
 },
@@ -1330,8 +1306,44 @@ Object.subclass('lib.squeak.vm.Interpreter',
     decodeSqueakSP: function(squeakPC) {
         return squeakPC + (Squeak.Context_tempFrameStart - 1);
     },
+    recycleIfPossible: function(ctxt) {
+        if (!this.isMethodContext(ctxt)) return;
+        if (ctxt.pointersSize() === (Squeak.Context_tempFrameStart+Squeak.Context_smallFrameSize)) {
+            // Recycle small contexts
+            ctxt.setPointer(0, this.freeContexts);
+            this.freeContexts = ctxt;
+        } else { // Recycle large contexts
+            if (ctxt.pointersSize() !== (Squeak.Context_tempFrameStart+Squeak.Context_largeFrameSize))
+                return;
+            ctxt.setPointer(0, this.freeLargeContexts);
+            this.freeLargeContexts = ctxt;
+        }
+    },
+    allocateOrRecycleContext: function(needsLarge) {
+        //Return a recycled context or a newly allocated one if none is available for recycling."
+        var freebie;
+        if (needsLarge) {
+            if (!this.freeLargeContexts.isNil) {
+                freebie = this.freeLargeContexts;
+                this.freeLargeContexts = freebie.getPointer(0);
+                this.nRecycledContexts++;
+                return freebie;
+            }
+            this.nAllocatedContexts++;
+            return this.instantiateClass(this.specialObjects[Squeak.splOb_ClassMethodContext], Squeak.Context_largeFrameSize);
+        } else {
+            if (!this.freeContexts.isNil) {
+                freebie = this.freeContexts;
+                this.freeContexts = freebie.getPointer(0);
+                this.nRecycledContexts++;
+                return freebie;
+            }
+            this.nAllocatedContexts++;
+            return this.instantiateClass(this.specialObjects[Squeak.splOb_ClassMethodContext], Squeak.Context_smallFrameSize);
+        }
+    },
 },
-'stack frame access', {
+'stack access', {
     pop: function() {
         //Note leaves garbage above SP.  Serious reclaim should store nils above SP
         return this.activeContext.pointers[this.sp--];  
@@ -1409,6 +1421,9 @@ Object.subclass('lib.squeak.vm.Interpreter',
 },
 'utils',
 {
+    instantiateClass: function(aClass, indexableSize) {
+        return this.image.instantiateClass(aClass, indexableSize, this.nilObj);
+    },
     arrayFill: function(array, fromIndex, toIndex, value) {
         // assign value to range from fromIndex (inclusive) to toIndex (exclusive)
         for (var i = fromIndex; i < toIndex; i++)
@@ -1545,6 +1560,8 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 107: return this.popNandPushIfOK(1, this.display.mouseButtons); // Sensor mouseButtons
 
             case 110: return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
+            case 116: return this.vm.flushMethodCacheForMethod(this.vm.top());
+            case 119: return this.vm.flushMethodCacheForSelector(this.vm.top());
             case 121: return this.popNandPushIfOK(1, this.makeStString("/home/bert/mini.image")); //imageName
             case 124: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore));
             case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());

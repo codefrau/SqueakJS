@@ -1906,8 +1906,8 @@ Object.subclass('lib.squeak.vm.Primitives',
         var p = schedLists.pointersSize() - 1;  // index of last indexable field
         var processList;
         do {
-            processList = schedLists.getPointer(p--);
             if (p < 0) throw "scheduler could not find a runnable process";
+            processList = schedLists.getPointer(p--);
         } while (this.isEmptyList(processList));
         return this.removeFirstLinkOfList(processList);
 	},    

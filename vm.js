@@ -1161,6 +1161,23 @@ Object.subclass('lib.squeak.vm.Interpreter',
         return message;
     },
 },
+'perform', {
+    primitivePerform: function(argCount) {
+        var selector = this.stackValue(argCount-1);
+        var rcvr = this.stackValue(argCount);
+        // NOTE: findNewMethodInClass may fail and be converted to #doesNotUnderstand:,
+        //       (Whoah) so we must slide args down on the stack now, so that would work
+        var trueArgCount = argCount - 1;
+        var selectorIndex = this.sp - trueArgCount;
+        var stack = this.activeContext.pointers; // slide eveything down...
+        this.arrayCopy(stack, selectorIndex+1, stack, selectorIndex, trueArgCount);
+        this.sp--; // adjust sp accordingly
+        var entry = this.findSelectorInClass(selector,trueArgCount, this.getClass(rcvr));
+        var newMethod = entry.method;
+        this.executeNewMethod(rcvr, newMethod, newMethod.methodNumArgs(), entry.primIndex);
+        return true;
+    },
+},
 'contexts', {
     isContext: function(obj) {//either block or methodContext
         if (obj.sqClass === this.specialObjects[Squeak.splOb_ClassMethodContext]) return true;
@@ -1379,7 +1396,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 35: return false; // primitiveBitOrLargeIntegers
             case 36: return false; // primitiveBitXorLargeIntegers
             case 37: return false; // primitiveBitShiftLargeIntegers
-            case 40: return this.primitiveAsFloat(argCount);
+            case 40: return this.popNandPushFloatIfOK(1,this.stackInteger(0)); // primitiveAsFloat
             case 41: return this.popNandPushFloatIfOK(2,this.stackFloat(1)+this.stackFloat(0));  // Float +
             case 42: return this.popNandPushFloatIfOK(2,this.stackFloat(1)-this.stackFloat(0));  // Float -	
             case 43: return this.pop2andPushBoolIfOK(this.stackFloat(1)<this.stackFloat(0));  // Float <
@@ -1390,6 +1407,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 48: return this.pop2andPushBoolIfOK(this.stackFloat(1)!==this.stackFloat(0));  // Float !=
             case 49: return this.popNandPushFloatIfOK(2,this.stackFloat(1)*this.stackFloat(0));  // Float.mul
             case 50: return this.popNandPushFloatIfOK(2,this.safeFDiv(this.stackFloat(1),this.stackFloat(0)));  // Float.div
+            case 51: return this.popNandPushIfOK(1, this.checkSmallInt(this.stackFloat(0)|0));  // Float.asInteger
             
             case 60: return this.popNandPushIfOK(2, this.objectAt(false,false,false)); // basicAt:
             case 61: return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); // basicAt:put:
@@ -1409,6 +1427,7 @@ Object.subclass('lib.squeak.vm.Primitives',
 
             case 75: return this.popNandPushIfOK(1, this.stackNonInteger(0).hash); // identityHash
             case 81: return this.primitiveBlockValue(argCount); // BlockContext.value
+            case 83: return this.vm.primitivePerform(argCount); // rcvr.perform:(with:)*
             case 85: return this.primitiveSignal(); // Semaphore.wait
             case 86: return this.primitiveWait(); // Semaphore.wait
             case 87: return this.primitiveResume(); // Process.resume
@@ -1838,7 +1857,6 @@ Object.subclass('lib.squeak.vm.Primitives',
         return true;
 	},
     primitiveSuspend: function() {
-        debugger;
         var activeProc = this.getScheduler().getPointer(Squeak.ProcSched_activeProcess);
         if (this.vm.top() !== activeProc) return false;
         this.vm.popNandPush(1, this.vm.nilObj);
@@ -1974,9 +1992,8 @@ Object.subclass('lib.squeak.vm.Primitives',
 	    return true;
 	},
 	primitiveCopyBits: function(argCount) { // no rcvr class check, to allow unknown subclasses (e.g. under Turtle)
-	    var bitbltObj = this.vm.stackValue(argCount);
+        var bitbltObj = this.vm.stackValue(argCount);
         var bitblt = new lib.squeak.vm.BitBlt(this.vm);
-        debugger;
         if (!bitblt.loadBitBlt(bitbltObj)) return false;
         bitblt.copyBits();
         if (bitblt.combinationRule == 22 || bitblt.combinationRule == 32)
@@ -2133,7 +2150,6 @@ Object.subclass('lib.squeak.vm.BitBlt',
         if (!this.source) {
             this.copyLoopNoSource();
         } else {
-            debugger;
             this.checkSourceOverlap();
             if (this.source.depth !== this.dest.depth) {
                 this.copyLoopPixMap();

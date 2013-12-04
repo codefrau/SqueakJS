@@ -881,7 +881,8 @@ Object.subclass('lib.squeak.vm.Interpreter',
         }
     },
     interpret: function() {
-        while(true)
+        this.breakOutOfInterpreter = false;
+        while (!this.breakOutOfInterpreter)
             this.interpretOne();
     },
     nextByte: function() {
@@ -891,7 +892,49 @@ Object.subclass('lib.squeak.vm.Interpreter',
         throw "Oh No!";
     },
     checkForInterrupts: function() {
-        // TODO
+        //Check for interrupts at sends and backward jumps
+        if (this.interruptCheckCounter-- > 0) return; //only really check every 100 times or so
+        var now = this.primHandler.millisecondClockValue();
+        if (now < this.lastTick) { //millisecond clock wrapped"
+            this.nextPollTick = now + (this.nextPollTick - this.lastTick);
+            if (this.nextWakeupTick !== 0)
+                this.nextWakeupTick = now + (this.nextWakeupTick - this.lastTick);
+        }
+        //Feedback logic attempts to keep interrupt response around 3ms...
+        if ((now - this.lastTick) < this.interruptChecksEveryNms)  //wrapping is not a concern
+            this.interruptCheckCounterFeedBackReset += 10;
+        else {
+            if (this.interruptCheckCounterFeedBackReset <= 1000)
+                this.interruptCheckCounterFeedBackReset = 1000;
+            else
+                this.interruptCheckCounterFeedBackReset -= 12;
+        }
+    	this.interruptCheckCounter = this.interruptCheckCounterFeedBackReset; //reset the interrupt check counter
+    	this.lastTick = now; //used to detect wraparound of millisecond clock
+        //	if(signalLowSpace) {
+        //            signalLowSpace= false; //reset flag
+        //            sema= getSpecialObject(Squeak.splOb_TheLowSpaceSemaphore);
+        //            if(sema != nilObj) synchronousSignal(sema); }
+        //	if(now >= nextPollTick) {
+        //            ioProcessEvents(); //sets interruptPending if interrupt key pressed
+        //            nextPollTick= now + 500; } //msecs to wait before next call to ioProcessEvents"
+        if (this.interruptPending) {
+            this.interruptPending = false; //reset interrupt flag
+            var sema = this.specialObjects[Squeak.splOb_TheInterruptSemaphore];
+            if (!sema.isNil) this.primHandler.synchronousSignal(sema);
+        }
+        if ((this.nextWakeupTick !== 0) && (now >= this.nextWakeupTick)) {
+            this.nextWakeupTick = 0; //reset timer interrupt
+            var sema = this.specialObjects[Squeak.splOb_TheTimerSemaphore];
+            if (!sema.isNil) this.primHandler.synchronousSignal(sema);
+        }
+        //	if (pendingFinalizationSignals > 0) { //signal any pending finalizations
+        //            sema= getSpecialObject(Squeak.splOb_ThefinalizationSemaphore);
+        //            pendingFinalizationSignals= 0;
+        //            if(sema != nilObj) primHandler.synchronousSignal(sema); }
+        //	if ((semaphoresToSignalCountA > 0) || (semaphoresToSignalCountB > 0)) {
+        //            signalExternalSemaphores(); }  //signal all semaphores in semaphoresToSignal
+        this.breakOutOfInterpreter = true;
     },
     extendedPush: function(nextByte) {
         var lobits = nextByte & 63;
@@ -1460,6 +1503,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 148: return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); //shallowCopy
             case 153: return false; //File.open 
             case 161: return this.popNandPushIfOK(1, this.charFromInt('/'.charCodeAt(0))); //path delimiter
+            case 230: return this.primitiveRelinquishProcessorForMicroseconds(argCount);
             case 234: return false; // primBitmapdecompressfromByteArrayat
             case 235: return false;  // primStringcomparewithcollated
         }
@@ -2026,6 +2070,21 @@ Object.subclass('lib.squeak.vm.Primitives',
             this.showOnDisplay(bitblt.dest, bitblt.affectedRect());
 		return true;
 	},
+    primitiveRelinquishProcessorForMicroseconds: function(argCount) {
+        // TODO
+        var millis = 100;
+        if (argCount > 1) return false;
+        if (argCount > 0) {
+            var micros = this.stackInteger(0);
+            if (!this.success) return false;
+            this.vm.pop();
+            millis = micros / 1000;
+        }
+        // so Squeak is idle, but what should we do?
+        this.vm.breakOutOfInterpreter = true;
+        return true;
+    },
+
     showOnDisplay: function(form, rect) {
         if (!rect) return;
         var ctx = this.display.ctx;

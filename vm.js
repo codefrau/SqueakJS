@@ -1436,13 +1436,17 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 86: return this.primitiveWait(); // Semaphore.wait
             case 87: return this.primitiveResume(); // Process.resume
             case 88: return this.primitiveSuspend(); // Process.suspend
+            case 90: return this.popNandPushIfOK(1, this.makePointWithXandY(this.display.mouseX, this.display.mouseY)); // mousePoint
 
             case 96: return this.primitiveCopyBits(argCount);  // BitBlt.copyBits
             case 101: return this.primitiveBeCursor(argCount); // Cursor.beCursor
             case 102: return this.primitiveBeDisplay(argCount); // DisplayScreen.beDisplay
+            case 103: return false; // primitiveScanCharacters
 
             case 105: return this.popNandPushIfOK(5, this.doStringReplace()); // string and array replace
             case 106: return this.popNandPushIfOK(1, this.makePointWithXandY(this.display.width, this.display.height)); // actualScreenSize
+            case 107: return this.popNandPushIfOK(1, this.display.mouseButtons); // Sensor mouseButtons
+
             case 110: return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
             case 121: return this.popNandPushIfOK(1, this.makeStString("/home/bert/mini.image")); //imageName
             case 124: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore));
@@ -1451,6 +1455,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 131: return this.popNandPushIfOK(1, this.vm.image.partialGC()); // GCmost
             case 134: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheInterruptSemaphore));
             case 135: return this.popNandPushIfOK(1, this.millisecondClockValue());
+            case 136: return this.primitiveSignalAtMilliseconds(argCount); //Delay signal:atMs:());
             case 142: return this.popNandPushIfOK(1, this.makeStString("/users/bert/squeakvm/")); //vmPath
             case 148: return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); //shallowCopy
             case 153: return false; //File.open 
@@ -1976,6 +1981,21 @@ Object.subclass('lib.squeak.vm.Primitives',
             this.resume(this.removeFirstLinkOfList(sema));
         return;
     },
+    primitiveSignalAtMilliseconds: function(argCount) { //Delay signal:atMs:
+        var msTime = this.stackInteger(0);
+        var sema = this.stackNonInteger(1);
+        var rcvr = this.stackNonInteger(2);
+        if (!this.success) return false;
+        if (this.isA(sema, Squeak.splOb_ClassSemaphore)) {
+            this.vm.specialObjects[Squeak.splOb_TheTimerSemaphore] = sema;
+            this.vm.nextWakeupTick = msTime;
+        } else {
+            this.vm.specialObjects[Squeak.splOb_TheTimerSemaphore] = this.vm.nilObj;
+            this.vm.nextWakeupTick = 0;
+        }
+        this.vm.popN(argCount); // return self
+        return true;
+	},
 },
 'memory', {
     setLowSpaceThreshold: function() {

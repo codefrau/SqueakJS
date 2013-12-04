@@ -1320,8 +1320,12 @@ Object.subclass('lib.squeak.vm.Interpreter',
     },
     arrayCopy: function(src, srcPos, dest, destPos, length) {
         // copy length elements from src at srcPos to dest at destPos
-        for (var i = 0; i < length; i++)
-            dest[destPos + i] = src[srcPos + i];
+        if (src === dest && srcPos < destPos)
+            for (var i = length - 1; i >= 0; i--)
+                dest[destPos + i] = src[srcPos + i];
+        else
+            for (var i = 0; i < length; i++)
+                dest[destPos + i] = src[srcPos + i];
     }
 });
 

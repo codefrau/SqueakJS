@@ -163,7 +163,7 @@ Object.subclass('lib.squeak.vm.Image',
     Instance variables/fields reference other objects directly via the "pointers" property.
     {
         sqClass: reference to class object
-        format: format word as in Squeak oop header
+        format: format integer as in Squeak oop header
         hash: identity hash integer
         pointers: (optional) Array referencing inst vars + indexable fields
         words: (optional) Array of numbers (words)
@@ -174,6 +174,9 @@ Object.subclass('lib.squeak.vm.Image',
         isFalse: (optional) true if this is the false object
         isFloat: (optional) true if this is a Float object
         isFloatClass: (optional) true if this is the Float class
+        id: unique id integer (re-assigned on GC)
+        mark: boolean (used only during GC, otherwise false)
+        nextObject: linked list of objects in old space (new space objects do not have this yet)
     }
 
     Object Table
@@ -217,6 +220,8 @@ Object.subclass('lib.squeak.vm.Image',
         var extraVMMemory = readWord();
         pos += headerSize - (9 * 4); //skip to end of header
         // read objects
+        this.oldSpaceCount = 0;
+        this.newSpaceCount = 0;
         var prevObj;
         var oopMap = {};
         for (var ptr = 0; ptr < endOfMemory; ) {
@@ -268,8 +273,9 @@ Object.subclass('lib.squeak.vm.Image',
             oopMap[oop].installFromImage(oopMap, compactClasses, floatClass, littleEndian);
         this.specialObjectsArray = splObs;
         this.decorateKnownObjects();
-        this.firstObject = oopMap[oldBaseAddr+4];
+        this.firstOldObject = oopMap[oldBaseAddr+4];
         this.lastOldObject = prevObj;
+        this.oldSpaceCount = this.newSpaceCount;
         this.newSpaceCount = 0; 
      },
     decorateKnownObjects: function() {
@@ -296,8 +302,8 @@ Object.subclass('lib.squeak.vm.Image',
         var newObjects = this.markReachableObjects();
         var removedObjects = this.removeUnmarkedOldObjects();
         this.appendToOldObjects(newObjects);
-        var garbageCount = removedObjects.length        // reclaimed in old space
-            + this.newSpaceCount - newObjects.length;    // reclaimed in new space
+        var garbageCount = removedObjects.length           // reclaimed in old space
+            + (this.newSpaceCount - newObjects.length);    // reclaimed in new space
         this.newSpaceCount = 0;
         return 1000000 + garbageCount; // free space
     },
@@ -326,10 +332,14 @@ Object.subclass('lib.squeak.vm.Image',
     removeUnmarkedOldObjects: function() {
         // Unlink unmarked old objects from the nextObject linked list
         // Reset marks of remaining objects
+        // Re-assign ids of remaining objects
         // Set this.lastOldObject to last old object
         // Return removed old objects (to support finalization later)
+        // Note: ids of removed objects are negated to distinguish them from current objects
+        this.oldSpaceCount = 0;
         var removed = [];
-        var obj = this.firstObject;
+        var obj = this.firstOldObject;
+        obj.id = ++this.oldSpaceCount;
         while (true) {
             var next = obj.nextObject;
             if (!next) { // we're done
@@ -339,8 +349,10 @@ Object.subclass('lib.squeak.vm.Image',
             // if marked, continue with next object
             if (next.mark) {
                 next.mark = false;     // unmark for next GC
+                next.id = ++this.oldSpaceCount;
                 obj = next;
             } else { // otherwise, drop it
+                next.id = -next.id;    // 
                 removed.push(next);
                 obj.nextObject = next.nextObject;
             }
@@ -348,10 +360,11 @@ Object.subclass('lib.squeak.vm.Image',
     },
     appendToOldObjects: function(newObjects) {
         // append new objects to linked list of old objects
+        // and re-assign their ids
         var oldObj = this.lastOldObject;
-        for (var i = 1; i < newObjects.length; i++) {
+        for (var i = 0; i < newObjects.length; i++) {
             var newObj = newObjects[i];
-            delete newObj.id;
+            newObj.id = ++this.oldSpaceCount;
             oldObj.nextObject = newObj;
             oldObj = newObj;
         }
@@ -361,10 +374,9 @@ Object.subclass('lib.squeak.vm.Image',
 'creating', {
     registerObject: function(obj) {
         // We don't actually register the object yet, because that would prevent
-        // it from being garbage-collected. But we give it a mark to preserve
-        // object creation order when we move it to old space.
-        if (this.newSpaceCount != undefined) obj.id = ++this.newSpaceCount;
-    	this.lastHash = (13849 + (27181 * this.lastHash)) & 0xFFFFFFFF;
+        // it from being garbage-collected.
+        obj.id = ++this.newSpaceCount + this.oldSpaceCount;
+        this.lastHash = (13849 + (27181 * this.lastHash)) & 0xFFFFFFFF;
         return this.lastHash & 0xFFF;
     },
     instantiateClass: function(aClass, indexableSize, filler) {
@@ -378,6 +390,46 @@ Object.subclass('lib.squeak.vm.Image',
         var hash = this.registerObject(newObject);
         newObject.initAsClone(object, hash);
         return newObject;
+    },
+},
+'operations', {
+    bulkBecome: function(fromArray, toArray, twoWay) {
+        debugger;
+        var n = fromArray.length;
+        if (n !== toArray.length)
+            return false;
+        // ensure new objects have nextObject pointers
+        if (this.newSpaceCount > 0)
+            this.fullGC();
+        // since GC may re-assign object ids, this had to go first
+        var mutations = {};
+        for (var i = 0; i < n; i++) {
+            var obj = fromArray[i];
+            if (!obj.sqClass) return false;  //non-objects in from array
+            if (mutations[obj.id]) return false; //repeated oops in from array
+            else mutations[obj.id] = toArray[i];
+        }
+        if (twoWay) for (var i = 0; i < n; i++) {
+            var obj = toArray[i];
+            if (!obj.sqClass) return false;  //non-objects in to array
+            if (mutations[obj.id]) return false; //repeated oops in to array
+            else mutations[obj.id] = fromArray[i];
+        }
+        // Now, for every object...
+        var obj = this.firstOldObject;
+        while (obj) {
+            // mutate the class
+            var mut = mutations[obj.sqClass.id];
+            if (mut) obj.sqClass = mut;
+            // and mutate body pointers
+            var body = obj.pointers;
+            if (body) for (var j = 0; j < body.length; j++) {
+                mut = mutations[body[j].id];
+                if (mut) body[j] = mut;
+            }
+            obj = obj.nextObject;
+        }
+        return true;
     },
 });
 
@@ -721,7 +773,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
         this.reclaimableContextCount = 0;
         this.nRecycledContexts = 0;
         this.nAllocatedContexts = 0;
-        this.startupTime = new Date().getTime(); // base for millisecond clock
+        this.startupTime = Date.now(); // base for millisecond clock
     },
     loadInitialContext: function() {
         var schedAssn = this.specialObjects[Squeak.splOb_SchedulerAssociation];
@@ -881,7 +933,9 @@ Object.subclass('lib.squeak.vm.Interpreter',
         }
     },
     interpret: function() {
+        // run until checkForInterrupts or relinquishProcessor
         this.breakOutOfInterpreter = false;
+        this.isIdle = false;
         while (!this.breakOutOfInterpreter)
             this.interpretOne();
     },
@@ -1469,6 +1523,7 @@ Object.subclass('lib.squeak.vm.Primitives',
 
             case 70: return this.popNandPushIfOK(1, this.vm.instantiateClass(this.stackNonInteger(0), 0)); // Class.new
             case 71: return this.popNandPushIfOK(2, this.vm.instantiateClass(this.stackNonInteger(1), this.stackPos32BitInt(0))); // Class.new:
+            case 72: return this.popNandPushIfOK(2, this.doArrayBecome(false)); //arrayBecomeOneWay
             case 73: return this.popNandPushIfOK(2, this.objectAt(false,false,true)); // instVarAt:
             case 74: return this.popNandPushIfOK(3, this.objectAtPut(false,false,true)); // instVarAt:put:
 
@@ -1494,6 +1549,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 121: return this.popNandPushIfOK(1, this.makeStString("/home/bert/mini.image")); //imageName
             case 124: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore));
             case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
+            case 128: return this.popNandPushIfOK(2, this.doArrayBecome(true)); //arrayBecome
             case 130: return this.popNandPushIfOK(1, this.vm.image.fullGC()); // GC
             case 131: return this.popNandPushIfOK(1, this.vm.image.partialGC()); // GCmost
             case 134: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheInterruptSemaphore));
@@ -1816,6 +1872,14 @@ Object.subclass('lib.squeak.vm.Primitives',
         this.vm.popNandPush(1+argCount, this.makePointWithXandY(x, y));
         return true;
     },
+    doArrayBecome: function(doBothWays) {
+    	// Should flush method cache
+	    var rcvr = this.stackNonInteger(1);
+        var arg = this.stackNonInteger(0);
+    	if (!this.success) return rcvr;
+        this.success = this.vm.image.bulkBecome(rcvr.pointers, arg.pointers, doBothWays);
+        return rcvr;
+    },
     doStringReplace: function() {
         var dst = this.stackNonInteger(4);
         var dstPos = this.stackInteger(3) - 1;
@@ -2080,7 +2144,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             this.vm.pop();
             millis = micros / 1000;
         }
-        // so Squeak is idle, but what should we do?
+        this.vm.isIdle = true;
         this.vm.breakOutOfInterpreter = true;
         return true;
     },
@@ -2118,7 +2182,7 @@ Object.subclass('lib.squeak.vm.Primitives',
         //Note that the millisecond clock wraps around periodically.
         //The range is limited to SmallInteger maxVal / 2 to allow
         //delays of up to that length without overflowing a SmallInteger."
-        return (new Date().getTime() - this.vm.startupTime) & this.vm.millisecondClockMask;
+        return (Date.now() - this.vm.startupTime) & this.vm.millisecondClockMask;
 	},
 });
 Object.subclass('lib.squeak.vm.BitBlt',

@@ -311,7 +311,7 @@ Object.subclass('lib.squeak.vm.Image',
     },
     markReachableObjects: function() {
         // Visit all reachable objects and mark them.
-        // Return new objects
+        // Return surviving new objects
         var todo = [this.specialObjectsArray, this.vm.activeContext];
         var newObjects = [];
         while (todo.length > 0) {
@@ -321,11 +321,11 @@ Object.subclass('lib.squeak.vm.Image',
             object.mark = true;           // mark it
             if (!object.sqClass.mark)     // trace class if not marked
                 todo.push(object.sqClass);
-            var ptrs = object.pointers;
-            if (ptrs)                     // trace all unmarked pointers
-                for (var i = 0; i < ptrs.length; i++)
-                    if (ptrs[i].sqClass && !ptrs[i].mark)   // except SmallInts
-                        todo.push(ptrs[i]);
+            var body = object.pointers;
+            if (body)                     // trace all unmarked pointers
+                for (var i = 0; i < body.length; i++)
+                    if (typeof body[i] === "object" && !body[i].mark)      // except SmallInts
+                        todo.push(body[i]);
         }
         // sort by id to preserve creation order
         return newObjects.sort(function(a,b){return a.id - b.id});
@@ -356,10 +356,11 @@ Object.subclass('lib.squeak.vm.Image',
     },
     appendToOldObjects: function(newObjects) {
         // append new objects to linked list of old objects
-        // and re-assign their ids
+        // and unmark them
         var oldObj = this.lastOldObject;
         for (var i = 0; i < newObjects.length; i++) {
             var newObj = newObjects[i];
+            newObj.mark = false;
             oldObj.nextObject = newObj;
             oldObj = newObj;
         }

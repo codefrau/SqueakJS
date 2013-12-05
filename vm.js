@@ -2264,7 +2264,10 @@ Object.subclass('lib.squeak.vm.BitBlt',
         this.dest = this.loadForm(this.destForm);
         if (!this.dest) return false;
         this.sourceForm = bitblt[Squeak.BitBlt_source];
-        this.source = this.loadForm(this.sourceForm);
+        if (!this.sourceForm.isNil) {
+            this.source = this.loadForm(this.sourceForm);
+            if (!this.source) return false;
+        }
         this.halftone = this.loadHalftone(bitblt[Squeak.BitBlt_halftone])
         this.combinationRule = bitblt[Squeak.BitBlt_combinationRule];
         this.destX = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_destX], 0);

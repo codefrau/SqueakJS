@@ -1070,7 +1070,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
             this.verifyAtSelector = selector;
             this.verifyAtClass = lookupClass;
         }
-        this.executeNewMethod(newRcvr, entry.method, argCount, entry.primIndex);
+        this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex);
         this.perfStop('sends');
     },
     findSelectorInClass: function(selector, argCount, startingClass) {
@@ -1093,6 +1093,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
                 //load cache entry here and return
                 cacheEntry.method = newMethod;
                 cacheEntry.primIndex = newMethod.methodPrimitiveIndex();
+                cacheEntry.argCount = argCount;
                 return cacheEntry;
             }  
             currentClass = currentClass.getPointer(Squeak.Class_superclass);
@@ -1239,9 +1240,8 @@ Object.subclass('lib.squeak.vm.Interpreter',
         var stack = this.activeContext.pointers; // slide eveything down...
         this.arrayCopy(stack, selectorIndex+1, stack, selectorIndex, trueArgCount);
         this.sp--; // adjust sp accordingly
-        var entry = this.findSelectorInClass(selector,trueArgCount, this.getClass(rcvr));
-        var newMethod = entry.method;
-        this.executeNewMethod(rcvr, newMethod, newMethod.methodNumArgs(), entry.primIndex);
+        var entry = this.findSelectorInClass(selector, trueArgCount, this.getClass(rcvr));
+        this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex);
         return true;
     },
     flushMethodCacheForSelector: function(selector) { //clear cache entries for selector (prim 119)

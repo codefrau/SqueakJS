@@ -2177,7 +2177,7 @@ Object.subclass('lib.squeak.vm.Primitives',
                 for (var y = 0; y < rect.h; y++) {
                     var srcIndex = form.pitch * srcY + (rect.x / 32 | 0);
                     var src = form.bits[srcIndex];
-                    var mask = 0x80000000;
+                    var mask = 0x80000000 >>> (rect.x % 32);
                     var dstIndex = pixels.width * y;
                     for (var x = 0; x < rect.w; x++) {
                         dest[dstIndex++] = src & mask ? 0xFF000000 : 0xFFFFFFFF; 

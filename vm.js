@@ -1525,6 +1525,95 @@ Object.subclass('lib.squeak.vm.Interpreter',
             for (var i = 0; i < length; i++)
                 dest[destPos + i] = src[srcPos + i];
     },
+},
+'debugging', {
+    printMethod: function(aMethod) {
+        // return a 'class>>selector' description for the method
+        // in old images this is expensive, we have to search all classes
+        var globals = this.specialObjects[Squeak.splOb_SmalltalkDictionary].pointers[1].pointers;
+        for (var i = 0; i < globals.length; i++) {
+            var assn = globals[i];
+            if (!assn.isNil) {
+                var assnVal = assn.pointers[1];
+                if (assnVal.pointers && assnVal.pointers.length >= 9) {
+                    var clsAndMeta = [assnVal, assnVal.sqClass];
+                    for (var c = 0; c < clsAndMeta.length; c++) {
+                        var cls = clsAndMeta[c];
+                        var mdict = cls.pointers[1];
+                        var methods = mdict.pointers[1].pointers;
+                        var selectors = mdict.pointers;
+                        for (var j = 0; j < methods.length; j++) {
+                            var method = methods[j];
+                            if (method === aMethod) {
+                                var clsName = cls.className();
+                                var selector = selectors[2+j].bytesAsString();
+                                return clsName + ">>" + selector;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return "?>>?";
+    },
+    printStack: function(ctx, limit) {
+        if (!ctx) ctx = this.activeContext;
+        if (!limit) limit = 100;
+        var stack = '';
+        while (!ctx.isNil && --limit > 0) {
+            var block = '';
+            var method = ctx.pointers[Squeak.Context_method];
+            if (typeof method === 'number') { // it's a block context, fetch home
+                method = ctx.pointers[Squeak.BlockContext_home].pointers[Squeak.Context_method];
+                block = '[] in ';
+            };
+            stack = block + this.printMethod(method) + '\n' + stack;
+            ctx = ctx.pointers[Squeak.Context_sender];
+        }
+        if (!ctx.isNil) stack = '... more senders ...\n' + stack;
+        return stack;
+    },
+    printActiveContext: function() {
+        // temps and stack in current context
+        var ctx = this.activeContext;
+        var isBlock = typeof ctx.pointers[Squeak.BlockContext_argumentCount] === 'number';
+        var homeCtx = isBlock ? ctx.pointers[Squeak.BlockContext_home] : ctx;
+        var tempCount = homeCtx.pointers[Squeak.Context_method].methodTempCount();
+        var stackBottom = this.decodeSqueakSP(0);
+        var stackTop = isBlock
+            ? this.decodeSqueakSP(homeCtx.pointers[Squeak.Context_stackPointer])
+            : this.sp;
+        var firstTemp = stackBottom + 1;
+        var lastTemp = firstTemp + tempCount - 1;
+        var stack = '';
+        for (var i = stackBottom; i <= stackTop; i++) {
+            var obj = homeCtx.pointers[i];
+            var value = obj.sqInstName ? obj.sqInstName() : obj.toString();
+            var label = '';
+            if (i == stackBottom) label = '=rcvr'; else
+            if (i <= lastTemp) label = '=tmp' + (i - firstTemp);
+            stack += '\nctx[' + i + ']' + label +': ' + value;
+        }
+        if (isBlock) {
+            stack += '\n';
+            var nArgs = ctx.pointers[3];
+            var firstArg = this.decodeSqueakSP(1);
+            var lastArg = firstArg + nArgs;
+            for (var i = firstArg; i <= this.sp; i++) {
+                var obj = ctx.pointers[i];
+                var value = obj.sqInstName ? obj.sqInstName() : obj.toString();
+                var label = '';
+                if (i <= lastArg) label = '=arg' + (i - firstArg);
+                stack += '\nblk[' + i + ']' + label +': ' + value;
+            }
+        }
+        return stack;
+    },
+    printByteCodes: function(aMethod, optionalIndent, optionalHighlight, optionalPC) {
+        if (!aMethod) aMethod = this.method;
+        var printer = new lib.squeak.vm.InstructionPrinter(aMethod, this);
+        return printer.printInstructions(optionalIndent, optionalHighlight, optionalPC);
+    },
 });
 
 Object.subclass('lib.squeak.vm.Primitives',

@@ -2110,10 +2110,12 @@ Object.subclass('lib.squeak.vm.Primitives',
         if (!this.success) return 0;
         var litCount = (header>>9) & 0xFF;
         var method = this.vm.instantiateClass(this.vm.stackValue(2), byteCount);
+        method.isCompiledMethod = true;
         method.pointers = [header];
         while (method.pointers.length < litCount+1)
             method.pointers.push(this.vm.nilObj);
-        return method;
+        this.vm.popNandPush(1+argCount, method);
+        return true;
     },
     doArrayBecome: function(doBothWays) {
     	// Should flush method cache

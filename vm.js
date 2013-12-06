@@ -1574,7 +1574,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 10: return this.popNandPushIntIfOK(2,this.vm.quickDivide(this.stackInteger(1),this.stackInteger(0)));  // Integer.divide /  (fails unless exact)
             case 11: return this.popNandPushIntIfOK(2,this.vm.mod(this.stackInteger(1),this.stackInteger(0)));  // Integer.mod \\
             case 12: return this.popNandPushIntIfOK(2,this.vm.div(this.stackInteger(1),this.stackInteger(0)));  // Integer.div //
-            case 13: return this.popNandPushIntIfOK(2,this.doQuo(this.stackInteger(1),this.stackInteger(0)));  // Integer.quo
+            case 13: return this.popNandPushIntIfOK(2,this.stackInteger(1) / this.stackInteger(0) | 0);  // Integer.quo
             case 14: return this.popNandPushIfOK(2,this.doBitAnd());  // SmallInt.bitAnd
             case 15: return this.popNandPushIfOK(2,this.doBitOr());  // SmallInt.bitOr
             case 16: return this.popNandPushIfOK(2,this.doBitXor());  // SmallInt.bitXor
@@ -1632,6 +1632,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 78: return this.popNandPushIfOK(1, this.nextInstanceAfter(this.stackNonInteger(0))); // Object.nextInstance
 
             case 75: return this.popNandPushIfOK(1, this.stackNonInteger(0).hash); // identityHash
+            case 79: return this.primitiveNewMethod(); // Compiledmethod.new
             case 81: return this.primitiveBlockValue(argCount); // BlockContext.value
             case 83: return this.vm.primitivePerform(argCount); // rcvr.perform:(with:)*
             case 85: return this.primitiveSignal(); // Semaphore.wait
@@ -1639,8 +1640,9 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 87: return this.primitiveResume(); // Process.resume
             case 88: return this.primitiveSuspend(); // Process.suspend
             case 90: return this.primitiveMousePoint(argCount); // mousePoint
-
+            case 91: return this.primitiveTestDisplayDepth(argCount); // cursorLocPut in old images
             case 96: return this.primitiveCopyBits(argCount);  // BitBlt.copyBits
+            case 97: return false; // primitiveSnapshot
             case 101: return this.primitiveBeCursor(argCount); // Cursor.beCursor
             case 102: return this.primitiveBeDisplay(argCount); // DisplayScreen.beDisplay
             case 103: return false; // primitiveScanCharacters
@@ -1648,7 +1650,8 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 105: return this.popNandPushIfOK(5, this.doStringReplace()); // string and array replace
             case 106: return this.primitiveScreenSize(argCount); // actualScreenSize
             case 107: return this.primitiveMouseButtons(argCount); // Sensor mouseButtons
-
+            case 108: return this.primitiveKeyboardNext(argCount); // Sensor kbdNext
+            case 109: return this.primitiveKeyboardPeek(argCount); // Sensor kbdPeek
             case 110: return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
             case 116: return this.vm.flushMethodCacheForMethod(this.vm.top());
             case 119: return this.vm.flushMethodCacheForSelector(this.vm.top());
@@ -1666,8 +1669,9 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 153: return false; //File.open 
             case 161: return this.popNandPushIfOK(1, this.charFromInt('/'.charCodeAt(0))); //path delimiter
             case 230: return this.primitiveRelinquishProcessorForMicroseconds(argCount);
-            case 234: return false; // primBitmapdecompressfromByteArrayat
+            case 234: return false;  // primBitmapdecompressfromByteArrayat
             case 235: return false;  // primStringcomparewithcollated
+            case 237: return false;  // primBitmapcompresstoByteArray
         }
         throw "primitive " + index + " not implemented yet";
         return false;
@@ -1990,6 +1994,18 @@ Object.subclass('lib.squeak.vm.Primitives',
         this.vm.popNandPush(1+argCount, this.makePointWithXandY(x, y));
         return true;
     },
+    primitiveNewMethod: function(argCount) {
+        debugger;
+        var header = this.stackInteger(0);
+        var byteCount = this.stackInteger(1);
+        if (!this.success) return 0;
+        var litCount = (header>>9) & 0xFF;
+        var method = this.vm.instantiateClass(this.vm.stackValue(2), byteCount);
+        method.pointers = [header];
+        while (method.pointers.length < litCount+1)
+            method.pointers.push(this.vm.nilObj);
+        return method;
+    },
     doArrayBecome: function(doBothWays) {
     	// Should flush method cache
 	    var rcvr = this.stackNonInteger(1);
@@ -2158,7 +2174,7 @@ Object.subclass('lib.squeak.vm.Primitives',
         return aLinkedList.getPointer(Squeak.LinkedList_firstLink).isNil;
     },
     removeFirstLinkOfList: function(aList) {
-        //Remove the first process from the given linked list."
+        //Remove the first process from the given linked list.
         var first = aList.getPointer(Squeak.LinkedList_firstLink);
         var last = aList.getPointer(Squeak.LinkedList_lastLink);
         if (first === last) {
@@ -2200,9 +2216,8 @@ Object.subclass('lib.squeak.vm.Primitives',
     },
     synchronousSignal: function(sema) {
     	if (this.isEmptyList(sema)) {
-            //no process is waiting on this semaphore"
-            var excessSignals = sema.getPointer(Squeak.Semaphore_excessSignals);
-            sema.setPointer(Squeak.Semaphore_excessSignals, excessSignals + 1);
+            // no process is waiting on this semaphore
+            sema.pointers[Squeak.Semaphore_excessSignals]++;
         } else
             this.resume(this.removeFirstLinkOfList(sema));
         return;
@@ -2254,8 +2269,15 @@ Object.subclass('lib.squeak.vm.Primitives',
         this.vm.perfStop('bitblt');
         return true;
 	},
-    primitiveMouseButtons: function() {
-        return this.popNandPushIfOK(1, this.checkSmallInt(this.display.mouseButtons));
+    primitiveKeyboardNext: function(argCount) {
+        return this.popNandPushIfOK(argCount+1, this.checkSmallInt(this.display.keys.pop()));
+    },
+    primitiveKeyboardPeek: function(argCount) {
+        var length = this.display.keys.length;
+        return this.popNandPushIfOK(argCount+1, length ? this.checkSmallInt(this.display.keys[length - 1] || 0) : this.vm.nilObj);
+    },
+    primitiveMouseButtons: function(argCount) {
+        return this.popNandPushIfOK(argCount+1, this.checkSmallInt(this.display.mouseButtons));
     },
     primitiveMousePoint: function(argCount) {
         return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(this.checkSmallInt(this.display.mouseX), this.checkSmallInt(this.display.mouseY)));
@@ -2304,6 +2326,10 @@ Object.subclass('lib.squeak.vm.Primitives',
     },
     primitiveScreenSize: function(argCount) {
         return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(this.display.width, this.display.height));
+    },
+    primitiveTestDisplayDepth: function(argCount) {
+        var supportedDepths = [1];
+        return this.pop2andPushBoolIfOK(supportedDepths.indexOf[this.stackInteger(0)] >= 0);
     },
 	millisecondClockValue: function() {
         //Return the value of the millisecond clock as an integer.

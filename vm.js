@@ -2438,7 +2438,14 @@ Object.subclass('lib.squeak.vm.BitBlt',
 'initialization', {
     initialize: function(vm) {
         this.vm = vm;
-    },
+        this.maskTable = [
+            // (1<<i)-1 is almost right, except for i == 32 because of JS 32 bit limit
+            // Try: range(0, 32).map(function(i){return ((1<<i)-1).toString(16)})
+            0x0, 0x1, 0x3, 0x7, 0xF, 0x1F, 0x3F, 0x7F, 0xFF, 0x1FF, 0x3FF, 0x7FF, 0xFFF,
+            0x1FFF, 0x3FFF, 0x7FFF, 0xFFFF, 0x1FFFF, 0x3FFFF, 0x7FFFF, 0xFFFFF,
+            0x1FFFFF, 0x3FFFFF, 0x7FFFFF, 0xFFFFFF, 0x1FFFFFF, 0x3FFFFFF, 0x7FFFFFF,
+            0xFFFFFFF, 0x1FFFFFFF, 0x3FFFFFFF, 0x7FFFFFFF, 0xFFFFFFFF];
+    }, 
     loadBitBlt: function(bitbltObj) {
         var bitblt = bitbltObj.pointers;
         this.success = true;
@@ -2828,7 +2835,19 @@ Object.subclass('lib.squeak.vm.BitBlt',
             this.destIndex = (this.dy * this.dest.pitch) + (this.dx / this.dest.pixPerWord | 0); //recompute since dx, dy change
             this.destDelta = (this.dest.pitch * this.vDir) - (this.nWords * this.hDir);
 		}
-    }
+    },
+    partitionedANDtonBitsnPartitions: function(word1, word2, nBits, nParts) {
+        /* partition mask starts at the right */
+        var mask = this.maskTable[nBits];
+        var result = 0;
+        for (var i = 1; i <= nParts; i += 1) {
+        	if ((word1 & mask) === mask)
+        		result = result | (word2 & mask);
+        	/* slide left to next partition */
+        	mask = mask << nBits;
+    	}
+        return result;
+	},
 },
 'accessing', {
     affectedRect: function() {

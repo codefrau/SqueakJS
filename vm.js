@@ -2382,6 +2382,8 @@ Object.subclass('lib.squeak.vm.Primitives',
             this.vm.pop();
             millis = micros / 1000;
         }
+        // make sure we tend to pending delays
+        this.vm.interruptCheckCounter = 0;
         this.vm.isIdle = true;
         this.vm.breakOutOfInterpreter = true;
         return true;

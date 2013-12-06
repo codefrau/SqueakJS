@@ -220,6 +220,7 @@ Object.subclass('lib.squeak.vm.Image',
         var extraVMMemory = readWord();
         pos += headerSize - (9 * 4); //skip to end of header
         // read objects
+        this.gcCount = 0;
         this.oldSpaceCount = 0;
         this.newSpaceCount = 0;
         this.lastId = 0;
@@ -299,14 +300,18 @@ Object.subclass('lib.squeak.vm.Image',
         // But they have an allocation id so the survivors can be ordered on tenure.
         // The "nextObject" references are created by collecting all new objects, 
         // sorting them by id, and then linking them into old space.
+        // Note: after an old object is released, its "nextObject" ref must still allow traversal
+        // of all remaining objects. This is so enumeration works despite GC.
         
         var newObjects = this.markReachableObjects();
         var removedObjects = this.removeUnmarkedOldObjects();
         this.appendToOldObjects(newObjects);
+        this.relinkRemovedObjects(removedObjects);
         var garbageCount = removedObjects.length           // reclaimed in old space
             + (this.newSpaceCount - newObjects.length);    // reclaimed in new space
         this.oldSpaceCount += newObjects.length - removedObjects.length;
         this.newSpaceCount = 0;
+        this.gcCount++;
         return 1000000 + garbageCount; // free space
     },
     markReachableObjects: function() {
@@ -330,7 +335,6 @@ Object.subclass('lib.squeak.vm.Image',
         // sort by id to preserve creation order
         return newObjects.sort(function(a,b){return a.id - b.id});
     },
-
     removeUnmarkedOldObjects: function() {
         // Unlink unmarked old objects from the nextObject linked list
         // Reset marks of remaining objects
@@ -340,7 +344,7 @@ Object.subclass('lib.squeak.vm.Image',
         var obj = this.firstOldObject;
         while (true) {
             var next = obj.nextObject;
-            if (!next) { // we're done
+            if (!next) {// we're done
                 this.lastOldObject = obj;
                 return removed;
             }
@@ -349,8 +353,14 @@ Object.subclass('lib.squeak.vm.Image',
                 next.mark = false;     // unmark for next GC
                 obj = next;
             } else { // otherwise, drop it
-                removed.push(next);
-                obj.nextObject = next.nextObject;
+                var corpse = next;
+                removed.push(corpse);
+                obj.nextObject = corpse.nextObject;
+                // Kludge: point removed object's nextObject to the non-removed object ...
+                corpse.nextObject = obj;
+                // ... so that enumerating will still work, even with a GC in the middle.
+                // However, this could lead to obj being enumerated twice, so we'll fix this
+                // later, after the new objects have been tenured
             }
         }
     },
@@ -365,6 +375,14 @@ Object.subclass('lib.squeak.vm.Image',
             oldObj = newObj;
         }
         this.lastOldObject = oldObj;
+    },
+    relinkRemovedObjects: function(removed) {
+        // fix up the nextObject pointers of removed objects
+        // which were set to the previous object in removeUnmarkedOldObjects()
+        debugger;
+        for (var i = 0; i < removed.length; i++)
+            removed[i].nextObject = removed[i].nextObject.nextObject;
+        debugger;
     },
 },
 'creating', {
@@ -425,6 +443,34 @@ Object.subclass('lib.squeak.vm.Image',
             obj = obj.nextObject;
         }
         return true;
+    },
+    someInstanceOf: function(clsObj) {
+        var obj = this.firstOldObject;
+        while (true) {
+            if (obj.sqClass === clsObj)
+                return obj;
+            if (!obj.nextObject) {
+                // this was the last old object, tenure new objects and try again
+                if (this.newSpaceCount > 0) this.fullGC();
+                // if this really was the last object, we're done
+                if (!obj.nextObject) return null;
+            }
+            obj = obj.nextObject;
+        }
+    },
+    nextInstanceAfter: function(obj) {
+        var clsObj = obj.sqClass;
+        while (true) {
+            if (!obj.nextObject) {
+                // this was the last old object, tenure new objects and try again
+                if (this.newSpaceCount > 0) this.fullGC();
+                // if this really was the last object, we're done
+                if (!obj.nextObject) return null;
+            }
+            obj = obj.nextObject;
+            if (obj.sqClass === clsObj)
+                return obj;
+        }
     },
 });
 
@@ -1581,6 +1627,9 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 72: return this.popNandPushIfOK(2, this.doArrayBecome(false)); //arrayBecomeOneWay
             case 73: return this.popNandPushIfOK(2, this.objectAt(false,false,true)); // instVarAt:
             case 74: return this.popNandPushIfOK(3, this.objectAtPut(false,false,true)); // instVarAt:put:
+            case 75: return this.popNandPushIfOK(1, this.stackNonInteger(0).hash); // Object.identityHash
+            case 77: return this.popNandPushIfOK(1, this.someInstanceOf(this.stackNonInteger(0))); // Class.someInstance
+            case 78: return this.popNandPushIfOK(1, this.nextInstanceAfter(this.stackNonInteger(0))); // Object.nextInstance
 
             case 75: return this.popNandPushIfOK(1, this.stackNonInteger(0).hash); // identityHash
             case 81: return this.primitiveBlockValue(argCount); // BlockContext.value
@@ -1923,6 +1972,18 @@ Object.subclass('lib.squeak.vm.Primitives',
     },
 },
 'basic',{
+    someInstanceOf: function(clsObj) {
+        var someInstance = this.vm.image.someInstanceOf(clsObj);
+        if (someInstance) return someInstance;
+        this.success = false;
+        return 0;
+    },
+    nextInstanceAfter: function(obj) {
+        var nextInstance = this.vm.image.nextInstanceAfter(obj);
+        if (nextInstance) return nextInstance;
+        this.success = false;
+        return 0;
+    },
     primitiveMakePoint: function(argCount) {
         var x = this.vm.stackValue(1);
         var y = this.vm.stackValue(0);

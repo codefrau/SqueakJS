@@ -987,10 +987,12 @@ Object.subclass('lib.squeak.vm.Interpreter',
         // run until idle, but at most a couple milliseconds
         // (as determined by checkForInterrupts)
         // answer milliseconds to sleep (until next timer wakeup)
+        // or 'break' if reached breakpoint
         this.breakOutOfInterpreter = false;
         this.isIdle = false;
         while (!this.breakOutOfInterpreter)
             this.interpretOne();
+        if (this.breakOutOfInterpreter == 'break') return 'break';
         if (!this.isIdle) return 0;
         if (!this.nextWakeupTick) throw "nothing more to do?";
         return Math.max(0, this.nextWakeupTick - this.primHandler.millisecondClockValue());
@@ -1180,6 +1182,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
     },
     executeNewMethod: function(newRcvr, newMethod, argumentCount, primitiveIndex) {
         this.sendCount++;
+        if (newMethod === this.breakOnMethod) {this.breakOutOfInterpreter = 'break'; debugger;}
         if (this.logSends) console.log(this.sendCount + ' ' + this.printMethod(newMethod));
         if (primitiveIndex>0)
             if (this.tryPrimitive(primitiveIndex, argumentCount))
@@ -1535,6 +1538,15 @@ Object.subclass('lib.squeak.vm.Interpreter',
     printMethod: function(aMethod) {
         // return a 'class>>selector' description for the method
         // in old images this is expensive, we have to search all classes
+        var found;
+        this.allMethodsDo(function(classObj, methodObj, selectorObj) {
+            if (methodObj === aMethod)
+                return found = classObj.className() + '>>' + selectorObj.bytesAsString();
+        });
+        return found || "?>>?";
+    },
+    allMethodsDo: function(callback) {
+        // callback(classObj, methodObj, selectorObj) should return true to break out of iteration
         var globals = this.specialObjects[Squeak.splOb_SmalltalkDictionary].pointers[1].pointers;
         for (var i = 0; i < globals.length; i++) {
             var assn = globals[i];
@@ -1548,19 +1560,15 @@ Object.subclass('lib.squeak.vm.Interpreter',
                         var methods = mdict.pointers[1].pointers;
                         var selectors = mdict.pointers;
                         for (var j = 0; j < methods.length; j++) {
-                            var method = methods[j];
-                            if (method === aMethod) {
-                                var clsName = cls.className();
-                                var selector = selectors[2+j].bytesAsString();
-                                return clsName + ">>" + selector;
-                            }
+                            if (callback.call(this, cls, methods[j], selectors[2+j]))
+                                return;
                         }
                     }
                 }
             }
         }
-        return "?>>?";
     },
+
     printStack: function(ctx, limit) {
         // both args are optional
         if (typeof ctx == "number") {limit = ctx; ctx = null;}
@@ -1579,6 +1587,17 @@ Object.subclass('lib.squeak.vm.Interpreter',
         }
         return stack;
     },
+    breakOn: function(classAndMethodString) {
+        // classAndMethodString is 'Class>>method'
+        var found;
+        this.allMethodsDo(function(classObj, methodObj, selectorObj) {
+            if (classAndMethodString == (classObj.className() + '>>' + selectorObj.bytesAsString()))
+                return found = methodObj;
+        });
+        if (!found) throw 'method not found: ', classAndMethodString;
+        this.breakOnMethod = found;
+    },
+
     printActiveContext: function() {
         // temps and stack in current context
         var ctx = this.activeContext;
@@ -1776,9 +1795,12 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 161: return this.popNandPushIfOK(1, this.charFromInt('/'.charCodeAt(0))); //path delimiter
             case 230: return this.primitiveRelinquishProcessorForMicroseconds(argCount);
             case 231: return this.primitiveForceDisplayUpdate(argCount);
+            case 234: return false; // primBitmapdecompressfromByteArrayat
             case 235: return false; // primStringcomparewithcollated
+            case 236: return false; // primSampledSoundconvert8bitSignedFromto16Bit
             case 237: return false; // primBitmapcompresstoByteArray
             case 238: case 239: case 240: case 241: return false; // serial port primitives
+            case 243: return false; // primStringtranslatefromtotable
             case 244: return false; // primStringfindFirstInStringinSetstartingAt
             case 245: return false; // primStringindexOfAsciiinStringstartingAt
             case 246: return false; // primStringfindSubstringinstartingAtmatchTable

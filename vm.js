@@ -1705,7 +1705,16 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 49: return this.popNandPushFloatIfOK(2,this.stackFloat(1)*this.stackFloat(0));  // Float.mul
             case 50: return this.popNandPushFloatIfOK(2,this.safeFDiv(this.stackFloat(1),this.stackFloat(0)));  // Float.div
             case 51: return this.popNandPushIfOK(1, this.checkSmallInt(this.stackFloat(0)|0));  // Float.asInteger
-            
+
+            case 52: return false; //this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // FractionalPart
+            case 53: return false; //this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // Exponent
+            case 54: return false; //this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // TimesTwoPower
+            case 55: return false; //this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // SquareRoot
+            case 56: return false; //this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // Sine
+            case 57: return false; //this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // Arctan
+            case 58: return false; //this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // LogN
+            case 59: return false; //this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // Exp
+    		
             case 60: return this.popNandPushIfOK(2, this.objectAt(false,false,false)); // basicAt:
             case 61: return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); // basicAt:put:
             case 62: return this.popNandPushIfOK(1, this.objectSize()); // size
@@ -1754,8 +1763,10 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 124: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore));
             case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
             case 128: return this.popNandPushIfOK(2, this.doArrayBecome(true)); //arrayBecome
+            case 129: return this.popNandPushIfOK(1, this.vm.image.specialObjectsArray); //specialObjectsOop
             case 130: return this.popNandPushIfOK(1, this.vm.image.fullGC()); // GC
             case 131: return this.popNandPushIfOK(1, this.vm.image.partialGC()); // GCmost
+            case 132: return this.pop2andPushBoolIfOK(this.stackNonInteger(1).pointers.indexOf(this.vm.top())>=0); //Object.pointsTo
             case 134: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheInterruptSemaphore));
             case 135: return this.popNandPushIfOK(1, this.millisecondClockValue());
             case 136: return this.primitiveSignalAtMilliseconds(argCount); //Delay signal:atMs:());
@@ -1764,9 +1775,13 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 153: return false; //File.open 
             case 161: return this.popNandPushIfOK(1, this.charFromInt('/'.charCodeAt(0))); //path delimiter
             case 230: return this.primitiveRelinquishProcessorForMicroseconds(argCount);
-            case 234: return false;  // primBitmapdecompressfromByteArrayat
-            case 235: return false;  // primStringcomparewithcollated
-            case 237: return false;  // primBitmapcompresstoByteArray
+            case 231: return this.primitiveForceDisplayUpdate(argCount);
+            case 235: return false; // primStringcomparewithcollated
+            case 237: return false; // primBitmapcompresstoByteArray
+            case 238: case 239: case 240: case 241: return false; // serial port primitives
+            case 244: return false; // primStringfindFirstInStringinSetstartingAt
+            case 245: return false; // primStringindexOfAsciiinStringstartingAt
+            case 246: return false; // primStringfindSubstringinstartingAtmatchTable
         }
         throw "primitive " + index + " not implemented yet";
         return false;
@@ -2418,6 +2433,10 @@ Object.subclass('lib.squeak.vm.Primitives',
             default: throw "not implemented yet";
         };
         ctx.putImageData(pixels, rect.x, rect.y);
+    },
+    primitiveForceDisplayUpdate: function(argCount) {
+        // not needed, we show everything immediately
+        return true;
     },
     primitiveScreenSize: function(argCount) {
         return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(this.display.width, this.display.height));

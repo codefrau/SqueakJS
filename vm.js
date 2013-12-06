@@ -302,7 +302,8 @@ Object.subclass('lib.squeak.vm.Image',
         // sorting them by id, and then linking them into old space.
         // Note: after an old object is released, its "nextObject" ref must still allow traversal
         // of all remaining objects. This is so enumeration works despite GC.
-        
+
+        this.vm.perfStart('GC');
         var newObjects = this.markReachableObjects();
         var removedObjects = this.removeUnmarkedOldObjects();
         this.appendToOldObjects(newObjects);
@@ -312,6 +313,7 @@ Object.subclass('lib.squeak.vm.Image',
         this.oldSpaceCount += newObjects.length - removedObjects.length;
         this.newSpaceCount = 0;
         this.gcCount++;
+        this.vm.perfStop('GC');
         return 1000000 + garbageCount; // free space
     },
     markReachableObjects: function() {
@@ -379,10 +381,8 @@ Object.subclass('lib.squeak.vm.Image',
     relinkRemovedObjects: function(removed) {
         // fix up the nextObject pointers of removed objects
         // which were set to the previous object in removeUnmarkedOldObjects()
-        debugger;
         for (var i = 0; i < removed.length; i++)
             removed[i].nextObject = removed[i].nextObject.nextObject;
-        debugger;
     },
 },
 'creating', {
@@ -835,7 +835,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
 },
 'interpreting', {
     interpretOne: function() {
-        this.perfStart('bytecodes');
+        this.perfStart('bytecode');
         var b, b2;
         this.byteCodeCount++;
         b = this.nextByte();
@@ -981,7 +981,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
             case 248: case 249: case 250: case 251: case 252: case 253: case 254: case 255:
                 this.send(this.method.methodGetSelector(b&0xF), 2, false); break;
         }
-        this.perfStop('bytecodes');
+        this.perfStop('bytecode');
     },
     interpret: function() {
         // run until idle, but at most a couple milliseconds
@@ -1005,7 +1005,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
         //Check for interrupts at sends and backward jumps
         if (this.interruptCheckCounter-- > 0) return; //only really check every 100 times or so
         var now = this.primHandler.millisecondClockValue();
-        if (now < this.lastTick) { //millisecond clock wrapped"
+        if (now < this.lastTick) { // millisecond clock wrapped
             this.nextPollTick = now + (this.nextPollTick - this.lastTick);
             if (this.nextWakeupTick !== 0)
                 this.nextWakeupTick = now + (this.nextWakeupTick - this.lastTick);
@@ -1108,7 +1108,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
 },
 'sending', {
     send: function(selector, argCount, doSuper) {
-        this.perfStart('sends');
+        this.perfStart('send');
         var newRcvr = this.stackValue(argCount);
         var lookupClass = this.getClass(newRcvr);
         if (doSuper) {
@@ -1122,7 +1122,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
             this.verifyAtClass = lookupClass;
         }
         this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex);
-        this.perfStop('sends');
+        this.perfStop('send');
     },
     findSelectorInClass: function(selector, argCount, startingClass) {
         var cacheEntry = {};//this.findMethodCacheEntry(selector, startingClass);
@@ -1149,13 +1149,12 @@ Object.subclass('lib.squeak.vm.Interpreter',
             }  
             currentClass = currentClass.getPointer(Squeak.Class_superclass);
         }
-    	//Cound not find a normal message -- send #doesNotUnderstand:
-    	var dnuSel = this.specialObjects[Squeak.splOb_SelectorDoesNotUnderstand];
+        //Cound not find a normal message -- send #doesNotUnderstand:
+        var dnuSel = this.specialObjects[Squeak.splOb_SelectorDoesNotUnderstand];
         if (selector === dnuSel) // Cannot find #doesNotUnderstand: -- unrecoverable error.
-	    	throw "Recursive not understood error encountered";
-	    debugger;
-    	var dnuMsg = this.createActualMessage(selector, argCount, startingClass); //The argument to doesNotUnderstand:
-    	this.popNandPush(argCount, dnuMsg);
+            throw "Recursive not understood error encountered";
+        var dnuMsg = this.createActualMessage(selector, argCount, startingClass); //The argument to doesNotUnderstand:
+        this.popNandPush(argCount, dnuMsg);
         return this.findSelectorInClass(dnuSel, 1, startingClass);
     },
     lookupSelectorInDict: function(mDict, messageSelector) {
@@ -1181,6 +1180,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
     },
     executeNewMethod: function(newRcvr, newMethod, argumentCount, primitiveIndex) {
         this.sendCount++;
+        if (this.logSends) console.log(this.sendCount + ' ' + this.printMethod(newMethod));
         if (primitiveIndex>0)
             if (this.tryPrimitive(primitiveIndex, argumentCount))
                 return;  //Primitive succeeded -- end of story
@@ -1265,9 +1265,9 @@ Object.subclass('lib.squeak.vm.Interpreter',
             this.popNandPush(1, primIndex - 261); //return -1...2
             return true;
         }
-        this.perfStart('primitives');
+        this.perfStart('primitive');
         var success = this.primHandler.doPrimitive(primIndex, argCount);
-        this.perfStop('primitives');
+        this.perfStop('primitive');
         return success;
     },
     createActualMessage: function(selector, argCount, cls) {
@@ -2090,7 +2090,6 @@ Object.subclass('lib.squeak.vm.Primitives',
         return true;
     },
     primitiveNewMethod: function(argCount) {
-        debugger;
         var header = this.stackInteger(0);
         var byteCount = this.stackInteger(1);
         if (!this.success) return 0;
@@ -2378,7 +2377,6 @@ Object.subclass('lib.squeak.vm.Primitives',
         return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(this.checkSmallInt(this.display.mouseX), this.checkSmallInt(this.display.mouseY)));
     },
     primitiveRelinquishProcessorForMicroseconds: function(argCount) {
-        // TODO
         var millis = 100;
         if (argCount > 1) return false;
         if (argCount > 0) {

@@ -1557,10 +1557,12 @@ Object.subclass('lib.squeak.vm.Interpreter',
         return "?>>?";
     },
     printStack: function(ctx, limit) {
+        // both args are optional
+        if (typeof ctx == "number") {limit = ctx; ctx = null;}
         if (!ctx) ctx = this.activeContext;
         if (!limit) limit = 100;
         var stack = '';
-        while (!ctx.isNil && --limit > 0) {
+        while (!ctx.isNil && limit-- > 0) {
             var block = '';
             var method = ctx.pointers[Squeak.Context_method];
             if (typeof method === 'number') { // it's a block context, fetch home
@@ -1570,7 +1572,6 @@ Object.subclass('lib.squeak.vm.Interpreter',
             stack = block + this.printMethod(method) + '\n' + stack;
             ctx = ctx.pointers[Squeak.Context_sender];
         }
-        if (!ctx.isNil) stack = '... more senders ...\n' + stack;
         return stack;
     },
     printActiveContext: function() {

@@ -984,11 +984,16 @@ Object.subclass('lib.squeak.vm.Interpreter',
         this.perfStop('bytecodes');
     },
     interpret: function() {
-        // run until checkForInterrupts or relinquishProcessor
+        // run until idle, but at most a couple milliseconds
+        // (as determined by checkForInterrupts)
+        // answer milliseconds to sleep (until next timer wakeup)
         this.breakOutOfInterpreter = false;
         this.isIdle = false;
         while (!this.breakOutOfInterpreter)
             this.interpretOne();
+        if (!this.isIdle) return 0;
+        if (!this.nextWakeupTick) throw "nothing more to do?";
+        return Math.max(0, this.nextWakeupTick - this.primHandler.millisecondClockValue());
     },
     nextByte: function() {
         return this.methodBytes[this.pc++] & 0xFF;

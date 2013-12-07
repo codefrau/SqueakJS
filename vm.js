@@ -1695,6 +1695,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 17: return this.popNandPushIfOK(2,this.doBitShift());  // SmallInt.bitShift
             case 18: return this.primitiveMakePoint(argCount);
             case 19: return false;                                 // Guard primitive for simulation -- *must* fail
+            case 20: return false;
             case 21: return false; // primitiveAddLargeIntegers
             case 22: return false; // primitiveSubtractLargeIntegers
             case 23: return false; // primitiveLessThanLargeIntegers
@@ -1712,6 +1713,8 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 35: return false; // primitiveBitOrLargeIntegers
             case 36: return false; // primitiveBitXorLargeIntegers
             case 37: return false; // primitiveBitShiftLargeIntegers
+            case 38: return false; // TODO: primitiveFloatAt
+            case 39: return false; // TODO: primitiveFloatAtPut
             case 40: return this.popNandPushFloatIfOK(1,this.stackInteger(0)); // primitiveAsFloat
             case 41: return this.popNandPushFloatIfOK(2,this.stackFloat(1)+this.stackFloat(0));  // Float +
             case 42: return this.popNandPushFloatIfOK(2,this.stackFloat(1)-this.stackFloat(0));  // Float -	
@@ -1724,16 +1727,14 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 49: return this.popNandPushFloatIfOK(2,this.stackFloat(1)*this.stackFloat(0));  // Float.mul
             case 50: return this.popNandPushFloatIfOK(2,this.safeFDiv(this.stackFloat(1),this.stackFloat(0)));  // Float.div
             case 51: return this.popNandPushIfOK(1, this.checkSmallInt(this.stackFloat(0)|0));  // Float.asInteger
-
-            case 52: return false; //this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // FractionalPart
-            case 53: return false; //this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // Exponent
-            case 54: return false; //this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // TimesTwoPower
-            case 55: return false; //this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // SquareRoot
-            case 56: return false; //this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // Sine
-            case 57: return false; //this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // Arctan
-            case 58: return false; //this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // LogN
-            case 59: return false; //this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // Exp
-    		
+            case 52: return false; //TODO: this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // FractionalPart
+            case 53: return false; //TODO: this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // Exponent
+            case 54: return false; //TODO: this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // TimesTwoPower
+            case 55: return false; //TODO: this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // SquareRoot
+            case 56: return false; //TODO: this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // Sine
+            case 57: return false; //TODO: this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // Arctan
+            case 58: return false; //TODO: this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // LogN
+            case 59: return false; //TODO: this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // Exp
             case 60: return this.popNandPushIfOK(2, this.objectAt(false,false,false)); // basicAt:
             case 61: return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); // basicAt:put:
             case 62: return this.popNandPushIfOK(1, this.objectSize()); // size
@@ -1744,57 +1745,92 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 67: return false; // primitiveAtEnd
             case 68: return this.popNandPushIfOK(2, this.objectAt(false,false,true)); // Method.objectAt:
             case 69: return this.popNandPushIfOK(3, this.objectAtPut(false,false,true)); // Method.objectAt:put:
-
             case 70: return this.popNandPushIfOK(1, this.vm.instantiateClass(this.stackNonInteger(0), 0)); // Class.new
             case 71: return this.popNandPushIfOK(2, this.vm.instantiateClass(this.stackNonInteger(1), this.stackPos32BitInt(0))); // Class.new:
             case 72: return this.popNandPushIfOK(2, this.doArrayBecome(false)); //arrayBecomeOneWay
             case 73: return this.popNandPushIfOK(2, this.objectAt(false,false,true)); // instVarAt:
             case 74: return this.popNandPushIfOK(3, this.objectAtPut(false,false,true)); // instVarAt:put:
             case 75: return this.popNandPushIfOK(1, this.stackNonInteger(0).hash); // Object.identityHash
+            case 76: return false; // primitiveStoreStackp (Blue Book: primitiveAsObject)
             case 77: return this.popNandPushIfOK(1, this.someInstanceOf(this.stackNonInteger(0))); // Class.someInstance
             case 78: return this.popNandPushIfOK(1, this.nextInstanceAfter(this.stackNonInteger(0))); // Object.nextInstance
-
-            case 75: return this.popNandPushIfOK(1, this.stackNonInteger(0).hash); // identityHash
             case 79: return this.primitiveNewMethod(); // Compiledmethod.new
+            case 80: return this.popNandPushIfOK(2,this.doBlockCopy()); // blockCopy:
             case 81: return this.primitiveBlockValue(argCount); // BlockContext.value
+            //TODO case 82: return this.primitiveValueWithArgs(argCount); // BlockContext.valueWithArguments:
             case 83: return this.vm.primitivePerform(argCount); // rcvr.perform:(with:)*
+            //TODO case 84: primitivePerformWithArgs)
             case 85: return this.primitiveSignal(); // Semaphore.wait
             case 86: return this.primitiveWait(); // Semaphore.wait
             case 87: return this.primitiveResume(); // Process.resume
             case 88: return this.primitiveSuspend(); // Process.suspend
+            case 89: return false; //TODO: primitiveFlushCache
             case 90: return this.primitiveMousePoint(argCount); // mousePoint
             case 91: return this.primitiveTestDisplayDepth(argCount); // cursorLocPut in old images
+            case 92: return false; // primitiveSetDisplayMode				"Blue Book: primitiveCursorLink"
+            case 93: return false; // primitiveInputSemaphore
+            case 94: return false; // primitiveGetNextEvent				"Blue Book: primitiveSampleInterval"
+            case 95: return false; // primitiveInputWord
             case 96: return this.primitiveCopyBits(argCount);  // BitBlt.copyBits
             case 97: return false; // primitiveSnapshot
+            case 98: return false; // primitiveStoreImageSegment
+            case 99: return false; // primitiveLoadImageSegment
+            //case 100: return false; // TODO primitivePerformInSuperclass		"Blue Book: primitiveSignalAtTick"
             case 101: return this.primitiveBeCursor(argCount); // Cursor.beCursor
             case 102: return this.primitiveBeDisplay(argCount); // DisplayScreen.beDisplay
             case 103: return false; // primitiveScanCharacters
-
+            case 104: return false; // primitiveDrawLoop
             case 105: return this.popNandPushIfOK(5, this.doStringReplace()); // string and array replace
             case 106: return this.primitiveScreenSize(argCount); // actualScreenSize
             case 107: return this.primitiveMouseButtons(argCount); // Sensor mouseButtons
             case 108: return this.primitiveKeyboardNext(argCount); // Sensor kbdNext
             case 109: return this.primitiveKeyboardPeek(argCount); // Sensor kbdPeek
             case 110: return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
+            case 111: return false; //TODO primitiveClass
+            case 112: this.popNandPushIfOK(1, 1000000); //primitiveBytesLeft
+            case 113: this.vm.breakOutOfInterpreter = 'break'; return true; //primitiveQuit
+            case 114: this.vm.breakOutOfInterpreter = 'break'; debugger; return true; //primitiveExitToDebugger
+            case 115: return false; //TODO primitiveChangeClass					"Blue Book: primitiveOopsLeft"
             case 116: return this.vm.flushMethodCacheForMethod(this.vm.top());
+            case 117: return false; //TODO primitiveExternalCall
+            case 118: return false; //TODO primitiveDoPrimitiveWithArgs
             case 119: return this.vm.flushMethodCacheForSelector(this.vm.top());
+            case 120: return false; //primitiveCalloutToFFI
             case 121: return this.popNandPushIfOK(1, this.makeStString("/home/bert/mini.image")); //imageName
+            case 122: return false; //			"Blue Book: primitiveImageVolume"
+            case 123: return false; //TODO primitiveValueUninterruptably
             case 124: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore));
             case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
+            case 126: return false; //TODO primitiveDeferDisplayUpdates
+    		case 127: return false; //TODO primitiveShowDisplayRect
             case 128: return this.popNandPushIfOK(2, this.doArrayBecome(true)); //arrayBecome
             case 129: return this.popNandPushIfOK(1, this.vm.image.specialObjectsArray); //specialObjectsOop
             case 130: return this.popNandPushIfOK(1, this.vm.image.fullGC()); // GC
             case 131: return this.popNandPushIfOK(1, this.vm.image.partialGC()); // GCmost
             case 132: return this.pop2andPushBoolIfOK(this.stackNonInteger(1).pointers.indexOf(this.vm.top())>=0); //Object.pointsTo
+            case 133: return false; //TODO primitiveSetInterruptKey
             case 134: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheInterruptSemaphore));
             case 135: return this.popNandPushIfOK(1, this.millisecondClockValue());
             case 136: return this.primitiveSignalAtMilliseconds(argCount); //Delay signal:atMs:());
+            case 137: return false; // TODO primitiveSecondsClock
+            case 138: return false; // TODO primitiveSomeObject
+            case 139: return false; // TODO primitiveNextObject
+            case 140: return false; // TODO primitiveBeep
+            case 141: return false; // TODO primitiveClipboardText
             case 142: return this.popNandPushIfOK(1, this.makeStString("/users/bert/squeakvm/")); //vmPath
+            case 143: return false; // TODO primitiveShortAt
+            case 144: return false; // TODO primitiveShortAtPut
+            case 145: return false; // TODO primitiveConstantFill
+            case 146: return false; // TODO primitiveReadJoystick
+            case 147: return false; // TODO primitiveWarpBits
             case 148: return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); //shallowCopy
+            case 149: return false; // TODO primitiveGetAttribute
             case 153: return false; //File.open 
+            case 160: return false; // TODO primitiveAdoptInstance
             case 161: return this.popNandPushIfOK(1, this.charFromInt('/'.charCodeAt(0))); //path delimiter
             case 230: return this.primitiveRelinquishProcessorForMicroseconds(argCount);
             case 231: return this.primitiveForceDisplayUpdate(argCount);
+            case 233: return this.primitiveSetFullScreen(argCount);
             case 234: return false; // primBitmapdecompressfromByteArrayat
             case 235: return false; // primStringcomparewithcollated
             case 236: return false; // primSampledSoundconvert8bitSignedFromto16Bit
@@ -2464,6 +2500,9 @@ Object.subclass('lib.squeak.vm.Primitives',
     },
     primitiveScreenSize: function(argCount) {
         return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(this.display.width, this.display.height));
+    },
+    primitiveSetFullScreen: function(argCount) {
+        return false; // fail for now
     },
     primitiveTestDisplayDepth: function(argCount) {
         var supportedDepths = [1];

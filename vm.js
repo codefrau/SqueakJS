@@ -303,7 +303,6 @@ Object.subclass('lib.squeak.vm.Image',
         // Note: after an old object is released, its "nextObject" ref must still allow traversal
         // of all remaining objects. This is so enumeration works despite GC.
 
-        this.vm.perfStart('GC');
         var newObjects = this.markReachableObjects();
         var removedObjects = this.removeUnmarkedOldObjects();
         this.appendToOldObjects(newObjects);
@@ -313,7 +312,6 @@ Object.subclass('lib.squeak.vm.Image',
         this.oldSpaceCount += newObjects.length - removedObjects.length;
         this.newSpaceCount = 0;
         this.gcCount++;
-        this.vm.perfStop('GC');
         return 1000000 + garbageCount; // free space
     },
     markReachableObjects: function() {
@@ -775,7 +773,6 @@ Object.subclass('lib.squeak.vm.Interpreter',
         this.image = image;
         this.image.vm = this;
         this.initConstants();
-        this.initPerf();
         this.primHandler = new lib.squeak.vm.Primitives(this, display);
         this.loadImageState();
         this.initVMState();
@@ -817,13 +814,6 @@ Object.subclass('lib.squeak.vm.Interpreter',
         this.nAllocatedContexts = 0;
         this.startupTime = Date.now(); // base for millisecond clock
     },
-    initPerf: function() {
-        // put an 'ignore' measurement on the perf stack so we don't have to check for empty
-        var stat = {label: 'ignore', count: 0, milliseconds: 0, start: performance.now()};
-        this.perf = { ignore: stat };
-        this.perfStack = [stat]; 
-    },
-
     loadInitialContext: function() {
         var schedAssn = this.specialObjects[Squeak.splOb_SchedulerAssociation];
         var sched = schedAssn.getPointer(Squeak.Assn_value);
@@ -835,7 +825,6 @@ Object.subclass('lib.squeak.vm.Interpreter',
 },
 'interpreting', {
     interpretOne: function() {
-        this.perfStart('bytecode');
         var b, b2;
         this.byteCodeCount++;
         b = this.nextByte();
@@ -981,7 +970,6 @@ Object.subclass('lib.squeak.vm.Interpreter',
             case 248: case 249: case 250: case 251: case 252: case 253: case 254: case 255:
                 this.send(this.method.methodGetSelector(b&0xF), 2, false); break;
         }
-        this.perfStop('bytecode');
     },
     interpret: function(forMilliseconds) {
         // run until idle, but at most for a couple milliseconds
@@ -1112,7 +1100,6 @@ Object.subclass('lib.squeak.vm.Interpreter',
 },
 'sending', {
     send: function(selector, argCount, doSuper) {
-        this.perfStart('send');
         var newRcvr = this.stackValue(argCount);
         var lookupClass = this.getClass(newRcvr);
         if (doSuper) {
@@ -1126,7 +1113,6 @@ Object.subclass('lib.squeak.vm.Interpreter',
             this.verifyAtClass = lookupClass;
         }
         this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex);
-        this.perfStop('send');
     },
     findSelectorInClass: function(selector, argCount, startingClass) {
         var cacheEntry = {};//this.findMethodCacheEntry(selector, startingClass);
@@ -1270,9 +1256,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
             this.popNandPush(1, primIndex - 261); //return -1...2
             return true;
         }
-        this.perfStart('primitive');
         var success = this.primHandler.doPrimitive(primIndex, argCount);
-        this.perfStop('primitive');
         return success;
     },
     createActualMessage: function(selector, argCount, cls) {
@@ -1488,32 +1472,6 @@ Object.subclass('lib.squeak.vm.Interpreter',
         var shifted = bitsToShift<<shiftCount;
         if  ((shifted>>shiftCount) === bitsToShift) return shifted;
         return this.nonSmallInt;  //non-small result will cause failure
-    },
-},
-'performance', {
-    perfStart: function(label) {
-        // label is 'outside', 'bytecodes', 'sends', 'primitives', etc (see initPerf)
-        var time = performance.now();
-        // pause previous measurement
-        var prev = this.perfStack[this.perfStack.length-1];
-        prev.milliseconds += time - prev.start;
-        // start current measurement
-        var current = this.perf[label];
-        if (!current) current = this.perf[label] = {label: label, count: 0, milliseconds: 0, start: time};
-        else current.start = time;
-        this.perfStack.push(current);
-    },
-    perfStop: function(label) {
-        var time = performance.now();
-        // stop current measurement
-        var current = this.perfStack.pop();
-        if (current.label !== label) throw 'perf counter not balanced';
-        current.milliseconds += performance.now() - current.start;
-        current.count++;
-        // resume previous measurement
-        var next = this.perfStack[this.perfStack.length-1];
-        next.start = time;
-        return false; // for convenience in early returns
     },
 },
 'utils',
@@ -2178,7 +2136,7 @@ Object.subclass('lib.squeak.vm.Primitives',
         return true;
     },
     doArrayBecome: function(doBothWays) {
-    	// Should flush method cache
+    	// TODO: Should flush method cache
 	    var rcvr = this.stackNonInteger(1);
         var arg = this.stackNonInteger(0);
     	if (!this.success) return rcvr;
@@ -2428,16 +2386,14 @@ Object.subclass('lib.squeak.vm.Primitives',
 	    return true;
 	},
 	primitiveCopyBits: function(argCount) { // no rcvr class check, to allow unknown subclasses (e.g. under Turtle)
-        this.vm.perfStart('bitblt');
         var bitbltObj = this.vm.stackValue(argCount);
         var bitblt = new lib.squeak.vm.BitBlt(this.vm);
-        if (!bitblt.loadBitBlt(bitbltObj)) return this.vm.perfStop('bitblt');
+        if (!bitblt.loadBitBlt(bitbltObj)) return false;
         bitblt.copyBits();
         if (bitblt.combinationRule === 22 || bitblt.combinationRule === 32)
             this.vm.popNandPush(argCount + 1, bitblt.bitCount);
         else if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay])
             this.showOnDisplay(bitblt.dest, bitblt.affectedRect());
-        this.vm.perfStop('bitblt');
         return true;
 	},
     primitiveKeyboardNext: function(argCount) {

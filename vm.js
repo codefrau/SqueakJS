@@ -983,18 +983,18 @@ Object.subclass('lib.squeak.vm.Interpreter',
         }
         this.perfStop('bytecode');
     },
-    interpret: function() {
-        // run until idle, but at most a couple milliseconds
-        // (as determined by checkForInterrupts)
+    interpret: function(forMilliseconds) {
+        // run until idle, but at most for a couple milliseconds
         // answer milliseconds to sleep (until next timer wakeup)
         // or 'break' if reached breakpoint
-        this.breakOutOfInterpreter = false;
         this.isIdle = false;
+        this.breakOutOfInterpreter = false;
+        this.breakOutTick = this.lastTick + (forMilliseconds || 500);
         while (!this.breakOutOfInterpreter)
             this.interpretOne();
         if (this.breakOutOfInterpreter == 'break') return 'break';
         if (!this.isIdle) return 0;
-        if (!this.nextWakeupTick) throw "nothing more to do?";
+        if (!this.nextWakeupTick) return 'sleep'; // all processes waiting
         return Math.max(0, this.nextWakeupTick - this.primHandler.millisecondClockValue());
     },
     nextByte: function() {
@@ -1009,6 +1009,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
         var now = this.primHandler.millisecondClockValue();
         if (now < this.lastTick) { // millisecond clock wrapped
             this.nextPollTick = now + (this.nextPollTick - this.lastTick);
+            this.breakOutTick = now + (this.breakOutTick - this.lastTick);
             if (this.nextWakeupTick !== 0)
                 this.nextWakeupTick = now + (this.nextWakeupTick - this.lastTick);
         }
@@ -1046,7 +1047,8 @@ Object.subclass('lib.squeak.vm.Interpreter',
         //            if(sema != nilObj) primHandler.synchronousSignal(sema); }
         //	if ((semaphoresToSignalCountA > 0) || (semaphoresToSignalCountB > 0)) {
         //            signalExternalSemaphores(); }  //signal all semaphores in semaphoresToSignal
-        this.breakOutOfInterpreter = true;
+        if (now >= this.breakOutTick) // have to return to web browser once in a while
+            this.breakOutOfInterpreter = true;
     },
     extendedPush: function(nextByte) {
         var lobits = nextByte & 63;

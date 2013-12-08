@@ -1799,7 +1799,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 119: return this.vm.flushMethodCacheForSelector(this.vm.top());
             case 120: return false; //primitiveCalloutToFFI
             case 121: return this.popNandPushIfOK(1, this.makeStString("/home/bert/mini.image")); //imageName
-            case 122: return false; //			"Blue Book: primitiveImageVolume"
+            case 122: return this.primitiveReverseDisplay(argCount); // Blue Book: primitiveImageVolume
             case 123: return false; //TODO primitiveValueUninterruptably
             case 124: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore));
             case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
@@ -2468,6 +2468,17 @@ Object.subclass('lib.squeak.vm.Primitives',
         this.vm.breakOutOfInterpreter = true;
         return true;
     },
+    primitiveReverseDisplay: function(argCount) {
+        this.reverseDisplay = !this.reverseDisplay;
+        this.redrawFullDisplay();
+        return true;
+    },
+    redrawFullDisplay: function() {
+        var displayObj = this.vm.specialObjects[Squeak.splOb_TheDisplay];
+        var display = (new lib.squeak.vm.BitBlt()).loadForm(displayObj);
+        var bounds = {x: 0, y: 0, w: display.width, h: display.height};
+        this.showOnDisplay(display, bounds);
+    },
     showOnDisplay: function(form, rect) {
         if (!rect) return;
         var ctx = this.display.ctx;
@@ -2475,6 +2486,8 @@ Object.subclass('lib.squeak.vm.Primitives',
         var dest = new Uint32Array(pixels.data.buffer);
         switch (form.depth) {
             case 1:
+                var black = this.reverseDisplay ? 0xFFFFFFFF : 0xFF000000;
+                var white = this.reverseDisplay ? 0xFF000000 : 0xFFFFFFFF;
                 var srcY = rect.y;
                 for (var y = 0; y < rect.h; y++) {
                     var srcIndex = form.pitch * srcY + (rect.x / 32 | 0);
@@ -2482,7 +2495,7 @@ Object.subclass('lib.squeak.vm.Primitives',
                     var mask = 0x80000000 >>> (rect.x % 32);
                     var dstIndex = pixels.width * y;
                     for (var x = 0; x < rect.w; x++) {
-                        dest[dstIndex++] = src & mask ? 0xFF000000 : 0xFFFFFFFF; 
+                        dest[dstIndex++] = src & mask ? black : white; 
                         mask = mask >>> 1;
                         if (!mask) {
                             mask = 0x80000000;

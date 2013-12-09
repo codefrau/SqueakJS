@@ -2505,6 +2505,7 @@ Object.subclass('lib.squeak.vm.Primitives',
 	},
 	secondClock: function() {
 	    var date = new Date();
+        var seconds = date.getTime() / 1000 | 0;    // milliseconds -> seconds
         seconds -= date.getTimezoneOffset() * 60;   // make local time
         seconds += ((69 * 365 + 17) * 24 * 3600);   // adjust epoch from 1970 to 1901
         return this.pos32BitIntFor(seconds);

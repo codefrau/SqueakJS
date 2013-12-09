@@ -151,6 +151,17 @@ Squeak = {
     Form_width: 1,
     Form_height: 2,
     Form_depth: 3,
+    
+    // Event constants
+    Mouse_Blue: 1,
+    Mouse_Yellow: 2,
+    Mouse_Red: 4,
+    Keyboard_Shift: 8,
+    Keyboard_Ctrl: 16,
+    Keyboard_Alt: 32,
+    Keyboard_Cmd: 64,
+    Mouse_All: 1 + 2 + 4,
+    Keyboard_All: 8 + 16 + 32 + 64,
 };
 
 Object.subclass('lib.squeak.vm.Image',
@@ -1643,6 +1654,7 @@ Object.subclass('lib.squeak.vm.Primitives',
     initialize: function(vm, display) {
         this.vm = vm;
         this.display = display;
+        this.display.vm = this.vm;
         this.initAtCache();
     }
 },
@@ -1813,7 +1825,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 138: return this.popNandPushIfOK(1, this.someObject()); // Object.someObject
             case 139: return this.popNandPushIfOK(1, this.nextObject(this.vm.top())); // Object.nextObject
             case 140: return false; // TODO primitiveBeep
-            case 141: return false; // TODO primitiveClipboardText
+            case 141: return this.primitiveClipboardText(argCount);
             case 142: return this.popNandPushIfOK(1, this.makeStString("/users/bert/squeakvm/")); //vmPath
             case 143: return false; // TODO primitiveShortAt
             case 144: return false; // TODO primitiveShortAtPut
@@ -2449,7 +2461,20 @@ Object.subclass('lib.squeak.vm.Primitives',
         var displayObj = this.vm.stackValue(0);
         this.vm.specialObjects[Squeak.splOb_TheDisplay] = displayObj;
         this.vm.popN(argCount); // return self
-	    return true;
+        return true;
+	},
+	primitiveClipboardText: function(argCount) {
+        if (argCount === 0) { // read from clipboard
+            if (typeof(this.display.clipboardString) !== 'string') return false;
+            this.vm.popNandPush(1, this.makeStString(this.display.clipboardString));
+        } else if (argCount === 1) { // write to clipboard
+            var stringObj = this.vm.top();
+            if (!stringObj.bytes) return false;
+            this.display.clipboardString = stringObj.bytesAsString();
+            this.display.clipboardStringChanged = true;
+            this.vm.pop();
+        }
+        return true;
 	},
 	primitiveCopyBits: function(argCount) { // no rcvr class check, to allow unknown subclasses (e.g. under Turtle)
         var bitbltObj = this.vm.stackValue(argCount);
@@ -2470,7 +2495,7 @@ Object.subclass('lib.squeak.vm.Primitives',
         return this.popNandPushIfOK(argCount+1, length ? this.checkSmallInt(this.display.keys[length - 1] || 0) : this.vm.nilObj);
     },
     primitiveMouseButtons: function(argCount) {
-        return this.popNandPushIfOK(argCount+1, this.checkSmallInt(this.display.mouseButtons));
+        return this.popNandPushIfOK(argCount+1, this.checkSmallInt(this.display.buttons));
     },
     primitiveMousePoint: function(argCount) {
         return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(this.checkSmallInt(this.display.mouseX), this.checkSmallInt(this.display.mouseY)));

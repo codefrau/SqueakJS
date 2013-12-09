@@ -456,6 +456,12 @@ Object.subclass('lib.squeak.vm.Image',
             obj = obj.nextObject;
         }
     },
+    objectAfter: function(obj) {
+        // if this was the last old object, tenure new objects and try again
+        if (!obj.nextObject && this.newSpaceCount > 0)
+            this.fullGC();
+        return obj.nextObject;
+    },
     nextInstanceAfter: function(obj) {
         var clsObj = obj.sqClass;
         while (true) {
@@ -608,7 +614,7 @@ Object.subclass('lib.squeak.vm.Object',
         var float = data.getFloat64(0, false);
         return float;
     },
-    getFloatData: function() {
+    floatData: function() {
         var buffer = new ArrayBuffer(8);
         var data = new DataView(buffer);
         data.setFloat64(0, this.float, false);
@@ -1687,14 +1693,14 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 49: return this.popNandPushFloatIfOK(2,this.stackFloat(1)*this.stackFloat(0));  // Float.mul
             case 50: return this.popNandPushFloatIfOK(2,this.safeFDiv(this.stackFloat(1),this.stackFloat(0)));  // Float.div
             case 51: return this.popNandPushIfOK(1, this.checkSmallInt(this.stackFloat(0)|0));  // Float.asInteger
-            case 52: return false; //TODO: this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // FractionalPart
-            case 53: return false; //TODO: this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // Exponent
-            case 54: return false; //TODO: this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // TimesTwoPower
-            case 55: return false; //TODO: this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // SquareRoot
-            case 56: return false; //TODO: this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // Sine
-            case 57: return false; //TODO: this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // Arctan
-            case 58: return false; //TODO: this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // LogN
-            case 59: return false; //TODO: this.popNandPushFloatIfOK(this.stackFloat(0) ... ); // Exp
+            case 52: return false;  // Float.fractionPart
+            case 53: return this.popNandPushIfOK(1, Math.log(this.stackFloat(0)) / Math.log(2) | 0); // Exponent
+            case 54: return this.popNandPushFloatIfOK(2, this.stackFloat(1) * Math.pow(2, this.stackFloat(0))); // TimesTwoPower
+            case 55: return this.popNandPushFloatIfOK(1, Math.sqrt(this.stackFloat(0))); // SquareRoot
+            case 56: return this.popNandPushFloatIfOK(1, Math.sin(this.stackFloat(0))); // Sine
+            case 57: return this.popNandPushFloatIfOK(1, Math.atan(this.stackFloat(0))); // Arctan
+            case 58: return this.popNandPushFloatIfOK(1, Math.log(this.stackFloat(0))); // LogN
+            case 59: return this.popNandPushFloatIfOK(1, Math.exp(this.stackFloat(0))); // Exp
             case 60: return this.popNandPushIfOK(2, this.objectAt(false,false,false)); // basicAt:
             case 61: return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); // basicAt:put:
             case 62: return this.popNandPushIfOK(1, this.objectSize()); // size
@@ -1724,7 +1730,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 86: return this.primitiveWait(); // Semaphore.wait
             case 87: return this.primitiveResume(); // Process.resume
             case 88: return this.primitiveSuspend(); // Process.suspend
-            case 89: return false; //TODO: primitiveFlushCache
+            case 89: return this.vm.flushMethodCache(); //primitiveFlushCache
             case 90: return this.primitiveMousePoint(argCount); // mousePoint
             case 91: return this.primitiveTestDisplayDepth(argCount); // cursorLocPut in old images
             case 92: return false; // primitiveSetDisplayMode				"Blue Book: primitiveCursorLink"
@@ -1746,13 +1752,13 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 108: return this.primitiveKeyboardNext(argCount); // Sensor kbdNext
             case 109: return this.primitiveKeyboardPeek(argCount); // Sensor kbdPeek
             case 110: return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
-            case 111: return false; //TODO primitiveClass
+            case 111: this.popNandPushIfOK(1, this.vm.getClass(this.vm.top())); // Object.class
             case 112: this.popNandPushIfOK(1, 1000000); //primitiveBytesLeft
             case 113: this.vm.breakOutOfInterpreter = 'break'; return true; //primitiveQuit
             case 114: this.vm.breakOutOfInterpreter = 'break'; debugger; return true; //primitiveExitToDebugger
             case 115: return false; //TODO primitiveChangeClass					"Blue Book: primitiveOopsLeft"
             case 116: return this.vm.flushMethodCacheForMethod(this.vm.top());
-            case 117: return false; //TODO primitiveExternalCall
+            case 117: return false; //primitiveExternalCall
             case 118: return false; //TODO primitiveDoPrimitiveWithArgs
             case 119: return this.vm.flushMethodCacheForSelector(this.vm.top());
             case 120: return false; //primitiveCalloutToFFI
@@ -1767,14 +1773,14 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 129: return this.popNandPushIfOK(1, this.vm.image.specialObjectsArray); //specialObjectsOop
             case 130: return this.popNandPushIfOK(1, this.vm.image.fullGC()); // GC
             case 131: return this.popNandPushIfOK(1, this.vm.image.partialGC()); // GCmost
-            case 132: return this.pop2andPushBoolIfOK(this.stackNonInteger(1).pointers.indexOf(this.vm.top())>=0); //Object.pointsTo
+            case 132: return this.pop2andPushBoolIfOK(this.pointsTo(this.stackNonInteger(1), this.vm.top())); //Object.pointsTo
             case 133: return false; //TODO primitiveSetInterruptKey
             case 134: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheInterruptSemaphore));
             case 135: return this.popNandPushIfOK(1, this.millisecondClockValue());
             case 136: return this.primitiveSignalAtMilliseconds(argCount); //Delay signal:atMs:());
-            case 137: return false; // TODO primitiveSecondsClock
-            case 138: return false; // TODO primitiveSomeObject
-            case 139: return false; // TODO primitiveNextObject
+            case 137: return this.popNandPushIfOK(1, this.secondClock()); // seconds since Jan 1, 1901
+            case 138: return this.popNandPushIfOK(1, this.someObject()); // Object.someObject
+            case 139: return this.popNandPushIfOK(1, this.nextObject(this.vm.top())); // Object.nextObject
             case 140: return false; // TODO primitiveBeep
             case 141: return false; // TODO primitiveClipboardText
             case 142: return this.popNandPushIfOK(1, this.makeStString("/users/bert/squeakvm/")); //vmPath
@@ -1966,6 +1972,10 @@ Object.subclass('lib.squeak.vm.Primitives',
         stString.bytes = bytes;
         return stString;
     },
+    pointsTo: function(rcvr, arg) {
+        if (!rcvr.pointers) return false;
+        return rcvr.pointers.indexOf(arg) >= 0;
+    },
 },
 'indexing', {
     objectAt: function(cameFromBytecode, convertChars, includeInstVars) {
@@ -2104,6 +2114,13 @@ Object.subclass('lib.squeak.vm.Primitives',
     },
 },
 'basic',{
+    someObject: function() {
+        return this.vm.image.firstOldObject;
+    },
+    nextObject: function(obj) {
+        var nextObj = this.vm.image.objectAfter(obj);
+        return nextObj ? nextObj : 0;
+    },
     someInstanceOf: function(clsObj) {
         var someInstance = this.vm.image.someInstanceOf(clsObj);
         if (someInstance) return someInstance;
@@ -2486,6 +2503,12 @@ Object.subclass('lib.squeak.vm.Primitives',
         //delays of up to that length without overflowing a SmallInteger."
         return (Date.now() - this.vm.startupTime) & this.vm.millisecondClockMask;
 	},
+	secondClock: function() {
+	    var date = new Date();
+        seconds -= date.getTimezoneOffset() * 60;   // make local time
+        seconds += ((69 * 365 + 17) * 24 * 3600);   // adjust epoch from 1970 to 1901
+        return this.pos32BitIntFor(seconds);
+    },
 });
 Object.subclass('lib.squeak.vm.BitBlt',
 'initialization', {

@@ -1290,6 +1290,37 @@ Object.subclass('lib.squeak.vm.Interpreter',
         this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex);
         return true;
     },
+    primitivePerformWithArgs: function(argCount, supered) {
+        var rcvr = this.stackValue(argCount);
+        var selector = this.stackValue(argCount - 1);
+        var args = this.stackValue(argCount - 2);
+        if (args.sqClass !== this.specialObjects[Squeak.splOb_ClassArray])
+            return false;
+        var lookupClass = supered ? this.stackValue(argCount - 3) : this.getClass(rcvr);
+        if (supered) { // verify that lookupClass is in fact in superclass chain of receiver;
+            var cls = this.getClass(rcvr);
+            while (cls !== lookupClass) {
+                cls = cls.pointers[Squeak.Class_superclass];
+		        if (cls.isNil) return false;
+            }
+        }
+        var trueArgCount = args.pointersSize();
+        var stack = this.activeContext.pointers;
+        this.arrayCopy(args.pointers, 0, stack, this.sp - 1, trueArgCount);
+        this.sp += trueArgCount - argCount; //pop selector and array then push args
+        var entry = this.findSelectorInClass(selector, trueArgCount, lookupClass);
+        this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex);
+        return true;
+    },
+    flushMethodCache: function() { //clear all cache entries (prim 89)
+        /*
+        for (var i = 0; i < this.methodCacheSize; i++) {
+            this.methodCache[i].selector = null;   // mark it free
+            this.methodCache[i].method = null;  // release the method
+        }
+        */
+        return true;
+    },
     flushMethodCacheForSelector: function(selector) { //clear cache entries for selector (prim 119)
         /*
         for (var i = 0; i < this.methodCacheSize; i++)
@@ -1723,9 +1754,9 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 79: return this.primitiveNewMethod(); // Compiledmethod.new
             case 80: return this.popNandPushIfOK(2,this.doBlockCopy()); // blockCopy:
             case 81: return this.primitiveBlockValue(argCount); // BlockContext.value
-            //TODO case 82: return this.primitiveValueWithArgs(argCount); // BlockContext.valueWithArguments:
-            case 83: return this.vm.primitivePerform(argCount); // rcvr.perform:(with:)*
-            //TODO case 84: primitivePerformWithArgs)
+            case 82: return this.primitiveValueWithArgs(argCount); // BlockContext.valueWithArguments:
+            case 83: return this.vm.primitivePerform(argCount); // Object.perform:(with:)*
+            case 84: return this.vm.primitivePerformWithArgs(argCount, false); //  Object.perform:withArguments:
             case 85: return this.primitiveSignal(); // Semaphore.wait
             case 86: return this.primitiveWait(); // Semaphore.wait
             case 87: return this.primitiveResume(); // Process.resume
@@ -1741,7 +1772,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 97: return false; // primitiveSnapshot
             case 98: return false; // primitiveStoreImageSegment
             case 99: return false; // primitiveLoadImageSegment
-            //case 100: return false; // TODO primitivePerformInSuperclass		"Blue Book: primitiveSignalAtTick"
+            case 100: return this.vm.primitivePerformWithArgs(argCount, true); // Object.perform:withArguments:inSuperclass: (Blue Book: primitiveSignalAtTick)
             case 101: return this.primitiveBeCursor(argCount); // Cursor.beCursor
             case 102: return this.primitiveBeDisplay(argCount); // DisplayScreen.beDisplay
             case 103: return false; // primitiveScanCharacters
@@ -2241,6 +2272,24 @@ Object.subclass('lib.squeak.vm.Primitives',
         var initialIP = block.getPointer(Squeak.BlockContext_initialIP);
         block.setPointer(Squeak.Context_instructionPointer, initialIP);
         block.setPointer(Squeak.Context_stackPointer, argCount);
+        block.setPointer(Squeak.BlockContext_caller, this.vm.activeContext);
+        this.vm.popN(argCount+1);
+        this.vm.newActiveContext(block);
+        return true;
+    },
+    primitiveValueWithArgs: function(argCount) {
+        var block = this.vm.stackValue(1);
+        var array = this.vm.stackValue(0);
+        if (!this.isA(block, Squeak.splOb_ClassBlockContext)) return false;
+        if (!this.isA(array, Squeak.splOb_ClassArray)) return false;
+        var blockArgCount = block.getPointer(Squeak.BlockContext_argumentCount);
+        if (!this.vm.isSmallInt(blockArgCount)) return false;
+        if (blockArgCount != array.pointersSize()) return false;
+        if (!block.getPointer(Squeak.BlockContext_caller).isNil) return false;
+        this.vm.arrayCopy(array.pointers, 0, block.pointers, Squeak.Context_tempFrameStart, blockArgCount);
+        var initialIP = block.getPointer(Squeak.BlockContext_initialIP);
+        block.setPointer(Squeak.Context_instructionPointer, initialIP);
+        block.setPointer(Squeak.Context_stackPointer, blockArgCount);
         block.setPointer(Squeak.BlockContext_caller, this.vm.activeContext);
         this.vm.popN(argCount+1);
         this.vm.newActiveContext(block);

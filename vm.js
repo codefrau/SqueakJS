@@ -1533,8 +1533,8 @@ Object.subclass('lib.squeak.vm.Interpreter',
     },
     quickDivide: function(rcvr, arg) { // must only handle exact case
         if (arg === 0) return this.nonSmallInt;  // fail if divide by zero
-        var result = rcvr/arg;
-        if (result*arg === rcvr) return result;
+        var result = rcvr / arg | 0;
+        if (result * arg === rcvr) return result;
         return this.nonSmallInt;     // fail if result is not exact
     },
     div: function(rcvr, arg) {

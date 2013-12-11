@@ -836,6 +836,10 @@ Object.subclass('lib.squeak.vm.Interpreter',
         this.methodCache = [];
         for (var i = 0; i < this.methodCacheSize; i++)
             this.methodCache[i] = {lkupClass: null, selector: null, method: null, primIndex: 0, argCount: 0};
+        this.breakOutOfInterpreter = false;
+        this.breakOutTick = 0;
+        this.breakOnMethod = null;
+        this.breakOnNewMethod = false;
         this.startupTime = Date.now(); // base for millisecond clock
     },
     loadInitialContext: function() {
@@ -2222,6 +2226,8 @@ Object.subclass('lib.squeak.vm.Primitives',
         while (method.pointers.length < litCount+1)
             method.pointers.push(this.vm.nilObj);
         this.vm.popNandPush(1+argCount, method);
+        if (this.vm.breakOnNewMethod)
+            this.vm.breakOnMethod = method;
         return true;
     },
     doArrayBecome: function(doBothWays) {

@@ -820,11 +820,9 @@ Object.subclass('lib.squeak.vm.Interpreter',
         this.lastTick = 0;
         this.interruptKeycode = 2094;  //"cmd-."
         this.interruptPending = false;
-        this.semaphoresUseBufferA = true;
-        this.semaphoresToSignalCountA = 0;
-        this.semaphoresToSignalCountB = 0;
-        this.deferDisplayUpdates = false;
-        this.pendingFinalizationSignals = 0;
+        //this.semaphoresToSignal = [];
+        //this.deferDisplayUpdates = false;
+        //this.pendingFinalizationSignals = 0;
         this.freeContexts = this.nilObj;
         this.freeLargeContexts = this.nilObj;
         this.reclaimableContextCount = 0;
@@ -1061,8 +1059,8 @@ Object.subclass('lib.squeak.vm.Interpreter',
         //            sema= getSpecialObject(Squeak.splOb_ThefinalizationSemaphore);
         //            pendingFinalizationSignals= 0;
         //            if(sema != nilObj) primHandler.synchronousSignal(sema); }
-        //	if ((semaphoresToSignalCountA > 0) || (semaphoresToSignalCountB > 0)) {
-        //            signalExternalSemaphores(); }  //signal all semaphores in semaphoresToSignal
+        //if (this.semaphoresToSignal.length)
+        //    this.signalExternalSemaphores();  //signal all semaphores in semaphoresToSignal
         if (now >= this.breakOutTick) // have to return to web browser once in a while
             this.breakOutOfInterpreter = true;
     },
@@ -1828,8 +1826,8 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 108: return this.primitiveKeyboardNext(argCount); // Sensor kbdNext
             case 109: return this.primitiveKeyboardPeek(argCount); // Sensor kbdPeek
             case 110: return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
-            case 111: this.popNandPushIfOK(1, this.vm.getClass(this.vm.top())); // Object.class
-            case 112: this.popNandPushIfOK(1, 1000000); //primitiveBytesLeft
+            case 111: return this.popNandPushIfOK(1, this.vm.getClass(this.vm.top())); // Object.class
+            case 112: return this.popNandPushIfOK(1, 1000000); //primitiveBytesLeft
             case 113: this.vm.breakOutOfInterpreter = 'break'; return true; //primitiveQuit
             case 114: this.vm.breakOutOfInterpreter = 'break'; debugger; return true; //primitiveExitToDebugger
             case 115: return false; //TODO primitiveChangeClass					"Blue Book: primitiveOopsLeft"

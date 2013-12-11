@@ -2090,7 +2090,7 @@ Object.subclass('lib.squeak.vm.Primitives',
         if (!this.success) return array;
         var info;
         if (cameFromBytecode) {// fast entry checks cache
-            info = this.atCache[array.hash & this.atCacheMask];
+            info = this.atPutCache[array.hash & this.atCacheMask];
             if (info.array !== array) {this.success = false; return array;}
         } else {// slow entry installs in cache if appropriate
             if (array.isFloat) { // present float as word array
@@ -2100,7 +2100,7 @@ Object.subclass('lib.squeak.vm.Primitives',
                 if (index==2) return this.pos32BitIntFor(floatData.getUint32(4, false));
                 this.success = false; return array;
             }
-            info = this.makeAtCacheInfo(this.atCache, this.vm.specialSelectors[32], array, convertChars, includeInstVars);
+            info = this.makeAtCacheInfo(this.atPutCache, this.vm.specialSelectors[34], array, convertChars, includeInstVars);
         }
         if (index<1 || index>info.size) {this.success = false; return array;}
         var objToPut = this.vm.stackValue(0);

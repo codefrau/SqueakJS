@@ -2584,6 +2584,16 @@ Object.subclass('lib.squeak.vm.Primitives',
                     srcY++;
                 };
                 break;
+            case 32:
+                var srcY = rect.y;
+                for (var y = 0; y < rect.h; y++) {
+                    var srcIndex = form.pitch * srcY + rect.x;
+                    var dstIndex = pixels.width * y;
+                    for (var x = 0; x < rect.w; x++)
+                        dest[dstIndex++] = form.bits[srcIndex++]; 
+                    srcY++;
+                };
+                break;
             default: throw "not implemented yet";
         };
         ctx.putImageData(pixels, rect.x, rect.y);
@@ -2599,9 +2609,10 @@ Object.subclass('lib.squeak.vm.Primitives',
         return false; // fail for now
     },
     primitiveTestDisplayDepth: function(argCount) {
-        var supportedDepths = [1];
+        var supportedDepths =  [1, 32]; // match showOnDisplay()
         return this.pop2andPushBoolIfOK(supportedDepths.indexOf[this.stackInteger(0)] >= 0);
     },
+
 	millisecondClockValue: function() {
         //Return the value of the millisecond clock as an integer.
         //Note that the millisecond clock wraps around periodically.
@@ -2640,7 +2651,7 @@ Object.subclass('lib.squeak.vm.BitBlt',
             this.source = this.loadForm(this.sourceForm);
             if (!this.source) return false;
         }
-        this.halftone = this.loadHalftone(bitblt[Squeak.BitBlt_halftone])
+        this.halftone = this.loadHalftone(bitblt[Squeak.BitBlt_halftone]);
         this.combinationRule = bitblt[Squeak.BitBlt_combinationRule];
         this.destX = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_destX], 0);
         this.destY = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_destY], 0);
@@ -2654,7 +2665,7 @@ Object.subclass('lib.squeak.vm.BitBlt',
         if (!this.source)
             this.sourceX = this.sourceY = 0;
         else {
-            //if (!this.loadColorMap()) return false;
+            if (!this.loadColorMap(bitblt[Squeak.BitBlt_colorMap])) return false;
             //if ((this.cmFlags & 8) == 0) this.setUpColorMasks();
             this.sourceX = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_sourceX], 0);
             this.sourceY = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_sourceY], 0);
@@ -2696,7 +2707,6 @@ Object.subclass('lib.squeak.vm.BitBlt',
         }
         throw "bitblt rule not implemented yet";
     },
-
     loadHalftone: function(halftoneObj) {
         return halftoneObj.words;
     },
@@ -2716,6 +2726,12 @@ Object.subclass('lib.squeak.vm.BitBlt',
         form.pitch = (form.width + (form.pixPerWord - 1)) / form.pixPerWord | 0;
         if (form.bits.length !== (form.pitch * form.height)) return null;
         return form;
+    },
+    loadColorMap: function(colorMapObj) {
+        this.cmLookupTable = colorMapObj.words;
+        if (this.cmLookupTable)
+            this.cmMask = this.cmLookupTable.length - 1;
+        return true;
     },
     intOrFloatIfNil: function(intOrFloat, valueIfNil) {
         if (this.vm.isSmallInt(intOrFloat)) return intOrFloat;
@@ -2910,8 +2926,117 @@ Object.subclass('lib.squeak.vm.BitBlt',
             this.destIndex += this.destDelta;
         }
     },
-
-
+    copyLoopPixMap: function() {
+        /*	This version of the inner loop maps source pixels
+        to a destination form with different depth.  Because it is already
+        unweildy, the loop is not unrolled as in the other versions.
+        Preload, skew and skewMask are all overlooked, since pickSourcePixels
+        delivers its destination word already properly aligned.
+        Note that pickSourcePixels could be copied in-line at the top of
+        the horizontal loop, and some of its inits moved out of the loop. */
+        /*	The loop has been rewritten to use only one pickSourcePixels call.
+        The idea is that the call itself could be inlined. If we decide not
+        to inline pickSourcePixels we could optimize the loop instead. */
+        debugger;
+        var sourcePixMask = this.maskTable[this.source.depth];
+        var destPixMask = this.maskTable[this.dest.depth];
+        //var mapperFlags = cmFlags & (~8);
+        this.sourceIndex = (this.sy * this.source.pitch) + (this.sx / this.source.pixPerWord | 0);
+        var scrStartBits = this.source.pixPerWord - (this.sx & (this.source.pixPerWord - 1));
+        var nSourceIncs = (this.bbW < scrStartBits) ? 0 : ((this.bbW - scrStartBits) / this.source.pixPerWord | 0) + 1;
+        /* Note following two items were already calculated in destmask setup! */
+        this.sourceDelta = this.source.pitch - nSourceIncs;
+        var startBits = this.dest.pixPerWord - (this.dx & (this.dest.pixPerWord - 1));
+        var endBits = (((this.dx + this.bbW) - 1) & (this.dest.pixPerWord - 1)) + 1;
+        if (this.bbW < startBits) startBits = this.bbW; // ?!
+        var srcShift = (this.sx & (this.source.pixPerWord - 1)) * this.source.depth;
+        var dstShift = (this.dx & (this.dest.pixPerWord - 1)) * this.dest.depth;
+        var srcShiftInc = this.source.depth;
+        var dstShiftInc = this.dest.depth;
+        var dstShiftLeft = 0;
+        if (this.source.msb) {
+            this.srcShift = (32 - this.source.depth) - this.srcShift;
+            srcShiftInc = -srcShiftInc;
+        }
+        if (this.dest.msb) {
+            this.dstShift = (32 - this.dest.depth) - this.dstShift;
+            dstShiftInc = -dstShiftInc;
+            dstShiftLeft = 32 - this.dest.depth;
+        }
+        for (var i = 0; i < this.bbH; i++) {
+            var halftoneWord = this.halftone ? this.halftone[(this.dy + i) % this.halftone.length] : 0xFFFFFFFF;
+		    this.srcBitShift = srcShift;
+		    this.dstBitShift = dstShift;
+		    this.destMask = this.mask1;
+            var nPix = startBits;
+            var words = this.nWords;
+            /* Here is the horizontal loop... */
+            do {
+                var skewWord = this.pickSourcePixels(nPix, sourcePixMask, destPixMask, srcShiftInc, dstShiftInc);
+                /* align next word to leftmost pixel */
+                this.dstBitShift = dstShiftLeft;
+                if (this.destMask === 0xFFFFFFFF) { // avoid read-modify-write
+                    this.dest.bits[this.destIndex] = this.mergeFn(skewWord & halftoneWord, this.dest.bits[this.destIndex]);
+                } else { // General version using dest masking
+                    var destWord = this.dest.bits[this.destIndex];
+                    var mergeWord = this.mergeFn(skewWord & halftoneWord, destWord & this.destMask);
+                    destWord = (this.destMask & mergeWord) | (destWord & (~this.destMask));
+                    this.dest.bits[this.destIndex] = destWord;
+                }
+                this.destIndex++;
+                if (words === 2) { // is the next word the last word?
+                    this.destMask = this.mask2;
+                    nPix = endBits;
+                } else { // use fullword mask for inner loop
+                    this.destMask = 0xFFFFFFFF;
+                    nPix = this.dest.pixPerWord;
+                }
+            } while (--words);
+            this.sourceIndex += this.sourceDelta;
+            this.destIndex += this.destDelta;
+        }
+    },
+    pickSourcePixels: function(nPixels, srcMask, dstMask, srcShiftInc, dstShiftInc) {
+        /*	Pick nPix pixels starting at srcBitIndex from the source, map by the
+        color map, and justify them according to dstBitIndex in the resulting destWord. */
+        var sourceWord = this.source.bits[this.sourceIndex];
+        var destWord = 0;
+        var srcShift = this.srcBitShift; // put into temp for speed
+        var dstShift = this.dstBitShift;
+        var nPix = nPixels;
+        // always > 0 so we can use do { } while(--nPix);
+        if (this.cmLookupTable) { // a little optimization for (pretty crucial) blits using indexed lookups only
+            do {
+                var sourcePix = (sourceWord >>> srcShift) & srcMask;
+                var destPix = this.cmLookupTable[sourcePix & this.cmMask];
+                // adjust dest pix index
+                destWord = destWord | ((destPix & dstMask) << dstShift);
+                // adjust source pix index
+                dstShift += dstShiftInc;
+                if ((srcShift += srcShiftInc) & 0xFFFFFFE0) {
+                    if (this.source.msb) { this.srcShift += 32; }
+                    else { srcShift -= 32; }
+                    sourceWord = this.source.bits[++this.sourceIndex];
+                }
+            } while (--nPix);
+		} else {
+           do {
+                var sourcePix = (sourceWord >>> srcShift) & srcMask;
+                var destPix = this.mapPixel(sourcePix);
+                // adjust dest pix index
+                destWord = destWord | ((destPix & dstMask) << dstShift);
+                // adjust source pix index
+                dstShift += dstShiftInc;
+                if ((srcShift += srcShiftInc) & 0xFFFFFFE0) {
+                    if (this.source.msb) { srcShift += 32; }
+                    else { srcShift -= 32; }
+                    sourceWord = this.src.bits[++sourceIndex];
+                }
+            } while (--nPix);
+        }
+        this.srcBitShift = srcShift;  // Store back
+        return destWord;
+    },
     sourceSkewAndPointerInit: function() {
         var pixPerM1 = this.dest.pixPerWord - 1;  //Pix per word is power of two, so this makes a mask
         var sxLowBits = this.sx & pixPerM1;
@@ -2937,7 +3062,6 @@ Object.subclass('lib.squeak.vm.BitBlt',
         this.sourceDelta = (this.source.pitch * this.vDir) - (this.nWords * this.hDir);
         if (this.preload) this.sourceDelta -= this.hDir;
     },
-
     destMaskAndPointerInit: function() {
         var pixPerM1 = this.dest.pixPerWord - 1;  //Pix per word is power of two, so this makes a mask
         var startBits = this.dest.pixPerWord - (this.dx & pixPerM1); //how many pixels in first word
@@ -2956,7 +3080,6 @@ Object.subclass('lib.squeak.vm.BitBlt',
         this.destIndex = (this.dy * this.dest.pitch) + (this.dx / this.dest.pixPerWord | 0); //both these in words, not bytes
         this.destDelta = (this.dest.pitch * this.vDir) - (this.nWords * this.hDir);
     },
-
     clipRange: function() {
         // initialize sx,sy, dx,dy, bbW,bbH to the intersection of source, dest, and clip
         

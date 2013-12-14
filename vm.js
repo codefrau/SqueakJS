@@ -2607,18 +2607,41 @@ Object.subclass('lib.squeak.vm.Primitives',
                         this.reversedColors = colors.map(function(c){return c ^ 0x00FFFFFF});
                     colors = this.reversedColors;
                 }
+                var mask = (1 << form.depth) - 1;
+                var leftSrcShift = 32 - (rect.x % form.pixPerWord + 1) * form.depth;
                 var srcY = rect.y;
                 for (var y = 0; y < rect.h; y++) {
                     var srcIndex = form.pitch * srcY + (rect.x / form.pixPerWord | 0);
-                    var srcShift = 32 - (rect.x % form.pixPerWord + 1) * form.depth;
+                    var srcShift = leftSrcShift;
                     var src = form.bits[srcIndex];
-                    var mask = (1 << form.depth) - 1;
                     var dstIndex = pixels.width * y;
                     for (var x = 0; x < rect.w; x++) {
                         dest[dstIndex++] = colors[(src >>> srcShift) & mask]; 
-                        srcShift -= form.depth;
-                        if (srcShift < 0) {
+                        if ((srcShift -= form.depth) < 0) {
                             srcShift = 32 - form.depth;
+                            src = form.bits[++srcIndex];
+                        }
+                    }
+                    srcY++;
+                };
+                break;
+            case 16:
+                var leftSrcShift = rect.x % 2 ? 0 : 16;
+                var srcY = rect.y;
+                for (var y = 0; y < rect.h; y++) {
+                    var srcIndex = form.pitch * srcY + (rect.x / 2 | 0);
+                    var srcShift = leftSrcShift;
+                    var src = form.bits[srcIndex];
+                    var dstIndex = pixels.width * y;
+                    for (var x = 0; x < rect.w; x++) {
+                        var rgb = src >>> srcShift;
+                        dest[dstIndex++] =
+                            ((rgb & 0x7C00) >> 7)     // shift red   down 2*5, up 0*8 + 3
+                            + ((rgb & 0x03E0) << 6)   // shift green down 1*5, up 1*8 + 3
+                            + ((rgb & 0x001F) << 19)  // shift blue  down 0*5, up 2*8 + 3
+                            + 0xFF000000;             // set alpha to opaque 
+                        if ((srcShift -= 16) < 0) {
+                            srcShift = 16;
                             src = form.bits[++srcIndex];
                         }
                     }
@@ -2656,7 +2679,7 @@ Object.subclass('lib.squeak.vm.Primitives',
         return false; // fail for now
     },
     primitiveTestDisplayDepth: function(argCount) {
-        var supportedDepths =  [1, 2, 4, 8, 32]; // match showOnDisplay()
+        var supportedDepths =  [1, 2, 4, 8, 16, 32]; // match showOnDisplay()
         return this.pop2andPushBoolIfOK(supportedDepths.indexOf[this.stackInteger(0)] >= 0);
     },
 

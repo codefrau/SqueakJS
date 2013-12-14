@@ -2589,8 +2589,14 @@ Object.subclass('lib.squeak.vm.Primitives',
                 for (var y = 0; y < rect.h; y++) {
                     var srcIndex = form.pitch * srcY + rect.x;
                     var dstIndex = pixels.width * y;
-                    for (var x = 0; x < rect.w; x++)
-                        dest[dstIndex++] = form.bits[srcIndex++]; 
+                    for (var x = 0; x < rect.w; x++) {
+                        var argb = form.bits[srcIndex++];  // convert ARGB -> ABGR
+                        var abgr = (argb & 0x0000FF00)     // green is okay
+                            + ((argb & 0x00FF0000) >> 16)  // shift red down
+                            + ((argb & 0x000000FF) << 16)  // shift blue up
+                            + 0xFF000000;                  // set alpha to opaque
+                        dest[dstIndex++] = abgr;
+                    }
                     srcY++;
                 };
                 break;
@@ -2955,11 +2961,11 @@ Object.subclass('lib.squeak.vm.BitBlt',
         var dstShiftInc = this.dest.depth;
         var dstShiftLeft = 0;
         if (this.source.msb) {
-            this.srcShift = (32 - this.source.depth) - this.srcShift;
+            srcShift = (32 - this.source.depth) - srcShift;
             srcShiftInc = -srcShiftInc;
         }
         if (this.dest.msb) {
-            this.dstShift = (32 - this.dest.depth) - this.dstShift;
+            dstShift = (32 - this.dest.depth) - dstShift;
             dstShiftInc = -dstShiftInc;
             dstShiftLeft = 32 - this.dest.depth;
         }
@@ -3014,7 +3020,7 @@ Object.subclass('lib.squeak.vm.BitBlt',
                 // adjust source pix index
                 dstShift += dstShiftInc;
                 if ((srcShift += srcShiftInc) & 0xFFFFFFE0) {
-                    if (this.source.msb) { this.srcShift += 32; }
+                    if (this.source.msb) { srcShift += 32; }
                     else { srcShift -= 32; }
                     sourceWord = this.source.bits[++this.sourceIndex];
                 }

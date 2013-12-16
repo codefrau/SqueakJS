@@ -238,6 +238,7 @@ Object.subclass('lib.squeak.vm.Image',
         this.lastId = 0;
         var prevObj;
         var oopMap = {};
+        console.log('squeak: reading objects');
         for (var ptr = 0; ptr < endOfMemory; ) {
             var nWords = 0;
             var classInt = 0;
@@ -283,6 +284,7 @@ Object.subclass('lib.squeak.vm.Image',
         var splObs         = oopMap[specialObjectsOopInt];
         var compactClasses = oopMap[splObs.bits[Squeak.splOb_CompactClasses]].bits;
         var floatClass     = oopMap[splObs.bits[Squeak.splOb_ClassFloat]];
+        console.log('squeak: mapping oops');
         for (var oop in oopMap)
             oopMap[oop].installFromImage(oopMap, compactClasses, floatClass, littleEndian);
         this.specialObjectsArray = splObs;
@@ -791,6 +793,7 @@ Object.subclass('lib.squeak.vm.Object',
 Object.subclass('lib.squeak.vm.Interpreter',
 'initialization', {
     initialize: function(image, display) {
+        console.log('squeak: initializing interpreter');
         this.image = image;
         this.image.vm = this;
         this.initConstants();
@@ -798,6 +801,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
         this.loadImageState();
         this.initVMState();
         this.loadInitialContext();
+        console.log('squeak: interpreter ready');
     },
     initConstants: function() {
         this.minSmallInt = -0x40000000;

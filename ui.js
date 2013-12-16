@@ -10,9 +10,9 @@ lively.data.FileUpload.Handler.subclass('lib.squeak.ui.SqueakLoader', {
     onLoad: function(evt) {
         this.openImage(this.file.name, this.file.type, evt.target.result, this.pos);
     },
-    openImage: function(url, mime, buffer, pos) {
+    openImage: function(name, mime, buffer, pos) {
         var morph = this.findSqueakMorph();
-        if (morph) return morph.loadImageFromBuffer(buffer);
+        if (morph) return morph.loadImageFromBuffer(buffer, name);
         alert("Please open a Squeak morph first");
     },
     findSqueakMorph: function() {

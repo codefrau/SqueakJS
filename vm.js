@@ -2688,7 +2688,7 @@ Object.subclass('lib.squeak.vm.Primitives',
     },
     primitiveTestDisplayDepth: function(argCount) {
         var supportedDepths =  [1, 2, 4, 8, 16, 32]; // match showOnDisplay()
-        return this.pop2andPushBoolIfOK(supportedDepths.indexOf[this.stackInteger(0)] >= 0);
+        return this.pop2andPushBoolIfOK(supportedDepths.indexOf(this.stackInteger(0)) >= 0);
     },
 
 	millisecondClockValue: function() {

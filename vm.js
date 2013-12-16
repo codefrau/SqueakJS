@@ -82,6 +82,7 @@ Squeak = {
     Class_superclass: 0,
     Class_mdict: 1,
     Class_format: 2,
+    Class_instVars: null,   // 3 or 4 depending on image, see instVarNames()
     Class_name: 6,
     // Context layout:
     Context_sender: 0,
@@ -709,7 +710,8 @@ Object.subclass('lib.squeak.vm.Object',
         return ((format >> 10) & 0xC0) + ((format >> 1) & 0x3F) - 1;
     },
     instVarNames: function() {
-        return (this.getPointer(4).pointers || []).map(function(each) {
+        var index = this.pointers.length > 9 ? 3 : 4;
+        return (this.pointers[index].pointers || []).map(function(each) {
             return each.bytesAsString();
         });
     },
@@ -721,12 +723,13 @@ Object.subclass('lib.squeak.vm.Object',
             return superclass.allInstVarNames().concat(this.instVarNames());
     },
     superclass: function() {
-        return this.getPointer(0);
+        return this.pointers[0];
     },
     className: function() {
-        var nameOrNonMetaClass = this.getPointer(Squeak.Class_name);
-        var isMeta = !nameOrNonMetaClass.bytes;
-        var nameObj = isMeta ? nameOrNonMetaClass.getPointer(Squeak.Class_name) : nameOrNonMetaClass;
+        var size = this.pointers.length;
+        var isMeta = size < 9;
+        var cls = isMeta ? this.pointers[size - 1] : this;
+        var nameObj = cls.pointers[Squeak.Class_name];
         var name = nameObj.bytesAsString();
         return isMeta ? name + " class" : name;
     }
@@ -1596,7 +1599,9 @@ Object.subclass('lib.squeak.vm.Interpreter',
                     for (var c = 0; c < clsAndMeta.length; c++) {
                         var cls = clsAndMeta[c];
                         var mdict = cls.pointers[1];
+                        if (!mdict.pointers || !mdict.pointers[1]) continue;
                         var methods = mdict.pointers[1].pointers;
+                        if (!methods) continue;
                         var selectors = mdict.pointers;
                         for (var j = 0; j < methods.length; j++) {
                             if (callback.call(this, cls, methods[j], selectors[2+j]))
@@ -1898,9 +1903,12 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 147: return false; // TODO primitiveWarpBits
             case 148: return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); //shallowCopy
             case 149: return false; // TODO primitiveGetAttribute
-            case 153: return false; //File.open 
+            case 153: return false; // File.open 
+            case 156: return false; // primDeleteFileNamed:
+            case 159: return false; // primRename:to:
             case 160: return false; // TODO primitiveAdoptInstance
             case 161: return this.popNandPushIfOK(1, this.charFromInt('/'.charCodeAt(0))); //path delimiter
+            case 162: return this.popNandPushIfOK(1, this.vm.nilObj);  // FileDirectory.primLookupEntryIn:index: 
             case 230: return this.primitiveRelinquishProcessorForMicroseconds(argCount);
             case 231: return this.primitiveForceDisplayUpdate(argCount);
             case 233: return this.primitiveSetFullScreen(argCount);

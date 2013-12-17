@@ -843,8 +843,10 @@ Object.subclass('lib.squeak.vm.Interpreter',
             this.methodCache[i] = {lkupClass: null, selector: null, method: null, primIndex: 0, argCount: 0};
         this.breakOutOfInterpreter = false;
         this.breakOutTick = 0;
-        this.breakOnMethod = null;
+        this.breakOnMethod = null; // method to break on
         this.breakOnNewMethod = false;
+        this.breakOnContextChanged = false;
+        this.breakOnContextReturned = null; // context to break on
         this.startupTime = Date.now(); // base for millisecond clock
     },
     loadInitialContext: function() {
@@ -1069,7 +1071,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
         //if (this.semaphoresToSignal.length)
         //    this.signalExternalSemaphores();  //signal all semaphores in semaphoresToSignal
         if (now >= this.breakOutTick) // have to return to web browser once in a while
-            this.breakOutOfInterpreter = true;
+            this.breakOutOfInterpreter = this.breakOutOfInterpreter || true; // do not overwrite break string
     },
     extendedPush: function(nextByte) {
         var lobits = nextByte & 63;
@@ -1203,7 +1205,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
     },
     executeNewMethod: function(newRcvr, newMethod, argumentCount, primitiveIndex) {
         this.sendCount++;
-        if (newMethod === this.breakOnMethod) {this.breakOutOfInterpreter = 'break'; debugger;}
+        if (newMethod === this.breakOnMethod) this.breakOutOfInterpreter = 'break';
         if (this.logSends) console.log(this.sendCount + ' ' + this.printMethod(newMethod));
         if (primitiveIndex>0)
             if (this.tryPrimitive(primitiveIndex, argumentCount, newMethod))
@@ -1228,7 +1230,11 @@ Object.subclass('lib.squeak.vm.Interpreter',
 	    this.reclaimableContextCount++;
         this.storeContextRegisters();
         /////// Woosh //////
-        this.activeContext = newContext; //We're off and running...            
+        this.activeContext = newContext; //We're off and running...
+        if (this.breakOnContextChanged) {
+            this.breakOnContextChanged = false;
+            this.breakOutOfInterpreter = 'break';
+        }
         //Following are more efficient than fetchContextRegisters() in newActiveContext()
         this.homeContext = newContext;
         this.method = newMethod;
@@ -1257,6 +1263,10 @@ Object.subclass('lib.squeak.vm.Interpreter',
         var nextContext;
         thisContext = this.activeContext;
         while (thisContext !== targetContext) {
+            if (this.breakOnContextReturned === thisContext) {
+                this.breakOnContextReturned = null;
+                this.breakOutOfInterpreter = 'break';
+            }
             nextContext = thisContext.getPointer(Squeak.Context_sender);
             thisContext.setPointer(Squeak.Context_sender, this.nilObj);
             thisContext.setPointer(Squeak.Context_instructionPointer, this.nilObj);
@@ -1269,6 +1279,10 @@ Object.subclass('lib.squeak.vm.Interpreter',
         this.activeContext = thisContext;
         this.fetchContextRegisters(this.activeContext);
         this.push(returnValue);
+        if (this.breakOnContextChanged) {
+            this.breakOnContextChanged = false;
+            this.breakOutOfInterpreter = 'break';
+        }
     },
     tryPrimitive: function(primIndex, argCount, newMethod) {
         if ((primIndex > 255) && (primIndex < 520)) {
@@ -1405,8 +1419,9 @@ Object.subclass('lib.squeak.vm.Interpreter',
         return false;
     },
     newActiveContext: function(newContext) {
+        // Note: this is inlined in executeNewMethod() and doReturn()
         this.storeContextRegisters();
-        this.activeContext = newContext; //We're off and running...            
+        this.activeContext = newContext; //We're off and running...
         this.fetchContextRegisters(newContext);
     },
     fetchContextRegisters: function(ctxt) {
@@ -1645,7 +1660,14 @@ Object.subclass('lib.squeak.vm.Interpreter',
         if (!found) throw 'method not found: ', classAndMethodString;
         this.breakOnMethod = found;
     },
-
+    breakOnReturn: function() {
+        this.breakOnContextChanged = false;
+        this.breakOnContextReturned = this.activeContext;
+    },
+    breakOnSend: function() {
+        this.breakOnContextChanged = true;
+        this.breakOnContextReturned = null;
+    },
     printActiveContext: function() {
         // temps and stack in current context
         var ctx = this.activeContext;
@@ -2474,6 +2496,11 @@ Object.subclass('lib.squeak.vm.Primitives',
         this.vm.newActiveContext(newProc.getPointer(Squeak.Proc_suspendedContext));
         newProc.setPointer(Squeak.Proc_suspendedContext, this.vm.nilObj);
         this.vm.reclaimableContextCount = 0;
+        if (this.vm.breakOnContextChanged || this.vm.breakOnContextReturned) {
+            this.vm.breakOnContextChanged = false;
+            this.vm.breakOnContextReturned = null;
+            this.vm.breakOutOfInterpreter = 'break';
+        }
     },
     pickTopProcess: function() { // aka wakeHighestPriority
         //Return the highest priority process that is ready to run.

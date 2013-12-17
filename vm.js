@@ -366,15 +366,16 @@ Object.subclass('lib.squeak.vm.Image',
             if (next.mark) {
                 next.mark = false;     // unmark for next GC
                 obj = next;
-            } else { // otherwise, drop it
-                var corpse = next;
-                removed.push(corpse);
-                obj.nextObject = corpse.nextObject;
-                // Kludge: point removed object's nextObject to the non-removed object ...
-                corpse.nextObject = obj;
-                // ... so that enumerating will still work, even with a GC in the middle.
-                // However, this could lead to obj being enumerated twice, so we'll fix this
-                // later, after the new objects have been tenured
+            } else { // otherwise, remove it
+                var corpse = next; 
+                obj.nextObject = corpse.nextObject; // drop from list
+                removed.push(corpse);               // remember for relinking
+                corpse.nextObject = obj;            // kludge: the corpse's nextObject
+                // must point into the old space list, so that enumerating will still work,
+                // even with a GC in the middle. So we point it to the surviving obj here.
+                // However, this would lead to obj being enumerated twice (because it preceded
+                // the corpse until now), so we'll relink this later, after the new objects
+                // have been tenured
             }
         }
     },
@@ -391,8 +392,8 @@ Object.subclass('lib.squeak.vm.Image',
         this.lastOldObject = oldObj;
     },
     relinkRemovedObjects: function(removed) {
-        // fix up the nextObject pointers of removed objects
-        // which were set to the previous object in removeUnmarkedOldObjects()
+        // fix up the nextObject pointers of removed objects,
+        // which were set to the preceding object in removeUnmarkedOldObjects()
         for (var i = 0; i < removed.length; i++)
             removed[i].nextObject = removed[i].nextObject.nextObject;
     },
@@ -704,6 +705,7 @@ Object.subclass('lib.squeak.vm.Object',
         if (this.format<2) return this.pointers.length; //indexable fields only
         return this.sqClass.classInstSize(); //0-255
     },
+
 },
 'as class', {
     classInstSize: function() {
@@ -712,7 +714,7 @@ Object.subclass('lib.squeak.vm.Object',
         return ((format >> 10) & 0xC0) + ((format >> 1) & 0x3F) - 1;
     },
     instVarNames: function() {
-        var index = this.pointers.length > 9 ? 3 : 4;
+        var index = this.pointers.length > 9 ? 3 : 4; // index changed in newer images
         return (this.pointers[index].pointers || []).map(function(each) {
             return each.bytesAsString();
         });

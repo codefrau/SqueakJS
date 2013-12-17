@@ -1206,7 +1206,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
         if (newMethod === this.breakOnMethod) {this.breakOutOfInterpreter = 'break'; debugger;}
         if (this.logSends) console.log(this.sendCount + ' ' + this.printMethod(newMethod));
         if (primitiveIndex>0)
-            if (this.tryPrimitive(primitiveIndex, argumentCount))
+            if (this.tryPrimitive(primitiveIndex, argumentCount, newMethod))
                 return;  //Primitive succeeded -- end of story
         var newContext = this.allocateOrRecycleContext(newMethod.methodNeedsLargeFrame());
         var methodNumLits = this.method.methodNumLits();
@@ -1270,7 +1270,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
         this.fetchContextRegisters(this.activeContext);
         this.push(returnValue);
     },
-    tryPrimitive: function(primIndex, argCount) {
+    tryPrimitive: function(primIndex, argCount, newMethod) {
         if ((primIndex > 255) && (primIndex < 520)) {
             if (primIndex >= 264) {//return instvars
                 this.popNandPush(1, this.top().getPointer(primIndex - 264));
@@ -1289,7 +1289,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
             this.popNandPush(1, primIndex - 261); //return -1...2
             return true;
         }
-        var success = this.primHandler.doPrimitive(primIndex, argCount);
+        var success = this.primHandler.doPrimitive(primIndex, argCount, newMethod);
         return success;
     },
     createActualMessage: function(selector, argCount, cls) {
@@ -1696,6 +1696,7 @@ Object.subclass('lib.squeak.vm.Primitives',
         this.display = display;
         this.display.vm = this.vm;
         this.initAtCache();
+        this.initModules();
         this.indexedColors = [
             0xFFFFFFFF, 0xFF000001, 0xFFFFFFFF, 0xFF808080, 0xFFFF0000, 0xFF00FF00, 0xFF0000FF, 0xFF00FFFF,
             0xFFFFFF00, 0xFFFF00FF, 0xFF202020, 0xFF404040, 0xFF606060, 0xFF9F9F9F, 0xFFBFBFBF, 0xFFDFDFDF,
@@ -1729,7 +1730,18 @@ Object.subclass('lib.squeak.vm.Primitives',
             0xFFFF0066, 0xFFFF3366, 0xFFFF6666, 0xFFFF9966, 0xFFFFCC66, 0xFFFFFF66, 0xFFFF0099, 0xFFFF3399, 
             0xFFFF6699, 0xFFFF9999, 0xFFFFCC99, 0xFFFFFF99, 0xFFFF00CC, 0xFFFF33CC, 0xFFFF66CC, 0xFFFF99CC, 
             0xFFFFCCCC, 0xFFFFFFCC, 0xFFFF00FF, 0xFFFF33FF, 0xFFFF66FF, 0xFFFF99FF, 0xFFFFCCFF, 0xFFFFFFFF];
-    }
+    },
+    initModules: function() {
+        this.loadedModules = {};
+        this.externalModules = {};
+        this.builtinModules = {
+            MiscPrimitivePlugin: {
+                exports: {
+                    primitiveStringHash: this.primitiveStringHash.bind(this),
+                },
+            },
+        };
+    },
 },
 'dispatch', {
     quickSendOther: function(rcvr, lobits) {
@@ -1755,7 +1767,7 @@ Object.subclass('lib.squeak.vm.Primitives',
         }
         return false;
     },
-    doPrimitive: function(index, argCount) {
+    doPrimitive: function(index, argCount, newMethod) {
         this.success = true;
         switch (index) {
             case 1: return this.popNandPushIntIfOK(2,this.stackInteger(1) + this.stackInteger(0));  // Integer.add
@@ -1874,7 +1886,7 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 114: this.vm.breakOutOfInterpreter = 'break'; debugger; return true; //primitiveExitToDebugger
             case 115: return false; //TODO primitiveChangeClass					"Blue Book: primitiveOopsLeft"
             case 116: return this.vm.flushMethodCacheForMethod(this.vm.top());
-            case 117: return false; //primitiveExternalCall
+            case 117: return this.doNamedPrimitive(argCount, newMethod); // named prims
             case 118: return false; //TODO primitiveDoPrimitiveWithArgs
             case 119: return this.vm.flushMethodCacheForSelector(this.vm.top());
             case 120: return false; //primitiveCalloutToFFI
@@ -1913,6 +1925,12 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 160: return false; // TODO primitiveAdoptInstance
             case 161: return this.popNandPushIfOK(1, this.charFromInt('/'.charCodeAt(0))); //path delimiter
             case 162: return this.popNandPushIfOK(1, this.vm.nilObj);  // FileDirectory.primLookupEntryIn:index: 
+            case 167: return false; // Processor.yield
+            case 195: return false; // Context.findNextUnwindContextUpTo:
+            case 196: return false; // Context.terminateTo:
+            case 197: return false; // Context.findNextHandlerContextStarting
+            case 198: return false; // MarkUnwindMethod (must fail)
+            case 199: return false; // MarkHandlerMethod (must fail)
             case 230: return this.primitiveRelinquishProcessorForMicroseconds(argCount);
             case 231: return this.primitiveForceDisplayUpdate(argCount);
             case 233: return this.primitiveSetFullScreen(argCount);
@@ -1925,9 +1943,36 @@ Object.subclass('lib.squeak.vm.Primitives',
             case 244: return false; // primStringfindFirstInStringinSetstartingAt
             case 245: return false; // primStringindexOfAsciiinStringstartingAt
             case 246: return false; // primStringfindSubstringinstartingAtmatchTable
+            case 254: return this.primitiveVMParameter(argCount);
         }
         throw "primitive " + index + " not implemented yet";
         return false;
+    },
+    doNamedPrimitive: function(argCount, newMethod) {
+        if (newMethod.pointersSize() < 2) return false;
+        var firstLiteral = newMethod.pointers[1]; // skip method header
+        if (firstLiteral.pointersSize() !== 4) return false;
+        var moduleName = firstLiteral.pointers[0].bytesAsString();
+        var functionName = firstLiteral.pointers[1].bytesAsString();
+        console.log('squeak: named primitive "' + moduleName + '.' + functionName + '"');
+        var module = this.loadedModules[moduleName];
+        if (!module) {
+            if (module !== undefined) return false; // earlier load failed
+            module = this.loadModule(moduleName);
+            this.loadedModules[moduleName] = module;
+        }
+        if (module) {
+            var primitive = module.exports[functionName];
+            if (primitive) return primitive(argCount);
+        }
+        return false;
+    },
+    loadModule: function(moduleName) {
+        var module = this.externalModules[moduleName] || this.builtinModules[moduleName];
+        if (!module || !module.exports) return null;
+        if (module.exports.initializeModule)
+            module.exports.initializeModule(this);
+        return module;
     },
 },
 'stack access', {
@@ -2522,12 +2567,48 @@ Object.subclass('lib.squeak.vm.Primitives',
         return true;
 	},
 },
-'memory', {
+'vm settings', {
     setLowSpaceThreshold: function() {
         var nBytes = this.stackInteger(0);
         if (this.success) this.vm.lowSpaceThreshold = nBytes;
         return this.vm.stackValue(1);
     },
+    primitiveVMParameter: function(argCount) {
+        /* Behaviour depends on argument count:
+		0 args:	return an Array of VM parameter values;
+		1 arg:	return the indicated VM parameter;
+		2 args:	set the VM indicated parameter. */
+		var paramsArraySize = 40;
+		switch (argCount) {
+		    case 0:
+		        var arrayObj = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassArray], paramsArraySize);
+		        arrayObj.pointers = this.vm.fillArray(paramsArraySize, 0);
+		        return this.popNandPushIfOK(1, arrayObj);
+		    case 1:
+		        return this.popNandPushIfOK(2, 0);
+		    case 2:
+		        return this.popNandPushIfOK(3, 0);
+		};
+		return false;
+    },
+},
+'MiscPrimitivePlugin', {
+    primitiveStringHash: function(argCount) {
+        // need to implement this because in older Etoys image the fallback code is wrong
+        var initialHash = this.stackInteger(0);
+        var stringObj = this.stackNonInteger(1);
+        if (!this.success) return false;
+        var stringSize = stringObj.bytesSize();
+        var string = stringObj.bytes;
+    	var hash = initialHash & 0x0FFFFFFF;
+    	for (var i = 0; i < stringSize; i++) {
+    		hash += string[i];
+    		var low = hash & 0x3FFF;
+    		hash = (0x260D * low + ((0x260D * (hash >>> 14) + (0x0065 * low) & 16383) * 16384)) & 0x0FFFFFFF;
+    	}
+    	this.vm.popNandPush(3, hash);
+        return true;
+    }
 },
 'platform', {
     primitiveBeCursor: function(argCount) {

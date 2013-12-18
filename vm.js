@@ -199,8 +199,12 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
     }
 },
 'initializing', {
-    readFromBuffer: function(buffer) {
-        var data = new DataView(buffer),
+    initialize: function(arraybuffer, name) {
+        this.name = name;
+        this.readFromBuffer(arraybuffer);
+    },
+    readFromBuffer: function(arraybuffer) {
+        var data = new DataView(arraybuffer),
             littleEndian = false,
             pos = 0;
         var readWord = function() {

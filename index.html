@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<!--
+Copyright (c) 2013 Bert Freudenberg
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+-->
+<head>
+<title>Standalone SqueakJS</title>
+<script>
+    // these two functions fake the Lively module and class system
+    // ust enough so the loading of vm.js succeeds
+    module = function (moduleName) {
+        return { requires: function() { return this; }, toRun: function(code) { code(); } };
+    };
+    Object.subclass = function(classPath) {
+        var path = classPath.split("."),
+            className = path.pop(),
+            submodule = window;
+        for (var i = 0; i < path.length; i++)
+            submodule = submodule[path[i]] = submodule[path[i]] || {};
+        submodule[className] = function() {
+            this.initialize && this.initialize.apply(this, arguments);
+            return this;
+        };
+        for (var i = 1; i < arguments.length; i++)
+            for (name in arguments[i])
+                submodule[className].prototype[name] = arguments[i][name];
+    };
+    // now for the good stuff
+    window.onload = function() {
+        createDisplay = function() {
+            var canvas = document.getElementsByTagName("canvas")[0],
+                body = document.getElementsByTagName("body")[0];
+            var display = {
+                ctx: canvas.getContext("2d"),
+                width: canvas.width,
+                height: canvas.height,
+                mouseX: 0,
+                mouseY: 0,
+                buttons: 0,
+                keys: [],
+                clipboardString: '',
+                clipboardStringChanged: false,
+            };
+            canvas.onmousedown = function(evt) {
+                display.buttons = display.buttons & ~7 | (4 >> evt.button);
+            };
+            canvas.onmouseup = function(evt) {display.buttons = display.buttons & ~7 };
+            canvas.onmousemove = function(evt) {
+                display.mouseX = evt.layerX;
+                display.mouseY = evt.layerY;
+            };
+            canvas.oncontextmenu = function() {return false};
+            body.onkeypress = function(evt) { display.keys.push(evt.charCode) };
+            body.onkeydown = function(evt) {
+                var code = ({46:127, 8:8, 45:5, 9:9, 13:13, 27:27, 36:1, 35:4,
+                    33:11, 34:12, 37:28, 39:29, 38:30, 40:31})[evt.keyCode];
+                if (code) {display.keys.push(code); return evt.preventDefault()};
+                var modifier = ({16:8, 17:16, 91:64, 18:64})[evt.keyCode];
+                if (modifier) {
+                    display.buttons |= modifier;
+                    if (modifier > 8) display.keys = [];
+                    return evt.preventDefault();
+                }
+                if ((evt.metaKey || evt.altKey) && evt.which) {
+                    code = evt.which;
+                    if (code >= 65 && code <= 90) if (!evt.shiftKey) code += 32;
+                    else if (evt.keyIdentifier && evt.keyIdentifier.slice(0,2) == 'U+')
+                        code = parseInt(evt.keyIdentifier.slice(2), 16);
+                    display.keys.push(code)
+                    return evt.preventDefault();
+                }
+            };
+            body.onkeyup = function(evt) {
+                var modifier = ({16:8, 17:16, 91:64, 18:64})[evt.keyCode];
+                if (modifier) { display.buttons &= ~modifier; return evt.preventDefault(); }
+            };
+            return display;
+        };
+        loadAndRunImage = function(url) {
+            var rq = new XMLHttpRequest();
+            rq.open('GET', url, true);
+            rq.responseType = 'arraybuffer';
+            rq.onload = function(e) {
+                var image = new users.bert.SqueakJS.vm.Image(rq.response, url);
+                var vm = new users.bert.SqueakJS.vm.Interpreter(image, createDisplay());
+                var run = function() {
+                    vm.interpret(20);
+                    window.setTimeout(run, 0);
+                };
+                run();
+            };
+            rq.send();
+        };
+        loadAndRunImage('mini.image');
+    };    
+    </script>
+    <script src="vm.js"></script>
+</head>
+<body style="background-color: #EEE; font-family: sans-serif;">
+    <h1>Standalone SqueakJS</h1>
+    <canvas width="640" height="480"></canvas>
+    <p>This page just demonstrates that SqueakJS also works outside Lively.
+    For the full interface, please visit the <a href= "http://lively-web.org/users/bert/squeak.html">Lively Squeak</a> page.
+    </p>
+</body>
+</html>

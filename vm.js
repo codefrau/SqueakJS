@@ -789,7 +789,22 @@ Object.subclass('lib.squeak.vm.Object',
     	    return length - flagByte - 1;
     	// Normal 4-byte source pointer
     	return length - 4;
-    }
+    },
+},
+'as context',
+{
+    contextHome: function() {
+        return this.contextIsBlock() ? this.pointers[Squeak.BlockContext_home] : this;
+    },
+    contextIsBlock: function() {
+        return typeof this.pointers[Squeak.BlockContext_argumentCount] === 'number';
+    },
+    contextMethod: function() {
+        return this.contextHome().pointers[Squeak.Context_method];
+    },
+    contextSender: function() {
+        return this.pointers[Squeak.Context_sender];
+    },
 });
 
 Object.subclass('lib.squeak.vm.Interpreter',
@@ -1209,6 +1224,10 @@ Object.subclass('lib.squeak.vm.Interpreter',
         this.sendCount++;
         if (newMethod === this.breakOnMethod) this.breakOutOfInterpreter = 'break';
         if (this.logSends) console.log(this.sendCount + ' ' + this.printMethod(newMethod));
+        if (this.breakOnContextChanged) {
+            this.breakOnContextChanged = false;
+            this.breakOutOfInterpreter = 'break';
+        }
         if (primitiveIndex>0)
             if (this.tryPrimitive(primitiveIndex, argumentCount, newMethod))
                 return;  //Primitive succeeded -- end of story
@@ -1233,10 +1252,6 @@ Object.subclass('lib.squeak.vm.Interpreter',
         this.storeContextRegisters();
         /////// Woosh //////
         this.activeContext = newContext; //We're off and running...
-        if (this.breakOnContextChanged) {
-            this.breakOnContextChanged = false;
-            this.breakOutOfInterpreter = 'break';
-        }
         //Following are more efficient than fetchContextRegisters() in newActiveContext()
         this.homeContext = newContext;
         this.method = newMethod;
@@ -1601,6 +1616,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
     printMethod: function(aMethod) {
         // return a 'class>>selector' description for the method
         // in old images this is expensive, we have to search all classes
+        if (!aMethod) aMethod = this.activeContext.contextMethod();
         var found;
         this.allMethodsDo(function(classObj, methodObj, selectorObj) {
             if (methodObj === aMethod)
@@ -1633,7 +1649,6 @@ Object.subclass('lib.squeak.vm.Interpreter',
             }
         }
     },
-
     printStack: function(ctx, limit) {
         // both args are optional
         if (typeof ctx == "number") {limit = ctx; ctx = null;}
@@ -1666,7 +1681,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
         this.breakOnContextChanged = false;
         this.breakOnContextReturned = this.activeContext;
     },
-    breakOnSend: function() {
+    breakOnSendOrReturn: function() {
         this.breakOnContextChanged = true;
         this.breakOnContextReturned = null;
     },
@@ -1711,6 +1726,40 @@ Object.subclass('lib.squeak.vm.Interpreter',
         var printer = new lib.squeak.vm.InstructionPrinter(aMethod, this);
         return printer.printInstructions(optionalIndent, optionalHighlight, optionalPC);
     },
+    willSendOrReturn: function() {
+        // Answer whether the next bytecode corresponds to a Smalltalk
+        // message send or return
+        var byte = this.method.bytes[this.pc];
+        if (byte >= 120 && byte <= 125) return true; // return
+        /* 
+        if (byte < 96) return false;    // 96-103 storeAndPopReceiverVariableBytecode
+        if (byte <= 111) return true;   // 104-111 storeAndPopTemporaryVariableBytecode
+        if (byte == 129        // 129 extendedStoreBytecode
+            || byte == 130     // 130 extendedStoreAndPopBytecode
+            || byte == 141	   // 141 storeRemoteTempLongBytecode
+            || byte == 142	   // 142 storeAndPopRemoteTempLongBytecode
+            || (byte == 132 && 
+                this.method.bytes[this.pc + 1] >= 160)) // 132 doubleExtendedDoAnythingBytecode
+                    return true;
+        */
+        if (byte < 131 || byte == 200) return false;
+        if (byte >= 176) return true; // special send or short send
+        if (byte <= 134) {         // long sends
+			// long form support demands we check the selector
+			var litIndex;
+			if (byte === 132) {
+                if ((this.method.bytes[this.pc + 1] >> 5) > 1) return false;
+                litIndex = this.method.bytes[this.pc + 2];
+			} else
+                litIndex = this.method.bytes[this.pc + 1] & (byte === 134 ? 63 : 31);
+            var selectorObj = this.method.pointers[litIndex + 1];
+            if (selectorObj.bytesAsString() != 'blockCopy:') return true;
+        }
+        return false;
+    },
+
+
+
 });
 
 Object.subclass('lib.squeak.vm.Primitives',

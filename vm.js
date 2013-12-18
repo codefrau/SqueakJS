@@ -1,4 +1,4 @@
-module('lib.squeak.vm').requires().toRun(function() {
+module('users.bert.SqueakJS.vm').requires().toRun(function() {
 /*
  * Copyright (c) 2013 Bert Freudenberg
  *
@@ -165,13 +165,13 @@ Squeak = {
     Keyboard_All: 8 + 16 + 32 + 64,
 };
 
-Object.subclass('lib.squeak.vm.Image',
+Object.subclass('users.bert.SqueakJS.vm.Image',
 'about', {
     about: function() {
     /*
     Object Format
     =============
-    Each Squeak object is a lib.squeak.vm.Object, only SmallIntegers are JS numbers.
+    Each Squeak object is a users.bert.SqueakJS.vm.Object, only SmallIntegers are JS numbers.
     Instance variables/fields reference other objects directly via the "pointers" property.
     {
         sqClass: reference to class object
@@ -272,7 +272,7 @@ Object.subclass('lib.squeak.vm.Image',
             var bits = readWords(nWords);
             ptr += nWords * 4;
 
-            var object = new lib.squeak.vm.Object();
+            var object = new users.bert.SqueakJS.vm.Object();
             object.initFromImage(classInt, format, hash, bits);
             this.registerObject(object);
             if (prevObj) prevObj.nextObject = object;
@@ -408,13 +408,13 @@ Object.subclass('lib.squeak.vm.Image',
         return this.lastHash & 0xFFF;
     },
     instantiateClass: function(aClass, indexableSize, filler) {
-        var newObject = new lib.squeak.vm.Object();
+        var newObject = new users.bert.SqueakJS.vm.Object();
         var hash = this.registerObject(newObject);
         newObject.initInstanceOf(aClass, indexableSize, hash, filler);
         return newObject;
     },
     clone: function(object) {
-        var newObject = new lib.squeak.vm.Object();
+        var newObject = new users.bert.SqueakJS.vm.Object();
         var hash = this.registerObject(newObject);
         newObject.initAsClone(object, hash);
         return newObject;
@@ -494,7 +494,7 @@ Object.subclass('lib.squeak.vm.Image',
     },
 });
 
-Object.subclass('lib.squeak.vm.Object',
+Object.subclass('users.bert.SqueakJS.vm.Object',
 'initialization', {
     initInstanceOf: function(aClass, indexableSize, hash, filler) {
         this.sqClass = aClass;
@@ -647,7 +647,7 @@ Object.subclass('lib.squeak.vm.Object',
 'printing', {
     toString: function() {
         return Strings.format('sqObj(%s)',
-            this.sqClass.constructor == lib.squeak.vm.Object ? this.sqInstName() : this.sqClass);
+            this.sqClass.constructor == users.bert.SqueakJS.vm.Object ? this.sqInstName() : this.sqClass);
     },
     bytesAsString: function() {
         if (!this.bytes) return '';
@@ -807,14 +807,14 @@ Object.subclass('lib.squeak.vm.Object',
     },
 });
 
-Object.subclass('lib.squeak.vm.Interpreter',
+Object.subclass('users.bert.SqueakJS.vm.Interpreter',
 'initialization', {
     initialize: function(image, display) {
         console.log('squeak: initializing interpreter');
         this.image = image;
         this.image.vm = this;
         this.initConstants();
-        this.primHandler = new lib.squeak.vm.Primitives(this, display);
+        this.primHandler = new users.bert.SqueakJS.vm.Primitives(this, display);
         this.loadImageState();
         this.initVMState();
         this.loadInitialContext();
@@ -1723,7 +1723,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
     },
     printByteCodes: function(aMethod, optionalIndent, optionalHighlight, optionalPC) {
         if (!aMethod) aMethod = this.method;
-        var printer = new lib.squeak.vm.InstructionPrinter(aMethod, this);
+        var printer = new users.bert.SqueakJS.vm.InstructionPrinter(aMethod, this);
         return printer.printInstructions(optionalIndent, optionalHighlight, optionalPC);
     },
     willSendOrReturn: function() {
@@ -1762,7 +1762,7 @@ Object.subclass('lib.squeak.vm.Interpreter',
 
 });
 
-Object.subclass('lib.squeak.vm.Primitives',
+Object.subclass('users.bert.SqueakJS.vm.Primitives',
 'initialization', {
     initialize: function(vm, display) {
         this.vm = vm;
@@ -2714,7 +2714,7 @@ Object.subclass('lib.squeak.vm.Primitives',
 	},
 	primitiveCopyBits: function(argCount) { // no rcvr class check, to allow unknown subclasses (e.g. under Turtle)
         var bitbltObj = this.vm.stackValue(argCount);
-        var bitblt = new lib.squeak.vm.BitBlt(this.vm);
+        var bitblt = new users.bert.SqueakJS.vm.BitBlt(this.vm);
         if (!bitblt.loadBitBlt(bitbltObj)) return false;
         bitblt.copyBits();
         if (bitblt.combinationRule === 22 || bitblt.combinationRule === 32)
@@ -2758,7 +2758,7 @@ Object.subclass('lib.squeak.vm.Primitives',
     },
     redrawFullDisplay: function() {
         var displayObj = this.vm.specialObjects[Squeak.splOb_TheDisplay];
-        var display = (new lib.squeak.vm.BitBlt()).loadForm(displayObj);
+        var display = (new users.bert.SqueakJS.vm.BitBlt()).loadForm(displayObj);
         var bounds = {x: 0, y: 0, w: display.width, h: display.height};
         this.showOnDisplay(display, bounds);
     },
@@ -2869,7 +2869,7 @@ Object.subclass('lib.squeak.vm.Primitives',
         return this.pos32BitIntFor(seconds);
     },
 });
-Object.subclass('lib.squeak.vm.BitBlt',
+Object.subclass('users.bert.SqueakJS.vm.BitBlt',
 'initialization', {
     initialize: function(vm) {
         this.vm = vm;
@@ -3417,7 +3417,7 @@ Object.subclass('lib.squeak.vm.BitBlt',
     },
 });
 
-Object.subclass('lib.squeak.vm.InstructionPrinter',
+Object.subclass('users.bert.SqueakJS.vm.InstructionPrinter',
 'initialization', {
     initialize: function(method, vm) {
         this.method = method;
@@ -3431,7 +3431,7 @@ Object.subclass('lib.squeak.vm.InstructionPrinter',
         this.highlight = highlight;     // prepend to highlighted line
         this.highlightPC = highlightPC; // PC of highlighted line
         this.result = '';
-        this.scanner = new lib.squeak.vm.InstructionStream(this.method, this.vm);
+        this.scanner = new users.bert.SqueakJS.vm.InstructionStream(this.method, this.vm);
         this.oldPC = this.scanner.pc;
         var end = this.method.methodEndPC();
     	while (this.scanner.pc < end)
@@ -3519,7 +3519,7 @@ Object.subclass('lib.squeak.vm.InstructionPrinter',
     },
 });
 
-Object.subclass('lib.squeak.vm.InstructionStream',
+Object.subclass('users.bert.SqueakJS.vm.InstructionStream',
 'initialization', {
     initialize: function(method, vm) {
         this.vm = vm;

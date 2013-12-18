@@ -1,6 +1,6 @@
-module('lib.squeak.ui').requires("lively.data.FileUpload").toRun(function() {
+module('users.bert.SqueakJS.ui').requires("lively.data.FileUpload").toRun(function() {
 
-lively.data.FileUpload.Handler.subclass('lib.squeak.ui.SqueakLoader', {
+lively.data.FileUpload.Handler.subclass('users.bert.SqueakJS.ui.SqueakLoader', {
     handles: function(file) {
         return file.type == 'application/squeak-image' || file.name.match(/\.image$/);
     },

@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 -->
 <head>
-<title>Standalone SqueakJS</title>
+<title>SqueakJS</title>
 <script>
     // these two functions fake the Lively module and class system
     // ust enough so the loading of vm.js succeeds
@@ -102,8 +102,8 @@ THE SOFTWARE.
                 var image = new users.bert.SqueakJS.vm.Image(rq.response, url);
                 var vm = new users.bert.SqueakJS.vm.Interpreter(image, createDisplay());
                 var run = function() {
-                    vm.interpret(20);
-                    window.setTimeout(run, 0);
+                    var ms = vm.interpret(20);
+                    window.setTimeout(run, ms);
                 };
                 run();
             };
@@ -115,10 +115,12 @@ THE SOFTWARE.
     <script src="vm.js"></script>
 </head>
 <body style="background-color: #EEE; font-family: sans-serif;">
-    <h1>Standalone SqueakJS</h1>
+    <h1>SqueakJS</h1>
     <canvas width="640" height="480"></canvas>
-    <p>This page just demonstrates that SqueakJS also works outside Lively.
-    For the full interface, please visit the <a href= "http://lively-web.org/users/bert/squeak.html">Lively Squeak</a> page.
+    <p>SqueakJS is a <a href="http://squeak.org/" target="_blank">Squeak</a> VM written in pure JavaScript by Bert Freudenberg.
+    It is normally developed and used in the <a href="http://lively-web.org/" target="_blank">Lively</a> environment. This page demonstrates that SqueakJS also works outside Lively.
+    For the full interface, please visit the <a href= "http://lively-web.org/users/bert/squeak.html">Lively SqueakJS</a> page.
     </p>
+    <a href="https://github.com/bertfreudenberg/SqueakJS" target="_blank"><img style="position: absolute; top: 0; right: 0; border: 0;" src="https://s3.amazonaws.com/github/ribbons/forkme_right_gray_6d6d6d.png" alt="Fork me on GitHub"></a>
 </body>
 </html>

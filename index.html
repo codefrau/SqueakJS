@@ -64,8 +64,8 @@ THE SOFTWARE.
             };
             canvas.onmouseup = function(evt) {display.buttons = display.buttons & ~7 };
             canvas.onmousemove = function(evt) {
-                display.mouseX = evt.layerX;
-                display.mouseY = evt.layerY;
+                display.mouseX = evt.pageX - this.offsetLeft;
+                display.mouseY = evt.pageY - this.offsetTop;
             };
             canvas.oncontextmenu = function() {return false};
             body.onkeypress = function(evt) { display.keys.push(evt.charCode) };

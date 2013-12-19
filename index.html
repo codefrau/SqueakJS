@@ -25,9 +25,12 @@ THE SOFTWARE.
 <title>SqueakJS</title>
 <script>
     // these two functions fake the Lively module and class system
-    // ust enough so the loading of vm.js succeeds
+    // just enough so the loading of vm.js succeeds
     module = function (moduleName) {
-        return { requires: function() { return this; }, toRun: function(code) { code(); } };
+        return {
+            requires: function() { return this; },
+            toRun: function(code) { code(); }
+        };
     };
     Object.subclass = function(classPath) {
         var path = classPath.split("."),
@@ -35,19 +38,21 @@ THE SOFTWARE.
             submodule = window;
         for (var i = 0; i < path.length; i++)
             submodule = submodule[path[i]] = submodule[path[i]] || {};
-        submodule[className] = function() {
-            this.initialize && this.initialize.apply(this, arguments);
+        var aClass = function() {
+            if (this.initialize) this.initialize.apply(this, arguments);
             return this;
         };
         for (var i = 1; i < arguments.length; i++)
             for (name in arguments[i])
-                submodule[className].prototype[name] = arguments[i][name];
+                aClass.prototype[name] = arguments[i][name];
+        submodule[className] = aClass;
     };
     // now for the good stuff
     window.onload = function() {
         createDisplay = function() {
-            var canvas = document.getElementsByTagName("canvas")[0],
-                body = document.getElementsByTagName("body")[0];
+            var canvas = document.getElementsByTagName("canvas")[0];
+            canvas.contentEditable = true;
+            canvas.focus();
             var display = {
                 ctx: canvas.getContext("2d"),
                 width: canvas.width,
@@ -60,16 +65,38 @@ THE SOFTWARE.
                 clipboardStringChanged: false,
             };
             canvas.onmousedown = function(evt) {
+                canvas.focus();
                 display.buttons = display.buttons & ~7 | (4 >> evt.button);
             };
-            canvas.onmouseup = function(evt) {display.buttons = display.buttons & ~7 };
+            canvas.onmouseup = function(evt) {
+                display.buttons = display.buttons & ~7;
+            };
             canvas.onmousemove = function(evt) {
                 display.mouseX = evt.pageX - this.offsetLeft;
                 display.mouseY = evt.pageY - this.offsetTop;
             };
-            canvas.oncontextmenu = function() {return false};
-            body.onkeypress = function(evt) { display.keys.push(evt.charCode) };
-            body.onkeydown = function(evt) {
+            canvas.oncontextmenu = function() {
+                return false;
+            };
+            canvas.ontouchstart = function(evt) {
+                canvas.focus();
+                display.buttons = 4;
+                canvas.ontouchmove(evt);
+            };
+            canvas.ontouchmove = function(evt) {
+                canvas.onmousemove(evt.touches[0]);
+            };
+            canvas.ontouchend = function(evt) {
+                display.buttons = 0;
+                canvas.ontouchmove(evt);
+            };
+            canvas.ontouchcancel = function(evt) {
+                display.buttons = 0;
+            };
+            canvas.onkeypress = function(evt) {
+                display.keys.push(evt.charCode);
+            };
+            canvas.onkeydown = function(evt) {
                 var code = ({46:127, 8:8, 45:5, 9:9, 13:13, 27:27, 36:1, 35:4,
                     33:11, 34:12, 37:28, 39:29, 38:30, 40:31})[evt.keyCode];
                 if (code) {display.keys.push(code); return evt.preventDefault()};
@@ -88,7 +115,7 @@ THE SOFTWARE.
                     return evt.preventDefault();
                 }
             };
-            body.onkeyup = function(evt) {
+            canvas.onkeyup = function(evt) {
                 var modifier = ({16:8, 17:16, 91:64, 18:64})[evt.keyCode];
                 if (modifier) { display.buttons &= ~modifier; return evt.preventDefault(); }
             };
@@ -96,7 +123,7 @@ THE SOFTWARE.
         };
         loadAndRunImage = function(url) {
             var rq = new XMLHttpRequest();
-            rq.open('GET', url, true);
+            rq.open('GET', url);
             rq.responseType = 'arraybuffer';
             rq.onload = function(e) {
                 var image = new users.bert.SqueakJS.vm.Image(rq.response, url);

@@ -52,6 +52,10 @@ THE SOFTWARE.
     };
     // now for the good stuff
     window.onload = function() {
+        if (navigator.standalone) {
+            document.body.style.margin = 0;
+            ['h1','a','img','p'].forEach(function(n){document.getElementsByTagName(n)[0].style.display="none"});
+        }
         var canvas = document.getElementsByTagName("canvas")[0];
         function createDisplay() {
             var display = {

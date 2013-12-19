@@ -52,10 +52,8 @@ THE SOFTWARE.
     };
     // now for the good stuff
     window.onload = function() {
-        createDisplay = function() {
-            var canvas = document.getElementsByTagName("canvas")[0];
-            canvas.contentEditable = true;
-            canvas.focus();
+        var canvas = document.getElementsByTagName("canvas")[0];
+        function createDisplay() {
             var display = {
                 ctx: canvas.getContext("2d"),
                 width: canvas.width,
@@ -124,11 +122,17 @@ THE SOFTWARE.
             };
             return display;
         };
-        loadAndRunImage = function(url) {
+        function loadAndRunImage(url) {
+            var progress = document.getElementsByTagName("progress")[0];
             var rq = new XMLHttpRequest();
             rq.open('GET', url);
             rq.responseType = 'arraybuffer';
+            rq.onprogress = function(e) {
+                if (e.lengthComputable) progress.value = 100 * e.loaded / e.total;
+            }
             rq.onload = function(e) {
+                progress.style.display = "none";
+                canvas.focus();
                 var image = new users.bert.SqueakJS.vm.Image(rq.response, url);
                 var vm = new users.bert.SqueakJS.vm.Interpreter(image, createDisplay());
                 var run = function() {
@@ -146,7 +150,8 @@ THE SOFTWARE.
 </head>
 <body style="background-color: #EEE; font-family: sans-serif;">
     <h1>SqueakJS</h1>
-    <canvas width="640" height="480"></canvas>
+    <progress value="0" max="100" style="vertical-align:top">Loading image ...</progress>
+    <canvas width="640" height="480" contenteditable="true"></canvas>
     <p>SqueakJS is a <a href="http://squeak.org/" target="_blank">Squeak</a> VM written in pure JavaScript by Bert Freudenberg.
     It is normally developed and used in the <a href="http://lively-web.org/" target="_blank">Lively</a> environment. This page demonstrates that SqueakJS also works outside Lively.
     For the full interface, please visit the <a href= "http://lively-web.org/users/bert/squeak.html">Lively SqueakJS</a> page.

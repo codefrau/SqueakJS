@@ -52,11 +52,15 @@ THE SOFTWARE.
     };
     // now for the good stuff
     window.onload = function() {
+        var canvas = document.getElementsByTagName("canvas")[0];
         if (navigator.standalone) {
             document.body.style.margin = 0;
+            document.body.style.backgroundColor = 'black';
             ['h1','a','img','p'].forEach(function(n){document.getElementsByTagName(n)[0].style.display="none"});
+            var scale = screen.width / canvas.width;
+            var head = document.getElementsByTagName("head")[0];
+            head.innerHTML += '<meta name="viewport" content="initial-scale=' + scale + '">';
         }
-        var canvas = document.getElementsByTagName("canvas")[0];
         function createDisplay() {
             var display = {
                 ctx: canvas.getContext("2d"),

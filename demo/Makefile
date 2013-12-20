@@ -11,11 +11,10 @@ OTHER=icon.png
 $(MANIFEST): Makefile $(PUB) $(CACHED)
 	@rm -f $@
 	@echo "CACHE MANIFEST" > $@
-	@date "+# Version: %+" | tee -a $@
+	@stat -f '# Version: %Sm' `ls -t $(CACHED) | head -n1` | tee -a $@
 	@echo "CACHE:" >> $@
 	@for f in $(CACHED) ; do echo $$f >> $@ ; done
 
 $(PUB): $(OTHER) $(CACHED)
 	@if [ ! -d $@ ] ; then mkdir -p $@ ; fi
 	@for f in $^ ; do install -pvm 444 $$f $@/$$f ; done
-

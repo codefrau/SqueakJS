@@ -24,7 +24,7 @@ THE SOFTWARE.
 <head>
 <title>SqueakJS</title>
 <link rel="icon" type="image/png" href="icon.png">
-<link rel="apple-touch-icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png" sizes="152x152">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <script>
     // these two functions fake the Lively module and class system
@@ -158,14 +158,35 @@ THE SOFTWARE.
     </script>
     <script src="vm.js"></script>
 </head>
-<body style="background-color: #EEE; font-family: sans-serif;">
+<style type="text/css">
+body {
+    background-color: #EEE;
+    font-family: sans-serif;
+}
+progress {
+    vertical-align: top;
+}
+canvas {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+img {
+    position: absolute;
+    top: 0;
+    right: 0;
+    border: 0;
+}
+</style>
+<body>
     <h1>SqueakJS</h1>
-    <progress value="0" max="100" style="vertical-align:top">Loading image ...</progress>
+    <progress value="0" max="100">Loading image ...</progress>
     <canvas width="640" height="480" contenteditable="true"></canvas>
     <p>SqueakJS is a <a href="http://squeak.org/" target="_blank">Squeak</a> VM written in pure JavaScript by Bert Freudenberg.
-    It is normally developed and used in the <a href="http://lively-web.org/" target="_blank">Lively</a> environment. This page demonstrates that SqueakJS also works outside Lively.
+    It is normally developed and used in the <a href="http://lively-web.org/" target="_blank">Lively</a> environment.
+    This page demonstrates that SqueakJS also works outside Lively (and e.g. on an iPad).
     For the full interface, please visit the <a href= "http://lively-web.org/users/bert/squeak.html">Lively SqueakJS</a> page.
     </p>
-    <a href="https://github.com/bertfreudenberg/SqueakJS" target="_blank"><img style="position: absolute; top: 0; right: 0; border: 0;" src="https://s3.amazonaws.com/github/ribbons/forkme_right_gray_6d6d6d.png" alt="Fork me on GitHub"></a>
+    <a href="https://github.com/bertfreudenberg/SqueakJS" target="_blank"><img src="https://s3.amazonaws.com/github/ribbons/forkme_right_gray_6d6d6d.png" alt="Fork me on GitHub"></a>
 </body>
 </html>

@@ -307,6 +307,10 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         splObjs[Squeak.splOb_FalseObject].isFalse = true;
         splObjs[Squeak.splOb_ClassFloat].isFloatClass = true;
         this.compactClasses = this.specialObjectsArray.pointers[Squeak.splOb_CompactClasses].pointers;
+        Object.defineProperty(Number.prototype, 'sqInstName', {
+            enumerable: false,
+            value: function() { return this.toString() }
+        });
     }
 
 },

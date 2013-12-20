@@ -200,6 +200,7 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
 },
 'initializing', {
     initialize: function(arraybuffer, name) {
+        this.totalMemory = 100000000; 
         this.name = name;
         this.readFromBuffer(arraybuffer);
     },
@@ -297,6 +298,7 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         this.lastOldObject = prevObj;
         this.oldSpaceCount = this.newSpaceCount;
         this.newSpaceCount = 0; 
+        this.oldSpaceBytes = endOfMemory;
      },
     decorateKnownObjects: function() {
         var splObjs = this.specialObjectsArray.pointers;
@@ -304,13 +306,14 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         splObjs[Squeak.splOb_TrueObject].isTrue = true;
         splObjs[Squeak.splOb_FalseObject].isFalse = true;
         splObjs[Squeak.splOb_ClassFloat].isFloatClass = true;
+        this.compactClasses = this.specialObjectsArray.pointers[Squeak.splOb_CompactClasses].pointers;
     }
 
 },
 'garbage collection', {
     partialGC: function() {
         // no partial GC needed since new space uses the Javascript GC
-        return 1000000;
+        return this.totalMemory - this.oldSpaceBytes;
     },
     fullGC: function() {
         // Old space is a linked list of objects - each object has an "nextObject" reference.
@@ -325,12 +328,10 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         var removedObjects = this.removeUnmarkedOldObjects();
         this.appendToOldObjects(newObjects);
         this.relinkRemovedObjects(removedObjects);
-        var garbageCount = removedObjects.length           // reclaimed in old space
-            + (this.newSpaceCount - newObjects.length);    // reclaimed in new space
         this.oldSpaceCount += newObjects.length - removedObjects.length;
         this.newSpaceCount = 0;
         this.gcCount++;
-        return 1000000 + garbageCount; // free space
+        return this.totalMemory - this.oldSpaceBytes;
     },
     markReachableObjects: function() {
         // Visit all reachable objects and mark them.
@@ -373,6 +374,7 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
             } else { // otherwise, remove it
                 var corpse = next; 
                 obj.nextObject = corpse.nextObject; // drop from list
+                this.oldSpaceBytes -= corpse.totalBytes(this.compactClasses);
                 removed.push(corpse);               // remember for relinking
                 corpse.nextObject = obj;            // kludge: the corpse's nextObject
                 // must point into the old space list, so that enumerating will still work,
@@ -392,6 +394,7 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
             newObj.mark = false;
             oldObj.nextObject = newObj;
             oldObj = newObj;
+            this.oldSpaceBytes += newObj.totalBytes(this.compactClasses);
         }
         this.lastOldObject = oldObj;
     },
@@ -709,7 +712,15 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         if (this.format<2) return this.pointers.length; //indexable fields only
         return this.sqClass.classInstSize(); //0-255
     },
-
+    totalBytes: function(compactClasses) { // size in bytes this object would take up in image snapshot
+        var nWords =
+            this.words ? this.words.length :
+            this.isFloat ? 2 :
+            this.pointers ? this.pointers.length : 0;
+        if (this.bytes) nWords += (this.bytes.length + 3) / 4 | 0; 
+        var headerWords = nWords > 63 ? 3 : compactClasses.indexOf(this.sqClass) >= 0 ? 1 : 2;
+        return (headerWords + nWords) * 4;
+    },
 },
 'as class', {
     classInstSize: function() {

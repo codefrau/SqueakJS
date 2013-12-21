@@ -5,8 +5,7 @@
 
 PUB=../gh-pages/demo
 MANIFEST=$(PUB)/offline.appcache
-CACHED=../vm.js simple.html simple.css simple.js mini.image add2home.css add2home.js
-OTHER=icon.png
+CACHED=../vm.js simple.html simple.css simple.js mini.image icon.png add2home.css add2home.js gh-fork-ribbon.css
 
 $(MANIFEST): Makefile $(PUB) $(CACHED)
 	@rm -f $@
@@ -15,6 +14,6 @@ $(MANIFEST): Makefile $(PUB) $(CACHED)
 	@echo "CACHE:" >> $@
 	@for f in $(CACHED) ; do echo $$f >> $@ ; done
 
-$(PUB): $(OTHER) $(CACHED)
+$(PUB): $(CACHED)
 	@if [ ! -d $@ ] ; then mkdir -p $@ ; fi
 	@for f in $^ ; do install -pvm 444 $$f $@/$$f ; done

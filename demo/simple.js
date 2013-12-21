@@ -59,7 +59,7 @@ window.onload = function() {
     if (navigator.standalone) {
         document.body.style.margin = 0;
         document.body.style.backgroundColor = 'black';
-        ['h1','a','img','p'].forEach(function(n){document.getElementsByTagName(n)[0].style.display="none"});
+        ['h1','p','div'].forEach(function(n){document.getElementsByTagName(n)[0].style.display="none"});
         var scale = screen.width / canvas.width;
         var head = document.getElementsByTagName("head")[0];
         head.innerHTML += '<meta name="viewport" content="initial-scale=' + scale + '">';

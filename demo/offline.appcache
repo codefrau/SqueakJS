@@ -1,10 +1,12 @@
 CACHE MANIFEST
-# Version: Dec 20 20:56:45 2013
+# Version: Dec 21 01:54:06 2013
 CACHE:
 ../vm.js
 simple.html
 simple.css
 simple.js
 mini.image
+icon.png
 add2home.css
 add2home.js
+gh-fork-ribbon.css

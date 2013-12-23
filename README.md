@@ -16,7 +16,10 @@ Running locally
 **Without Lively (simpler)**
 
 * download and unpack the [ZIP archive][zip] (or clone the [github repo][repo])
-* serve the SqueakJS directory using a local web server
+* serve the SqueakJS directory using a local web server.
+  If you have python try out something like
+  ```python
+  python -m SimpleHTTPServer 9090```
 * in your web browser, open the SqueakJS/demo/simple.html file
 
 Now Squeak should be running.

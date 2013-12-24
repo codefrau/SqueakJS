@@ -1248,7 +1248,7 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
             this.breakOnContextChanged = false;
             this.breakOutOfInterpreter = 'break';
         }
-        if (primitiveIndex>0)
+        if (primitiveIndex > 0)
             if (this.tryPrimitive(primitiveIndex, argumentCount, newMethod))
                 return;  //Primitive succeeded -- end of story
         var newContext = this.allocateOrRecycleContext(newMethod.methodNeedsLargeFrame());
@@ -1941,7 +1941,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 76: return false; // primitiveStoreStackp (Blue Book: primitiveAsObject)
             case 77: return this.popNandPushIfOK(1, this.someInstanceOf(this.stackNonInteger(0))); // Class.someInstance
             case 78: return this.popNandPushIfOK(1, this.nextInstanceAfter(this.stackNonInteger(0))); // Object.nextInstance
-            case 79: return this.primitiveNewMethod(); // Compiledmethod.new
+            case 79: return this.primitiveNewMethod(argCount); // Compiledmethod.new
             case 80: return this.popNandPushIfOK(2,this.doBlockCopy()); // blockCopy:
             case 81: return this.primitiveBlockValue(argCount); // BlockContext.value
             case 82: return this.primitiveValueWithArgs(argCount); // BlockContext.valueWithArguments:

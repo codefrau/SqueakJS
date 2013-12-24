@@ -25,7 +25,7 @@ var SimplePlugin = function() {
         }
         if (!result) return false; // fail
         var resultObj = proxy.makeStString(result);
-        proxy.vm.popNandPush(1, resultObj);
+        proxy.vm.popNandPush(1 + argCount, resultObj);
         return true; // success
     };
 

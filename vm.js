@@ -163,6 +163,12 @@ Squeak = {
     Keyboard_Cmd: 64,
     Mouse_All: 1 + 2 + 4,
     Keyboard_All: 8 + 16 + 32 + 64,
+    
+    // External modules
+    externalModules: {},
+    registerExternalModule: function(name, module) {
+        this.externalModules[name] = module;
+    },
 };
 
 Object.subclass('users.bert.SqueakJS.vm.Image',
@@ -2061,7 +2067,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         return false;
     },
     loadModule: function(moduleName) {
-        var module = this.externalModules[moduleName] || this.builtinModules[moduleName];
+        var module = Squeak.externalModules[moduleName] || this.builtinModules[moduleName];
         if (!module || !module.exports) return null;
         if (module.exports.initializeModule)
             module.exports.initializeModule(this);

@@ -351,6 +351,7 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         var newObjects = [];
         while (todo.length > 0) {
             var object = todo.pop();
+            if (object.mark) continue;             // objects are added to todo more than once 
             if (!object.nextObject && object !== this.lastOldObject)       // it's a new object
                 newObjects.push(object);
             object.mark = true;           // mark it

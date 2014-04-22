@@ -1050,19 +1050,22 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
                 this.send(this.method.methodGetSelector(b&0xF), 2, false); break;
         }
     },
-    interpret: function(forMilliseconds) {
+    interpret: function(forMilliseconds, thenDo) {
         // run until idle, but at most for a couple milliseconds
         // answer milliseconds to sleep (until next timer wakeup)
         // or 'break' if reached breakpoint
+        // call thenDo with that result when done
         this.isIdle = false;
         this.breakOutOfInterpreter = false;
         this.breakOutTick = this.lastTick + (forMilliseconds || 500);
         while (!this.breakOutOfInterpreter)
             this.interpretOne();
-        if (this.breakOutOfInterpreter == 'break') return 'break';
-        if (!this.isIdle) return 0;
-        if (!this.nextWakeupTick) return 'sleep'; // all processes waiting
-        return Math.max(0, this.nextWakeupTick - this.primHandler.millisecondClockValue());
+        var result = this.breakOutOfInterpreter == 'break' ? 'break'
+            : !this.isIdle ? 0
+            : !this.nextWakeupTick ? 'sleep'        // all processes waiting
+            : Math.max(0, this.nextWakeupTick - this.primHandler.millisecondClockValue());
+        if (thenDo) thenDo(result);
+        return result;
     },
     nextByte: function() {
         return this.methodBytes[this.pc++] & 0xFF;

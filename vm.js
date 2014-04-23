@@ -3455,6 +3455,101 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
     },
 });
 
+Object.extend(Squeak,
+'files', {
+    fileStoreDo: function(mode, transactionFunc) {
+        // Files are stored in the IndexedDB named "squeak" in object store "files"
+        var openReq = indexedDB.open("squeak");
+        openReq.onsuccess = function(e) {
+            var db = this.result;
+            db.onversionchange = function(e) {
+                db.close();
+                alert("A new version of this page is ready. Please reload!");
+            };
+            var trans = db.transaction("files", mode),
+                store = trans.objectStore("files");
+            transactionFunc(store, function(){db.close()});
+        }
+        openReq.onupgradeneeded = function (e) {
+            // run only first time, or when version changed
+            console.log("Creating database version " + e.newVersion);
+            var db = e.target.result,
+                store = db.createObjectStore("files");
+        };
+        openReq.onerror = function(e) {
+            console.log("Error opening database: " + e.value);
+        };
+        openReq.onblocked = function(e) {
+            // If some other tab is loaded with the database, then it needs to be closed
+            // before we can proceed upgrading the database.
+            alert("Please close all other tabs with this site open!");
+        };
+    },
+    fileGet: function(filename, thenDo, errorDo) {
+        this.fileStoreDo("readonly", function(store, whenDone) { 
+            var getReq = store.get(filename);
+            getReq.onerror = function(e) {
+                whenDone();
+                if (errorDo) errorDo(e.value);
+                else console.log(e.value);
+            };
+            getReq.onsuccess = function(e) {
+                whenDone();
+                thenDo(this.result);
+            };
+        });
+    },
+    filePut: function(filename, contents, thenDo, errorDo) {
+        this.fileStoreDo("readwrite", function(store, whenDone) { 
+            var putReq = store.put(contents, filename);
+            putReq.onerror = function(e) {
+                whenDone();
+                if (errorDo) errorDo(e.value);
+                else console.log(e.value);
+            };
+            putReq.onsuccess = function(e) {
+                whenDone();
+                if (thenDo) thenDo();
+                else console.log("Saved '" + filename + "' in database");
+            };
+        });
+    },
+    fileDelete: function(filename, thenDo, errorDo) {
+        this.fileStoreDo("readwrite", function(store, whenDone) { 
+            var deleteReq = store['delete'](filename);  // workaround for ometa parser
+            deleteReq.onerror = function(e) {
+                whenDone();
+                if (errorDo) errorDo(e.value);
+                else console.log(e.value);
+            };
+            deleteReq.onsuccess = function(e) {
+                whenDone();
+                if (thenDo) thenDo();
+                else console.log("Deleted '" + filename + "' from database");
+            };
+        });
+    },
+    fileList: function(thenDo, errorDo) {
+        this.fileStoreDo("readonly", function(store, whenDone) { 
+            var cursorReq = store.openCursor(),
+                list = [];
+            cursorReq.onerror = function(e) {
+                whenDone();
+                if (errorDo) errorDo(e.value);
+                else console.log(e.value);
+            };
+            cursorReq.onsuccess = function(e) {
+                if (!this.result) {
+                    whenDone();
+                    return thenDo(list);
+                }
+                list.push(this.result.key);
+                this.result['continue'](); // workaround for ometa parser
+            };
+        });
+    },
+});
+
 Object.subclass('users.bert.SqueakJS.vm.InstructionPrinter',
 'initialization', {
     initialize: function(method, vm) {

@@ -2763,11 +2763,11 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         return true;
 	},
     primitiveKeyboardNext: function(argCount) {
-        return this.popNandPushIfOK(argCount+1, this.checkSmallInt(this.display.keys.pop()));
+        return this.popNandPushIfOK(argCount+1, this.checkSmallInt(this.display.keys.shift()));
     },
     primitiveKeyboardPeek: function(argCount) {
         var length = this.display.keys.length;
-        return this.popNandPushIfOK(argCount+1, length ? this.checkSmallInt(this.display.keys[length - 1] || 0) : this.vm.nilObj);
+        return this.popNandPushIfOK(argCount+1, length ? this.checkSmallInt(this.display.keys[0] || 0) : this.vm.nilObj);
     },
     primitiveMouseButtons: function(argCount) {
         return this.popNandPushIfOK(argCount+1, this.checkSmallInt(this.display.buttons));

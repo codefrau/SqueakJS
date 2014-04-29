@@ -313,6 +313,9 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         splObjs[Squeak.splOb_FalseObject].isFalse = true;
         splObjs[Squeak.splOb_ClassFloat].isFloatClass = true;
         this.compactClasses = this.specialObjectsArray.pointers[Squeak.splOb_CompactClasses].pointers;
+        for (var i = 0; i < this.compactClasses.length; i++)
+            if (!this.compactClasses[i].isNil)
+                this.compactClasses[i].isCompact = true;
         if (!Number.prototype.sqInstName)
             Object.defineProperty(Number.prototype, 'sqInstName', {
                 enumerable: false,
@@ -386,7 +389,7 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
             } else { // otherwise, remove it
                 var corpse = next; 
                 obj.nextObject = corpse.nextObject; // drop from list
-                this.oldSpaceBytes -= corpse.totalBytes(this.compactClasses);
+                this.oldSpaceBytes -= corpse.totalBytes();
                 removed.push(corpse);               // remember for relinking
                 corpse.nextObject = obj;            // kludge: the corpse's nextObject
                 // must point into the old space list, so that enumerating will still work,
@@ -406,7 +409,7 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
             newObj.mark = false;
             oldObj.nextObject = newObj;
             oldObj = newObj;
-            this.oldSpaceBytes += newObj.totalBytes(this.compactClasses);
+            this.oldSpaceBytes += newObj.totalBytes();
         }
         this.lastOldObject = oldObj;
     },
@@ -724,13 +727,22 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         if (this.format<2) return this.pointers.length; //indexable fields only
         return this.sqClass.classInstSize(); //0-255
     },
-    totalBytes: function(compactClasses) { // size in bytes this object would take up in image snapshot
+    baseAddr: function() { // oop minus object header size
         var nWords =
             this.words ? this.words.length :
             this.isFloat ? 2 :
             this.pointers ? this.pointers.length : 0;
         if (this.bytes) nWords += (this.bytes.length + 3) / 4 | 0; 
-        var headerWords = nWords > 63 ? 3 : compactClasses.indexOf(this.sqClass) >= 0 ? 1 : 2;
+        var headerWords = nWords > 63 ? 3 : this.sqClass.isCompact ? 1 : 2;
+        return this.oop - headerWords * 4;
+    },
+    totalBytes: function() { // size in bytes this object would take up in image snapshot
+        var nWords =
+            this.words ? this.words.length :
+            this.isFloat ? 2 :
+            this.pointers ? this.pointers.length : 0;
+        if (this.bytes) nWords += (this.bytes.length + 3) / 4 | 0; 
+        var headerWords = nWords > 63 ? 3 : this.sqClass.isCompact ? 1 : 2;
         return (headerWords + nWords) * 4;
     },
 },

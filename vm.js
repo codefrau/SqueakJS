@@ -192,14 +192,19 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         isFalse: (optional) true if this is the false object
         isFloat: (optional) true if this is a Float object
         isFloatClass: (optional) true if this is the Float class
-        id: unique id integer
+        isCompact: (optional) true if this is a compact class
+        oop: identifies this object in a snapshot (assigned on GC, new space object oops are negative)
         mark: boolean (used only during GC, otherwise false)
         nextObject: linked list of objects in old space (new space objects do not have this yet)
     }
 
     Object Table
     ============
-    Used for enumerating objects and GC.
+    There is no actual object table. Instead, objects in old space are a linked list.
+    New objects are only referenced by other objects' pointers, and thus can be garbage-collected
+    at any time by the Javascript GC.
+    
+    There is no support for weak references yet.
 
     */    
     }
@@ -246,7 +251,7 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         this.gcCount = 0;
         this.oldSpaceCount = 0;
         this.newSpaceCount = 0;
-        this.lastId = 0;
+        this.nextTempOop = -1;
         var prevObj;
         var oopMap = {};
         console.log('squeak: reading objects');
@@ -276,7 +281,7 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
                 case Squeak.HeaderTypeFree:
                     throw "Unexpected free block";
             }
-            var baseAddr = ptr - 4; //0-rel byte oop of this object (base header)
+            var oop = ptr - 4; //0-rel byte oop of this object (base header)
             nWords--;  //length includes base header which we have already read
             var format = ((header>>8) & 15);
             var hash = ((header>>17) & 4095);
@@ -284,12 +289,12 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
             ptr += nWords * 4;
 
             var object = new users.bert.SqueakJS.vm.Object();
-            object.initFromImage(classInt, format, hash, bits);
-            this.registerObject(object);
+            object.initFromImage(oop, classInt, format, hash, bits);
             if (prevObj) prevObj.nextObject = object;
+            this.oldSpaceCount++;
             prevObj = object;
             //oopMap is from old oops to new objects
-            oopMap[oldBaseAddr + baseAddr] = object;
+            oopMap[oldBaseAddr + oop] = object;
         }
         //create proper objects
         var splObs         = oopMap[specialObjectsOopInt];
@@ -302,8 +307,6 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         this.decorateKnownObjects();
         this.firstOldObject = oopMap[oldBaseAddr+4];
         this.lastOldObject = prevObj;
-        this.oldSpaceCount = this.newSpaceCount;
-        this.newSpaceCount = 0; 
         this.oldSpaceBytes = endOfMemory;
      },
     decorateKnownObjects: function() {
@@ -366,30 +369,33 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
                     if (typeof body[i] === "object" && !body[i].mark)      // except SmallInts
                         todo.push(body[i]);
         }
-        // sort by id to preserve creation order
-        return newObjects.sort(function(a,b){return a.id - b.id});
+        // sort by oop to preserve creation order
+        return newObjects.sort(function(a,b){return b.oop - a.oop});
     },
     removeUnmarkedOldObjects: function() {
         // Unlink unmarked old objects from the nextObject linked list
-        // Reset marks of remaining objects
+        // Reset marks of remaining objects, and adjust their oops
         // Set this.lastOldObject to last old object
         // Return removed old objects (to support finalization later)
-        var removed = [];
-        var obj = this.firstOldObject;
+        var removed = [],
+            removedBytes = 0,
+            obj = this.firstOldObject;
         while (true) {
             var next = obj.nextObject;
             if (!next) {// we're done
                 this.lastOldObject = obj;
+                this.oldSpaceBytes -= removedBytes;
                 return removed;
             }
             // if marked, continue with next object
             if (next.mark) {
                 next.mark = false;     // unmark for next GC
+                next.oop -= removedBytes;
                 obj = next;
             } else { // otherwise, remove it
                 var corpse = next; 
                 obj.nextObject = corpse.nextObject; // drop from list
-                this.oldSpaceBytes -= corpse.totalBytes();
+                removedBytes += corpse.totalBytes(); 
                 removed.push(corpse);               // remember for relinking
                 corpse.nextObject = obj;            // kludge: the corpse's nextObject
                 // must point into the old space list, so that enumerating will still work,
@@ -407,9 +413,9 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         for (var i = 0; i < newObjects.length; i++) {
             var newObj = newObjects[i];
             newObj.mark = false;
+            this.oldSpaceBytes = newObj.setAddr(this.oldSpaceBytes);     // add at end of memory
             oldObj.nextObject = newObj;
             oldObj = newObj;
-            this.oldSpaceBytes += newObj.totalBytes();
         }
         this.lastOldObject = oldObj;
     },
@@ -423,8 +429,8 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
 'creating', {
     registerObject: function(obj) {
         // We don't actually register the object yet, because that would prevent
-        // it from being garbage-collected.
-        obj.id = ++this.lastId; // this can become quite large, but won't overflow for many years
+        // it from being garbage-collected by the Javascript collector
+        obj.oop = this.nextTempOop--; // temp oops are negative. Real oop assigned when surviving GC
         this.newSpaceCount++;
         this.lastHash = (13849 + (27181 * this.lastHash)) & 0xFFFFFFFF;
         return this.lastHash & 0xFFF;
@@ -451,14 +457,14 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         for (var i = 0; i < n; i++) {
             var obj = fromArray[i];
             if (!obj.sqClass) return false;  //non-objects in from array
-            if (mutations[obj.id]) return false; //repeated oops in from array
-            else mutations[obj.id] = toArray[i];
+            if (mutations[obj.oop]) return false; //repeated oops in from array
+            else mutations[obj.oop] = toArray[i];
         }
         if (twoWay) for (var i = 0; i < n; i++) {
             var obj = toArray[i];
             if (!obj.sqClass) return false;  //non-objects in to array
-            if (mutations[obj.id]) return false; //repeated oops in to array
-            else mutations[obj.id] = fromArray[i];
+            if (mutations[obj.oop]) return false; //repeated oops in to array
+            else mutations[obj.oop] = fromArray[i];
         }
         // ensure new objects have nextObject pointers
         if (this.newSpaceCount > 0)
@@ -467,12 +473,12 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         var obj = this.firstOldObject;
         while (obj) {
             // mutate the class
-            var mut = mutations[obj.sqClass.id];
+            var mut = mutations[obj.sqClass.oop];
             if (mut) obj.sqClass = mut;
             // and mutate body pointers
             var body = obj.pointers;
             if (body) for (var j = 0; j < body.length; j++) {
-                mut = mutations[body[j].id];
+                mut = mutations[body[j].oop];
                 if (mut) body[j] = mut;
             }
             obj = obj.nextObject;
@@ -571,8 +577,9 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
             if (original.bytes) this.bytes = original.bytes.slice(0);            // copy
         }
     },
-    initFromImage: function(cls, fmt, hsh, data) {
+    initFromImage: function(oop, cls, fmt, hsh, data) {
         // initial creation from Image, with unmapped data
+        this.oop = oop;
         this.sqClass = cls;
         this.format = fmt;
         this.hash = hsh;
@@ -727,23 +734,31 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         if (this.format<2) return this.pointers.length; //indexable fields only
         return this.sqClass.classInstSize(); //0-255
     },
-    baseAddr: function() { // oop minus object header size
-        var nWords =
-            this.words ? this.words.length :
-            this.isFloat ? 2 :
-            this.pointers ? this.pointers.length : 0;
-        if (this.bytes) nWords += (this.bytes.length + 3) / 4 | 0; 
-        var headerWords = nWords > 63 ? 3 : this.sqClass.isCompact ? 1 : 2;
-        return this.oop - headerWords * 4;
+    setAddr: function(addr) {
+        // move oop during GC. Answer next object's address
+        // oop is address of last header word
+        var size = this.snapshotSize();
+        this.oop = addr + size.header - 4;
+        return addr + size.header + size.body; 
     },
-    totalBytes: function() { // size in bytes this object would take up in image snapshot
+    snapshotSize: function() {
+        // size of object header and body this object would take up in image snapshot
         var nWords =
             this.words ? this.words.length :
             this.isFloat ? 2 :
             this.pointers ? this.pointers.length : 0;
         if (this.bytes) nWords += (this.bytes.length + 3) / 4 | 0; 
-        var headerWords = nWords > 63 ? 3 : this.sqClass.isCompact ? 1 : 2;
-        return (headerWords + nWords) * 4;
+        var headerWords = nWords + 1 > 63 ? 3 : this.sqClass.isCompact ? 1 : 2;
+        return {header: headerWords * 4, body: nWords * 4};
+    },
+    addr: function() { // start addr of this object in a snapshot
+        // oop is pointer to last header word
+        return this.oop + 4 - this.snapshotSize().header;
+    },
+    totalBytes: function() {
+        // size in bytes this object would take up in image snapshot
+        var size = this.snapshotSize();
+        return size.header + size.body;
     },
 },
 'as class', {

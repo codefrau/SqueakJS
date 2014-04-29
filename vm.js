@@ -1993,7 +1993,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 118: return false; //TODO primitiveDoPrimitiveWithArgs
             case 119: return this.vm.flushMethodCacheForSelector(this.vm.top());
             case 120: return false; //primitiveCalloutToFFI
-            case 121: return this.popNandPushIfOK(1, this.makeStString("/home/bert/mini.image")); //imageName
+            case 121: return this.primitiveImageName(argCount); //get+set imageName
             case 122: return this.primitiveReverseDisplay(argCount); // Blue Book: primitiveImageVolume
             case 123: return false; //TODO primitiveValueUninterruptably
             case 124: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore));
@@ -2719,6 +2719,12 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     }
 },
 'platform', {
+    primitiveImageName: function(argCount) {
+        if (argCount == 0)
+            return this.popNandPushIfOK(1, this.makeStString(this.vm.image.name));
+        this.vm.image.name = this.vm.top().bytesAsString();
+        return true;
+    },
     primitiveQuit: function(argCount) {
         this.vm.breakOutOfInterpreter = 'break'; 
         return true;

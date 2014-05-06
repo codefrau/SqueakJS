@@ -364,10 +364,14 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
             if (!object.sqClass.mark)     // trace class if not marked
                 todo.push(object.sqClass);
             var body = object.pointers;
-            if (body)                     // trace all unmarked pointers
-                for (var i = 0; i < body.length; i++)
+            if (body) {                   // trace all unmarked pointers
+                var n = body.length;
+                if (this.vm.isContext(object))       // contexts have garbage on the stack 
+                    n = this.vm.decodeSqueakSP(object.getPointer(Squeak.Context_stackPointer)) + 1;
+                for (var i = 0; i < n; i++)
                     if (typeof body[i] === "object" && !body[i].mark)      // except SmallInts
                         todo.push(body[i]);
+            }
         }
         // sort by oop to preserve creation order
         return newObjects.sort(function(a,b){return b.oop - a.oop});
@@ -1289,12 +1293,9 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
             if (this.tryPrimitive(primitiveIndex, argumentCount, newMethod))
                 return;  //Primitive succeeded -- end of story
         var newContext = this.allocateOrRecycleContext(newMethod.methodNeedsLargeFrame());
-        var methodNumLits = this.method.methodNumLits();
-        //The stored IP should be 1-based index of *next* instruction, offset by hdr and lits
-        var newPC = 0;
     	var tempCount = newMethod.methodTempCount();
-        var newSP = tempCount;
-        newSP += Squeak.Context_tempFrameStart - 1; //-1 for z-rel addressing
+        var newPC = 0; // direct zero-based index into byte codes
+        var newSP = Squeak.Context_tempFrameStart + tempCount - 1; // direct zero-based index into context pointers
         newContext.setPointer(Squeak.Context_method, newMethod);
         //Following store is in case we alloc without init; all other fields get stored
         newContext.setPointer(Squeak.BlockContext_initialIP, this.nilObj);
@@ -1533,8 +1534,8 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
         // sp is offset by tempFrameStart, -1 for z-rel addressing
         return intSP - (Squeak.Context_tempFrameStart - 1);
     },
-    decodeSqueakSP: function(squeakPC) {
-        return squeakPC + (Squeak.Context_tempFrameStart - 1);
+    decodeSqueakSP: function(squeakSP) {
+        return squeakSP + (Squeak.Context_tempFrameStart - 1);
     },
     recycleIfPossible: function(ctxt) {
         if (!this.isMethodContext(ctxt)) return;

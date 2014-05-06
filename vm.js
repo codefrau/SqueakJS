@@ -737,28 +737,28 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
     setAddr: function(addr) {
         // move oop during GC. Answer next object's address
         // oop is address of last header word
-        var size = this.snapshotSize();
-        this.oop = addr + size.header - 4;
-        return addr + size.header + size.body; 
+        var words = this.snapshotSize();
+        this.oop = addr + (words.header - 1) * 4;
+        return addr + (words.header + words.body) * 4; 
     },
     snapshotSize: function() {
-        // size of object header and body this object would take up in image snapshot
+        // words of object header and body this object would take up in image snapshot
         var nWords =
             this.words ? this.words.length :
             this.isFloat ? 2 :
             this.pointers ? this.pointers.length : 0;
         if (this.bytes) nWords += (this.bytes.length + 3) / 4 | 0; 
         var headerWords = nWords + 1 > 63 ? 3 : this.sqClass.isCompact ? 1 : 2;
-        return {header: headerWords * 4, body: nWords * 4};
+        return {header: headerWords, body: nWords};
     },
     addr: function() { // start addr of this object in a snapshot
         // oop is pointer to last header word
-        return this.oop + 4 - this.snapshotSize().header;
+        return this.oop - (this.snapshotSize().header - 1) * 4;
     },
     totalBytes: function() {
         // size in bytes this object would take up in image snapshot
-        var size = this.snapshotSize();
-        return size.header + size.body;
+        var words = this.snapshotSize();
+        return (words.header + words.body) * 4;
     },
 },
 'as class', {

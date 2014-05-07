@@ -731,7 +731,7 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         return this.bytes ? this.bytes.length : 0;
     },
     wordsSize: function() {
-        return this.words ? this.words.length : this.isFloat ? 2 : 0;
+        return this.isFloat ? 2 : this.words ? this.words.length : 0;
     },
     instSize: function() {//same as class.classInstSize, but faster from format
         if (this.format>4 || this.format==2) return 0; //indexable fields only
@@ -740,24 +740,24 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
     },
     setAddr: function(addr) {
         // move oop during GC. Answer next object's address
-        // oop is address of last header word
         var words = this.snapshotSize();
-        this.oop = addr + (words.header - 1) * 4;
+        this.oop = addr + words.header * 4;
         return addr + (words.header + words.body) * 4; 
     },
     snapshotSize: function() {
-        // words of object header and body this object would take up in image snapshot
+        // words of extra object header and body this object would take up in image snapshot
+        // body size includes one header word that is always present
         var nWords =
-            this.words ? this.words.length :
             this.isFloat ? 2 :
+            this.words ? this.words.length :
             this.pointers ? this.pointers.length : 0;
-        if (this.bytes) nWords += (this.bytes.length + 3) / 4 | 0; 
-        var headerWords = nWords + 1 > 63 ? 3 : this.sqClass.isCompact ? 1 : 2;
-        return {header: headerWords, body: nWords};
+        if (this.bytes) nWords += (this.bytes.length + 3) >> 2;
+        nWords++; // include one header word
+        var extraHeader = nWords > 63 ? 2 : this.sqClass.isCompact ? 0 : 1;
+        return {header: extraHeader, body: nWords};
     },
     addr: function() { // start addr of this object in a snapshot
-        // oop is pointer to last header word
-        return this.oop - (this.snapshotSize().header - 1) * 4;
+        return this.oop - this.snapshotSize().header * 4;
     },
     totalBytes: function() {
         // size in bytes this object would take up in image snapshot
@@ -1815,9 +1815,6 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
         }
         return false;
     },
-
-
-
 });
 
 Object.subclass('users.bert.SqueakJS.vm.Primitives',
@@ -3489,8 +3486,7 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
     },
 });
 
-Object.extend(Squeak,
-'files', {
+Object.extend(Squeak, {
     fileStoreDo: function(mode, transactionFunc) {
         // Files are stored in the IndexedDB named "squeak" in object store "files"
         var openReq = indexedDB.open("squeak");

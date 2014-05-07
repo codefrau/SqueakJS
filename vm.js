@@ -524,6 +524,42 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
                 return obj;
         }
     },
+    writeToBuffer: function() {
+        var headerSize = 64,
+            data = new DataView(new ArrayBuffer(headerSize + this.oldSpaceBytes)),
+            pos = 0;
+        var writeWord = function(word) {
+            data.setUint32(pos, word);
+            pos += 4;
+        };
+        writeWord(6502); // magic number
+        writeWord(headerSize);
+        writeWord(this.oldSpaceBytes); // end of memory
+        writeWord(this.firstOldObject.addr()); // base addr (0)
+        writeWord(this.objectToOop(this.specialObjectsArray));
+        writeWord(this.lastHash);
+        writeWord((800 << 16) + 600);  // window size
+        while (pos < headerSize)
+            writeWord(0);
+        // objects
+        var obj = this.firstOldObject,
+            n = 0;
+        while (obj) {
+            pos = obj.writeTo(data, pos, this);
+            obj = obj.nextObject;
+            n++;
+        }
+        if (pos !== data.byteLength) throw "wrong image size";
+        if (n !== this.oldSpaceCount) throw "wrong object count";
+        return data.buffer;
+    },
+    objectToOop: function(obj) {
+        // unsigned word for use in snapshot
+        if (typeof obj ===  "number")
+            return (obj * 2 + 0x100000001) & 0xFFFFFFFF; // add tag bit, make unsigned
+        if (obj.oop < 0) throw "temporary oop";
+        return obj.oop;
+    },
 });
 
 Object.subclass('users.bert.SqueakJS.vm.Object',
@@ -763,6 +799,49 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         // size in bytes this object would take up in image snapshot
         var words = this.snapshotSize();
         return (words.header + words.body) * 4;
+    },
+    writeTo: function(data, pos, image) {
+        // Write 1 to 3 header words encoding type, class, and size, then instance data
+        var beforePos = pos,
+            size = this.snapshotSize(),
+            formatAndHash = ((this.format & 15) << 8) | ((this.hash & 4095) << 17);
+        // write header words first
+        switch (size.header) {
+            case 2:
+                data.setUint32(pos, size.body << 2 | Squeak.HeaderTypeSizeAndClass); pos += 4;
+                data.setUint32(pos, this.sqClass.oop | Squeak.HeaderTypeSizeAndClass); pos += 4;
+                data.setUint32(pos, formatAndHash | Squeak.HeaderTypeSizeAndClass); pos += 4;
+                break;
+            case 1:
+                data.setUint32(pos, this.sqClass.oop | Squeak.HeaderTypeClass); pos += 4;
+                data.setUint32(pos, formatAndHash | size.body << 2 | Squeak.HeaderTypeClass); pos += 4;
+                break;
+            case 0:
+                var classIndex = image.compactClasses.indexOf(this.sqClass) + 1;
+                data.setUint32(pos, formatAndHash | classIndex << 12 | size.body << 2 | Squeak.HeaderTypeShort); pos += 4;
+        }
+        // now write body, if any
+        if (this.isFloat) {
+            data.setFloat64(pos, this.float); pos += 8;
+        } else if (this.words) {
+            for (var i = 0; i < this.words.length; i++) {
+                data.setUint32(pos, this.words[i]); pos += 4;
+            }
+        } else if (this.pointers) {
+            for (var i = 0; i < this.pointers.length; i++) { 
+                data.setUint32(pos, image.objectToOop(this.pointers[i])); pos += 4;
+            }
+        }
+        // no "else" because CompiledMethods have both pointers and bytes
+        if (this.bytes) {
+            for (var i = 0; i < this.bytes.length; i++)
+                data.setUint8(pos++, this.bytes[i]);
+            // skip to next word
+            pos += -this.bytes.length & 3;
+        }
+        // done
+        if (pos !== beforePos + this.totalBytes()) throw "written size does not match";
+        return pos;
     },
 },
 'as class', {
@@ -1650,6 +1729,19 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
         return this.nonSmallInt;  //non-small result will cause failure
     },
 },
+'snapshots', {
+    snapshotCleanUp: function() {
+        // nil out slots above stack pointer in all contexts
+        var obj = this.image.firstOldObject;
+        while (obj = obj.nextObject) {
+            if (!this.isContext(obj)) continue;
+            var sp = obj.getPointer(Squeak.Context_stackPointer);
+            if (sp.isNil) continue;
+            for (var i = this.decodeSqueakSP(sp) + 1; i < obj.pointers.length; i++)
+                obj.pointers[i] = this.nilObj;
+        }
+    },
+},
 'utils',
 {
     instantiateClass: function(aClass, indexableSize) {
@@ -1994,7 +2086,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 94: return false; // primitiveGetNextEvent				"Blue Book: primitiveSampleInterval"
             case 95: return false; // primitiveInputWord
             case 96: return this.primitiveCopyBits(argCount);  // BitBlt.copyBits
-            case 97: return false; // primitiveSnapshot
+            case 97: return this.primitiveSnapshot(argCount);
             case 98: return false; // primitiveStoreImageSegment
             case 99: return false; // primitiveLoadImageSegment
             case 100: return this.vm.primitivePerformWithArgs(argCount, true); // Object.perform:withArguments:inSuperclass: (Blue Book: primitiveSignalAtTick)
@@ -2748,6 +2840,18 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         if (argCount == 0)
             return this.popNandPushIfOK(1, this.makeStString(this.vm.image.name));
         this.vm.image.name = this.vm.top().bytesAsString();
+        return true;
+    },
+    primitiveSnapshot: function(argCount) {
+        this.vm.popNandPush(1, this.vm.trueObj);        // put true on stack for saved snapshot
+        this.vm.storeContextRegisters();                // store current state for snapshot
+        var proc = this.getScheduler().getPointer(Squeak.ProcSched_activeProcess);
+        proc.setPointer(Squeak.Proc_suspendedContext, this.vm.activeContext); // store initial context
+        this.vm.image.fullGC();             // before cleanup so traversal works
+        this.vm.snapshotCleanUp();
+        var buffer = this.vm.image.writeToBuffer();
+        Squeak.filePut(this.vm.image.name, buffer);
+        this.vm.popNandPush(1, this.vm.falseObj);       // put false on stack for continuing
         return true;
     },
     primitiveQuit: function(argCount) {

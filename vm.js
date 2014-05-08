@@ -251,7 +251,6 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         this.gcCount = 0;
         this.oldSpaceCount = 0;
         this.newSpaceCount = 0;
-        this.nextTempOop = -1;
         var prevObj;
         var oopMap = {};
         console.log('squeak: reading objects');
@@ -434,8 +433,7 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
     registerObject: function(obj) {
         // We don't actually register the object yet, because that would prevent
         // it from being garbage-collected by the Javascript collector
-        obj.oop = this.nextTempOop--; // temp oops are negative. Real oop assigned when surviving GC
-        this.newSpaceCount++;
+        obj.oop = -(++this.newSpaceCount); // temp oops are negative. Real oop assigned when surviving GC
         this.lastHash = (13849 + (27181 * this.lastHash)) & 0xFFFFFFFF;
         return this.lastHash & 0xFFF;
     },

@@ -1171,7 +1171,7 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
         var result = this.breakOutOfInterpreter == 'break' ? 'break'
             : !this.isIdle ? 0
             : !this.nextWakeupTick ? 'sleep'        // all processes waiting
-            : Math.max(0, this.nextWakeupTick - this.primHandler.millisecondClockValue());
+            : Math.max(200, this.nextWakeupTick - this.primHandler.millisecondClockValue());
         if (thenDo) thenDo(result);
         return result;
     },
@@ -3626,6 +3626,7 @@ Object.extend(Squeak, {
                 else console.log(e.value);
             };
             getReq.onsuccess = function(e) {
+                if (!this.result) return this.onerror({value: "file not found: " + filename});
                 whenDone();
                 thenDo(this.result);
             };

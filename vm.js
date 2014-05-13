@@ -3058,7 +3058,10 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         var supportedDepths =  [1, 2, 4, 8, 16, 32]; // match showOnDisplay()
         return this.pop2andPushBoolIfOK(supportedDepths.indexOf(this.stackInteger(0)) >= 0);
     },
-
+    displayFlush: function(){
+        // no-op for now
+        // TODO: copy damage rect code from Smalltalk-78 VM
+    },
 	millisecondClockValue: function() {
         //Return the value of the millisecond clock as an integer.
         //Note that the millisecond clock wraps around periodically.

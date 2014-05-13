@@ -2364,12 +2364,26 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         newFloat.float = value;
         return newFloat;
 	},
+    makeLargeIfNeeded: function(integer) {
+        return this.vm.canBeSmallInt(integer) ? integer : this.makeLargeInt(integer);
+    },
+    makeLargeInt: function(integer) {
+        if (integer < 0) throw "negative large ints not implemented yet";
+        if (integer > 0xFFFFFFFF) throw "large large ints not implemented yet";
+        return this.pos32BitIntFor(integer);
+    },
     makePointWithXandY: function(x, y) {
         var pointClass = this.vm.specialObjects[Squeak.splOb_ClassPoint];
         var newPoint = this.vm.instantiateClass(pointClass, 0);
         newPoint.setPointer(Squeak.Point_x, x);
         newPoint.setPointer(Squeak.Point_y, y);
         return newPoint;
+    },
+    makeStArray: function(jsArray) {
+        var array = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassArray], jsArray.length);
+        for (var i = 0; i < jsArray.length; i++)
+            array.pointers[i] = this.makeStObject(jsArray[i]);
+        return array;
     },
     makeStString: function(jsString) {
         var bytes = [];
@@ -2378,6 +2392,18 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         var stString = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassString], bytes.length);
         stString.bytes = bytes;
         return stString;
+    },
+    makeStObject: function(obj) {
+        if (obj === undefined || obj === null) return this.vm.nilObj;
+        if (obj === true) return this.vm.trueObj;
+        if (obj === false) return this.vm.falseObj;
+        if (obj.stClass) return obj;
+        if (typeof obj === "string" || obj.constructor === Uint8Array) return this.makeStString(obj);
+        if (obj.constructor === Array) return this.makeStArray(obj);
+        if (typeof obj === "number")
+            if (obj === (obj|0)) return this.makeLargeIfNeeded(obj);
+            else return this.makeFloat(obj)
+        throw "cannot make smalltalk object";
     },
     pointsTo: function(rcvr, arg) {
         if (!rcvr.pointers) return false;

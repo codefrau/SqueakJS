@@ -1166,17 +1166,39 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
         // answer milliseconds to sleep (until next timer wakeup)
         // or 'break' if reached breakpoint
         // call thenDo with that result when done
+        if (this.frozen) return 'frozen';
         this.isIdle = false;
         this.breakOutOfInterpreter = false;
         this.breakOutTick = this.lastTick + (forMilliseconds || 500);
         while (!this.breakOutOfInterpreter)
             this.interpretOne();
+        // this is to allow 'freezing' the interpreter and restarting it asynchronously. See freeze()
+        if (typeof this.breakOutOfInterpreter == "function")
+            return this.breakOutOfInterpreter(thenDo);
+        // normally, we answer regularly
         var result = this.breakOutOfInterpreter == 'break' ? 'break'
             : !this.isIdle ? 0
             : !this.nextWakeupTick ? 'sleep'        // all processes waiting
             : Math.max(200, this.nextWakeupTick - this.primHandler.millisecondClockValue());
         if (thenDo) thenDo(result);
         return result;
+    },
+    freeze: function(externalContinueFunc) {
+        // Stop the interpreter. Answer a function that can be
+        // called to continue interpreting.
+        var continueFunc = externalContinueFunc; // only needed if called from outside the interpreter
+        this.primHandler.displayFlush(); // make sure display is up to date
+        this.frozen = true;
+        this.breakOutOfInterpreter = function(thenDo) {
+            if (!thenDo) throw "need function to restart interpreter";
+            continueFunc = thenDo;
+            return "frozen";
+        }.bind(this);
+        return function unfreeze() {
+            this.frozen = false;
+            if (!continueFunc) throw "no continue function";
+            continueFunc(0);    //continue without timeout
+        }.bind(this);
     },
     nextByte: function() {
         return this.methodBytes[this.pc++] & 0xFF;

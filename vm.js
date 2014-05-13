@@ -2815,24 +2815,6 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
 		return false;
     },
 },
-'MiscPrimitivePlugin', {
-    primitiveStringHash: function(argCount) {
-        // need to implement this because in older Etoys image the fallback code is wrong
-        var initialHash = this.stackInteger(0);
-        var stringObj = this.stackNonInteger(1);
-        if (!this.success) return false;
-        var stringSize = stringObj.bytesSize();
-        var string = stringObj.bytes;
-    	var hash = initialHash & 0x0FFFFFFF;
-    	for (var i = 0; i < stringSize; i++) {
-    		hash += string[i];
-    		var low = hash & 0x3FFF;
-    		hash = (0x260D * low + ((0x260D * (hash >>> 14) + (0x0065 * low) & 16383) * 16384)) & 0x0FFFFFFF;
-    	}
-    	this.vm.popNandPush(3, hash);
-        return true;
-    }
-},
 'platform', {
     primitiveImageName: function(argCount) {
         if (argCount == 0)
@@ -3040,6 +3022,24 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         seconds += ((69 * 365 + 17) * 24 * 3600);   // adjust epoch from 1970 to 1901
         return this.pos32BitIntFor(seconds);
     },
+},
+'MiscPrimitivePlugin', {
+    primitiveStringHash: function(argCount) {
+        // need to implement this because in older Etoys image the fallback code is wrong
+        var initialHash = this.stackInteger(0);
+        var stringObj = this.stackNonInteger(1);
+        if (!this.success) return false;
+        var stringSize = stringObj.bytesSize();
+        var string = stringObj.bytes;
+    	var hash = initialHash & 0x0FFFFFFF;
+    	for (var i = 0; i < stringSize; i++) {
+    		hash += string[i];
+    		var low = hash & 0x3FFF;
+    		hash = (0x260D * low + ((0x260D * (hash >>> 14) + (0x0065 * low) & 16383) * 16384)) & 0x0FFFFFFF;
+    	}
+    	this.vm.popNandPush(3, hash);
+        return true;
+    }
 });
 Object.subclass('users.bert.SqueakJS.vm.BitBlt',
 'initialization', {

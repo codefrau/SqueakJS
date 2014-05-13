@@ -163,6 +163,9 @@ Squeak = {
     Keyboard_Cmd: 64,
     Mouse_All: 1 + 2 + 4,
     Keyboard_All: 8 + 16 + 32 + 64,
+
+    // other constants
+    Epoch: Date.UTC(1901,0,1)/1000 + (new Date()).getTimezoneOffset()*60,         // local timezone
     
     // External modules
     externalModules: {},
@@ -3016,11 +3019,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         return (Date.now() - this.vm.startupTime) & this.vm.millisecondClockMask;
 	},
 	secondClock: function() {
-	    var date = new Date();
-        var seconds = date.getTime() / 1000 | 0;    // milliseconds -> seconds
-        seconds -= date.getTimezoneOffset() * 60;   // make local time
-        seconds += ((69 * 365 + 17) * 24 * 3600);   // adjust epoch from 1970 to 1901
-        return this.pos32BitIntFor(seconds);
+        return this.pos32BitIntFor(Squeak.totalSeconds()); // will overflow 32 bits in 2037
     },
 },
 'MiscPrimitivePlugin', {
@@ -3680,6 +3679,10 @@ Object.extend(Squeak, {
                 this.result['continue'](); // workaround for ometa parser
             };
         });
+    },
+    totalSeconds: function() {
+        // seconds since 1901-01-01, local time
+        return Math.floor(Date.now()/1000) - Squeak.Epoch;
     },
 });
 

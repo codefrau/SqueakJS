@@ -3639,97 +3639,105 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
 });
 
 Object.extend(Squeak, {
-    fileStoreDo: function(mode, transactionFunc) {
-        // Files are stored in the IndexedDB named "squeak" in object store "files"
+    dbTransaction: function(mode, transactionFunc) {
+        // File contents is stored in the IndexedDB named "squeak" in object store "files"
+        // and directory entries in localStorage with prefix "squeak:"
+        var startTransaction = function() {
+            var trans = SqueakDB.transaction("files", mode),
+                fileStore = trans.objectStore("files");
+            transactionFunc(fileStore);
+        };
+
+        // if database connection already opened, just do transaction
+        if (window.SqueakDB) return startTransaction();
+        
+        // otherwise, open SqueakDB first
         var openReq = indexedDB.open("squeak");
         openReq.onsuccess = function(e) {
-            var db = this.result;
-            db.onversionchange = function(e) {
-                db.close();
-                alert("A new version of this page is ready. Please reload!");
+            window.SqueakDB = this.result;
+            SqueakDB.onversionchange = function(e) {
+                delete window.SqueakDB;
+                this.close();
             };
-            var trans = db.transaction("files", mode),
-                store = trans.objectStore("files");
-            transactionFunc(store, function(){db.close()});
-        }
+            startTransaction();
+        };
         openReq.onupgradeneeded = function (e) {
             // run only first time, or when version changed
             console.log("Creating database version " + e.newVersion);
-            var db = e.target.result,
-                store = db.createObjectStore("files");
+            var db = e.target.result;
+            db.createObjectStore("files");
         };
         openReq.onerror = function(e) {
-            console.log("Error opening database: " + e.value);
+            console.log("Error opening database: " + e.target.errorCode);
         };
         openReq.onblocked = function(e) {
             // If some other tab is loaded with the database, then it needs to be closed
             // before we can proceed upgrading the database.
-            alert("Please close all other tabs with this site open!");
+            alert("Database upgrade needed. Please close all other tabs with this site open!");
         };
     },
-    fileGet: function(filename, thenDo, errorDo) {
-        this.fileStoreDo("readonly", function(store, whenDone) { 
-            var getReq = store.get(filename);
-            getReq.onerror = function(e) {
-                whenDone();
-                if (errorDo) errorDo(e.value);
-                else console.log(e.value);
-            };
+    fileGet: function(filepath, thenDo, errorDo) {
+        if (!errorDo) errorDo = console.log;
+        var path = this.splitFilePath(filepath);
+        if (!path.basename) return errorDo("Invalid path: " + filepath);
+        this.dbTransaction("readonly", function(fileStore) {
+            var getReq = fileStore.get(path.fullname);
+            getReq.onerror = function(e) { errorDo(e.target.errorCode) };
             getReq.onsuccess = function(e) {
-                if (!this.result) return this.onerror({value: "file not found: " + filename});
-                whenDone();
+                if (!this.result) return errorDo("file not found: " + path.fullname);
                 thenDo(this.result);
             };
         });
     },
-    filePut: function(filename, contents, thenDo, errorDo) {
-        this.fileStoreDo("readwrite", function(store, whenDone) { 
-            var putReq = store.put(contents, filename);
-            putReq.onerror = function(e) {
-                whenDone();
-                if (errorDo) errorDo(e.value);
-                else console.log(e.value);
-            };
-            putReq.onsuccess = function(e) {
-                whenDone();
-                if (thenDo) thenDo();
-                else console.log("Saved '" + filename + "' in database");
-            };
+    filePut: function(filepath, contents) {
+        // store file, return dir entry if successful
+        var path = this.splitFilePath(filepath); if (!path.basename) return null;
+        var directory = this.dirList(path.dirname); if (!directory) return null;
+        // get or create entry
+        var entry = directory[path.basename],
+            now = this.totalSeconds();
+        if (!entry) { // new file
+            entry = [/*name*/ path.basename, /*ctime*/ now, /*mtime*/ 0, /*dir*/ false, /*size*/ 0];
+            directory[path.basename] = entry;
+        } else if (entry[3]) // is a directory
+            return null;
+        // update directory entry
+        entry[2] = now; // modification time
+        entry[4] = contents.byteLength || contents.length;
+        localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
+        // put file contents (async)
+        this.dbTransaction("readwrite", function(fileStore) {
+            fileStore.put(contents, path.fullname);
         });
+        return entry;
     },
-    fileDelete: function(filename, thenDo, errorDo) {
-        this.fileStoreDo("readwrite", function(store, whenDone) { 
-            var deleteReq = store['delete'](filename);  // workaround for ometa parser
-            deleteReq.onerror = function(e) {
-                whenDone();
-                if (errorDo) errorDo(e.value);
-                else console.log(e.value);
-            };
-            deleteReq.onsuccess = function(e) {
-                whenDone();
-                if (thenDo) thenDo();
-                else console.log("Deleted '" + filename + "' from database");
-            };
+    fileDelete: function(filepath) {
+        var path = this.splitFilePath(filepath); if (!path.basename) return false;
+        var directory = this.dirList(path.dirname); if (!directory) return false;
+        var entry = directory[path.basename]; if (!entry || entry[3]) return false; // not found or is a directory
+        // delete entry from directory
+        delete directory[path.basename];
+        localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
+        // delete file contents (async)
+        this.dbTransaction("readwrite", function(fileStore) {
+            fileStore['delete'](path.fullname);    // workaround for ometa parser
         });
+        return true;
     },
-    fileList: function(thenDo, errorDo) {
-        this.fileStoreDo("readonly", function(store, whenDone) { 
-            var cursorReq = store.openCursor(),
-                list = [];
-            cursorReq.onerror = function(e) {
-                whenDone();
-                if (errorDo) errorDo(e.value);
-                else console.log(e.value);
-            };
-            cursorReq.onsuccess = function(e) {
-                if (!this.result) {
-                    whenDone();
-                    return thenDo(list);
-                }
-                list.push(this.result.key);
-                this.result['continue'](); // workaround for ometa parser
-            };
-        });
+    dirList: function(dirpath) {
+        // return directory entries or null
+        var path = this.splitFilePath(dirpath),
+            entries = localStorage["squeak:" + path.fullname];
+        if (entries) return JSON.parse(entries);
+        if (path.fullname == "/") return {};
+        return null;
+    },
+    splitFilePath: function(filepath) {
+        if (filepath[0] !== '/') filepath = '/' + filepath;
+        var matches = filepath.match(/(.*)\/(.*)/),
+            dirname = matches[1] || '/',
+            basename = matches[2];
+        return {fullname: filepath, dirname: dirname, basename: basename};
     },
     totalSeconds: function() {
         // seconds since 1901-01-01, local time

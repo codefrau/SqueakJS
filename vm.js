@@ -2889,6 +2889,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         if (argCount == 0)
             return this.popNandPushIfOK(1, this.makeStString(this.vm.image.name));
         this.vm.image.name = this.vm.top().bytesAsString();
+        window.localStorage['squeakImageName'] = this.vm.image.name;
         return true;
     },
     primitiveSnapshot: function(argCount) {
@@ -2896,14 +2897,16 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         this.vm.storeContextRegisters();                // store current state for snapshot
         var proc = this.getScheduler().getPointer(Squeak.ProcSched_activeProcess);
         proc.setPointer(Squeak.Proc_suspendedContext, this.vm.activeContext); // store initial context
-        this.vm.image.fullGC();             // before cleanup so traversal works
+        this.vm.image.fullGC();                        // before cleanup so traversal works
         this.vm.snapshotCleanUp();
         var buffer = this.vm.image.writeToBuffer();
+        Squeak.flushAllFiles();                         // so there are no more writes pending
         Squeak.filePut(this.vm.image.name, buffer);
         this.vm.popNandPush(1, this.vm.falseObj);       // put false on stack for continuing
         return true;
     },
     primitiveQuit: function(argCount) {
+        Squeak.flushAllFiles();
         this.vm.breakOutOfInterpreter = 'break'; 
         return true;
     },
@@ -3136,24 +3139,16 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         return true;
     },
     primitiveFileAtEnd: function(argCount) {
-        var fileObj = this.stackNonInteger(0);
-        if (!this.success || !fileObj.fileName) return false;
-        this.popNandPushIfOK(argCount+1, this.makeStObject(fileObj.filePos >= fileObj.fileSize));
+        var handle = this.stackNonInteger(0);
+        if (!this.success || !handle.file) return false;
+        this.popNandPushIfOK(argCount+1, this.makeStObject(handle.filePos >= handle.file.size));
         return true;
     },
     primitiveFileClose: function(argCount) {
-        var fileObj = this.stackNonInteger(0);
-        if (!this.success || !fileObj.fileName) return false;
-        if (fileObj.fileModified) {
-            var buffer = fileObj.fileContents.buffer;
-            if (buffer.byteLength !== fileObj.fileSize) {
-                buffer = new ArrayBuffer(fileObj.fileSize);
-                (new Uint8Array(buffer)).set(fileObj.fileContents.subarray(0, fileObj.fileSize));
-            }
-            Squeak.filePut(fileObj.fileName, buffer);
-        }
-        fileObj.fileName = null;
-        fileObj.fileContents = null;        // release memory asap
+        var handle = this.stackNonInteger(0);
+        if (!this.success || !handle.file) return false;
+        this.fileClose(handle.file);
+        handle.file = null;
         return true;
     },
     primitiveFileDelete: function(argCount) {
@@ -3161,50 +3156,38 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         if (!this.success) return false;
         var success = Squeak.fileDelete(fileNameObj.bytesAsString());
         return success;
-    }
-,
+    },
     primitiveFileFlush: function(argCount) {
-        console.log("Not yet implemented: primitiveFileFlush");
-        return false;
+        var handle = this.stackNonInteger(0);
+        if (!this.success || !handle.file) return false;
+        Squeak.flushFile(handle.file);
+        return true;
     },
     primitiveFileGetPosition: function(argCount) {
-        var fileObj = this.stackNonInteger(0);
-        if (!this.success || !fileObj.fileName) return false;
-        this.popNandPushIfOK(argCount + 1, this.makeLargeIfNeeded(fileObj.filePos));
+        var handle = this.stackNonInteger(0);
+        if (!this.success || !handle.file) return false;
+        this.popNandPushIfOK(argCount + 1, this.makeLargeIfNeeded(handle.filePos));
         return true;
     },
     primitiveFileOpen: function(argCount) {
         var writeFlag = !!this.stackNonInteger(0).isTrue,
             nameObj = this.stackNonInteger(1);
         if (!this.success) return false;
-        var path = Squeak.splitFilePath(nameObj.bytesAsString());
-        if (!path.basename) return false;
-        var directory = Squeak.dirList(path.dirname);
-        if (!directory) return false;
-        var entry = directory[path.basename],
-            contents = null;
-        if (!entry) {
-            if (!writeFlag) return false;
-            contents = new Uint8Array();
-            entry = Squeak.filePut(path.fullname, contents.buffer);
-            if (!entry) return false;
-        }
-        var fileObj = this.makeStArray([path.fullname]); // array contents irrelevant
-        fileObj.fileName = path.fullname;
-        fileObj.fileWrite = writeFlag;
-        fileObj.fileModified = false;
-        fileObj.filePos = 0;
-        fileObj.fileSize = entry[4],     // actual size (fileContents length might be larger during write)
-        fileObj.fileContents = contents; // possibly null, fetched when needed
-        this.popNandPushIfOK(argCount+1, fileObj);
+        var file = this.fileOpen(nameObj.bytesAsString(), writeFlag);
+        if (!file) return false;
+        var handle = this.makeStArray([file.name]); // array contents irrelevant
+        handle.file = file;             // shared between handles
+        handle.fileWrite = writeFlag;   // specific to this handle
+        handle.filePos = 0;             // specific to this handle
+        this.popNandPushIfOK(argCount+1, handle);
         return true;
     },
     primitiveFileRead: function(argCount) {
         var count = this.stackInteger(0),
             startIndex = this.stackInteger(1) - 1, // make zero based
             arrayObj = this.stackNonInteger(2),
-            fileObj = this.stackNonInteger(3);
-        if (!this.success || !fileObj.fileName) return false;
+            handle = this.stackNonInteger(3);
+        if (!this.success || !handle.file) return false;
         if (!count) return this.popNandPushIfOK(argCount+1, 0);
         if (!arrayObj.bytes) {
             console.log("File reading into non-bytes object not implemented yet");
@@ -3213,35 +3196,16 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         if (startIndex < 0 || startIndex + count > arrayObj.bytes.length)
             return false;
 
-        var doRead = function() {
-            var srcArray = fileObj.fileContents,
+        return this.fileContentsDo(handle.file, function(file) {
+            if (!file.contents)
+                return this.popNandPushIfOK(argCount+1, 0);
+            var srcArray = file.contents,
                 dstArray = arrayObj.bytes;
-            count = Math.min(count, fileObj.fileSize - fileObj.filePos);
+            count = Math.min(count, file.size - handle.filePos);
             for (var i = 0; i < count; i++)
-                dstArray[startIndex + i] = srcArray[fileObj.filePos++];
+                dstArray[startIndex + i] = srcArray[handle.filePos++];
             this.popNandPushIfOK(argCount+1, count);
-        }.bind(this);
-
-        if (fileObj.fileContents) {
-            doRead();
-        } else {
-            if (fileObj.fileContents === false) // failed to get contents before
-                return false;
-            var unfreeze = this.vm.freeze();
-            Squeak.fileGet(fileObj.fileName,
-                function success(contents){
-                    fileObj.fileContents = this.asUint8Array(contents);
-                    unfreeze();
-                    doRead();
-                }.bind(this),
-                function error(msg) {
-                    console.log("File get failed: " + msg);
-                    fileObj.fileContents = false;
-                    unfreeze();
-                    this.popNandPushIfOK(argCount+1, 0);
-                }.bind(this));
-        }
-        return true;
+        }.bind(this));
     },
     primitiveFileRename: function(argCount) {
         console.log("Not yet implemented: primitiveFileRename");
@@ -3249,16 +3213,16 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     },
     primitiveFileSetPosition: function(argCount) {
         var pos = this.stackPos32BitInt(0),
-            fileObj = this.stackNonInteger(1);
-        if (!this.success || !fileObj.fileName) return false;
-        fileObj.filePos = pos;
+            handle = this.stackNonInteger(1);
+        if (!this.success || !handle.file) return false;
+        handle.filePos = pos;
         this.vm.pop(argCount);
         return true;
     },
     primitiveFileSize: function(argCount) {
-        var fileObj = this.stackNonInteger(0);
-        if (!this.success || !fileObj.fileName) return false;
-        this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(fileObj.fileSize));
+        var handle = this.stackNonInteger(0);
+        if (!this.success || !handle.file) return false;
+        this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(handle.file.size));
         return true;
     },
     primitiveFileStdioHandles: function(argCount) {
@@ -3273,8 +3237,8 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         var count = this.stackInteger(0),
             startIndex = this.stackInteger(1) - 1, // make zero based
             arrayObj = this.stackNonInteger(2),
-            fileObj = this.stackNonInteger(3);
-        if (!this.success || !fileObj.fileName || !fileObj.fileWrite) return false;
+            handle = this.stackNonInteger(3);
+        if (!this.success || !handle.file || !handle.fileWrite) return false;
         if (!count) return this.popNandPushIfOK(argCount+1, 0);
         if (!arrayObj.bytes) {
             console.log("File writing from non-bytes object not implemented yet");
@@ -3283,38 +3247,82 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         if (startIndex < 0 || startIndex + count > arrayObj.bytes.length)
             return false;
 
-        var doWrite = function() {
+        return this.fileContentsDo(handle.file, function(file) {
             var srcArray = arrayObj.bytes,
-                dstArray = fileObj.fileContents;
-            if (fileObj.filePos + count > dstArray.length) {
-                var newSize = dstArray.length === 0 ? fileObj.filePos + count :
-                    Math.max(fileObj.filePos + count, dstArray.length + 10000);
-                fileObj.fileContents = new Uint8Array(newSize);
-                fileObj.fileContents.set(dstArray);
-                dstArray = fileObj.fileContents;
+                dstArray = file.contents || [];
+            if (handle.filePos + count > dstArray.length) {
+                var newSize = dstArray.length === 0 ? handle.filePos + count :
+                    Math.max(handle.filePos + count, dstArray.length + 10000);
+                file.contents = new Uint8Array(newSize);
+                file.contents.set(dstArray);
+                dstArray = file.contents;
             }
             for (var i = 0; i < count; i++)
-                dstArray[fileObj.filePos++] = srcArray[startIndex + i];
-            if (fileObj.filePos > fileObj.fileSize) fileObj.fileSize = fileObj.filePos;
-            fileObj.fileModified = true;
+                dstArray[handle.filePos++] = srcArray[startIndex + i];
+            if (handle.filePos > file.size) file.size = handle.filePos;
+            file.modified = true;
             this.popNandPushIfOK(argCount+1, count);
-        }.bind(this);
-
-        if (fileObj.fileContents) {
-            doWrite();
+        }.bind(this));
+    },
+    fileOpen: function(filename, writeFlag) {
+        // if a file is opened for read and write at the same time,
+        // they must share the contents. That's why all open files
+        // are held in the ref-counted global SqueakFiles
+        if (typeof SqueakFiles == 'undefined')
+            SqueakFiles = {};
+        var path = Squeak.splitFilePath(filename);
+        if (!path.basename) return null;    // malformed filename
+        // if it is open already, return it   
+        var file = SqueakFiles[path.fullname];
+        if (file) {
+            ++file.refCount;
+            return file;
+        }
+        // otherwise, fetch or create its directory entry
+        var directory = Squeak.dirList(path.dirname);
+        if (!directory) return null;
+        var entry = directory[path.basename],
+            contents = null;
+        if (!entry) {
+            if (!writeFlag) return null;
+            contents = new Uint8Array();
+            entry = Squeak.filePut(path.fullname, contents.buffer);
+            if (!entry) return null;
+        }
+        // make the file object
+        file = {
+            name: path.fullname,
+            size: entry[4],         // actual file size, may differ from contents.length
+            contents: contents,     // possibly null, fetched when needed
+            modified: false,
+            refCount: 1
+        };
+        SqueakFiles[file.name] = file;
+        return file;
+    },
+    fileClose: function(file) {
+        Squeak.flushFile(file);
+        if (--file.refCount == 0)
+            delete SqueakFiles[file.name];
+    },
+    fileContentsDo: function(file, func) {
+        if (file.contents) {
+            func(file);
         } else {
+            if (file.contents === false) // failed to get contents before
+                return false;
             var unfreeze = this.vm.freeze();
-            Squeak.fileGet(fileObj.fileName,
+            Squeak.fileGet(file.name,
                 function success(contents){
-                    fileObj.fileContents = this.asUint8Array(contents);
+                    file.contents = this.asUint8Array(contents);
                     unfreeze();
-                    doWrite();
+                    func(file);
                 }.bind(this),
                 function error(msg) {
-                    console.log("File get failed: " + msg); // happens when deleting file while opened
-                    fileObj.fileContents = new Uint8Array(fileObj.fileSize);
+                    console.log("File get failed: " + msg);
+                    file.contents = false;
                     unfreeze();
-                    doWrite();
+                    func(file);
                 }.bind(this));
         }
         return true;
@@ -3969,6 +3977,27 @@ Object.extend(Squeak, {
             dirname = matches[1] || '/',
             basename = matches[2];
         return {fullname: filepath, dirname: dirname, basename: basename};
+    },
+    flushFile: function(file) {
+        if (file.modified) {
+            var buffer = file.contents.buffer;
+            if (buffer.byteLength !== file.size) {
+                buffer = new ArrayBuffer(file.size);
+                (new Uint8Array(buffer)).set(file.contents.subarray(0, file.size));
+            }
+            Squeak.filePut(file.name, buffer);
+            file.modified = false;
+        }
+    },
+    flushAllFiles: function() {
+        if (typeof SqueakFiles == 'undefined') return;
+        for (var name in SqueakFiles)
+            this.flushFile(SqueakFiles[name]);
+    },
+    closeAllFiles: function() {
+        // close the files held open in memory
+        Squeak.flushAllFiles();
+        delete SqueakFiles;
     },
     totalSeconds: function() {
         // seconds since 1901-01-01, local time

@@ -868,11 +868,12 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         return this.pointers[0];
     },
     className: function() {
+        if (!this.pointers) return "?!?";
         var size = this.pointers.length;
-        var isMeta = size < 9;
-        var cls = isMeta ? this.pointers[size - 1] : this;
-        var nameObj = cls.pointers[Squeak.Class_name];
-        var name = nameObj.bytesAsString();
+        var isMeta = size < 9;  // true for all Squeak versions, hopefully
+        var cls = isMeta ? this.pointers[size == 7 ? 6 : 5] : this;
+        var nameObj = cls.pointers && cls.pointers[Squeak.Class_name];
+        var name = nameObj && nameObj.bytes ? nameObj.bytesAsString() : "???";
         return isMeta ? name + " class" : name;
     }
 },
@@ -1847,8 +1848,8 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
             if (classAndMethodString == (classObj.className() + '>>' + selectorObj.bytesAsString()))
                 return found = methodObj;
         });
-        if (!found) throw 'method not found: ', classAndMethodString;
         this.breakOnMethod = found;
+        return found;
     },
     breakOnReturn: function() {
         this.breakOnContextChanged = false;
@@ -4079,7 +4080,8 @@ Object.subclass('users.bert.SqueakJS.vm.InstructionPrinter',
 	    this.print('push: thisContext');
     },
     pushConstant: function(obj) {
-    	this.print('pushConst: ' + obj.toString());
+        var value = obj.sqInstName ? obj.sqInstName() : obj.toString();
+        this.print('pushConst: ' + value);
     },
     pushLiteralVariable: function(anAssociation) {
     	this.print('pushBinding: ' + anAssociation.assnKeyAsString());

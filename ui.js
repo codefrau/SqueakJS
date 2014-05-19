@@ -21,7 +21,7 @@ module('users.bert.SqueakJS.ui').requires("lively.data.FileUpload").toRun(functi
  * THE SOFTWARE.
  */
 
-lively.data.FileUpload.Handler.subclass('users.bert.SqueakJS.ui.SqueakLoader', {
+lively.data.FileUpload.Handler.subclass('users.bert.SqueakJS.ui.ImageLoader', {
     handles: function(file) {
         return file.type == 'application/squeak-image' || file.name.match(/\.image$/);
     },
@@ -29,6 +29,8 @@ lively.data.FileUpload.Handler.subclass('users.bert.SqueakJS.ui.SqueakLoader', {
         return {readMethod: "asArrayBuffer"}
     },
     onLoad: function(evt) {
+        console.log("Storing " + this.file.name);
+        Squeak.filePut(this.file.name, evt.target.result);
         this.openImage(this.file.name, this.file.type, evt.target.result, this.pos);
     },
     openImage: function(name, mime, buffer, pos) {
@@ -38,6 +40,19 @@ lively.data.FileUpload.Handler.subclass('users.bert.SqueakJS.ui.SqueakLoader', {
     },
     findSqueakMorph: function() {
         return $world.submorphs.detect(function(morph){return !!morph.loadImageFromBuffer});
+    },
+});
+
+lively.data.FileUpload.Handler.subclass('users.bert.SqueakJS.ui.FileLoader', {
+    handles: function(file) {
+        return true;
+    },
+    getUploadSpec: function(evt, file) {
+        return {readMethod: "asArrayBuffer"}
+    },
+    onLoad: function(evt) {
+        console.log("Storing " + this.file.name);
+        Squeak.filePut(this.file.name, evt.target.result);
     },
 });
 

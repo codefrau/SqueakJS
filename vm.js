@@ -2089,7 +2089,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 73: return this.popNandPushIfOK(2, this.objectAt(false,false,true)); // instVarAt:
             case 74: return this.popNandPushIfOK(3, this.objectAtPut(false,false,true)); // instVarAt:put:
             case 75: return this.popNandPushIfOK(1, this.stackNonInteger(0).hash); // Object.identityHash
-            case 76: return false; // primitiveStoreStackp (Blue Book: primitiveAsObject)
+            case 76: return this.primitiveStoreStackp(argCount);  // (Blue Book: primitiveAsObject)
             case 77: return this.popNandPushIfOK(1, this.someInstanceOf(this.stackNonInteger(0))); // Class.someInstance
             case 78: return this.popNandPushIfOK(1, this.nextInstanceAfter(this.stackNonInteger(0))); // Object.nextInstance
             case 79: return this.primitiveNewMethod(argCount); // Compiledmethod.new
@@ -2146,7 +2146,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 130: return this.popNandPushIfOK(1, this.vm.image.fullGC()); // GC
             case 131: return this.popNandPushIfOK(1, this.vm.image.partialGC()); // GCmost
             case 132: return this.pop2andPushBoolIfOK(this.pointsTo(this.stackNonInteger(1), this.vm.top())); //Object.pointsTo
-            case 133: return false; //TODO primitiveSetInterruptKey
+            case 133: return true; //TODO primitiveSetInterruptKey
             case 134: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheInterruptSemaphore));
             case 135: return this.popNandPushIfOK(1, this.millisecondClockValue());
             case 136: return this.primitiveSignalAtMilliseconds(argCount); //Delay signal:atMs:());
@@ -2589,6 +2589,18 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         var x = this.vm.stackValue(1);
         var y = this.vm.stackValue(0);
         this.vm.popNandPush(1+argCount, this.makePointWithXandY(x, y));
+        return true;
+    },
+    primitiveStoreStackp: function(argCount) {
+        var ctxt = this.stackNonInteger(1),
+            newStackp = this.stackInteger(0);       
+        if (!this.success || newStackp < 0 || this.vm.decodeSqueakSP(newStackp) >= ctxt.pointers.length)
+            return false;
+        var stackp = ctxt.pointers[Squeak.Context_stackPointer];
+        while (stackp < newStackp)
+            ctxt.pointers[this.vm.decodeSqueakSP(++stackp)] = this.vm.nilObj;
+        ctxt.pointers[Squeak.Context_stackPointer] = newStackp;
+        this.vm.pop(argCount);
         return true;
     },
     primitiveNewMethod: function(argCount) {

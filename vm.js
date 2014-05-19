@@ -2228,7 +2228,6 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         if (firstLiteral.pointersSize() !== 4) return false;
         var moduleName = firstLiteral.pointers[0].bytesAsString();
         var functionName = firstLiteral.pointers[1].bytesAsString();
-        console.log('squeak: named primitive "' + moduleName + '.' + functionName + '"');
         var module = this.loadedModules[moduleName];
         if (!module) {
             if (module !== undefined) return false; // earlier load failed
@@ -2239,6 +2238,11 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             var primitive = module.exports[functionName];
             if (primitive) return primitive(argCount);
         }
+        if (["MiscPrimitivePlugin.primitiveCompareString",
+            "MiscPrimitivePlugin.primitiveIndexOfAsciiInString",
+            "MiscPrimitivePlugin.primitiveFindSubstring",
+            ].indexOf(moduleName + '.' + functionName) < 0)
+            console.log('squeak: unknown named primitive "' + moduleName + '.' + functionName + '"');
         return false;
     },
     loadModule: function(moduleName) {

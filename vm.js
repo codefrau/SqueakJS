@@ -2074,8 +2074,8 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 35: return false; // primitiveBitOrLargeIntegers
             case 36: return false; // primitiveBitXorLargeIntegers
             case 37: return false; // primitiveBitShiftLargeIntegers
-            case 38: return false; // TODO: primitiveFloatAt
-            case 39: return false; // TODO: primitiveFloatAtPut
+            //case 38: return false; // TODO: primitiveFloatAt
+            //case 39: return false; // TODO: primitiveFloatAtPut
             case 40: return this.popNandPushFloatIfOK(1,this.stackInteger(0)); // primitiveAsFloat
             case 41: return this.popNandPushFloatIfOK(2,this.stackFloat(1)+this.stackFloat(0));  // Float +
             case 42: return this.popNandPushFloatIfOK(2,this.stackFloat(1)-this.stackFloat(0));  // Float -	
@@ -2134,8 +2134,8 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 95: return false; // primitiveInputWord
             case 96: return this.primitiveCopyBits(argCount);  // BitBlt.copyBits
             case 97: return this.primitiveSnapshot(argCount);
-            case 98: return false; // primitiveStoreImageSegment
-            case 99: return false; // primitiveLoadImageSegment
+            //case 98: return false; // primitiveStoreImageSegment
+            //case 99: return false; // primitiveLoadImageSegment
             case 100: return this.vm.primitivePerformWithArgs(argCount, true); // Object.perform:withArguments:inSuperclass: (Blue Book: primitiveSignalAtTick)
             case 101: return this.primitiveBeCursor(argCount); // Cursor.beCursor
             case 102: return this.primitiveBeDisplay(argCount); // DisplayScreen.beDisplay
@@ -2151,15 +2151,15 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 112: return this.popNandPushIfOK(1, 1000000); //primitiveBytesLeft
             case 113: return this.primitiveQuit(argCount);
             case 114: return this.primitiveExitToDebugger(argCount);
-            case 115: return false; //TODO primitiveChangeClass					"Blue Book: primitiveOopsLeft"
+            //case 115: return false; //TODO primitiveChangeClass					"Blue Book: primitiveOopsLeft"
             case 116: return this.vm.flushMethodCacheForMethod(this.vm.top());
             case 117: return this.doNamedPrimitive(argCount, newMethod); // named prims
-            case 118: return false; //TODO primitiveDoPrimitiveWithArgs
+            //case 118: return false; //TODO primitiveDoPrimitiveWithArgs
             case 119: return this.vm.flushMethodCacheForSelector(this.vm.top());
             case 120: return false; //primitiveCalloutToFFI
             case 121: return this.primitiveImageName(argCount); //get+set imageName
             case 122: return this.primitiveReverseDisplay(argCount); // Blue Book: primitiveImageVolume
-            case 123: return false; //TODO primitiveValueUninterruptably
+            //case 123: return false; //TODO primitiveValueUninterruptably
             case 124: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore));
             case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
             case 126: return false; //TODO primitiveDeferDisplayUpdates
@@ -2176,14 +2176,14 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 137: return this.popNandPushIfOK(1, this.secondClock()); // seconds since Jan 1, 1901
             case 138: return this.popNandPushIfOK(1, this.someObject()); // Object.someObject
             case 139: return this.popNandPushIfOK(1, this.nextObject(this.vm.top())); // Object.nextObject
-            case 140: return false; // TODO primitiveBeep
+            case 140: return true; // TODO primitiveBeep
             case 141: return this.primitiveClipboardText(argCount);
             case 142: return this.popNandPushIfOK(1, this.makeStString("/users/bert/SqueakJS/")); //vmPath
-            case 143: return false; // TODO primitiveShortAt
-            case 144: return false; // TODO primitiveShortAtPut
-            case 145: return false; // TODO primitiveConstantFill
+            //case 143: return false; // TODO primitiveShortAt
+            //case 144: return false; // TODO primitiveShortAtPut
+            //case 145: return false; // TODO primitiveConstantFill
             case 146: return false; // TODO primitiveReadJoystick
-            case 147: return false; // TODO primitiveWarpBits
+            //case 147: return false; // TODO primitiveWarpBits
             case 148: return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); //shallowCopy
             case 149: return false; // TODO primitiveGetAttribute
             case 150: return this.primitiveFileAtEnd(argCount);
@@ -2196,7 +2196,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 157: return this.primitiveFileSize(argCount);
             case 158: return this.primitiveFileWrite(argCount);
             case 159: return this.primitiveFileRename(argCount);
-            case 160: return false; // TODO primitiveAdoptInstance
+            //case 160: return false; // TODO primitiveAdoptInstance
             case 161: return this.primitiveDirectoryDelimitor(argCount);
             case 162: return this.primitiveDirectoryLookup(argCount);
             case 167: return false; // Processor.yield

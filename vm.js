@@ -620,8 +620,8 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
             this.float = original.float;
         } else {
             if (original.pointers) this.pointers = original.pointers.slice(0);   // copy
-            if (original.words) this.words = original.words.slice(0);            // copy
-            if (original.bytes) this.bytes = original.bytes.slice(0);            // copy
+            if (original.words) this.words = new Uint32Array(original.words);    // copy
+            if (original.bytes) this.bytes = new Uint8Array(original.bytes);     // copy
         }
     },
     initFromImage: function(oop, cls, fmt, hsh, data) {

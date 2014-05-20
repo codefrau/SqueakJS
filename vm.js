@@ -3605,20 +3605,25 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
             if (this.combinationRule == 3) { //Store mode avoids dest merge function
                 if ((this.skew === 0) && (halftoneWord === 0xFFFFFFFF)) {
                     //Non-skewed with no halftone
-                    if (this.hDir == -1) {
-                        for (var word = 2; word < this.nWords; word++) {
-                            thisWord = this.source.bits[this.sourceIndex];
-                            this.dest.bits[this.destIndex] = thisWord;
-                            this.sourceIndex += hInc;
-                            this.destIndex += hInc;
-                        }
-                    } else {
-                        for (var word = 2; word < this.nWords; word++) {
+                    var n = this.nWords - 2; // without first and last word
+                    if (n > 0) {
+                        if (hInc > 0) {
                             this.dest.bits[this.destIndex] = prevWord;
-                            prevWord = this.source.bits[this.sourceIndex];
-                            this.destIndex += hInc;
-                            this.sourceIndex += hInc;
+                            if (n > 1) {
+                                var somebits = this.source.bits.subarray(this.sourceIndex, this.sourceIndex-1 + n);
+                                this.dest.bits.set(somebits, this.destIndex+1);
+                            }
+                            prevWord = this.source.bits[this.sourceIndex-1 + n];
+                        } else {
+                            if (n == 1) {
+                                this.dest.bits[this.destIndex] = this.source.bits[this.sourceIndex];
+                            } else {
+                                var somebits = this.source.bits.subarray(this.sourceIndex - n + 1, this.sourceIndex - 1);
+                                this.dest.bits.set(somebits, this.destIndex - n + 1);
+                            }
                         }
+                        this.sourceIndex += hInc * n;
+                        this.destIndex += hInc * n;
                     }
                 } else {
                     //skewed and/or halftoned

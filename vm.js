@@ -2503,11 +2503,14 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             if (info.array !== array) {this.success = false; return array;}
         } else {// slow entry installs in cache if appropriate
             if (array.isFloat) { // present float as word array
-                throw "not implemented yet"
-                var floatData = array.floatData();
-                if (index==1) return this.pos32BitIntFor(floatData.getUint32(0, false));
-                if (index==2) return this.pos32BitIntFor(floatData.getUint32(4, false));
-                this.success = false; return array;
+                var wordToPut = this.stackPos32BitInt(0);
+                if (this.success && (index == 1 || index == 2)) {
+                    var floatData = array.floatData();
+                    floatData.setUint32(index == 1 ? 0 : 4, wordToPut, false);
+                    array.float = floatData.getFloat64(0);
+                    debugger;
+                } else this.success = false;
+                return this.vm.stackValue(0);
             }
             info = this.makeAtCacheInfo(this.atPutCache, this.vm.specialSelectors[34], array, convertChars, includeInstVars);
         }

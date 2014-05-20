@@ -750,6 +750,10 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
     },
 },
 'accessing', {
+    isWordsOrBytes: function() {
+        var fmt = this.format;
+        return fmt == 6  || (fmt >= 8 && fmt <= 11);
+    },
     getPointer: function(zeroBasedIndex){
         return this.pointers[zeroBasedIndex];
     },
@@ -2195,7 +2199,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 142: return this.popNandPushIfOK(1, this.makeStString("/users/bert/SqueakJS/")); //vmPath
             case 143: // short at and shortAtPut
             case 144: return this.primitiveShortAtAndPut(argCount);
-            //case 145: return false; // TODO primitiveConstantFill
+            case 145: return this.primitiveConstantFill(argCount);
             case 146: return false; // TODO primitiveReadJoystick
             //case 147: return false; // TODO primitiveWarpBits
             case 148: return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); //shallowCopy
@@ -2663,6 +2667,21 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             array[index] = value;
         }
         this.popNandPushIfOK(argCount+1, value);
+        return true;
+    },
+    primitiveConstantFill:  function(argCount) {
+        var rcvr = this.stackNonInteger(1),
+            value = this.stackPos32BitInt(0);
+        if (!this.success || !rcvr.isWordsOrBytes())
+            return false;
+        var array = rcvr.words || rcvr.bytes;
+        if (array) {
+            if (array === rcvr.bytes && value > 255)
+                return false;
+            for (var i = 0; i < array.length; i++)
+                array[i] = value;
+        }
+        this.vm.popN(argCount);
         return true;
     },
     primitiveNewMethod: function(argCount) {

@@ -227,11 +227,17 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
             pos += 4;
             return int;
         };
-        var readWords = function(n) {
-            var words = [];
-            for (var j = 0; j < n; j++)
-                words.push(readWord());
-            return words;
+        var readBits = function(nWords, format) {
+            if (format < 5) { // pointers (do endian conversion)
+                var oops = [];
+                while (oops.length < nWords)
+                    oops.push(readWord());
+                return oops;
+            } else { // words (no endian conversion yet)
+                var bits = new Uint32Array(arraybuffer, pos, nWords);
+                pos += nWords*4;
+                return bits;
+            }
         };
         // read version
         var version = readWord();
@@ -283,11 +289,11 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
                 case Squeak.HeaderTypeFree:
                     throw "Unexpected free block";
             }
-            var oop = ptr - 4; //0-rel byte oop of this object (base header)
             nWords--;  //length includes base header which we have already read
-            var format = ((header>>8) & 15);
-            var hash = ((header>>17) & 4095);
-            var bits = readWords(nWords);
+            var oop = ptr - 4, //0-rel byte oop of this object (base header)
+                format = (header>>8) & 15,
+                hash = (header>>17) & 4095,
+                bits = readBits(nWords, format);
             ptr += nWords * 4;
 
             var object = new users.bert.SqueakJS.vm.Object();
@@ -565,27 +571,27 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
 
 Object.subclass('users.bert.SqueakJS.vm.Object',
 'initialization', {
-    initInstanceOf: function(aClass, indexableSize, hash, filler) {
+    initInstanceOf: function(aClass, indexableSize, hash, nilObj) {
         this.sqClass = aClass;
         this.hash = hash;
-        var instSpec = aClass.getPointer(Squeak.Class_format);
-        var instSize = ((instSpec>>1) & 0x3F) + ((instSpec>>10) & 0xC0) - 1; //0-255
+        var instSpec = aClass.getPointer(Squeak.Class_format),
+            instSize = ((instSpec>>1) & 0x3F) + ((instSpec>>10) & 0xC0) - 1; //0-255
         this.format = (instSpec>>7) & 0xF; //This is the 0-15 code
 
         if (this.format < 8) {
             if (this.format != 6) {
                 if (instSize + indexableSize > 0)
-                    this.pointers = this.fillArray(instSize + indexableSize, filler);
+                    this.pointers = this.fillArray(instSize + indexableSize, nilObj);
             } else // Words
                 if (indexableSize > 0)
                     if (aClass.isFloatClass) {
                         this.isFloat = true;
                         this.float = 0.0;
                     } else
-                        this.words = this.fillArray(indexableSize, 0); 
+                        this.words = new Uint32Array(indexableSize); 
         } else // Bytes
             if (indexableSize > 0)
-                this.bytes = this.fillArray(indexableSize, 0); //Methods require further init of pointers
+                this.bytes = new Uint8Array(indexableSize); //Methods require further init of pointers
 
 //      Definition of Squeak's format code...
 //
@@ -641,22 +647,22 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
                 this.pointers = this.decodePointers(nWords, this.bits, oopMap);
         } else if (this.format >= 12) {
             //Formats 12-15 -- CompiledMethods both pointers and bits
-            var methodHeader = this.bits[0];
-            var numLits = (methodHeader>>10) & 255;
-            this.isCompiledMethod = true;
-            this.pointers = this.decodePointers(numLits+1, this.bits, oopMap); //header+lits
-            this.bytes = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this.format & 3, littleEndian);
+            var words = this.decodeWords(nWords, this.bits, littleEndian),
+                methodHeader = words[0],
+                numLits = (methodHeader>>10) & 255;
+            this.pointers = this.decodePointers(numLits+1, words, oopMap); //header+lits
+            this.bytes = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this.format & 3);
         } else if (this.format >= 8) {
             //Formats 8..11 -- ByteArrays (and ByteStrings)
             if (nWords > 0)
-                this.bytes = this.decodeBytes(nWords, this.bits, 0, this.format & 3, littleEndian);
+                this.bytes = this.decodeBytes(nWords, this.bits, 0, this.format & 3);
         } else if (this.sqClass == floatClass) {
             //Floats need two ints to be converted to double
             this.isFloat = true;
-            this.float = this.decodeFloat(this.bits);
+            this.float = this.decodeFloat(this.bits, littleEndian);
         } else {
             if (nWords > 0)
-                this.words = this.decodeWords(nWords, this.bits);
+                this.words = this.decodeWords(nWords, this.bits, littleEndian);
         }
         delete this.bits;
         this.mark = false; // for GC
@@ -673,40 +679,25 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         }
         return ptrs;        
     },
-    decodeWords: function(nWords, theBits) {
-        return theBits;
+    decodeWords: function(nWords, theBits, littleEndian) {
+        var data = new DataView(theBits.buffer, theBits.byteOffset),
+            words = new Uint32Array(nWords);
+        for (var i = 0; i < nWords; i++)
+            words[i] = data.getUint32(i*4, littleEndian);
+        return words;
     },
-    decodeBytes: function (nWords, theBits, wordOffset, fmtLowBits, littleEndian) {
-        //Adjust size for low bits and extract bytes from ints
-        var nBytes = (nWords * 4) - fmtLowBits;
-        var bytes = [];
-        var wordIx = wordOffset;
-        var fourBytes = 0;
-        for (var i = 0; i < nBytes; i++) {
-            if ((i & 3) === 0)
-                fourBytes = theBits[wordIx++];
-            bytes[i] = littleEndian
-                ? (fourBytes>>(8*(i&3)))&255        // little endian
-                : (fourBytes>>(8*(3-(i&3))))&255;   // big endian
-        }
+    decodeBytes: function (nWords, theBits, wordOffset, fmtLowBits) {
+        // Adjust size for low bits and make a copy
+        var nBytes = (nWords * 4) - fmtLowBits,
+            wordsAsBytes = new Uint8Array(theBits.buffer, theBits.byteOffset + wordOffset * 4, nBytes),
+            bytes = new Uint8Array(nBytes);
+        bytes.set(wordsAsBytes);
         return bytes;
     },
-
-    decodeFloat: function(theBits) {
-        var buffer = new ArrayBuffer(8);
-        var data = new DataView(buffer);
-        data.setUint32(0, theBits[0], false);
-        data.setUint32(4, theBits[1], false);
-        var float = data.getFloat64(0, false);
+    decodeFloat: function(theBits, littleEndian) {
+        var data = new DataView(theBits.buffer, theBits.byteOffset),
+            float = data.getFloat64(0, littleEndian);
         return float;
-    },
-    floatData: function() {
-        var buffer = new ArrayBuffer(8);
-        var data = new DataView(buffer);
-        data.setFloat64(0, this.float, false);
-        //1st word is data.getUint32(0, false);
-        //2nd word is data.getUint32(4, false);
-        return data;
     },
     fillArray: function(length, filler) {
         for (var array = [], i = 0; i < length; i++)
@@ -721,7 +712,10 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
     },
     bytesAsString: function() {
         if (!this.bytes) return '';
-        return this.bytes.map(function(char) { return String.fromCharCode(char); }).join('');
+        var chars = [];
+        for (var i = 0; i < this.bytes.length; i++)
+            chars.push(String.fromCharCode(this.bytes[i]));
+        return chars.join('');
     },
     assnKeyAsString: function() {
         return this.getPointer(Squeak.Assn_key).bytesAsString();  
@@ -774,6 +768,14 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         if (this.format>4 || this.format==2) return 0; //indexable fields only
         if (this.format<2) return this.pointers.length; //indexable fields only
         return this.sqClass.classInstSize(); //0-255
+    },
+    floatData: function() {
+        var buffer = new ArrayBuffer(8);
+        var data = new DataView(buffer);
+        data.setFloat64(0, this.float, false);
+        //1st word is data.getUint32(0, false);
+        //2nd word is data.getUint32(4, false);
+        return data;
     },
     setAddr: function(addr) {
         // move oop during GC. Answer next object's address
@@ -2636,7 +2638,6 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         if (!this.success) return 0;
         var litCount = (header>>9) & 0xFF;
         var method = this.vm.instantiateClass(this.vm.stackValue(2), byteCount);
-        method.isCompiledMethod = true;
         method.pointers = [header];
         while (method.pointers.length < litCount+1)
             method.pointers.push(this.vm.nilObj);

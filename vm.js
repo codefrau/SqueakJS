@@ -2009,6 +2009,11 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
                     primitiveFileWrite: this.primitiveFileWrite.bind(this),
                 },
             },
+            BitBltPlugin: {
+                exports: {
+                    primitiveCopyBits: this.primitiveCopyBits.bind(this),
+                }
+            },
         };
     },
 },
@@ -3001,17 +3006,6 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         }
         return true;
 	},
-	primitiveCopyBits: function(argCount) { // no rcvr class check, to allow unknown subclasses (e.g. under Turtle)
-        var bitbltObj = this.vm.stackValue(argCount);
-        var bitblt = new users.bert.SqueakJS.vm.BitBlt(this.vm);
-        if (!bitblt.loadBitBlt(bitbltObj)) return false;
-        bitblt.copyBits();
-        if (bitblt.combinationRule === 22 || bitblt.combinationRule === 32)
-            this.vm.popNandPush(argCount + 1, bitblt.bitCount);
-        else if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay])
-            this.showOnDisplay(bitblt.dest, bitblt.affectedRect());
-        return true;
-	},
     primitiveKeyboardNext: function(argCount) {
         return this.popNandPushIfOK(argCount+1, this.checkSmallInt(this.display.keys.shift()));
     },
@@ -3390,6 +3384,19 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         }
         return true;
     },
+},
+'BitBltPlugin', {
+	primitiveCopyBits: function(argCount) { // no rcvr class check, to allow unknown subclasses (e.g. under Turtle)
+        var bitbltObj = this.vm.stackValue(argCount);
+        var bitblt = new users.bert.SqueakJS.vm.BitBlt(this.vm);
+        if (!bitblt.loadBitBlt(bitbltObj)) return false;
+        bitblt.copyBits();
+        if (bitblt.combinationRule === 22 || bitblt.combinationRule === 32)
+            this.vm.popNandPush(argCount + 1, bitblt.bitCount);
+        else if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay])
+            this.showOnDisplay(bitblt.dest, bitblt.affectedRect());
+        return true;
+	},
 });
 Object.subclass('users.bert.SqueakJS.vm.BitBlt',
 'initialization', {
@@ -3480,7 +3487,8 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
         form.depth = formObj.pointers[Squeak.Form_depth];
         form.width = formObj.pointers[Squeak.Form_width];
         form.height = formObj.pointers[Squeak.Form_height];
-        if (!(form.width >= 0 && form.height >= 0)) return null; // checks for int
+        if (form.width === 0 && form.height === 0) return form;
+        if (!(form.width > 0 && form.height > 0)) return null;
         if (!form.bits) return null;    // checks for words
         form.msb = form.depth > 0;
         if (!form.msb) form.depth = -form.depth;

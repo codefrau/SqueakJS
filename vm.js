@@ -2181,8 +2181,8 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 140: return true; // TODO primitiveBeep
             case 141: return this.primitiveClipboardText(argCount);
             case 142: return this.popNandPushIfOK(1, this.makeStString("/users/bert/SqueakJS/")); //vmPath
-            //case 143: return false; // TODO primitiveShortAt
-            //case 144: return false; // TODO primitiveShortAtPut
+            case 143: // short at and shortAtPut
+            case 144: return this.primitiveShortAtAndPut(argCount);
             //case 145: return false; // TODO primitiveConstantFill
             case 146: return false; // TODO primitiveReadJoystick
             //case 147: return false; // TODO primitiveWarpBits
@@ -2630,6 +2630,25 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             ctxt.pointers[this.vm.decodeSqueakSP(++stackp)] = this.vm.nilObj;
         ctxt.pointers[Squeak.Context_stackPointer] = newStackp;
         this.vm.pop(argCount);
+        return true;
+    },
+    primitiveShortAtAndPut:  function(argCount) {
+        var rcvr = this.stackNonInteger(argCount),
+            index = this.stackInteger(argCount-1) - 1, // make zero-based
+            bits = rcvr.words || rcvr.bytes,
+        	array = bits && new Int16Array(bits.buffer);
+        if (!this.success || !array || index < 0 || index >= array.length)
+            return false;
+        var value;
+        if (argCount < 2) { // shortAt:
+            value = array[index];
+        } else { // shortAt:put:
+            value = this.stackInteger(0);
+            if (value < -32768 || value > 32767)
+                return false;
+            array[index] = value;
+        }
+        this.popNandPushIfOK(argCount+1, value);
         return true;
     },
     primitiveNewMethod: function(argCount) {

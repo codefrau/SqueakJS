@@ -732,6 +732,7 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         if (this.isNil) return "nil";
         if (this.isTrue) return "true";
         if (this.isFalse) return "false";
+        if (this.isFloat) {var str = this.float.toString(); if (!/\./.test(str)) str += '.0'; return str; }
         var className = this.sqClass.className();
         if (/ /.test(className))
             return 'the ' + className;
@@ -2014,6 +2015,12 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
                     primitiveCopyBits: this.primitiveCopyBits.bind(this),
                 }
             },
+            FloatArrayPlugin: {
+                exports: {
+                    primitiveAt: this.primitiveFloatArrayAtAndPut.bind(this),
+                    primitiveAtPut: this.primitiveFloatArrayAtAndPut.bind(this),
+                }
+            },
         };
     },
 },
@@ -2643,8 +2650,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     primitiveShortAtAndPut:  function(argCount) {
         var rcvr = this.stackNonInteger(argCount),
             index = this.stackInteger(argCount-1) - 1, // make zero-based
-            bits = rcvr.words || rcvr.bytes,
-        	array = bits && new Int16Array(bits.buffer);
+            array = rcvr.int16Array || (rcvr.words && (rcvr.int16Array = new Int16Array(rcvr.words.buffer)));
         if (!this.success || !array || index < 0 || index >= array.length)
             return false;
         var value;
@@ -3397,6 +3403,25 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             this.showOnDisplay(bitblt.dest, bitblt.affectedRect());
         return true;
 	},
+},
+'FloatArrayPlugin', {
+    primitiveFloatArrayAtAndPut: function(argCount) {
+        var rcvr = this.stackNonInteger(argCount),
+            index = this.stackPos32BitInt(argCount-1) - 1,
+            array = rcvr.float32Array || (rcvr.words && (rcvr.float32Array = new Float32Array(rcvr.words.buffer)));
+        if (!this.success || index < 0 || index >= array.length)
+            return false;
+        if (argCount < 2) {// at:
+            var value = array[index];
+            this.vm.popNandPush(argCount+1, this.makeFloat(value));
+        } else { // at:put:
+            var value = this.stackFloat(0);
+            if (!this.success) return false;
+            array[index] = value;
+            this.vm.popNandPush(argCount+1, this.vm.stackValue(0));
+        }
+        return true;
+    },
 });
 Object.subclass('users.bert.SqueakJS.vm.BitBlt',
 'initialization', {

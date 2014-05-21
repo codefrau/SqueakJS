@@ -2916,9 +2916,8 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         this.vm.newActiveContext(newProc.getPointer(Squeak.Proc_suspendedContext));
         newProc.setPointer(Squeak.Proc_suspendedContext, this.vm.nilObj);
         this.vm.reclaimableContextCount = 0;
-        if (this.vm.breakOnContextChanged || this.vm.breakOnContextReturned) {
+        if (this.vm.breakOnContextChanged) {
             this.vm.breakOnContextChanged = false;
-            this.vm.breakOnContextReturned = null;
             this.vm.breakOutOfInterpreter = 'break';
         }
     },

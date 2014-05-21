@@ -1983,13 +1983,14 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             0xFFFFCCCC, 0xFFFFFFCC, 0xFFFF00FF, 0xFFFF33FF, 0xFFFF66FF, 0xFFFF99FF, 0xFFFFCCFF, 0xFFFFFFFF];
     },
     initModules: function() {
+        this.missingPrimitives = {};
         this.loadedModules = {};
         this.externalModules = {};
         this.builtinModules = {
             MiscPrimitivePlugin: {
                 exports: {
                     primitiveStringHash: this.primitiveStringHash.bind(this),
-                },
+                }
             },
             FilePlugin: {
                 exports: {
@@ -2012,7 +2013,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
                     primitiveFileStdioHandles: this.primitiveFileStdioHandles.bind(this),
                     primitiveFileTruncate: this.primitiveFileTruncate.bind(this),
                     primitiveFileWrite: this.primitiveFileWrite.bind(this),
-                },
+                }
             },
             BitBltPlugin: {
                 exports: {
@@ -2256,12 +2257,17 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             var primitive = module.exports[functionName];
             if (primitive) return primitive(argCount);
         }
-        if (["MiscPrimitivePlugin.primitiveCompareString",
-            "MiscPrimitivePlugin.primitiveIndexOfAsciiInString",
-            "MiscPrimitivePlugin.primitiveFindSubstring",
-            ].indexOf(moduleName + '.' + functionName) < 0)
-            console.log('squeak: unknown named primitive "' + moduleName + '.' + functionName + '"');
+        this.missingPrimitive(moduleName + '.' + functionName);
         return false;
+    },
+    missingPrimitive: function(prim) {
+        // warn once about missing primitives
+        if (this.missingPrimitives[prim]) {
+            this.missingPrimitives[prim]++;
+        } else {
+            this.missingPrimitives[prim] = 1;
+            console.warn('primitive missing: ' + prim);
+        }
     },
     loadModule: function(moduleName) {
         var module = Squeak.externalModules[moduleName] || this.builtinModules[moduleName];

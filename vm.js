@@ -3014,7 +3014,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         return true;
 	},
 },
-'vm settings', {
+'vm functions', {
     getVMPath: function() {
         return "/users/bert/SqueakJS/";
     },
@@ -3057,8 +3057,6 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
 		};
 		return false;
     },
-},
-'platform', {
     primitiveImageName: function(argCount) {
         if (argCount == 0)
             return this.popNandPushIfOK(1, this.makeStString(this.vm.image.name));
@@ -3089,6 +3087,8 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         debugger;
         return true;
     },
+},
+'display', {
     primitiveBeCursor: function(argCount) {
         this.vm.popN(argCount); // return self
         return true;
@@ -3099,47 +3099,6 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         this.vm.popN(argCount); // return self
         return true;
 	},
-	primitiveClipboardText: function(argCount) {
-        if (argCount === 0) { // read from clipboard
-            if (typeof(this.display.clipboardString) !== 'string') return false;
-            this.vm.popNandPush(1, this.makeStString(this.display.clipboardString));
-        } else if (argCount === 1) { // write to clipboard
-            var stringObj = this.vm.top();
-            if (!stringObj.bytes) return false;
-            this.display.clipboardString = stringObj.bytesAsString();
-            this.display.clipboardStringChanged = true;
-            this.vm.pop();
-        }
-        return true;
-	},
-    primitiveKeyboardNext: function(argCount) {
-        return this.popNandPushIfOK(argCount+1, this.checkSmallInt(this.display.keys.shift()));
-    },
-    primitiveKeyboardPeek: function(argCount) {
-        var length = this.display.keys.length;
-        return this.popNandPushIfOK(argCount+1, length ? this.checkSmallInt(this.display.keys[0] || 0) : this.vm.nilObj);
-    },
-    primitiveMouseButtons: function(argCount) {
-        return this.popNandPushIfOK(argCount+1, this.checkSmallInt(this.display.buttons));
-    },
-    primitiveMousePoint: function(argCount) {
-        return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(this.checkSmallInt(this.display.mouseX), this.checkSmallInt(this.display.mouseY)));
-    },
-    primitiveRelinquishProcessorForMicroseconds: function(argCount) {
-        var millis = 100;
-        if (argCount > 1) return false;
-        if (argCount > 0) {
-            var micros = this.stackInteger(0);
-            if (!this.success) return false;
-            this.vm.pop();
-            millis = micros / 1000;
-        }
-        // make sure we tend to pending delays
-        this.vm.interruptCheckCounter = 0;
-        this.vm.isIdle = true;
-        this.vm.breakOutOfInterpreter = true;
-        return true;
-    },
     primitiveReverseDisplay: function(argCount) {
         this.reverseDisplay = !this.reverseDisplay;
         this.redrawFullDisplay();
@@ -3245,6 +3204,51 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     displayFlush: function(){
         // no-op for now
         // TODO: copy damage rect code from Smalltalk-78 VM
+    },
+},
+'input', {
+	primitiveClipboardText: function(argCount) {
+        if (argCount === 0) { // read from clipboard
+            if (typeof(this.display.clipboardString) !== 'string') return false;
+            this.vm.popNandPush(1, this.makeStString(this.display.clipboardString));
+        } else if (argCount === 1) { // write to clipboard
+            var stringObj = this.vm.top();
+            if (!stringObj.bytes) return false;
+            this.display.clipboardString = stringObj.bytesAsString();
+            this.display.clipboardStringChanged = true;
+            this.vm.pop();
+        }
+        return true;
+	},
+    primitiveKeyboardNext: function(argCount) {
+        return this.popNandPushIfOK(argCount+1, this.checkSmallInt(this.display.keys.shift()));
+    },
+    primitiveKeyboardPeek: function(argCount) {
+        var length = this.display.keys.length;
+        return this.popNandPushIfOK(argCount+1, length ? this.checkSmallInt(this.display.keys[0] || 0) : this.vm.nilObj);
+    },
+    primitiveMouseButtons: function(argCount) {
+        return this.popNandPushIfOK(argCount+1, this.checkSmallInt(this.display.buttons));
+    },
+    primitiveMousePoint: function(argCount) {
+        return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(this.checkSmallInt(this.display.mouseX), this.checkSmallInt(this.display.mouseY)));
+    },
+},
+'time', {
+    primitiveRelinquishProcessorForMicroseconds: function(argCount) {
+        var millis = 100;
+        if (argCount > 1) return false;
+        if (argCount > 0) {
+            var micros = this.stackInteger(0);
+            if (!this.success) return false;
+            this.vm.pop();
+            millis = micros / 1000;
+        }
+        // make sure we tend to pending delays
+        this.vm.interruptCheckCounter = 0;
+        this.vm.isIdle = true;
+        this.vm.breakOutOfInterpreter = true;
+        return true;
     },
 	millisecondClockValue: function() {
         //Return the value of the millisecond clock as an integer.

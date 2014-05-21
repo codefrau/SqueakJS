@@ -3549,40 +3549,6 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
         this.mergeFn = this.makeMergeFn(this.combinationRule);
         return true;
     },
-    makeMergeFn: function(rule) {
-        switch(rule) {
-            case 0: return function(src, dst) { return 0 };
-            case 1: return function(src, dst) { return src & dst };
-            case 2: return function(src, dst) { return src & (~dst) };
-            case 3: return function(src, dst) { return src };
-            case 4: return function(src, dst) { return (~src) & dst };
-            case 5: return function(src, dst) { return dst };
-            case 6: return function(src, dst) { return src ^ dst };
-            case 7: return function(src, dst) { return src | dst };
-            case 8: return function(src, dst) { return (~src) & (~dst) };
-            case 9: return function(src, dst) { return (~src) ^ dst };
-            case 10: return function(src, dst) { return ~dst };
-            case 11: return function(src, dst) { return src | (~dst) };
-            case 12: return function(src, dst) { return ~src };
-            case 13: return function(src, dst) { return (~src) | dst };
-            case 14: return function(src, dst) { return (~src) | (~dst) };
-            case 15: return function(src, dst) { return dst };
-            case 16: return function(src, dst) { return dst };
-            case 17: return function(src, dst) { return dst };
-            case 18: return function(src, dst) { return src + dst };
-            case 19: return function(src, dst) { return src - dst };
-            case 20: return function(src, dst) { return src };
-            case 21: return function(src, dst) { return src };
-            case 22: return function(src, dst) { return src };
-            case 23: return function(src, dst) { return src };
-            case 24: return function(src, dst) { return src };
-            case 25: return function(src, dst) { return src === 0 ? dst
-                : src | this.partitionedANDtonBitsnPartitions(~src, dst, this.dest.depth, this.dest.pixPerWord) };
-            case 26: return function(src, dst) {
-                return this.partitionedANDtonBitsnPartitions(~src, dst, this.dest.depth, this.dest.pixPerWord) };
-        }
-        throw "bitblt rule not implemented yet";
-    },
     loadHalftone: function(halftoneObj) {
         return halftoneObj.words;
     },
@@ -3650,7 +3616,7 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
             // First word in row is masked
             var destMask = this.mask1;
             var destWord = this.dest.bits[this.destIndex];
-            var mergeWord = this.mergeFn(halftoneWord, destWord);
+            var mergeWord = this.mergeFn(halftoneWord, destWord, destMask);
             destWord = (destMask & mergeWord) | (destWord & (~destMask));
             this.dest.bits[this.destIndex++] = destWord;
             destMask = 0xFFFFFFFF;
@@ -3661,14 +3627,14 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
             else
                 for (var word = 2; word < this.nWords; word++) {
                         destWord = this.dest.bits[this.destIndex];
-                        mergeWord = this.mergeFn(halftoneWord, destWord);
+                        mergeWord = this.mergeFn(halftoneWord, destWord, 0xFFFFFFFF);
                         this.dest.bits[this.destIndex++] = mergeWord;
                 }
             //last word in row is masked
             if (this.nWords > 1) {
                     destMask = this.mask2;
                     destWord = this.dest.bits[this.destIndex];
-                    mergeWord = this.mergeFn(halftoneWord, destWord);
+                    mergeWord = this.mergeFn(halftoneWord, destWord, destMask);
                     destWord = (destMask & mergeWord) | (destWord & (~destMask));
                     this.dest.bits[this.destIndex++] = destWord;
             }
@@ -3732,7 +3698,7 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
                 | (((this.skew < 0) ? ( (thisWord & skewMask) >>> -this.skew) : ( (thisWord & skewMask) << this.skew)));
             prevWord = thisWord;
             var destWord = this.dest.bits[this.destIndex];
-            var mergeWord = this.mergeFn(skewWord & halftoneWord, destWord);
+            var mergeWord = this.mergeFn(skewWord & halftoneWord, destWord, destMask);
             destWord = (destMask & mergeWord) | (destWord & (~destMask));
             this.dest.bits[this.destIndex] = destWord;
             //The central horizontal loop requires no store masking */
@@ -3782,7 +3748,7 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
                     skewWord = (((unskew < 0) ? ( (prevWord & notSkewMask) >>> -unskew) : ( (prevWord & notSkewMask) << unskew)))
                         | (((this.skew < 0) ? ( (thisWord & skewMask) >>> -this.skew) : ( (thisWord & skewMask) << this.skew)));
                     prevWord = thisWord;
-                    mergeWord = this.mergeFn(skewWord & halftoneWord, this.dest.bits[this.destIndex]);
+                    mergeWord = this.mergeFn(skewWord & halftoneWord, this.dest.bits[this.destIndex], 0xFFFFFFFF);
                     this.dest.bits[this.destIndex] = mergeWord;
                     this.destIndex += hInc;
                 }
@@ -3799,7 +3765,7 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
                 skewWord = (((unskew < 0) ? ((prevWord & notSkewMask) >>> -unskew) : ((prevWord & notSkewMask) << unskew)))
                     | (((this.skew < 0) ? ( (thisWord & skewMask) >>> -this.skew) : ( (thisWord & skewMask) << this.skew)));
                 destWord = this.dest.bits[this.destIndex];
-                mergeWord = this.mergeFn(skewWord & halftoneWord, destWord);
+                mergeWord = this.mergeFn(skewWord & halftoneWord, destWord, destMask);
                 destWord = (destMask & mergeWord) | (destWord & (~destMask));
                 this.dest.bits[this.destIndex] = destWord;
                 this.destIndex += hInc;
@@ -3857,10 +3823,10 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
                 /* align next word to leftmost pixel */
                 this.dstBitShift = dstShiftLeft;
                 if (this.destMask === 0xFFFFFFFF) { // avoid read-modify-write
-                    this.dest.bits[this.destIndex] = this.mergeFn(skewWord & halftoneWord, this.dest.bits[this.destIndex]);
+                    this.dest.bits[this.destIndex] = this.mergeFn(skewWord & halftoneWord, this.dest.bits[this.destIndex], 0xFFFFFFFF);
                 } else { // General version using dest masking
                     var destWord = this.dest.bits[this.destIndex];
-                    var mergeWord = this.mergeFn(skewWord & halftoneWord, destWord & this.destMask);
+                    var mergeWord = this.mergeFn(skewWord & halftoneWord, destWord & this.destMask, this.destMask);
                     destWord = (this.destMask & mergeWord) | (destWord & (~this.destMask));
                     this.dest.bits[this.destIndex] = destWord;
                 }
@@ -4023,14 +3989,111 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
             this.destDelta = (this.dest.pitch * this.vDir) - (this.nWords * this.hDir);
 		}
     },
-    partitionedANDtonBitsnPartitions: function(word1, word2, nBits, nParts) {
-        /* partition mask starts at the right */
-        var mask = this.maskTable[nBits];
-        var result = 0;
-        for (var i = 1; i <= nParts; i += 1) {
+},
+'rules', {
+    makeMergeFn: function(rule) {
+        var self = this;
+        switch(rule) {
+            case 0: return function() { return 0 };
+            case 1: return function(src, dst) { return src & dst };
+            case 2: return function(src, dst) { return src & (~dst) };
+            case 3: return function(src, dst) { return src };
+            case 4: return function(src, dst) { return (~src) & dst };
+            case 5: return function(src, dst) { return dst };
+            case 6: return function(src, dst) { return src ^ dst };
+            case 7: return function(src, dst) { return src | dst };
+            case 8: return function(src, dst) { return (~src) & (~dst) };
+            case 9: return function(src, dst) { return (~src) ^ dst };
+            case 10: return function(src, dst) { return ~dst };
+            case 11: return function(src, dst) { return src | (~dst) };
+            case 12: return function(src, dst) { return ~src };
+            case 13: return function(src, dst) { return (~src) | dst };
+            case 14: return function(src, dst) { return (~src) | (~dst) };
+            case 15: return function(src, dst) { return dst };
+            case 16: return function(src, dst) { return dst };
+            case 17: return function(src, dst) { return dst };
+            case 18: return function(src, dst) { return src + dst };
+            case 19: return function(src, dst) { return src - dst };
+            case 20: return function(src, dst) { return src };
+            case 21: return function(src, dst) { return src };
+            case 22: return function(src, dst) { return src };
+            case 23: return function(src, dst) { return src };
+            case 24: return function(src, dst) { return src };
+            case 25: return function(src, dst) { return src === 0 ? dst
+                : src | self.partitionedAND(~src, dst, self.dest.depth, self.dest.pixPerWord) };
+            case 26: return function(src, dst) {
+                return self.partitionedAND(~src, dst, self.dest.depth, self.dest.pixPerWord) };
+            case 32: return function(src, dst, mask) { // accumulate differences, do not modify dst 
+                self.rgbDiff(src, dst, mask, self.dest.depth, self.dest.pixPerWord);
+                return dst; };
+            case 34: return function(src, dst) { return self.alphaBlendScaled(src, dst) };
+        }
+        throw Error("bitblt rule " + rule + " not implemented yet");
+    },
+    rgbDiff: function(src, dst, mask, nBits, nParts) {
+        var pixMask = this.maskTable[nBits],
+            bitsPerColor = nBits == 16 ? 5 : 8,
+            rgbMask = this.maskTable[bitsPerColor];
+        var diff = 0;
+        for (var i = 0; i < nParts; i++) {
+            if (mask & pixMask) { // Only tally pixels within the destination rectangle
+                var dstPix = dst & pixMask,
+                    srcPix = src & pixMask;
+                if (nBits < 16) { // count whether pixel differs
+                    if (dstPix !== srcPix) this.bitCount++;
+                } else { // count rgb difference
+                    var diff = this.partitionedSub(srcPix, dstPix, bitsPerColor, 3);
+                    this.bitCount += (diff & rgbMask)
+                        + ((diff>>bitsPerColor) & rgbMask)
+                        + ((diff>>(bitsPerColor*2)) & rgbMask);
+                }
+            }
+            // shift next pixel into low bits 
+            src = src >>> nBits;
+            dst = dst >>> nBits;
+            mask = mask >>> nBits;
+        }
+    },
+    alphaBlendScaled: function(src, dst) {
+        // 	Blend srcWord with dstWord using the alpha value from srcWord.
+        // 	Alpha is encoded as 0 meaning 0.0, and 255 meaning 1.0.
+        // 	In contrast to alphaBlend() the color produced is
+        // 		srcColor + (1-srcAlpha) * dstColor
+        // 	i.e., it is assumed that the source color is already scaled.
+        var unAlpha = (255 - (src >>> 24)) / 255,
+            b = Math.min(255, unAlpha * (dst & 255) + (src & 255)),
+            g = Math.min(255, unAlpha * ((dst>>>8) & 255) + ((src>>>8) & 255)),
+            r = Math.min(255, unAlpha * ((dst>>>16) & 255) + ((src>>>16) & 255)),
+            a = Math.min(255, unAlpha * (dst>>>24) + (src>>>24));
+        return ((((((a << 8) + r) << 8) + g) << 8) + b) | 0;
+	},
+    partitionedSub: function(src, dst, nBits, nParts) {
+        var mask = this.maskTable[nBits],
+            result = 0;
+        for (var i = 0; i < nParts; i++) {
+            result |= (dst & mask) - (src & mask);
+        	mask = mask << nBits;
+    	}
+        return result;
+	},
+    partitionedAdd: function(src, dst, nBits, nParts) {
+        var mask = this.maskTable[nBits],
+            result = 0;
+        for (var i = 0; i < nParts; i++) {
+            result |= (dst & mask) + (src & mask);
+        	mask = mask << nBits;
+    	}
+        return result;
+	},
+    partitionedAND: function(word1, word2, nBits, nParts) {
+        // AND word1 to word2 as nParts partitions of nBits each.
+        // Any field of word1 not all-ones is treated as all-zeroes.
+        // Used for erasing, eg, brush shapes prior to ORing in a color
+        var mask = this.maskTable[nBits],
+            result = 0;
+        for (var i = 0; i < nParts; i++) {
         	if ((word1 & mask) === mask)
         		result = result | (word2 & mask);
-        	/* slide left to next partition */
         	mask = mask << nBits;
     	}
         return result;

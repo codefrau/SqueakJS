@@ -2244,14 +2244,14 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 139: return this.popNandPushIfOK(1, this.nextObject(this.vm.top())); // Object.nextObject
             case 140: return true; // TODO primitiveBeep
             case 141: return this.primitiveClipboardText(argCount);
-            case 142: return this.popNandPushIfOK(1, this.makeStString("/users/bert/SqueakJS/")); //vmPath
+            case 142: return this.popNandPushIfOK(1, this.makeStString(this.getVMPath())); //vmPath
             case 143: // short at and shortAtPut
             case 144: return this.primitiveShortAtAndPut(argCount);
             case 145: return this.primitiveConstantFill(argCount);
             case 146: return false; // TODO primitiveReadJoystick
             //case 147: return false; // TODO primitiveWarpBits
             case 148: return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); //shallowCopy
-            case 149: return false; // TODO primitiveGetAttribute
+            case 149: return this.primitiveGetAttribute(argCount);
             case 150: return this.primitiveFileAtEnd(argCount);
             case 151: return this.primitiveFileClose(argCount);
             case 152: return this.primitiveFileGetPosition(argCount);
@@ -3015,6 +3015,25 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
 	},
 },
 'vm settings', {
+    getVMPath: function() {
+        return "/users/bert/SqueakJS/";
+    },
+    primitiveGetAttribute: function(argCount) {
+        var attr = this.stackInteger(0);
+        if (!this.success) return false;
+        var value;
+        switch (attr) {
+            case 0: value = this.getVMPath() + 'vm.js'; break;  // vm
+            case 1: value = this.vm.image.name; break;          // image
+            case 1001: value = "Web"; break;                    // OS
+            case 1002: value = navigator.userAgent; break;      // OS version
+            case 1003: value = "unknown"; break;                // processor type
+            case 1004: value = "SqueakJS"; break;               // VM version
+            default: return false;
+        }
+        this.vm.popNandPush(argCount+1, this.makeStString(value));
+        return true;
+	},
     setLowSpaceThreshold: function() {
         var nBytes = this.stackInteger(0);
         if (this.success) this.vm.lowSpaceThreshold = nBytes;

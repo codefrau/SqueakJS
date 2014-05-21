@@ -2020,6 +2020,53 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
                     primitiveCopyBits: this.primitiveCopyBits.bind(this),
                 }
             },
+            B2DPlugin: {
+                exports: {
+                    // curry the primitive name and return value
+                    primitiveAddActiveEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddActiveEdgeEntry", 0),
+                    primitiveAddBezier: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddBezier", 0),
+                    primitiveAddBezierShape: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddBezierShape", 0),
+                    primitiveAddBitmapFill: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddBitmapFill", 0),
+                    primitiveAddCompressedShape: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddCompressedShape", 0),
+                    primitiveAddGradientFill: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddGradientFill", 0),
+                    primitiveAddLine: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddLine", 0),
+                    primitiveAddOval: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddOval", 0),
+                    primitiveAddPolygon: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddPolygon", 0),
+                    primitiveAddRect: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddRect", 0),
+                    primitiveChangedActiveEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveChangedActiveEdgeEntry", 0),
+                    primitiveCopyBuffer: this.fakePrimitive.bind(this, "B2DPlugin.primitiveCopyBuffer", 0),
+                    primitiveDisplaySpanBuffer: this.fakePrimitive.bind(this, "B2DPlugin.primitiveDisplaySpanBuffer", 0),
+                    primitiveDoProfileStats: this.fakePrimitive.bind(this, "B2DPlugin.primitiveDoProfileStats", 0),
+                    primitiveFinishedProcessing: this.fakePrimitive.bind(this, "B2DPlugin.primitiveFinishedProcessing", true),
+                    primitiveGetAALevel: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetAALevel", 0),
+                    primitiveGetBezierStats: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetBezierStats", 0),
+                    primitiveGetClipRect: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetClipRect", 0),
+                    primitiveGetCounts: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetCounts", 0),
+                    primitiveGetDepth: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetDepth", 1),
+                    primitiveGetFailureReason: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetFailureReason", 0),
+                    primitiveGetOffset: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetOffset", 0),
+                    primitiveGetTimes: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetTimes", 0),
+                    primitiveInitializeBuffer: this.fakePrimitive.bind(this, "B2DPlugin.primitiveInitializeBuffer", 0),
+                    primitiveInitializeProcessing: this.fakePrimitive.bind(this, "B2DPlugin.primitiveInitializeProcessing", 0),
+                    primitiveMergeFillFrom: this.fakePrimitive.bind(this, "B2DPlugin.primitiveMergeFillFrom", 0),
+                    primitiveNeedsFlush: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNeedsFlush", false),
+                    primitiveNeedsFlushPut: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNeedsFlushPut", 0),
+                    primitiveNextActiveEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNextActiveEdgeEntry", 0),
+                    primitiveNextFillEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNextFillEntry", 0),
+                    primitiveNextGlobalEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNextGlobalEdgeEntry", 0),
+                    primitiveRegisterExternalEdge: this.fakePrimitive.bind(this, "B2DPlugin.primitiveRegisterExternalEdge", 0),
+                    primitiveRegisterExternalFill: this.fakePrimitive.bind(this, "B2DPlugin.primitiveRegisterExternalFill", 0),
+                    primitiveRenderImage: this.fakePrimitive.bind(this, "B2DPlugin.primitiveRenderImage", 0),
+                    primitiveRenderScanline: this.fakePrimitive.bind(this, "B2DPlugin.primitiveRenderScanline", 0),
+                    primitiveSetAALevel: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetAALevel", 0),
+                    primitiveSetBitBltPlugin: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetBitBltPlugin", 0),
+                    primitiveSetClipRect: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetClipRect", 0),
+                    primitiveSetColorTransform: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetColorTransform", 0),
+                    primitiveSetDepth: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetDepth", 0),
+                    primitiveSetEdgeTransform: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetEdgeTransform", 0),
+                    primitiveSetOffset: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetOffset", 0),
+                }
+            },
             FloatArrayPlugin: {
                 exports: {
                     primitiveAt: this.primitiveFloatArrayAtAndPut.bind(this),
@@ -2268,6 +2315,15 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             this.missingPrimitives[prim] = 1;
             console.warn('primitive missing: ' + prim);
         }
+    },
+    fakePrimitive: function(prim, retVal, argCount) {
+        // fake a named primitive
+        // prim and retVal need to be curried when used:
+        //  this.fakePrimitive.bind(this, "Module.primitive", 42)
+        this.missingPrimitive(prim);
+        if (retVal === undefined) this.vm.popN(argCount);
+        else this.vm.popNandPush(argCount+1, this.makeStObject(retVal));
+        return true;
     },
     loadModule: function(moduleName) {
         var module = Squeak.externalModules[moduleName] || this.builtinModules[moduleName];

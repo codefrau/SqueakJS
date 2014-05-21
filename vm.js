@@ -3254,8 +3254,13 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         //Return the value of the millisecond clock as an integer.
         //Note that the millisecond clock wraps around periodically.
         //The range is limited to SmallInteger maxVal / 2 to allow
-        //delays of up to that length without overflowing a SmallInteger."
+        //delays of up to that length without overflowing a SmallInteger.
         return (Date.now() - this.vm.startupTime) & this.vm.millisecondClockMask;
+	},
+	millisecondClockValueSet: function(clock) {
+        // set millisecondClock to the (previously saved) clock value 
+        // to allow "stopping" the VM clock while debugging
+        this.vm.startupTime = Date.now() - clock;
 	},
 	secondClock: function() {
         return this.pos32BitIntFor(Squeak.totalSeconds()); // will overflow 32 bits in 2037

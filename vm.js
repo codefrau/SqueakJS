@@ -244,7 +244,7 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         if (version != 6502) {
             littleEndian = true; pos = 0;
             version = readWord();
-            if (version != 6502) throw "bad image version";
+            if (version != 6502) throw Error("bad image version");
         }
         // read header
         var headerSize = readWord();
@@ -287,7 +287,7 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
                     ptr += 4;
                     break;
                 case Squeak.HeaderTypeFree:
-                    throw "Unexpected free block";
+                    throw Error("Unexpected free block");
             }
             nWords--;  //length includes base header which we have already read
             var oop = ptr - 4, //0-rel byte oop of this object (base header)
@@ -556,15 +556,15 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
             obj = obj.nextObject;
             n++;
         }
-        if (pos !== data.byteLength) throw "wrong image size";
-        if (n !== this.oldSpaceCount) throw "wrong object count";
+        if (pos !== data.byteLength) throw Error("wrong image size");
+        if (n !== this.oldSpaceCount) throw Error("wrong object count");
         return data.buffer;
     },
     objectToOop: function(obj) {
         // unsigned word for use in snapshot
         if (typeof obj ===  "number")
             return (obj * 2 + 0x100000001) & 0xFFFFFFFF; // add tag bit, make unsigned
-        if (obj.oop < 0) throw "temporary oop";
+        if (obj.oop < 0) throw Error("temporary oop");
         return obj.oop;
     },
 });
@@ -848,7 +848,7 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
             pos += -this.bytes.length & 3;
         }
         // done
-        if (pos !== beforePos + this.totalBytes()) throw "written size does not match";
+        if (pos !== beforePos + this.totalBytes()) throw Error("written size does not match");
         return pos;
     },
 },
@@ -1198,13 +1198,13 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
         this.primHandler.displayFlush(); // make sure display is up to date
         this.frozen = true;
         this.breakOutOfInterpreter = function(thenDo) {
-            if (!thenDo) throw "need function to restart interpreter";
+            if (!thenDo) throw Error("need function to restart interpreter");
             continueFunc = thenDo;
             return "frozen";
         }.bind(this);
         return function unfreeze() {
             this.frozen = false;
-            if (!continueFunc) throw "no continue function";
+            if (!continueFunc) throw Error("no continue function");
             continueFunc(0);    //continue without timeout
         }.bind(this);
     },
@@ -1212,7 +1212,7 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
         return this.methodBytes[this.pc++] & 0xFF;
     },
     nono: function() {
-        throw "Oh No!";
+        throw Error("Oh No!");
     },
     checkForInterrupts: function() {
         //Check for interrupts at sends and backward jumps
@@ -1350,7 +1350,7 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
 //                self createActualMessageTo: class.
 //                messageSelector _ self splObj: SelectorCannotInterpret.
 //                ^ self lookupMethodInClass: (self superclassOf: currentClass)]
-                throw "cannotInterpret";
+                throw Error("cannotInterpret");
             }
             var newMethod = this.lookupSelectorInDict(mDict, selector);
             if (!newMethod.isNil) {
@@ -1365,7 +1365,7 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
         //Cound not find a normal message -- send #doesNotUnderstand:
         var dnuSel = this.specialObjects[Squeak.splOb_SelectorDoesNotUnderstand];
         if (selector === dnuSel) // Cannot find #doesNotUnderstand: -- unrecoverable error.
-            throw "Recursive not understood error encountered";
+            throw Error("Recursive not understood error encountered");
         var dnuMsg = this.createActualMessage(selector, argCount, startingClass); //The argument to doesNotUnderstand:
         this.popNandPush(argCount, dnuMsg);
         return this.findSelectorInClass(dnuSel, 1, startingClass);
@@ -1429,7 +1429,7 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
         this.storeContextRegisters(); // not really necessary, I claim
         this.receiver = newContext.getPointer(Squeak.Context_receiver);
         if (this.receiver !== newRcvr)
-            throw "receivers don't match";
+            throw Error("receivers don't match");
         this.checkForInterrupts();
     },
     doReturn: function(returnValue, targetContext) {
@@ -1622,7 +1622,7 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
         this.methodBytes = meth.bytes;
         this.pc = this.decodeSqueakPC(ctxt.getPointer(Squeak.Context_instructionPointer), meth);
         if (this.pc < -1)
-            throw "error";
+            throw Error("bad pc");
         this.sp = this.decodeSqueakSP(ctxt.getPointer(Squeak.Context_stackPointer));
     },
     storeContextRegisters: function() {
@@ -2237,7 +2237,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 246: return false; // primStringfindSubstringinstartingAtmatchTable
             case 254: return this.primitiveVMParameter(argCount);
         }
-        throw "primitive " + index + " not implemented yet";
+        throw Error("primitive " + index + " not implemented yet");
         return false;
     },
     doNamedPrimitive: function(argCount, newMethod) {
@@ -2421,8 +2421,8 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         return this.vm.canBeSmallInt(integer) ? integer : this.makeLargeInt(integer);
     },
     makeLargeInt: function(integer) {
-        if (integer < 0) throw "negative large ints not implemented yet";
-        if (integer > 0xFFFFFFFF) throw "large large ints not implemented yet";
+        if (integer < 0) throw Error("negative large ints not implemented yet");
+        if (integer > 0xFFFFFFFF) throw Error("large large ints not implemented yet");
         return this.pos32BitIntFor(integer);
     },
     makePointWithXandY: function(x, y) {
@@ -2456,7 +2456,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         if (typeof obj === "number")
             if (obj === (obj|0)) return this.makeLargeIfNeeded(obj);
             else return this.makeFloat(obj)
-        throw "cannot make smalltalk object";
+        throw Error("cannot make smalltalk object");
     },
     pointsTo: function(rcvr, arg) {
         if (!rcvr.pointers) return false;
@@ -2471,7 +2471,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
                 array[i] = buffer.charCodeAt(i);
             return array;
         }
-        throw "unknown buffer type"
+        throw Error("unknown buffer type");
     },
 },
 'indexing', {
@@ -2867,7 +2867,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         var p = schedLists.pointersSize() - 1;  // index of last indexable field
         var processList;
         do {
-            if (p < 0) throw "scheduler could not find a runnable process";
+            if (p < 0) throw Error("scheduler could not find a runnable process");
             processList = schedLists.getPointer(p--);
         } while (this.isEmptyList(processList));
         return this.removeFirstLinkOfList(processList);
@@ -3143,7 +3143,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
                     srcY++;
                 };
                 break;
-            default: throw "not implemented yet";
+            default: throw Error("depth not implemented");
         };
         ctx.putImageData(pixels, rect.x, rect.y);
     },
@@ -4266,7 +4266,7 @@ Object.subclass('users.bert.SqueakJS.vm.InstructionStream',
 			if (offset < 12) return client.methodReturnConstant(this.specialConstants[offset - 9]);
 			if (offset===12) return client.methodReturnTop();
 			if (offset===13) return client.blockReturnTop();
-			if (offset > 13) throw "unusedBytecode";
+			if (offset > 13) throw Error("unusedBytecode");
     	}
     	if (type === 8) return this.interpretExtension(offset, method, client);
     	if (type === 9) // short jumps
@@ -4303,13 +4303,13 @@ Object.subclass('users.bert.SqueakJS.vm.InstructionStream',
     			if (offset === 1) {
     			    if (type === 0) return client.storeIntoReceiverVariable(offset2);
     				if (type === 1) return client.storeIntoTemporaryVariable(offset2);
-    				if (type === 2) throw "illegalStore";
+    				if (type === 2) throw Error("illegalStore");
     				if (type === 3) return client.storeIntoLiteralVariable(this.method.methodGetLiteral(offset2));
     			}
     			if (offset === 2) {
         			if (type === 0) return client.popIntoReceiverVariable(offset2);
     				if (type === 1) return client.popIntoTemporaryVariable(offset2);
-    				if (type === 2) throw "illegalStore";
+    				if (type === 2) throw Error("illegalStore");
     				if (type === 3) return client.popIntoLiteralVariable(this.method.methodGetLiteral(offset2));
     			}
     		}
@@ -4336,7 +4336,7 @@ Object.subclass('users.bert.SqueakJS.vm.InstructionStream',
     	if (offset === 7) return client.doPop();
     	if (offset === 8) return client.doDup();
     	if (offset === 9) return client.pushActiveContext();
-    	throw "unusedBytecode";
+    	throw Error("unusedBytecode");
     }
 });
 

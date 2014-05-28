@@ -3506,7 +3506,18 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         var bitbltObj = this.stackNonInteger(argCount),
             bitblt = new users.bert.SqueakJS.vm.BitBlt(this.vm);
         if (!bitblt.loadBitBlt(bitbltObj)) return false;
+
+        if (bitblt.combinationRule === 30 || bitblt.combinationRule === 31) {
+            // fetch source alpha parameter for alpha blend
+        	if (argCount !== 1) return false;
+            bitblt.sourceAlpha = this.stackInteger(0);
+            if (!this.success || bitblt.sourceAlpha < 0 || bitblt.sourceAlpha > 255)
+				return false;
+			this.vm.pop();
+    	}
+    	
         bitblt.copyBits();
+        
         if (bitblt.combinationRule === 22 || bitblt.combinationRule === 32)
             this.vm.popNandPush(1, bitblt.bitCount);
         else if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay])
@@ -3614,7 +3625,7 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
         form.depth = formObj.pointers[Squeak.Form_depth];
         form.width = formObj.pointers[Squeak.Form_width];
         form.height = formObj.pointers[Squeak.Form_height];
-        if (form.width === 0 && form.height === 0) return form;
+        if (form.width === 0 || form.height === 0) return form;
         if (!(form.width > 0 && form.height > 0)) return null;
         if (!form.bits) return null;    // checks for words
         form.msb = form.depth > 0;
@@ -4352,6 +4363,8 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
                 : src | self.partitionedAND(~src, dst, self.dest.depth, self.dest.pixPerWord) };
             case 26: return function(src, dst) {
                 return self.partitionedAND(~src, dst, self.dest.depth, self.dest.pixPerWord) };
+            case 30: return function(src, dst, mask) { return self.alphaBlendConst(src, dst, mask, false) };
+            case 31: return function(src, dst, mask) { return self.alphaBlendConst(src, dst, mask, true) };
             case 32: return function(src, dst, mask) { // accumulate differences, do not modify dst 
                 self.rgbDiff(src, dst, mask, self.dest.depth, self.dest.pixPerWord);
                 return dst; };
@@ -4395,6 +4408,55 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
             r = Math.min(255, unAlpha * ((dst>>>16) & 255) + ((src>>>16) & 255)),
             a = Math.min(255, unAlpha * (dst>>>24) + (src>>>24));
         return ((((((a << 8) + r) << 8) + g) << 8) + b) | 0;
+	},
+    alphaBlendConst: function(sourceWord, destWord, destMask, paintMode) {
+        // Blend sourceWord with destWord using a constant alpha.
+        // Alpha is encoded as 0 meaning 0.0, and 255 meaning 1.0.
+        // The blend produced is alpha*source + (1.0-alpha)*dest, with the
+        // computation being performed independently on each color component.
+        // This function could eventually blend into any depth destination,
+        // using the same color averaging and mapping as warpBlt.
+        // paintMode == true means do nothing if the source pixel value is zero.
+        if (this.dest.depth < 16 || (paintMode && sourceWord == 0))
+            return destWord; // no-op
+        var alpha = this.sourceAlpha,
+            unAlpha = 255 - alpha,
+            pixMask = this.maskTable[this.dest.depth],
+            bitsPerColor = this.dest.depth == 16 ? 5: 8,
+            rgbMask = (1<<bitsPerColor) - 1,
+            maskShifted = destMask,
+            destShifted = destWord,
+            sourceShifted = sourceWord,
+            result = destWord;
+        if (this.dest.depth == 32) { // 32bpp blends include alpha
+            result = 0;
+            for (var shift = 0; shift <= 24; shift += 8) {
+                var blend = ((((sourceWord>>shift) & rgbMask) * alpha
+                    + ((destWord>>shift) & rgbMask) * unAlpha
+                    + 254) / 255) & rgbMask;
+                result |= blend<<shift;
+            };
+        } else { // 16bpp
+            for (var j = 0; j < 2; j++) {
+                var sourcePixVal = sourceShifted & pixMask;
+                // no effect if outside of dest rectangle or painting a transparent pixel
+                if ((maskShifted & pixMask) && (!paintMode || sourcePixVal)) {
+                    var destPixVal = destShifted & pixMask,
+                        pixBlend = 0;
+                    for (var shift = 0; shift <= 10; shift += 5) {
+                        var blend = ((((sourcePixVal>>shift) & rgbMask) * alpha
+                            + ((destPixVal>>shift) & rgbMask) * unAlpha
+                            + 254) / 255) & rgbMask;
+                        pixBlend |= blend<<shift;
+                    }
+                    result = result & ~(pixMask << (j*16)) | (pixBlend << (j*16));
+                }
+                maskShifted = maskShifted >> 16;
+                sourceShifted = sourceShifted >> 16;
+                destShifted = destShifted >> 16;
+            }
+        }
+        return result;
 	},
     partitionedSub: function(src, dst, nBits, nParts) {
         var mask = this.maskTable[nBits],

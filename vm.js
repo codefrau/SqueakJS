@@ -1592,15 +1592,6 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
     },
 },
 'contexts', {
-    isContext: function(obj) {//either block or methodContext
-        if (obj.sqClass === this.specialObjects[Squeak.splOb_ClassMethodContext]) return true;
-        if (obj.sqClass === this.specialObjects[Squeak.splOb_ClassBlockContext]) return true;
-        return false;
-    },
-    isMethodContext: function(obj) {
-        if (obj.sqClass === this.specialObjects[Squeak.splOb_ClassMethodContext]) return true;
-        return false;
-    },
     isUnwindMarked: function(ctx) {
         return false;
     },
@@ -1776,6 +1767,17 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
 },
 'utils',
 {
+    isContext: function(obj) {//either block or methodContext
+        if (obj.sqClass === this.specialObjects[Squeak.splOb_ClassMethodContext]) return true;
+        if (obj.sqClass === this.specialObjects[Squeak.splOb_ClassBlockContext]) return true;
+        return false;
+    },
+    isMethodContext: function(obj) {
+        return obj.sqClass === this.specialObjects[Squeak.splOb_ClassMethodContext];
+    },
+    isMethod: function(obj, index) {
+        return  obj.sqClass === this.specialObjects[Squeak.splOb_ClassCompiledMethod];
+    },
     instantiateClass: function(aClass, indexableSize) {
         return this.image.instantiateClass(aClass, indexableSize, this.nilObj);
     },
@@ -2268,6 +2270,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 161: return this.primitiveDirectoryDelimitor(argCount);
             case 162: return this.primitiveDirectoryLookup(argCount);
             case 167: return false; // Processor.yield
+            case 188: return this.primitiveExecuteMethodArgsArray(argCount);
             case 195: return false; // Context.findNextUnwindContextUpTo:
             case 196: return false; // Context.terminateTo:
             case 197: return false; // Context.findNextHandlerContextStarting
@@ -2760,6 +2763,23 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         this.vm.popNandPush(1+argCount, method);
         if (this.vm.breakOnNewMethod)
             this.vm.breakOnMethod = method;
+        return true;
+    },
+    primitiveExecuteMethodArgsArray: function(argCount) {
+        // receiver, argsArray, then method are on top of stack.  Execute method with
+        // receiver and args.
+        var methodObj = this.stackNonInteger(0),
+            argsArray = this.stackNonInteger(1),
+            receiver = this.vm.stackValue(2);
+        // Allow for up to two extra arguments (e.g. for mirror primitives).
+        if (!this.success || !this.vm.isMethod(methodObj) || argCount > 4) return false;
+        var numArgs = methodObj.methodNumArgs();
+        if (numArgs !== argsArray.pointersSize()) return false;
+        // drop all args, push receiver, and new arguments
+        this.vm.popNandPush(argCount+1, receiver);
+        for (var i = 0; i < numArgs; i++) 
+            this.vm.push(argsArray.pointers[i]);
+        this.vm.executeNewMethod(receiver, methodObj, numArgs, methodObj.methodPrimitiveIndex());
         return true;
     },
     doArrayBecome: function(doBothWays) {

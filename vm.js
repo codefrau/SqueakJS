@@ -23,6 +23,15 @@ module('users.bert.SqueakJS.vm').requires().toRun(function() {
 
 
 Squeak = {
+    // system attributes
+    vmVersion: "SqueakJS 0.1",
+    vmBuild: "unknown",                 // replace at runtime by last-modified?
+    vmPath: "/users/bert/SqueakJS/",    // entirely made up
+    osName: "Web",
+    osVersion: navigator.userAgent,
+    windowSystem: "HTML",
+    cpuType: "unknown",
+
     // object headers
     HeaderTypeMask: 3,
     HeaderTypeSizeAndClass: 0, //3-word header
@@ -2248,7 +2257,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 139: return this.popNandPushIfOK(1, this.nextObject(this.vm.top())); // Object.nextObject
             case 140: return true; // TODO primitiveBeep
             case 141: return this.primitiveClipboardText(argCount);
-            case 142: return this.popNandPushIfOK(1, this.makeStString(this.getVMPath())); //vmPath
+            case 142: return this.popNandPushIfOK(1, this.makeStString(Squeak.vmPath));
             case 143: // short at and shortAtPut
             case 144: return this.primitiveShortAtAndPut(argCount);
             case 145: return this.primitiveConstantFill(argCount);
@@ -3036,20 +3045,19 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
 	},
 },
 'vm functions', {
-    getVMPath: function() {
-        return "/users/bert/SqueakJS/";
-    },
     primitiveGetAttribute: function(argCount) {
         var attr = this.stackInteger(0);
         if (!this.success) return false;
         var value;
         switch (attr) {
-            case 0: value = this.getVMPath() + 'vm.js'; break;  // vm
-            case 1: value = this.vm.image.name; break;          // image
-            case 1001: value = "Web"; break;                    // OS
-            case 1002: value = navigator.userAgent; break;      // OS version
-            case 1003: value = "unknown"; break;                // processor type
-            case 1004: value = "SqueakJS"; break;               // VM version
+            case 0: value = Squeak.vmPath + 'vm.js'; break;
+            case 1: value = this.vm.image.name; break;
+            case 1001: value = Squeak.osName; break;
+            case 1002: value = Squeak.osVersion; break;
+            case 1003: value = Squeak.cpuType; break;
+            case 1004: value = Squeak.vmVersion; break;
+            case 1005: value = Squeak.windowSystem; break;
+            case 1006: value = Squeak.vmBuild; break;
             default: return false;
         }
         this.vm.popNandPush(argCount+1, this.makeStString(value));

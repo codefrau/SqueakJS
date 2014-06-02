@@ -49,6 +49,12 @@ Object.subclass = function(classPath) {
     submodule[className] = aClass;
 };
 
+Object.extend = function(obj) {
+    for (var i = 1; i < arguments.length; i++)
+        for (name in arguments[i])
+            obj[name] = arguments[i][name];
+};
+
 //////////////////////////////////////////////////////////////////////////////
 // now for the good stuff
 //////////////////////////////////////////////////////////////////////////////

@@ -23,6 +23,15 @@ module('users.bert.SqueakJS.vm').requires().toRun(function() {
 
 
 Squeak = {
+    // system attributes
+    vmVersion: "SqueakJS 0.1",
+    vmBuild: "unknown",                 // replace at runtime by last-modified?
+    vmPath: "/users/bert/SqueakJS/",    // entirely made up
+    osName: "Web",
+    osVersion: navigator.userAgent,
+    windowSystem: "HTML",
+    cpuType: "unknown",
+
     // object headers
     HeaderTypeMask: 3,
     HeaderTypeSizeAndClass: 0, //3-word header
@@ -147,6 +156,7 @@ Squeak = {
     BitBlt_clipW: 12,
     BitBlt_clipH: 13,
     BitBlt_colorMap: 14,
+    BitBlt_warpBase: 15,
     // Form layout:
     Form_bits: 0,
     Form_width: 1,
@@ -163,6 +173,9 @@ Squeak = {
     Keyboard_Cmd: 64,
     Mouse_All: 1 + 2 + 4,
     Keyboard_All: 8 + 16 + 32 + 64,
+
+    // other constants
+    Epoch: Date.UTC(1901,0,1)/1000 + (new Date()).getTimezoneOffset()*60,         // local timezone
     
     // External modules
     externalModules: {},
@@ -192,14 +205,19 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         isFalse: (optional) true if this is the false object
         isFloat: (optional) true if this is a Float object
         isFloatClass: (optional) true if this is the Float class
-        id: unique id integer
+        isCompact: (optional) true if this is a compact class
+        oop: identifies this object in a snapshot (assigned on GC, new space object oops are negative)
         mark: boolean (used only during GC, otherwise false)
         nextObject: linked list of objects in old space (new space objects do not have this yet)
     }
 
     Object Table
     ============
-    Used for enumerating objects and GC.
+    There is no actual object table. Instead, objects in old space are a linked list.
+    New objects are only referenced by other objects' pointers, and thus can be garbage-collected
+    at any time by the Javascript GC.
+    
+    There is no support for weak references yet.
 
     */    
     }
@@ -219,18 +237,24 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
             pos += 4;
             return int;
         };
-        var readWords = function(n) {
-            var words = [];
-            for (var j = 0; j < n; j++)
-                words.push(readWord());
-            return words;
+        var readBits = function(nWords, format) {
+            if (format < 5) { // pointers (do endian conversion)
+                var oops = [];
+                while (oops.length < nWords)
+                    oops.push(readWord());
+                return oops;
+            } else { // words (no endian conversion yet)
+                var bits = new Uint32Array(arraybuffer, pos, nWords);
+                pos += nWords*4;
+                return bits;
+            }
         };
         // read version
         var version = readWord();
         if (version != 6502) {
             littleEndian = true; pos = 0;
             version = readWord();
-            if (version != 6502) throw "bad image version";
+            if (version != 6502) throw Error("bad image version");
         }
         // read header
         var headerSize = readWord();
@@ -246,7 +270,6 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         this.gcCount = 0;
         this.oldSpaceCount = 0;
         this.newSpaceCount = 0;
-        this.lastId = 0;
         var prevObj;
         var oopMap = {};
         console.log('squeak: reading objects');
@@ -274,22 +297,22 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
                     ptr += 4;
                     break;
                 case Squeak.HeaderTypeFree:
-                    throw "Unexpected free block";
+                    throw Error("Unexpected free block");
             }
-            var baseAddr = ptr - 4; //0-rel byte oop of this object (base header)
             nWords--;  //length includes base header which we have already read
-            var format = ((header>>8) & 15);
-            var hash = ((header>>17) & 4095);
-            var bits = readWords(nWords);
+            var oop = ptr - 4, //0-rel byte oop of this object (base header)
+                format = (header>>8) & 15,
+                hash = (header>>17) & 4095,
+                bits = readBits(nWords, format);
             ptr += nWords * 4;
 
             var object = new users.bert.SqueakJS.vm.Object();
-            object.initFromImage(classInt, format, hash, bits);
-            this.registerObject(object);
+            object.initFromImage(oop, classInt, format, hash, bits);
             if (prevObj) prevObj.nextObject = object;
+            this.oldSpaceCount++;
             prevObj = object;
             //oopMap is from old oops to new objects
-            oopMap[oldBaseAddr + baseAddr] = object;
+            oopMap[oldBaseAddr + oop] = object;
         }
         //create proper objects
         var splObs         = oopMap[specialObjectsOopInt];
@@ -302,8 +325,6 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         this.decorateKnownObjects();
         this.firstOldObject = oopMap[oldBaseAddr+4];
         this.lastOldObject = prevObj;
-        this.oldSpaceCount = this.newSpaceCount;
-        this.newSpaceCount = 0; 
         this.oldSpaceBytes = endOfMemory;
      },
     decorateKnownObjects: function() {
@@ -313,6 +334,9 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         splObjs[Squeak.splOb_FalseObject].isFalse = true;
         splObjs[Squeak.splOb_ClassFloat].isFloatClass = true;
         this.compactClasses = this.specialObjectsArray.pointers[Squeak.splOb_CompactClasses].pointers;
+        for (var i = 0; i < this.compactClasses.length; i++)
+            if (!this.compactClasses[i].isNil)
+                this.compactClasses[i].isCompact = true;
         if (!Number.prototype.sqInstName)
             Object.defineProperty(Number.prototype, 'sqInstName', {
                 enumerable: false,
@@ -351,41 +375,51 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         var newObjects = [];
         while (todo.length > 0) {
             var object = todo.pop();
+            if (object.mark) continue;             // objects are added to todo more than once 
             if (!object.nextObject && object !== this.lastOldObject)       // it's a new object
                 newObjects.push(object);
             object.mark = true;           // mark it
             if (!object.sqClass.mark)     // trace class if not marked
                 todo.push(object.sqClass);
             var body = object.pointers;
-            if (body)                     // trace all unmarked pointers
-                for (var i = 0; i < body.length; i++)
+            if (body) {                   // trace all unmarked pointers
+                var n = body.length;
+                if (this.vm.isContext(object)) {      // contexts have garbage on the stack
+                    var sp = object.pointers[Squeak.Context_stackPointer];
+                    n = this.vm.decodeSqueakSP(typeof sp == "number" ? sp : 0) + 1;
+                }
+                for (var i = 0; i < n; i++)
                     if (typeof body[i] === "object" && !body[i].mark)      // except SmallInts
                         todo.push(body[i]);
+            }
         }
-        // sort by id to preserve creation order
-        return newObjects.sort(function(a,b){return a.id - b.id});
+        // sort by oop to preserve creation order
+        return newObjects.sort(function(a,b){return b.oop - a.oop});
     },
     removeUnmarkedOldObjects: function() {
         // Unlink unmarked old objects from the nextObject linked list
-        // Reset marks of remaining objects
+        // Reset marks of remaining objects, and adjust their oops
         // Set this.lastOldObject to last old object
         // Return removed old objects (to support finalization later)
-        var removed = [];
-        var obj = this.firstOldObject;
+        var removed = [],
+            removedBytes = 0,
+            obj = this.firstOldObject;
         while (true) {
             var next = obj.nextObject;
             if (!next) {// we're done
                 this.lastOldObject = obj;
+                this.oldSpaceBytes -= removedBytes;
                 return removed;
             }
             // if marked, continue with next object
             if (next.mark) {
                 next.mark = false;     // unmark for next GC
+                next.oop -= removedBytes;
                 obj = next;
             } else { // otherwise, remove it
                 var corpse = next; 
                 obj.nextObject = corpse.nextObject; // drop from list
-                this.oldSpaceBytes -= corpse.totalBytes(this.compactClasses);
+                removedBytes += corpse.totalBytes(); 
                 removed.push(corpse);               // remember for relinking
                 corpse.nextObject = obj;            // kludge: the corpse's nextObject
                 // must point into the old space list, so that enumerating will still work,
@@ -403,9 +437,9 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         for (var i = 0; i < newObjects.length; i++) {
             var newObj = newObjects[i];
             newObj.mark = false;
+            this.oldSpaceBytes = newObj.setAddr(this.oldSpaceBytes);     // add at end of memory
             oldObj.nextObject = newObj;
             oldObj = newObj;
-            this.oldSpaceBytes += newObj.totalBytes(this.compactClasses);
         }
         this.lastOldObject = oldObj;
     },
@@ -419,9 +453,8 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
 'creating', {
     registerObject: function(obj) {
         // We don't actually register the object yet, because that would prevent
-        // it from being garbage-collected.
-        obj.id = ++this.lastId; // this can become quite large, but won't overflow for many years
-        this.newSpaceCount++;
+        // it from being garbage-collected by the Javascript collector
+        obj.oop = -(++this.newSpaceCount); // temp oops are negative. Real oop assigned when surviving GC
         this.lastHash = (13849 + (27181 * this.lastHash)) & 0xFFFFFFFF;
         return this.lastHash & 0xFFF;
     },
@@ -447,14 +480,14 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         for (var i = 0; i < n; i++) {
             var obj = fromArray[i];
             if (!obj.sqClass) return false;  //non-objects in from array
-            if (mutations[obj.id]) return false; //repeated oops in from array
-            else mutations[obj.id] = toArray[i];
+            if (mutations[obj.oop]) return false; //repeated oops in from array
+            else mutations[obj.oop] = toArray[i];
         }
         if (twoWay) for (var i = 0; i < n; i++) {
             var obj = toArray[i];
             if (!obj.sqClass) return false;  //non-objects in to array
-            if (mutations[obj.id]) return false; //repeated oops in to array
-            else mutations[obj.id] = fromArray[i];
+            if (mutations[obj.oop]) return false; //repeated oops in to array
+            else mutations[obj.oop] = fromArray[i];
         }
         // ensure new objects have nextObject pointers
         if (this.newSpaceCount > 0)
@@ -463,12 +496,12 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         var obj = this.firstOldObject;
         while (obj) {
             // mutate the class
-            var mut = mutations[obj.sqClass.id];
+            var mut = mutations[obj.sqClass.oop];
             if (mut) obj.sqClass = mut;
             // and mutate body pointers
             var body = obj.pointers;
             if (body) for (var j = 0; j < body.length; j++) {
-                mut = mutations[body[j].id];
+                mut = mutations[body[j].oop];
                 if (mut) body[j] = mut;
             }
             obj = obj.nextObject;
@@ -510,31 +543,67 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
                 return obj;
         }
     },
+    writeToBuffer: function() {
+        var headerSize = 64,
+            data = new DataView(new ArrayBuffer(headerSize + this.oldSpaceBytes)),
+            pos = 0;
+        var writeWord = function(word) {
+            data.setUint32(pos, word);
+            pos += 4;
+        };
+        writeWord(6502); // magic number
+        writeWord(headerSize);
+        writeWord(this.oldSpaceBytes); // end of memory
+        writeWord(this.firstOldObject.addr()); // base addr (0)
+        writeWord(this.objectToOop(this.specialObjectsArray));
+        writeWord(this.lastHash);
+        writeWord((800 << 16) + 600);  // window size
+        while (pos < headerSize)
+            writeWord(0);
+        // objects
+        var obj = this.firstOldObject,
+            n = 0;
+        while (obj) {
+            pos = obj.writeTo(data, pos, this);
+            obj = obj.nextObject;
+            n++;
+        }
+        if (pos !== data.byteLength) throw Error("wrong image size");
+        if (n !== this.oldSpaceCount) throw Error("wrong object count");
+        return data.buffer;
+    },
+    objectToOop: function(obj) {
+        // unsigned word for use in snapshot
+        if (typeof obj ===  "number")
+            return (obj * 2 + 0x100000001) & 0xFFFFFFFF; // add tag bit, make unsigned
+        if (obj.oop < 0) throw Error("temporary oop");
+        return obj.oop;
+    },
 });
 
 Object.subclass('users.bert.SqueakJS.vm.Object',
 'initialization', {
-    initInstanceOf: function(aClass, indexableSize, hash, filler) {
+    initInstanceOf: function(aClass, indexableSize, hash, nilObj) {
         this.sqClass = aClass;
         this.hash = hash;
-        var instSpec = aClass.getPointer(Squeak.Class_format);
-        var instSize = ((instSpec>>1) & 0x3F) + ((instSpec>>10) & 0xC0) - 1; //0-255
+        var instSpec = aClass.getPointer(Squeak.Class_format),
+            instSize = ((instSpec>>1) & 0x3F) + ((instSpec>>10) & 0xC0) - 1; //0-255
         this.format = (instSpec>>7) & 0xF; //This is the 0-15 code
 
         if (this.format < 8) {
             if (this.format != 6) {
                 if (instSize + indexableSize > 0)
-                    this.pointers = this.fillArray(instSize + indexableSize, filler);
+                    this.pointers = this.fillArray(instSize + indexableSize, nilObj);
             } else // Words
                 if (indexableSize > 0)
                     if (aClass.isFloatClass) {
                         this.isFloat = true;
                         this.float = 0.0;
                     } else
-                        this.words = this.fillArray(indexableSize, 0); 
+                        this.words = new Uint32Array(indexableSize); 
         } else // Bytes
             if (indexableSize > 0)
-                this.bytes = this.fillArray(indexableSize, 0); //Methods require further init of pointers
+                this.bytes = new Uint8Array(indexableSize); //Methods require further init of pointers
 
 //      Definition of Squeak's format code...
 //
@@ -563,12 +632,13 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
             this.float = original.float;
         } else {
             if (original.pointers) this.pointers = original.pointers.slice(0);   // copy
-            if (original.words) this.words = original.words.slice(0);            // copy
-            if (original.bytes) this.bytes = original.bytes.slice(0);            // copy
+            if (original.words) this.words = new Uint32Array(original.words);    // copy
+            if (original.bytes) this.bytes = new Uint8Array(original.bytes);     // copy
         }
     },
-    initFromImage: function(cls, fmt, hsh, data) {
+    initFromImage: function(oop, cls, fmt, hsh, data) {
         // initial creation from Image, with unmapped data
+        this.oop = oop;
         this.sqClass = cls;
         this.format = fmt;
         this.hash = hsh;
@@ -589,22 +659,22 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
                 this.pointers = this.decodePointers(nWords, this.bits, oopMap);
         } else if (this.format >= 12) {
             //Formats 12-15 -- CompiledMethods both pointers and bits
-            var methodHeader = this.bits[0];
-            var numLits = (methodHeader>>10) & 255;
-            this.isCompiledMethod = true;
-            this.pointers = this.decodePointers(numLits+1, this.bits, oopMap); //header+lits
-            this.bytes = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this.format & 3, littleEndian);
+            var words = this.decodeWords(nWords, this.bits, littleEndian),
+                methodHeader = words[0],
+                numLits = (methodHeader>>10) & 255;
+            this.pointers = this.decodePointers(numLits+1, words, oopMap); //header+lits
+            this.bytes = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this.format & 3);
         } else if (this.format >= 8) {
             //Formats 8..11 -- ByteArrays (and ByteStrings)
             if (nWords > 0)
-                this.bytes = this.decodeBytes(nWords, this.bits, 0, this.format & 3, littleEndian);
+                this.bytes = this.decodeBytes(nWords, this.bits, 0, this.format & 3);
         } else if (this.sqClass == floatClass) {
             //Floats need two ints to be converted to double
             this.isFloat = true;
-            this.float = this.decodeFloat(this.bits);
+            this.float = this.decodeFloat(this.bits, littleEndian);
         } else {
             if (nWords > 0)
-                this.words = this.decodeWords(nWords, this.bits);
+                this.words = this.decodeWords(nWords, this.bits, littleEndian);
         }
         delete this.bits;
         this.mark = false; // for GC
@@ -621,40 +691,25 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         }
         return ptrs;        
     },
-    decodeWords: function(nWords, theBits) {
-        return theBits;
+    decodeWords: function(nWords, theBits, littleEndian) {
+        var data = new DataView(theBits.buffer, theBits.byteOffset),
+            words = new Uint32Array(nWords);
+        for (var i = 0; i < nWords; i++)
+            words[i] = data.getUint32(i*4, littleEndian);
+        return words;
     },
-    decodeBytes: function (nWords, theBits, wordOffset, fmtLowBits, littleEndian) {
-        //Adjust size for low bits and extract bytes from ints
-        var nBytes = (nWords * 4) - fmtLowBits;
-        var bytes = [];
-        var wordIx = wordOffset;
-        var fourBytes = 0;
-        for (var i = 0; i < nBytes; i++) {
-            if ((i & 3) === 0)
-                fourBytes = theBits[wordIx++];
-            bytes[i] = littleEndian
-                ? (fourBytes>>(8*(i&3)))&255        // little endian
-                : (fourBytes>>(8*(3-(i&3))))&255;   // big endian
-        }
+    decodeBytes: function (nWords, theBits, wordOffset, fmtLowBits) {
+        // Adjust size for low bits and make a copy
+        var nBytes = (nWords * 4) - fmtLowBits,
+            wordsAsBytes = new Uint8Array(theBits.buffer, theBits.byteOffset + wordOffset * 4, nBytes),
+            bytes = new Uint8Array(nBytes);
+        bytes.set(wordsAsBytes);
         return bytes;
     },
-
-    decodeFloat: function(theBits) {
-        var buffer = new ArrayBuffer(8);
-        var data = new DataView(buffer);
-        data.setUint32(0, theBits[0], false);
-        data.setUint32(4, theBits[1], false);
-        var float = data.getFloat64(0, false);
+    decodeFloat: function(theBits, littleEndian) {
+        var data = new DataView(theBits.buffer, theBits.byteOffset),
+            float = data.getFloat64(0, littleEndian);
         return float;
-    },
-    floatData: function() {
-        var buffer = new ArrayBuffer(8);
-        var data = new DataView(buffer);
-        data.setFloat64(0, this.float, false);
-        //1st word is data.getUint32(0, false);
-        //2nd word is data.getUint32(4, false);
-        return data;
     },
     fillArray: function(length, filler) {
         for (var array = [], i = 0; i < length; i++)
@@ -664,12 +719,14 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
 },
 'printing', {
     toString: function() {
-        return Strings.format('sqObj(%s)',
-            this.sqClass.constructor == users.bert.SqueakJS.vm.Object ? this.sqInstName() : this.sqClass);
+        return "sqObj(" + (this.sqClass.constructor == users.bert.SqueakJS.vm.Object ? this.sqInstName() : this.sqClass) + ")";
     },
     bytesAsString: function() {
         if (!this.bytes) return '';
-        return this.bytes.map(function(char) { return String.fromCharCode(char); }).join('');
+        var chars = [];
+        for (var i = 0; i < this.bytes.length; i++)
+            chars.push(String.fromCharCode(this.bytes[i]));
+        return chars.join('');
     },
     assnKeyAsString: function() {
         return this.getPointer(Squeak.Assn_key).bytesAsString();  
@@ -686,6 +743,7 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         if (this.isNil) return "nil";
         if (this.isTrue) return "true";
         if (this.isFalse) return "false";
+        if (this.isFloat) {var str = this.float.toString(); if (!/\./.test(str)) str += '.0'; return str; }
         var className = this.sqClass.className();
         if (/ /.test(className))
             return 'the ' + className;
@@ -703,6 +761,10 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
     },
 },
 'accessing', {
+    isWordsOrBytes: function() {
+        var fmt = this.format;
+        return fmt == 6  || (fmt >= 8 && fmt <= 11);
+    },
     getPointer: function(zeroBasedIndex){
         return this.pointers[zeroBasedIndex];
     },
@@ -716,21 +778,89 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         return this.bytes ? this.bytes.length : 0;
     },
     wordsSize: function() {
-        return this.words ? this.words.length : this.isFloat ? 2 : 0;
+        return this.isFloat ? 2 : this.words ? this.words.length : 0;
     },
     instSize: function() {//same as class.classInstSize, but faster from format
         if (this.format>4 || this.format==2) return 0; //indexable fields only
         if (this.format<2) return this.pointers.length; //indexable fields only
         return this.sqClass.classInstSize(); //0-255
     },
-    totalBytes: function(compactClasses) { // size in bytes this object would take up in image snapshot
+    floatData: function() {
+        var buffer = new ArrayBuffer(8);
+        var data = new DataView(buffer);
+        data.setFloat64(0, this.float, false);
+        //1st word is data.getUint32(0, false);
+        //2nd word is data.getUint32(4, false);
+        return data;
+    },
+    setAddr: function(addr) {
+        // move oop during GC. Answer next object's address
+        var words = this.snapshotSize();
+        this.oop = addr + words.header * 4;
+        return addr + (words.header + words.body) * 4; 
+    },
+    snapshotSize: function() {
+        // words of extra object header and body this object would take up in image snapshot
+        // body size includes one header word that is always present
         var nWords =
-            this.words ? this.words.length :
             this.isFloat ? 2 :
+            this.words ? this.words.length :
             this.pointers ? this.pointers.length : 0;
-        if (this.bytes) nWords += (this.bytes.length + 3) / 4 | 0; 
-        var headerWords = nWords > 63 ? 3 : compactClasses.indexOf(this.sqClass) >= 0 ? 1 : 2;
-        return (headerWords + nWords) * 4;
+        if (this.bytes) nWords += (this.bytes.length + 3) >> 2;
+        nWords++; // include one header word
+        var extraHeader = nWords > 63 ? 2 : this.sqClass.isCompact ? 0 : 1;
+        return {header: extraHeader, body: nWords};
+    },
+    addr: function() { // start addr of this object in a snapshot
+        return this.oop - this.snapshotSize().header * 4;
+    },
+    totalBytes: function() {
+        // size in bytes this object would take up in image snapshot
+        var words = this.snapshotSize();
+        return (words.header + words.body) * 4;
+    },
+    writeTo: function(data, pos, image) {
+        // Write 1 to 3 header words encoding type, class, and size, then instance data
+        var beforePos = pos,
+            size = this.snapshotSize(),
+            formatAndHash = ((this.format & 15) << 8) | ((this.hash & 4095) << 17);
+        // write header words first
+        switch (size.header) {
+            case 2:
+                data.setUint32(pos, size.body << 2 | Squeak.HeaderTypeSizeAndClass); pos += 4;
+                data.setUint32(pos, this.sqClass.oop | Squeak.HeaderTypeSizeAndClass); pos += 4;
+                data.setUint32(pos, formatAndHash | Squeak.HeaderTypeSizeAndClass); pos += 4;
+                break;
+            case 1:
+                data.setUint32(pos, this.sqClass.oop | Squeak.HeaderTypeClass); pos += 4;
+                data.setUint32(pos, formatAndHash | size.body << 2 | Squeak.HeaderTypeClass); pos += 4;
+                break;
+            case 0:
+                var classIndex = image.compactClasses.indexOf(this.sqClass) + 1;
+                data.setUint32(pos, formatAndHash | classIndex << 12 | size.body << 2 | Squeak.HeaderTypeShort); pos += 4;
+        }
+        // now write body, if any
+        if (this.isFloat) {
+            data.setFloat64(pos, this.float); pos += 8;
+        } else if (this.words) {
+            for (var i = 0; i < this.words.length; i++) {
+                data.setUint32(pos, this.words[i]); pos += 4;
+            }
+        } else if (this.pointers) {
+            for (var i = 0; i < this.pointers.length; i++) { 
+                data.setUint32(pos, image.objectToOop(this.pointers[i])); pos += 4;
+            }
+        }
+        // no "else" because CompiledMethods have both pointers and bytes
+        if (this.bytes) {
+            for (var i = 0; i < this.bytes.length; i++)
+                data.setUint8(pos++, this.bytes[i]);
+            // skip to next word
+            pos += -this.bytes.length & 3;
+        }
+        // done
+        if (pos !== beforePos + this.totalBytes()) throw Error("written size does not match");
+        return pos;
     },
 },
 'as class', {
@@ -756,11 +886,12 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         return this.pointers[0];
     },
     className: function() {
+        if (!this.pointers) return "?!?";
         var size = this.pointers.length;
-        var isMeta = size < 9;
-        var cls = isMeta ? this.pointers[size - 1] : this;
-        var nameObj = cls.pointers[Squeak.Class_name];
-        var name = nameObj.bytesAsString();
+        var isMeta = size < 9;  // true for all Squeak versions, hopefully
+        var cls = isMeta ? this.pointers[size == 7 ? 6 : 5] : this;
+        var nameObj = cls.pointers && cls.pointers[Squeak.Class_name];
+        var name = nameObj && nameObj.bytes ? nameObj.bytesAsString() : "???";
         return isMeta ? name + " class" : name;
     }
 },
@@ -1049,25 +1180,50 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
                 this.send(this.method.methodGetSelector(b&0xF), 2, false); break;
         }
     },
-    interpret: function(forMilliseconds) {
+    interpret: function(forMilliseconds, thenDo) {
         // run until idle, but at most for a couple milliseconds
         // answer milliseconds to sleep (until next timer wakeup)
         // or 'break' if reached breakpoint
+        // call thenDo with that result when done
+        if (this.frozen) return 'frozen';
         this.isIdle = false;
         this.breakOutOfInterpreter = false;
         this.breakOutTick = this.lastTick + (forMilliseconds || 500);
         while (!this.breakOutOfInterpreter)
             this.interpretOne();
-        if (this.breakOutOfInterpreter == 'break') return 'break';
-        if (!this.isIdle) return 0;
-        if (!this.nextWakeupTick) return 'sleep'; // all processes waiting
-        return Math.max(0, this.nextWakeupTick - this.primHandler.millisecondClockValue());
+        // this is to allow 'freezing' the interpreter and restarting it asynchronously. See freeze()
+        if (typeof this.breakOutOfInterpreter == "function")
+            return this.breakOutOfInterpreter(thenDo);
+        // normally, we answer regularly
+        var result = this.breakOutOfInterpreter == 'break' ? 'break'
+            : !this.isIdle ? 0
+            : !this.nextWakeupTick ? 'sleep'        // all processes waiting
+            : Math.max(200, this.nextWakeupTick - this.primHandler.millisecondClockValue());
+        if (thenDo) thenDo(result);
+        return result;
+    },
+    freeze: function(externalContinueFunc) {
+        // Stop the interpreter. Answer a function that can be
+        // called to continue interpreting.
+        var continueFunc = externalContinueFunc; // only needed if called from outside the interpreter
+        this.primHandler.displayFlush(); // make sure display is up to date
+        this.frozen = true;
+        this.breakOutOfInterpreter = function(thenDo) {
+            if (!thenDo) throw Error("need function to restart interpreter");
+            continueFunc = thenDo;
+            return "frozen";
+        }.bind(this);
+        return function unfreeze() {
+            this.frozen = false;
+            if (!continueFunc) throw Error("no continue function");
+            continueFunc(0);    //continue without timeout
+        }.bind(this);
     },
     nextByte: function() {
         return this.methodBytes[this.pc++] & 0xFF;
     },
     nono: function() {
-        throw "Oh No!";
+        throw Error("Oh No!");
     },
     checkForInterrupts: function() {
         //Check for interrupts at sends and backward jumps
@@ -1143,17 +1299,17 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
             case 3: this.method.methodGetLiteral(lobits).setPointer(Squeak.Assn_value, this.pop()); break;
         }
     },
-    doubleExtendedDoAnything: function(nextByte) {
+    doubleExtendedDoAnything: function(byte2) {
         var byte3 = this.nextByte();
-        switch (nextByte>>5) {
-            case 0: this.send(this.method.methodGetSelector(byte3), nextByte&31, false); break;
-            case 1: this.send(this.method.methodGetSelector(byte3), nextByte&31, true); break;
+        switch (byte2>>5) {
+            case 0: this.send(this.method.methodGetSelector(byte3), byte2&31, false); break;
+            case 1: this.send(this.method.methodGetSelector(byte3), byte2&31, true); break;
             case 2: this.push(this.receiver.getPointer(byte3)); break;
             case 3: this.push(this.method.methodGetLiteral(byte3)); break;
-            case 4: this.push(this.method.methodGetLiteral(byte3).getPointer(Squeak.Assn_key)); break;
+            case 4: this.push(this.method.methodGetLiteral(byte3).getPointer(Squeak.Assn_value)); break;
             case 5: this.receiver.setPointer(byte3, this.top()); break;
             case 6: this.receiver.setPointer(byte3, this.pop()); break;
-            case 7: this.method.methodGetLiteral(byte3).setPointer(Squeak.Assn_key, this.top()); break;
+            case 7: this.method.methodGetLiteral(byte3).setPointer(Squeak.Assn_value, this.top()); break;
         }
     },
     jumpIfTrue: function(delta) {
@@ -1205,7 +1361,7 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
 //                self createActualMessageTo: class.
 //                messageSelector _ self splObj: SelectorCannotInterpret.
 //                ^ self lookupMethodInClass: (self superclassOf: currentClass)]
-                throw "cannotInterpret";
+                throw Error("cannotInterpret");
             }
             var newMethod = this.lookupSelectorInDict(mDict, selector);
             if (!newMethod.isNil) {
@@ -1220,7 +1376,7 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
         //Cound not find a normal message -- send #doesNotUnderstand:
         var dnuSel = this.specialObjects[Squeak.splOb_SelectorDoesNotUnderstand];
         if (selector === dnuSel) // Cannot find #doesNotUnderstand: -- unrecoverable error.
-            throw "Recursive not understood error encountered";
+            throw Error("Recursive not understood error encountered");
         var dnuMsg = this.createActualMessage(selector, argCount, startingClass); //The argument to doesNotUnderstand:
         this.popNandPush(argCount, dnuMsg);
         return this.findSelectorInClass(dnuSel, 1, startingClass);
@@ -1258,12 +1414,9 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
             if (this.tryPrimitive(primitiveIndex, argumentCount, newMethod))
                 return;  //Primitive succeeded -- end of story
         var newContext = this.allocateOrRecycleContext(newMethod.methodNeedsLargeFrame());
-        var methodNumLits = this.method.methodNumLits();
-        //The stored IP should be 1-based index of *next* instruction, offset by hdr and lits
-        var newPC = 0;
     	var tempCount = newMethod.methodTempCount();
-        var newSP = tempCount;
-        newSP += Squeak.Context_tempFrameStart - 1; //-1 for z-rel addressing
+        var newPC = 0; // direct zero-based index into byte codes
+        var newSP = Squeak.Context_tempFrameStart + tempCount - 1; // direct zero-based index into context pointers
         newContext.setPointer(Squeak.Context_method, newMethod);
         //Following store is in case we alloc without init; all other fields get stored
         newContext.setPointer(Squeak.BlockContext_initialIP, this.nilObj);
@@ -1287,7 +1440,7 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
         this.storeContextRegisters(); // not really necessary, I claim
         this.receiver = newContext.getPointer(Squeak.Context_receiver);
         if (this.receiver !== newRcvr)
-            throw "receivers don't match";
+            throw Error("receivers don't match");
         this.checkForInterrupts();
     },
     doReturn: function(returnValue, targetContext) {
@@ -1449,15 +1602,6 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
     },
 },
 'contexts', {
-    isContext: function(obj) {//either block or methodContext
-        if (obj.sqClass === this.specialObjects[Squeak.splOb_ClassMethodContext]) return true;
-        if (obj.sqClass === this.specialObjects[Squeak.splOb_ClassBlockContext]) return true;
-        return false;
-    },
-    isMethodContext: function(obj) {
-        if (obj.sqClass === this.specialObjects[Squeak.splOb_ClassMethodContext]) return true;
-        return false;
-    },
     isUnwindMarked: function(ctx) {
         return false;
     },
@@ -1480,7 +1624,7 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
         this.methodBytes = meth.bytes;
         this.pc = this.decodeSqueakPC(ctxt.getPointer(Squeak.Context_instructionPointer), meth);
         if (this.pc < -1)
-            throw "error";
+            throw Error("bad pc");
         this.sp = this.decodeSqueakSP(ctxt.getPointer(Squeak.Context_stackPointer));
     },
     storeContextRegisters: function() {
@@ -1502,8 +1646,8 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
         // sp is offset by tempFrameStart, -1 for z-rel addressing
         return intSP - (Squeak.Context_tempFrameStart - 1);
     },
-    decodeSqueakSP: function(squeakPC) {
-        return squeakPC + (Squeak.Context_tempFrameStart - 1);
+    decodeSqueakSP: function(squeakSP) {
+        return squeakSP + (Squeak.Context_tempFrameStart - 1);
     },
     recycleIfPossible: function(ctxt) {
         if (!this.isMethodContext(ctxt)) return;
@@ -1618,8 +1762,32 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
         return this.nonSmallInt;  //non-small result will cause failure
     },
 },
+'snapshots', {
+    snapshotCleanUp: function() {
+        // nil out slots above stack pointer in all contexts
+        var obj = this.image.firstOldObject;
+        while (obj = obj.nextObject) {
+            if (!this.isContext(obj)) continue;
+            var sp = obj.getPointer(Squeak.Context_stackPointer);
+            if (sp.isNil) continue;
+            for (var i = this.decodeSqueakSP(sp) + 1; i < obj.pointers.length; i++)
+                obj.pointers[i] = this.nilObj;
+        }
+    },
+},
 'utils',
 {
+    isContext: function(obj) {//either block or methodContext
+        if (obj.sqClass === this.specialObjects[Squeak.splOb_ClassMethodContext]) return true;
+        if (obj.sqClass === this.specialObjects[Squeak.splOb_ClassBlockContext]) return true;
+        return false;
+    },
+    isMethodContext: function(obj) {
+        return obj.sqClass === this.specialObjects[Squeak.splOb_ClassMethodContext];
+    },
+    isMethod: function(obj, index) {
+        return  obj.sqClass === this.specialObjects[Squeak.splOb_ClassCompiledMethod];
+    },
     instantiateClass: function(aClass, indexableSize) {
         return this.image.instantiateClass(aClass, indexableSize, this.nilObj);
     },
@@ -1700,8 +1868,8 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
             if (classAndMethodString == (classObj.className() + '>>' + selectorObj.bytesAsString()))
                 return found = methodObj;
         });
-        if (!found) throw 'method not found: ', classAndMethodString;
         this.breakOnMethod = found;
+        return found;
     },
     breakOnReturn: function() {
         this.breakOnContextChanged = false;
@@ -1783,9 +1951,6 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
         }
         return false;
     },
-
-
-
 });
 
 Object.subclass('users.bert.SqueakJS.vm.Primitives',
@@ -1831,13 +1996,96 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             0xFFFFCCCC, 0xFFFFFFCC, 0xFFFF00FF, 0xFFFF33FF, 0xFFFF66FF, 0xFFFF99FF, 0xFFFFCCFF, 0xFFFFFFFF];
     },
     initModules: function() {
+        this.missingPrimitives = {};
         this.loadedModules = {};
         this.externalModules = {};
         this.builtinModules = {
             MiscPrimitivePlugin: {
                 exports: {
                     primitiveStringHash: this.primitiveStringHash.bind(this),
-                },
+                }
+            },
+            FilePlugin: {
+                exports: {
+                    primitiveDirectoryDelimitor: this.primitiveDirectoryDelimitor.bind(this),
+                    primitiveDirectoryCreate: this.primitiveDirectoryCreate.bind(this),
+                    primitiveDirectoryDelete: this.primitiveDirectoryDelete.bind(this),
+                    primitiveDirectoryDelimitor: this.primitiveDirectoryDelimitor.bind(this),
+                    primitiveDirectoryEntry: this.primitiveDirectoryEntry.bind(this),
+                    primitiveDirectoryLookup: this.primitiveDirectoryLookup.bind(this),
+                    primitiveFileAtEnd: this.primitiveFileAtEnd.bind(this),
+                    primitiveFileClose: this.primitiveFileClose.bind(this),
+                    primitiveFileDelete: this.primitiveFileDelete.bind(this),
+                    primitiveFileFlush: this.primitiveFileFlush.bind(this),
+                    primitiveFileGetPosition: this.primitiveFileGetPosition.bind(this),
+                    primitiveFileOpen: this.primitiveFileOpen.bind(this),
+                    primitiveFileRead: this.primitiveFileRead.bind(this),
+                    primitiveFileRename: this.primitiveFileRename.bind(this),
+                    primitiveFileSetPosition: this.primitiveFileSetPosition.bind(this),
+                    primitiveFileSize: this.primitiveFileSize.bind(this),
+                    primitiveFileStdioHandles: this.primitiveFileStdioHandles.bind(this),
+                    primitiveFileTruncate: this.primitiveFileTruncate.bind(this),
+                    primitiveFileWrite: this.primitiveFileWrite.bind(this),
+                }
+            },
+            BitBltPlugin: {
+                exports: {
+                    primitiveCopyBits: this.primitiveCopyBits.bind(this),
+                    primitiveWarpBits: this.primitiveWarpBits.bind(this),
+                }
+            },
+            B2DPlugin: {
+                exports: {
+                    // curry the primitive name and return value
+                    primitiveAddActiveEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddActiveEdgeEntry", 0),
+                    primitiveAddBezier: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddBezier", 0),
+                    primitiveAddBezierShape: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddBezierShape", 0),
+                    primitiveAddBitmapFill: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddBitmapFill", 0),
+                    primitiveAddCompressedShape: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddCompressedShape", 0),
+                    primitiveAddGradientFill: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddGradientFill", 0),
+                    primitiveAddLine: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddLine", 0),
+                    primitiveAddOval: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddOval", 0),
+                    primitiveAddPolygon: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddPolygon", 0),
+                    primitiveAddRect: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddRect", 0),
+                    primitiveChangedActiveEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveChangedActiveEdgeEntry", 0),
+                    primitiveCopyBuffer: this.fakePrimitive.bind(this, "B2DPlugin.primitiveCopyBuffer", 0),
+                    primitiveDisplaySpanBuffer: this.fakePrimitive.bind(this, "B2DPlugin.primitiveDisplaySpanBuffer", 0),
+                    primitiveDoProfileStats: this.fakePrimitive.bind(this, "B2DPlugin.primitiveDoProfileStats", 0),
+                    primitiveFinishedProcessing: this.fakePrimitive.bind(this, "B2DPlugin.primitiveFinishedProcessing", true),
+                    primitiveGetAALevel: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetAALevel", 0),
+                    primitiveGetBezierStats: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetBezierStats", 0),
+                    primitiveGetClipRect: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetClipRect", 0),
+                    primitiveGetCounts: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetCounts", 0),
+                    primitiveGetDepth: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetDepth", 1),
+                    primitiveGetFailureReason: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetFailureReason", 0),
+                    primitiveGetOffset: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetOffset", 0),
+                    primitiveGetTimes: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetTimes", 0),
+                    primitiveInitializeBuffer: this.fakePrimitive.bind(this, "B2DPlugin.primitiveInitializeBuffer", 0),
+                    primitiveInitializeProcessing: this.fakePrimitive.bind(this, "B2DPlugin.primitiveInitializeProcessing", 0),
+                    primitiveMergeFillFrom: this.fakePrimitive.bind(this, "B2DPlugin.primitiveMergeFillFrom", 0),
+                    primitiveNeedsFlush: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNeedsFlush", false),
+                    primitiveNeedsFlushPut: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNeedsFlushPut", 0),
+                    primitiveNextActiveEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNextActiveEdgeEntry", 0),
+                    primitiveNextFillEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNextFillEntry", 0),
+                    primitiveNextGlobalEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNextGlobalEdgeEntry", 0),
+                    primitiveRegisterExternalEdge: this.fakePrimitive.bind(this, "B2DPlugin.primitiveRegisterExternalEdge", 0),
+                    primitiveRegisterExternalFill: this.fakePrimitive.bind(this, "B2DPlugin.primitiveRegisterExternalFill", 0),
+                    primitiveRenderImage: this.fakePrimitive.bind(this, "B2DPlugin.primitiveRenderImage", 0),
+                    primitiveRenderScanline: this.fakePrimitive.bind(this, "B2DPlugin.primitiveRenderScanline", 0),
+                    primitiveSetAALevel: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetAALevel", 0),
+                    primitiveSetBitBltPlugin: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetBitBltPlugin", 0),
+                    primitiveSetClipRect: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetClipRect", 0),
+                    primitiveSetColorTransform: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetColorTransform", 0),
+                    primitiveSetDepth: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetDepth", 0),
+                    primitiveSetEdgeTransform: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetEdgeTransform", 0),
+                    primitiveSetOffset: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetOffset", 0),
+                }
+            },
+            FloatArrayPlugin: {
+                exports: {
+                    primitiveAt: this.primitiveFloatArrayAtAndPut.bind(this),
+                    primitiveAtPut: this.primitiveFloatArrayAtAndPut.bind(this),
+                }
             },
         };
     },
@@ -1906,8 +2154,8 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 35: return false; // primitiveBitOrLargeIntegers
             case 36: return false; // primitiveBitXorLargeIntegers
             case 37: return false; // primitiveBitShiftLargeIntegers
-            case 38: return false; // TODO: primitiveFloatAt
-            case 39: return false; // TODO: primitiveFloatAtPut
+            //case 38: return false; // TODO: primitiveFloatAt
+            //case 39: return false; // TODO: primitiveFloatAtPut
             case 40: return this.popNandPushFloatIfOK(1,this.stackInteger(0)); // primitiveAsFloat
             case 41: return this.popNandPushFloatIfOK(2,this.stackFloat(1)+this.stackFloat(0));  // Float +
             case 42: return this.popNandPushFloatIfOK(2,this.stackFloat(1)-this.stackFloat(0));  // Float -	
@@ -1944,7 +2192,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 73: return this.popNandPushIfOK(2, this.objectAt(false,false,true)); // instVarAt:
             case 74: return this.popNandPushIfOK(3, this.objectAtPut(false,false,true)); // instVarAt:put:
             case 75: return this.popNandPushIfOK(1, this.stackNonInteger(0).hash); // Object.identityHash
-            case 76: return false; // primitiveStoreStackp (Blue Book: primitiveAsObject)
+            case 76: return this.primitiveStoreStackp(argCount);  // (Blue Book: primitiveAsObject)
             case 77: return this.popNandPushIfOK(1, this.someInstanceOf(this.stackNonInteger(0))); // Class.someInstance
             case 78: return this.popNandPushIfOK(1, this.nextInstanceAfter(this.stackNonInteger(0))); // Object.nextInstance
             case 79: return this.primitiveNewMethod(argCount); // Compiledmethod.new
@@ -1965,9 +2213,9 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 94: return false; // primitiveGetNextEvent				"Blue Book: primitiveSampleInterval"
             case 95: return false; // primitiveInputWord
             case 96: return this.primitiveCopyBits(argCount);  // BitBlt.copyBits
-            case 97: return false; // primitiveSnapshot
-            case 98: return false; // primitiveStoreImageSegment
-            case 99: return false; // primitiveLoadImageSegment
+            case 97: return this.primitiveSnapshot(argCount);
+            //case 98: return false; // primitiveStoreImageSegment
+            //case 99: return false; // primitiveLoadImageSegment
             case 100: return this.vm.primitivePerformWithArgs(argCount, true); // Object.perform:withArguments:inSuperclass: (Blue Book: primitiveSignalAtTick)
             case 101: return this.primitiveBeCursor(argCount); // Cursor.beCursor
             case 102: return this.primitiveBeDisplay(argCount); // DisplayScreen.beDisplay
@@ -1983,15 +2231,15 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 112: return this.popNandPushIfOK(1, 1000000); //primitiveBytesLeft
             case 113: return this.primitiveQuit(argCount);
             case 114: return this.primitiveExitToDebugger(argCount);
-            case 115: return false; //TODO primitiveChangeClass					"Blue Book: primitiveOopsLeft"
+            //case 115: return false; //TODO primitiveChangeClass					"Blue Book: primitiveOopsLeft"
             case 116: return this.vm.flushMethodCacheForMethod(this.vm.top());
             case 117: return this.doNamedPrimitive(argCount, newMethod); // named prims
-            case 118: return false; //TODO primitiveDoPrimitiveWithArgs
+            //case 118: return false; //TODO primitiveDoPrimitiveWithArgs
             case 119: return this.vm.flushMethodCacheForSelector(this.vm.top());
             case 120: return false; //primitiveCalloutToFFI
-            case 121: return this.popNandPushIfOK(1, this.makeStString("/home/bert/mini.image")); //imageName
+            case 121: return this.primitiveImageName(argCount); //get+set imageName
             case 122: return this.primitiveReverseDisplay(argCount); // Blue Book: primitiveImageVolume
-            case 123: return false; //TODO primitiveValueUninterruptably
+            //case 123: return false; //TODO primitiveValueUninterruptably
             case 124: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore));
             case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
             case 126: return false; //TODO primitiveDeferDisplayUpdates
@@ -2001,30 +2249,38 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 130: return this.popNandPushIfOK(1, this.vm.image.fullGC()); // GC
             case 131: return this.popNandPushIfOK(1, this.vm.image.partialGC()); // GCmost
             case 132: return this.pop2andPushBoolIfOK(this.pointsTo(this.stackNonInteger(1), this.vm.top())); //Object.pointsTo
-            case 133: return false; //TODO primitiveSetInterruptKey
+            case 133: return true; //TODO primitiveSetInterruptKey
             case 134: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheInterruptSemaphore));
             case 135: return this.popNandPushIfOK(1, this.millisecondClockValue());
             case 136: return this.primitiveSignalAtMilliseconds(argCount); //Delay signal:atMs:());
             case 137: return this.popNandPushIfOK(1, this.secondClock()); // seconds since Jan 1, 1901
             case 138: return this.popNandPushIfOK(1, this.someObject()); // Object.someObject
             case 139: return this.popNandPushIfOK(1, this.nextObject(this.vm.top())); // Object.nextObject
-            case 140: return false; // TODO primitiveBeep
+            case 140: return true; // TODO primitiveBeep
             case 141: return this.primitiveClipboardText(argCount);
-            case 142: return this.popNandPushIfOK(1, this.makeStString("/users/bert/squeakvm/")); //vmPath
-            case 143: return false; // TODO primitiveShortAt
-            case 144: return false; // TODO primitiveShortAtPut
-            case 145: return false; // TODO primitiveConstantFill
+            case 142: return this.popNandPushIfOK(1, this.makeStString(Squeak.vmPath));
+            case 143: // short at and shortAtPut
+            case 144: return this.primitiveShortAtAndPut(argCount);
+            case 145: return this.primitiveConstantFill(argCount);
             case 146: return false; // TODO primitiveReadJoystick
-            case 147: return false; // TODO primitiveWarpBits
+            case 147: return this.primitiveWarpBits(argCount);
             case 148: return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); //shallowCopy
-            case 149: return false; // TODO primitiveGetAttribute
-            case 153: return false; // File.open 
-            case 156: return false; // primDeleteFileNamed:
-            case 159: return false; // primRename:to:
-            case 160: return false; // TODO primitiveAdoptInstance
-            case 161: return this.popNandPushIfOK(1, this.charFromInt('/'.charCodeAt(0))); //path delimiter
-            case 162: return this.popNandPushIfOK(1, this.vm.nilObj);  // FileDirectory.primLookupEntryIn:index: 
+            case 149: return this.primitiveGetAttribute(argCount);
+            case 150: return this.primitiveFileAtEnd(argCount);
+            case 151: return this.primitiveFileClose(argCount);
+            case 152: return this.primitiveFileGetPosition(argCount);
+            case 153: return this.primitiveFileOpen(argCount);
+            case 154: return this.primitiveFileRead(argCount);
+            case 155: return this.primitiveFileSetPosition(argCount);
+            case 156: return this.primitiveFileDelete(argCount);
+            case 157: return this.primitiveFileSize(argCount);
+            case 158: return this.primitiveFileWrite(argCount);
+            case 159: return this.primitiveFileRename(argCount);
+            //case 160: return false; // TODO primitiveAdoptInstance
+            case 161: return this.primitiveDirectoryDelimitor(argCount);
+            case 162: return this.primitiveDirectoryLookup(argCount);
             case 167: return false; // Processor.yield
+            case 188: return this.primitiveExecuteMethodArgsArray(argCount);
             case 195: return false; // Context.findNextUnwindContextUpTo:
             case 196: return false; // Context.terminateTo:
             case 197: return false; // Context.findNextHandlerContextStarting
@@ -2044,7 +2300,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 246: return false; // primStringfindSubstringinstartingAtmatchTable
             case 254: return this.primitiveVMParameter(argCount);
         }
-        throw "primitive " + index + " not implemented yet";
+        throw Error("primitive " + index + " not implemented yet");
         return false;
     },
     doNamedPrimitive: function(argCount, newMethod) {
@@ -2053,7 +2309,6 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         if (firstLiteral.pointersSize() !== 4) return false;
         var moduleName = firstLiteral.pointers[0].bytesAsString();
         var functionName = firstLiteral.pointers[1].bytesAsString();
-        console.log('squeak: named primitive "' + moduleName + '.' + functionName + '"');
         var module = this.loadedModules[moduleName];
         if (!module) {
             if (module !== undefined) return false; // earlier load failed
@@ -2064,7 +2319,26 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             var primitive = module.exports[functionName];
             if (primitive) return primitive(argCount);
         }
+        this.missingPrimitive(moduleName + '.' + functionName);
         return false;
+    },
+    missingPrimitive: function(prim) {
+        // warn once about missing primitives
+        if (this.missingPrimitives[prim]) {
+            this.missingPrimitives[prim]++;
+        } else {
+            this.missingPrimitives[prim] = 1;
+            console.warn('primitive missing: ' + prim);
+        }
+    },
+    fakePrimitive: function(prim, retVal, argCount) {
+        // fake a named primitive
+        // prim and retVal need to be curried when used:
+        //  this.fakePrimitive.bind(this, "Module.primitive", 42)
+        this.missingPrimitive(prim);
+        if (retVal === undefined) this.vm.popN(argCount);
+        else this.vm.popNandPush(argCount+1, this.makeStObject(retVal));
+        return true;
     },
     loadModule: function(moduleName) {
         var module = Squeak.externalModules[moduleName] || this.builtinModules[moduleName];
@@ -2220,12 +2494,26 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         newFloat.float = value;
         return newFloat;
 	},
+    makeLargeIfNeeded: function(integer) {
+        return this.vm.canBeSmallInt(integer) ? integer : this.makeLargeInt(integer);
+    },
+    makeLargeInt: function(integer) {
+        if (integer < 0) throw Error("negative large ints not implemented yet");
+        if (integer > 0xFFFFFFFF) throw Error("large large ints not implemented yet");
+        return this.pos32BitIntFor(integer);
+    },
     makePointWithXandY: function(x, y) {
         var pointClass = this.vm.specialObjects[Squeak.splOb_ClassPoint];
         var newPoint = this.vm.instantiateClass(pointClass, 0);
         newPoint.setPointer(Squeak.Point_x, x);
         newPoint.setPointer(Squeak.Point_y, y);
         return newPoint;
+    },
+    makeStArray: function(jsArray) {
+        var array = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassArray], jsArray.length);
+        for (var i = 0; i < jsArray.length; i++)
+            array.pointers[i] = this.makeStObject(jsArray[i]);
+        return array;
     },
     makeStString: function(jsString) {
         var bytes = [];
@@ -2235,9 +2523,32 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         stString.bytes = bytes;
         return stString;
     },
+    makeStObject: function(obj) {
+        if (obj === undefined || obj === null) return this.vm.nilObj;
+        if (obj === true) return this.vm.trueObj;
+        if (obj === false) return this.vm.falseObj;
+        if (obj.stClass) return obj;
+        if (typeof obj === "string" || obj.constructor === Uint8Array) return this.makeStString(obj);
+        if (obj.constructor === Array) return this.makeStArray(obj);
+        if (typeof obj === "number")
+            if (obj === (obj|0)) return this.makeLargeIfNeeded(obj);
+            else return this.makeFloat(obj)
+        throw Error("cannot make smalltalk object");
+    },
     pointsTo: function(rcvr, arg) {
         if (!rcvr.pointers) return false;
         return rcvr.pointers.indexOf(arg) >= 0;
+    },
+    asUint8Array: function(buffer) {
+        if (buffer.constructor === Uint8Array) return buffer;
+        if (buffer.constructor === ArrayBuffer) return new Uint8Array(buffer);
+        if (typeof buffer === "string") {
+            var array = new Uint8Array(buffer.length);
+            for (var i = 0; i < buffer.length; i++)
+                array[i] = buffer.charCodeAt(i);
+            return array;
+        }
+        throw Error("unknown buffer type");
     },
 },
 'indexing', {
@@ -2285,11 +2596,14 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             if (info.array !== array) {this.success = false; return array;}
         } else {// slow entry installs in cache if appropriate
             if (array.isFloat) { // present float as word array
-                throw "not implemented yet"
-                var floatData = array.floatData();
-                if (index==1) return this.pos32BitIntFor(floatData.getUint32(0, false));
-                if (index==2) return this.pos32BitIntFor(floatData.getUint32(4, false));
-                this.success = false; return array;
+                var wordToPut = this.stackPos32BitInt(0);
+                if (this.success && (index == 1 || index == 2)) {
+                    var floatData = array.floatData();
+                    floatData.setUint32(index == 1 ? 0 : 4, wordToPut, false);
+                    array.float = floatData.getFloat64(0);
+                    debugger;
+                } else this.success = false;
+                return this.vm.stackValue(0);
             }
             info = this.makeAtCacheInfo(this.atPutCache, this.vm.specialSelectors[34], array, convertChars, includeInstVars);
         }
@@ -2402,19 +2716,80 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         this.vm.popNandPush(1+argCount, this.makePointWithXandY(x, y));
         return true;
     },
+    primitiveStoreStackp: function(argCount) {
+        var ctxt = this.stackNonInteger(1),
+            newStackp = this.stackInteger(0);       
+        if (!this.success || newStackp < 0 || this.vm.decodeSqueakSP(newStackp) >= ctxt.pointers.length)
+            return false;
+        var stackp = ctxt.pointers[Squeak.Context_stackPointer];
+        while (stackp < newStackp)
+            ctxt.pointers[this.vm.decodeSqueakSP(++stackp)] = this.vm.nilObj;
+        ctxt.pointers[Squeak.Context_stackPointer] = newStackp;
+        this.vm.pop(argCount);
+        return true;
+    },
+    primitiveShortAtAndPut:  function(argCount) {
+        var rcvr = this.stackNonInteger(argCount),
+            index = this.stackInteger(argCount-1) - 1, // make zero-based
+            array = rcvr.int16Array || (rcvr.words && (rcvr.int16Array = new Int16Array(rcvr.words.buffer)));
+        if (!this.success || !array || index < 0 || index >= array.length)
+            return false;
+        var value;
+        if (argCount < 2) { // shortAt:
+            value = array[index];
+        } else { // shortAt:put:
+            value = this.stackInteger(0);
+            if (value < -32768 || value > 32767)
+                return false;
+            array[index] = value;
+        }
+        this.popNandPushIfOK(argCount+1, value);
+        return true;
+    },
+    primitiveConstantFill:  function(argCount) {
+        var rcvr = this.stackNonInteger(1),
+            value = this.stackPos32BitInt(0);
+        if (!this.success || !rcvr.isWordsOrBytes())
+            return false;
+        var array = rcvr.words || rcvr.bytes;
+        if (array) {
+            if (array === rcvr.bytes && value > 255)
+                return false;
+            for (var i = 0; i < array.length; i++)
+                array[i] = value;
+        }
+        this.vm.popN(argCount);
+        return true;
+    },
     primitiveNewMethod: function(argCount) {
         var header = this.stackInteger(0);
         var byteCount = this.stackInteger(1);
         if (!this.success) return 0;
         var litCount = (header>>9) & 0xFF;
         var method = this.vm.instantiateClass(this.vm.stackValue(2), byteCount);
-        method.isCompiledMethod = true;
         method.pointers = [header];
         while (method.pointers.length < litCount+1)
             method.pointers.push(this.vm.nilObj);
         this.vm.popNandPush(1+argCount, method);
         if (this.vm.breakOnNewMethod)
             this.vm.breakOnMethod = method;
+        return true;
+    },
+    primitiveExecuteMethodArgsArray: function(argCount) {
+        // receiver, argsArray, then method are on top of stack.  Execute method with
+        // receiver and args.
+        var methodObj = this.stackNonInteger(0),
+            argsArray = this.stackNonInteger(1),
+            receiver = this.vm.stackValue(2);
+        // Allow for up to two extra arguments (e.g. for mirror primitives).
+        if (!this.success || !this.vm.isMethod(methodObj) || argCount > 4) return false;
+        var numArgs = methodObj.methodNumArgs();
+        if (numArgs !== argsArray.pointersSize()) return false;
+        // drop all args, push receiver, and new arguments
+        this.vm.popNandPush(argCount+1, receiver);
+        for (var i = 0; i < numArgs; i++) 
+            this.vm.push(argsArray.pointers[i]);
+        this.vm.executeNewMethod(receiver, methodObj, numArgs, methodObj.methodPrimitiveIndex());
         return true;
     },
     doArrayBecome: function(doBothWays) {
@@ -2573,9 +2948,8 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         this.vm.newActiveContext(newProc.getPointer(Squeak.Proc_suspendedContext));
         newProc.setPointer(Squeak.Proc_suspendedContext, this.vm.nilObj);
         this.vm.reclaimableContextCount = 0;
-        if (this.vm.breakOnContextChanged || this.vm.breakOnContextReturned) {
+        if (this.vm.breakOnContextChanged) {
             this.vm.breakOnContextChanged = false;
-            this.vm.breakOnContextReturned = null;
             this.vm.breakOutOfInterpreter = 'break';
         }
     },
@@ -2586,7 +2960,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         var p = schedLists.pointersSize() - 1;  // index of last indexable field
         var processList;
         do {
-            if (p < 0) throw "scheduler could not find a runnable process";
+            if (p < 0) throw Error("scheduler could not find a runnable process");
             processList = schedLists.getPointer(p--);
         } while (this.isEmptyList(processList));
         return this.removeFirstLinkOfList(processList);
@@ -2671,7 +3045,25 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         return true;
 	},
 },
-'vm settings', {
+'vm functions', {
+    primitiveGetAttribute: function(argCount) {
+        var attr = this.stackInteger(0);
+        if (!this.success) return false;
+        var value;
+        switch (attr) {
+            case 0: value = Squeak.vmPath + 'vm.js'; break;
+            case 1: value = this.vm.image.name; break;
+            case 1001: value = Squeak.osName; break;
+            case 1002: value = Squeak.osVersion; break;
+            case 1003: value = Squeak.cpuType; break;
+            case 1004: value = Squeak.vmVersion; break;
+            case 1005: value = Squeak.windowSystem; break;
+            case 1006: value = Squeak.vmBuild; break;
+            default: return false;
+        }
+        this.vm.popNandPush(argCount+1, this.makeStString(value));
+        return true;
+	},
     setLowSpaceThreshold: function() {
         var nBytes = this.stackInteger(0);
         if (this.success) this.vm.lowSpaceThreshold = nBytes;
@@ -2695,27 +3087,28 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
 		};
 		return false;
     },
-},
-'MiscPrimitivePlugin', {
-    primitiveStringHash: function(argCount) {
-        // need to implement this because in older Etoys image the fallback code is wrong
-        var initialHash = this.stackInteger(0);
-        var stringObj = this.stackNonInteger(1);
-        if (!this.success) return false;
-        var stringSize = stringObj.bytesSize();
-        var string = stringObj.bytes;
-    	var hash = initialHash & 0x0FFFFFFF;
-    	for (var i = 0; i < stringSize; i++) {
-    		hash += string[i];
-    		var low = hash & 0x3FFF;
-    		hash = (0x260D * low + ((0x260D * (hash >>> 14) + (0x0065 * low) & 16383) * 16384)) & 0x0FFFFFFF;
-    	}
-    	this.vm.popNandPush(3, hash);
+    primitiveImageName: function(argCount) {
+        if (argCount == 0)
+            return this.popNandPushIfOK(1, this.makeStString(this.vm.image.name));
+        this.vm.image.name = this.vm.top().bytesAsString();
+        window.localStorage['squeakImageName'] = this.vm.image.name;
         return true;
-    }
-},
-'platform', {
+    },
+    primitiveSnapshot: function(argCount) {
+        this.vm.popNandPush(1, this.vm.trueObj);        // put true on stack for saved snapshot
+        this.vm.storeContextRegisters();                // store current state for snapshot
+        var proc = this.getScheduler().getPointer(Squeak.ProcSched_activeProcess);
+        proc.setPointer(Squeak.Proc_suspendedContext, this.vm.activeContext); // store initial context
+        this.vm.image.fullGC();                        // before cleanup so traversal works
+        this.vm.snapshotCleanUp();
+        var buffer = this.vm.image.writeToBuffer();
+        Squeak.flushAllFiles();                         // so there are no more writes pending
+        Squeak.filePut(this.vm.image.name, buffer);
+        this.vm.popNandPush(1, this.vm.falseObj);       // put false on stack for continuing
+        return true;
+    },
     primitiveQuit: function(argCount) {
+        Squeak.flushAllFiles();
         this.vm.breakOutOfInterpreter = 'break'; 
         return true;
     },
@@ -2724,6 +3117,8 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         debugger;
         return true;
     },
+},
+'display', {
     primitiveBeCursor: function(argCount) {
         this.vm.popN(argCount); // return self
         return true;
@@ -2734,58 +3129,6 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         this.vm.popN(argCount); // return self
         return true;
 	},
-	primitiveClipboardText: function(argCount) {
-        if (argCount === 0) { // read from clipboard
-            if (typeof(this.display.clipboardString) !== 'string') return false;
-            this.vm.popNandPush(1, this.makeStString(this.display.clipboardString));
-        } else if (argCount === 1) { // write to clipboard
-            var stringObj = this.vm.top();
-            if (!stringObj.bytes) return false;
-            this.display.clipboardString = stringObj.bytesAsString();
-            this.display.clipboardStringChanged = true;
-            this.vm.pop();
-        }
-        return true;
-	},
-	primitiveCopyBits: function(argCount) { // no rcvr class check, to allow unknown subclasses (e.g. under Turtle)
-        var bitbltObj = this.vm.stackValue(argCount);
-        var bitblt = new users.bert.SqueakJS.vm.BitBlt(this.vm);
-        if (!bitblt.loadBitBlt(bitbltObj)) return false;
-        bitblt.copyBits();
-        if (bitblt.combinationRule === 22 || bitblt.combinationRule === 32)
-            this.vm.popNandPush(argCount + 1, bitblt.bitCount);
-        else if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay])
-            this.showOnDisplay(bitblt.dest, bitblt.affectedRect());
-        return true;
-	},
-    primitiveKeyboardNext: function(argCount) {
-        return this.popNandPushIfOK(argCount+1, this.checkSmallInt(this.display.keys.pop()));
-    },
-    primitiveKeyboardPeek: function(argCount) {
-        var length = this.display.keys.length;
-        return this.popNandPushIfOK(argCount+1, length ? this.checkSmallInt(this.display.keys[length - 1] || 0) : this.vm.nilObj);
-    },
-    primitiveMouseButtons: function(argCount) {
-        return this.popNandPushIfOK(argCount+1, this.checkSmallInt(this.display.buttons));
-    },
-    primitiveMousePoint: function(argCount) {
-        return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(this.checkSmallInt(this.display.mouseX), this.checkSmallInt(this.display.mouseY)));
-    },
-    primitiveRelinquishProcessorForMicroseconds: function(argCount) {
-        var millis = 100;
-        if (argCount > 1) return false;
-        if (argCount > 0) {
-            var micros = this.stackInteger(0);
-            if (!this.success) return false;
-            this.vm.pop();
-            millis = micros / 1000;
-        }
-        // make sure we tend to pending delays
-        this.vm.interruptCheckCounter = 0;
-        this.vm.isIdle = true;
-        this.vm.breakOutOfInterpreter = true;
-        return true;
-    },
     primitiveReverseDisplay: function(argCount) {
         this.reverseDisplay = !this.reverseDisplay;
         this.redrawFullDisplay();
@@ -2870,7 +3213,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
                     srcY++;
                 };
                 break;
-            default: throw "not implemented yet";
+            default: throw Error("depth not implemented");
         };
         ctx.putImageData(pixels, rect.x, rect.y);
     },
@@ -2888,20 +3231,363 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         var supportedDepths =  [1, 2, 4, 8, 16, 32]; // match showOnDisplay()
         return this.pop2andPushBoolIfOK(supportedDepths.indexOf(this.stackInteger(0)) >= 0);
     },
-
+    displayFlush: function(){
+        // no-op for now
+        // TODO: copy damage rect code from Smalltalk-78 VM
+    },
+},
+'input', {
+	primitiveClipboardText: function(argCount) {
+        if (argCount === 0) { // read from clipboard
+            if (typeof(this.display.clipboardString) !== 'string') return false;
+            this.vm.popNandPush(1, this.makeStString(this.display.clipboardString));
+        } else if (argCount === 1) { // write to clipboard
+            var stringObj = this.vm.top();
+            if (!stringObj.bytes) return false;
+            this.display.clipboardString = stringObj.bytesAsString();
+            this.display.clipboardStringChanged = true;
+            this.vm.pop();
+        }
+        return true;
+	},
+    primitiveKeyboardNext: function(argCount) {
+        return this.popNandPushIfOK(argCount+1, this.checkSmallInt(this.display.keys.shift()));
+    },
+    primitiveKeyboardPeek: function(argCount) {
+        var length = this.display.keys.length;
+        return this.popNandPushIfOK(argCount+1, length ? this.checkSmallInt(this.display.keys[0] || 0) : this.vm.nilObj);
+    },
+    primitiveMouseButtons: function(argCount) {
+        return this.popNandPushIfOK(argCount+1, this.checkSmallInt(this.display.buttons));
+    },
+    primitiveMousePoint: function(argCount) {
+        return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(this.checkSmallInt(this.display.mouseX), this.checkSmallInt(this.display.mouseY)));
+    },
+},
+'time', {
+    primitiveRelinquishProcessorForMicroseconds: function(argCount) {
+        var millis = 100;
+        if (argCount > 1) return false;
+        if (argCount > 0) {
+            var micros = this.stackInteger(0);
+            if (!this.success) return false;
+            this.vm.pop();
+            millis = micros / 1000;
+        }
+        // make sure we tend to pending delays
+        this.vm.interruptCheckCounter = 0;
+        this.vm.isIdle = true;
+        this.vm.breakOutOfInterpreter = true;
+        return true;
+    },
 	millisecondClockValue: function() {
         //Return the value of the millisecond clock as an integer.
         //Note that the millisecond clock wraps around periodically.
         //The range is limited to SmallInteger maxVal / 2 to allow
-        //delays of up to that length without overflowing a SmallInteger."
+        //delays of up to that length without overflowing a SmallInteger.
         return (Date.now() - this.vm.startupTime) & this.vm.millisecondClockMask;
 	},
+	millisecondClockValueSet: function(clock) {
+        // set millisecondClock to the (previously saved) clock value 
+        // to allow "stopping" the VM clock while debugging
+        this.vm.startupTime = Date.now() - clock;
+	},
 	secondClock: function() {
-	    var date = new Date();
-        var seconds = date.getTime() / 1000 | 0;    // milliseconds -> seconds
-        seconds -= date.getTimezoneOffset() * 60;   // make local time
-        seconds += ((69 * 365 + 17) * 24 * 3600);   // adjust epoch from 1970 to 1901
-        return this.pos32BitIntFor(seconds);
+        return this.pos32BitIntFor(Squeak.totalSeconds()); // will overflow 32 bits in 2037
+    },
+},
+'MiscPrimitivePlugin', {
+    primitiveStringHash: function(argCount) {
+        // need to implement this because in older Etoys image the fallback code is wrong
+        var initialHash = this.stackInteger(0);
+        var stringObj = this.stackNonInteger(1);
+        if (!this.success) return false;
+        var stringSize = stringObj.bytesSize();
+        var string = stringObj.bytes;
+    	var hash = initialHash & 0x0FFFFFFF;
+    	for (var i = 0; i < stringSize; i++) {
+    		hash += string[i];
+    		var low = hash & 0x3FFF;
+    		hash = (0x260D * low + ((0x260D * (hash >>> 14) + (0x0065 * low) & 16383) * 16384)) & 0x0FFFFFFF;
+    	}
+    	this.vm.popNandPush(3, hash);
+        return true;
+    }
+},
+'FilePlugin', {
+    primitiveDirectoryCreate: function(argCount) {
+        console.log("Not yet implemented: primitiveDirectoryCreate");
+        return false;
+    },
+    primitiveDirectoryDelete: function(argCount) {
+        console.log("Not yet implemented: primitiveDirectoryDelete");
+        return false;
+    },
+    primitiveDirectoryDelimitor: function(argCount) {
+        var delimitor = '/';
+        return this.popNandPushIfOK(1, this.charFromInt(delimitor.charCodeAt(0)));
+    },
+    primitiveDirectoryEntry: function(argCount) {
+        return false; // image falls back on primitiveDirectoryLookup
+    },
+    primitiveDirectoryLookup: function(argCount) {
+        var index = this.stackInteger(0),
+            dirNameObj = this.stackNonInteger(1);
+        if (!this.success) return false;
+        var entries = Squeak.dirList(dirNameObj.bytesAsString());
+        if (!entries) return false;
+        var keys = Object.keys(entries);
+        this.popNandPushIfOK(argCount+1, this.makeStObject(entries[keys[index - 1]]));  // entry or nil
+        return true;
+    },
+    primitiveFileAtEnd: function(argCount) {
+        var handle = this.stackNonInteger(0);
+        if (!this.success || !handle.file) return false;
+        this.popNandPushIfOK(argCount+1, this.makeStObject(handle.filePos >= handle.file.size));
+        return true;
+    },
+    primitiveFileClose: function(argCount) {
+        var handle = this.stackNonInteger(0);
+        if (!this.success || !handle.file) return false;
+        this.fileClose(handle.file);
+        handle.file = null;
+        return true;
+    },
+    primitiveFileDelete: function(argCount) {
+        var fileNameObj = this.stackNonInteger(0);
+        if (!this.success) return false;
+        var success = Squeak.fileDelete(fileNameObj.bytesAsString());
+        return success;
+    },
+    primitiveFileFlush: function(argCount) {
+        var handle = this.stackNonInteger(0);
+        if (!this.success || !handle.file) return false;
+        Squeak.flushFile(handle.file);
+        return true;
+    },
+    primitiveFileGetPosition: function(argCount) {
+        var handle = this.stackNonInteger(0);
+        if (!this.success || !handle.file) return false;
+        this.popNandPushIfOK(argCount + 1, this.makeLargeIfNeeded(handle.filePos));
+        return true;
+    },
+    primitiveFileOpen: function(argCount) {
+        var writeFlag = !!this.stackNonInteger(0).isTrue,
+            nameObj = this.stackNonInteger(1);
+        if (!this.success) return false;
+        var file = this.fileOpen(nameObj.bytesAsString(), writeFlag);
+        if (!file) return false;
+        var handle = this.makeStArray([file.name]); // array contents irrelevant
+        handle.file = file;             // shared between handles
+        handle.fileWrite = writeFlag;   // specific to this handle
+        handle.filePos = 0;             // specific to this handle
+        this.popNandPushIfOK(argCount+1, handle);
+        return true;
+    },
+    primitiveFileRead: function(argCount) {
+        var count = this.stackInteger(0),
+            startIndex = this.stackInteger(1) - 1, // make zero based
+            arrayObj = this.stackNonInteger(2),
+            handle = this.stackNonInteger(3);
+        if (!this.success || !handle.file) return false;
+        if (!count) return this.popNandPushIfOK(argCount+1, 0);
+        if (!arrayObj.bytes) {
+            console.log("File reading into non-bytes object not implemented yet");
+            return false;
+        }
+        if (startIndex < 0 || startIndex + count > arrayObj.bytes.length)
+            return false;
+
+        return this.fileContentsDo(handle.file, function(file) {
+            if (!file.contents)
+                return this.popNandPushIfOK(argCount+1, 0);
+            var srcArray = file.contents,
+                dstArray = arrayObj.bytes;
+            count = Math.min(count, file.size - handle.filePos);
+            for (var i = 0; i < count; i++)
+                dstArray[startIndex + i] = srcArray[handle.filePos++];
+            this.popNandPushIfOK(argCount+1, count);
+        }.bind(this));
+    },
+    primitiveFileRename: function(argCount) {
+        console.log("Not yet implemented: primitiveFileRename");
+        return false;
+    },
+    primitiveFileSetPosition: function(argCount) {
+        var pos = this.stackPos32BitInt(0),
+            handle = this.stackNonInteger(1);
+        if (!this.success || !handle.file) return false;
+        handle.filePos = pos;
+        this.vm.pop(argCount);
+        return true;
+    },
+    primitiveFileSize: function(argCount) {
+        var handle = this.stackNonInteger(0);
+        if (!this.success || !handle.file) return false;
+        this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(handle.file.size));
+        return true;
+    },
+    primitiveFileStdioHandles: function(argCount) {
+        console.log("Not yet implemented: primitiveFileStdioHandles");
+        return false;
+    },
+    primitiveFileTruncate: function(argCount) {
+        console.log("Not yet implemented: primitiveFileTruncate");
+        return false;
+    },
+    primitiveFileWrite: function(argCount) {
+        var count = this.stackInteger(0),
+            startIndex = this.stackInteger(1) - 1, // make zero based
+            arrayObj = this.stackNonInteger(2),
+            handle = this.stackNonInteger(3);
+        if (!this.success || !handle.file || !handle.fileWrite) return false;
+        if (!count) return this.popNandPushIfOK(argCount+1, 0);
+        if (!arrayObj.bytes) {
+            console.log("File writing from non-bytes object not implemented yet");
+            return false;
+        }
+        if (startIndex < 0 || startIndex + count > arrayObj.bytes.length)
+            return false;
+
+        return this.fileContentsDo(handle.file, function(file) {
+            var srcArray = arrayObj.bytes,
+                dstArray = file.contents || [];
+            if (handle.filePos + count > dstArray.length) {
+                var newSize = dstArray.length === 0 ? handle.filePos + count :
+                    Math.max(handle.filePos + count, dstArray.length + 10000);
+                file.contents = new Uint8Array(newSize);
+                file.contents.set(dstArray);
+                dstArray = file.contents;
+            }
+            for (var i = 0; i < count; i++)
+                dstArray[handle.filePos++] = srcArray[startIndex + i];
+            if (handle.filePos > file.size) file.size = handle.filePos;
+            file.modified = true;
+            this.popNandPushIfOK(argCount+1, count);
+        }.bind(this));
+    },
+    fileOpen: function(filename, writeFlag) {
+        // if a file is opened for read and write at the same time,
+        // they must share the contents. That's why all open files
+        // are held in the ref-counted global SqueakFiles
+        if (typeof SqueakFiles == 'undefined')
+            SqueakFiles = {};
+        var path = Squeak.splitFilePath(filename);
+        if (!path.basename) return null;    // malformed filename
+        // if it is open already, return it   
+        var file = SqueakFiles[path.fullname];
+        if (file) {
+            ++file.refCount;
+            return file;
+        }
+        // otherwise, fetch or create its directory entry
+        var directory = Squeak.dirList(path.dirname);
+        if (!directory) return null;
+        var entry = directory[path.basename],
+            contents = null;
+        if (!entry) {
+            if (!writeFlag) return null;
+            contents = new Uint8Array();
+            entry = Squeak.filePut(path.fullname, contents.buffer);
+            if (!entry) return null;
+        }
+        // make the file object
+        file = {
+            name: path.fullname,
+            size: entry[4],         // actual file size, may differ from contents.length
+            contents: contents,     // possibly null, fetched when needed
+            modified: false,
+            refCount: 1
+        };
+        SqueakFiles[file.name] = file;
+        return file;
+    },
+    fileClose: function(file) {
+        Squeak.flushFile(file);
+        if (--file.refCount == 0)
+            delete SqueakFiles[file.name];
+    },
+    fileContentsDo: function(file, func) {
+        if (file.contents) {
+            func(file);
+        } else {
+            if (file.contents === false) // failed to get contents before
+                return false;
+            var unfreeze = this.vm.freeze();
+            Squeak.fileGet(file.name,
+                function success(contents){
+                    file.contents = this.asUint8Array(contents);
+                    unfreeze();
+                    func(file);
+                }.bind(this),
+                function error(msg) {
+                    console.log("File get failed: " + msg);
+                    file.contents = false;
+                    unfreeze();
+                    func(file);
+                }.bind(this));
+        }
+        return true;
+    },
+},
+'BitBltPlugin', {
+	primitiveCopyBits: function(argCount) {
+        var bitbltObj = this.stackNonInteger(argCount),
+            bitblt = new users.bert.SqueakJS.vm.BitBlt(this.vm);
+        if (!bitblt.loadBitBlt(bitbltObj)) return false;
+
+        if (bitblt.combinationRule === 30 || bitblt.combinationRule === 31) {
+            // fetch source alpha parameter for alpha blend
+        	if (argCount !== 1) return false;
+            bitblt.sourceAlpha = this.stackInteger(0);
+            if (!this.success || bitblt.sourceAlpha < 0 || bitblt.sourceAlpha > 255)
+				return false;
+			this.vm.pop();
+    	}
+    	
+        bitblt.copyBits();
+        
+        if (bitblt.combinationRule === 22 || bitblt.combinationRule === 32)
+            this.vm.popNandPush(1, bitblt.bitCount);
+        else if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay])
+            this.showOnDisplay(bitblt.dest, bitblt.affectedRect());
+        return true;
+	},
+	primitiveWarpBits: function(argCount) {
+        var bitbltObj = this.stackNonInteger(argCount),
+            smoothing = argCount == 2 ? Math.max(1, this.stackInteger(1)) : 1,
+            sourceMap = argCount == 2 ? this.stackNonInteger(0).words : null;
+        if (!this.success) return false;
+        var bitblt = new users.bert.SqueakJS.vm.BitBlt(this.vm);
+        if (!bitblt.loadBitBlt(bitbltObj, smoothing, sourceMap)) return false;
+        // color map is required to smooth non-RGB dest
+		if (smoothing > 1 && bitblt.source.depth < 16)
+            if (!sourceMap || sourceMap.length < (1 << bitblt.source.depth))
+                return false; 	// sourceMap must be long enough for source depth
+        bitblt.warpBits();
+        if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay])
+            this.showOnDisplay(bitblt.dest, bitblt.affectedRect());
+        this.vm.popN(argCount);
+        return true;
+	},
+},
+'FloatArrayPlugin', {
+    primitiveFloatArrayAtAndPut: function(argCount) {
+        var rcvr = this.stackNonInteger(argCount),
+            index = this.stackPos32BitInt(argCount-1) - 1,
+            array = rcvr.float32Array || (rcvr.words && (rcvr.float32Array = new Float32Array(rcvr.words.buffer)));
+        if (!this.success || index < 0 || index >= array.length)
+            return false;
+        if (argCount < 2) {// at:
+            var value = array[index];
+            this.vm.popNandPush(argCount+1, this.makeFloat(value));
+        } else { // at:put:
+            var value = this.stackFloat(0);
+            if (!this.success) return false;
+            array[index] = value;
+            this.vm.popNandPush(argCount+1, this.vm.stackValue(0));
+        }
+        return true;
     },
 });
 Object.subclass('users.bert.SqueakJS.vm.BitBlt',
@@ -2909,14 +3595,12 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
     initialize: function(vm) {
         this.vm = vm;
         this.maskTable = [
-            // (1<<i)-1 is almost right, except for i == 32 because of JS 32 bit limit
-            // Try: range(0, 32).map(function(i){return ((1<<i)-1).toString(16)})
             0x0, 0x1, 0x3, 0x7, 0xF, 0x1F, 0x3F, 0x7F, 0xFF, 0x1FF, 0x3FF, 0x7FF, 0xFFF,
             0x1FFF, 0x3FFF, 0x7FFF, 0xFFFF, 0x1FFFF, 0x3FFFF, 0x7FFFF, 0xFFFFF,
             0x1FFFFF, 0x3FFFFF, 0x7FFFFF, 0xFFFFFF, 0x1FFFFFF, 0x3FFFFFF, 0x7FFFFFF,
             0xFFFFFFF, 0x1FFFFFFF, 0x3FFFFFFF, 0x7FFFFFFF, 0xFFFFFFFF];
     }, 
-    loadBitBlt: function(bitbltObj) {
+    loadBitBlt: function(bitbltObj, warpSmoothing, warpSourceMap) {
         var bitblt = bitbltObj.pointers;
         this.success = true;
         this.destForm = bitblt[Squeak.BitBlt_dest];
@@ -2942,46 +3626,23 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
             this.sourceX = this.sourceY = 0;
         else {
             if (!this.loadColorMap(bitblt[Squeak.BitBlt_colorMap])) return false;
-            //if ((this.cmFlags & 8) == 0) this.setUpColorMasks();
             this.sourceX = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_sourceX], 0);
             this.sourceY = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_sourceY], 0);
         }
         this.mergeFn = this.makeMergeFn(this.combinationRule);
-        return true;
-    },
-    makeMergeFn: function(rule) {
-        switch(rule) {
-            case 0: return function(src, dst) { return 0 };
-            case 1: return function(src, dst) { return src & dst };
-            case 2: return function(src, dst) { return src & (~dst) };
-            case 3: return function(src, dst) { return src };
-            case 4: return function(src, dst) { return (~src) & dst };
-            case 5: return function(src, dst) { return dst };
-            case 6: return function(src, dst) { return src ^ dst };
-            case 7: return function(src, dst) { return src | dst };
-            case 8: return function(src, dst) { return (~src) & (~dst) };
-            case 9: return function(src, dst) { return (~src) ^ dst };
-            case 10: return function(src, dst) { return ~dst };
-            case 11: return function(src, dst) { return src | (~dst) };
-            case 12: return function(src, dst) { return ~src };
-            case 13: return function(src, dst) { return (~src) | dst };
-            case 14: return function(src, dst) { return (~src) | (~dst) };
-            case 15: return function(src, dst) { return dst };
-            case 16: return function(src, dst) { return dst };
-            case 17: return function(src, dst) { return dst };
-            case 18: return function(src, dst) { return src + dst };
-            case 19: return function(src, dst) { return src - dst };
-            case 20: return function(src, dst) { return src };
-            case 21: return function(src, dst) { return src };
-            case 22: return function(src, dst) { return src };
-            case 23: return function(src, dst) { return src };
-            case 24: return function(src, dst) { return src };
-            case 25: return function(src, dst) { return src === 0 ? dst
-                : src | this.partitionedANDtonBitsnPartitions(~src, dst, this.dest.depth, this.dest.pixPerWord) };
-            case 26: return function(src, dst) {
-                return this.partitionedANDtonBitsnPartitions(~src, dst, this.dest.depth, this.dest.pixPerWord) };
+        if (warpSmoothing) { // this is a warp blt
+            this.warpSmoothing = warpSmoothing;
+            this.warpSourceMap = warpSourceMap; // maps indexed to rgb for smoothing
+            this.p1x = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_warpBase], 0);
+            this.p1y = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_warpBase+1], 0);
+            this.p2x = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_warpBase+3], 0);
+            this.p2y = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_warpBase+4], 0);
+            this.p3x = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_warpBase+6], 0);
+            this.p3y = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_warpBase+7], 0);
+            this.p4x = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_warpBase+9], 0);
+            this.p4y = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_warpBase+10], 0);
         }
-        throw "bitblt rule not implemented yet";
+        return this.success;
     },
     loadHalftone: function(halftoneObj) {
         return halftoneObj.words;
@@ -2993,7 +3654,8 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
         form.depth = formObj.pointers[Squeak.Form_depth];
         form.width = formObj.pointers[Squeak.Form_width];
         form.height = formObj.pointers[Squeak.Form_height];
-        if (!(form.width >= 0 && form.height >= 0)) return null; // checks for int
+        if (form.width === 0 || form.height === 0) return form;
+        if (!(form.width > 0 && form.height > 0)) return null;
         if (!form.bits) return null;    // checks for words
         form.msb = form.depth > 0;
         if (!form.msb) form.depth = -form.depth;
@@ -3004,9 +3666,45 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
         return form;
     },
     loadColorMap: function(colorMapObj) {
-        this.cmLookupTable = colorMapObj.words;
-        if (this.cmLookupTable)
-            this.cmMask = this.cmLookupTable.length - 1;
+        // ColorMap, if not nil, must be words, and 
+        // 2^N long, where N = sourceDepth for 1, 2, 4, 8 bits, 
+        // or N = 9, 12, or 15 (3, 4, 5 bits per color) for 16 or 32 bits.
+        if (colorMapObj.isNil) return true;
+        var oldStyle = !!colorMapObj.words,
+            colors, shifts, masks;
+        if (oldStyle) {
+            // This is an old-style color map (indexed only, with implicit RGBA conversion)
+		    colors = colorMapObj.words;
+        } else {
+            // A new-style color map (fully qualified)
+            if (colorMapObj.pointersSize() < 3) return false;
+            shifts = colorMapObj.pointers[0].words,
+            masks = colorMapObj.pointers[1].words;
+            colors = colorMapObj.pointers[2].words;
+            if (!shifts || shifts.length != 4 || !masks || masks.length != 4) return false;
+            this.cmShiftTable = new Int32Array(shifts.buffer);
+            this.cmMaskTable = masks;
+            this.cmLookupTable = colors;
+        }
+        if (colors && colors.length) {
+            this.cmLookupTable = colors;
+            this.cmSize = colors.length;
+            this.cmMask = this.cmSize - 1;
+            if (this.cmSize & this.cmMask) return false; // not a power of 2
+            this.cmBitsPerColor = 
+                this.cmSize == 512 ? 3 :
+                this.cmSize == 4096 ? 4 :
+                this.cmSize == 32768 ? 5 : 0;
+        }
+        if (oldStyle && this.source.depth > 8) { // needs implicit conversion
+            var srcBits = this.source.depth == 16 ? 5 : 8,
+                dstBits = this.cmBitsPerColor ? this.cmBitsPerColor 
+                    : this.dest.depth == 16 ? 5
+                    : this.dest.depth == 32 ? 8
+                    : srcBits;
+            if (srcBits != dstBits)
+                this.setupColorMasks(srcBits, dstBits);
+        }
         return true;
     },
     intOrFloatIfNil: function(intOrFloat, valueIfNil) {
@@ -3049,7 +3747,7 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
             // First word in row is masked
             var destMask = this.mask1;
             var destWord = this.dest.bits[this.destIndex];
-            var mergeWord = this.mergeFn(halftoneWord, destWord);
+            var mergeWord = this.mergeFn(halftoneWord, destWord, destMask);
             destWord = (destMask & mergeWord) | (destWord & (~destMask));
             this.dest.bits[this.destIndex++] = destWord;
             destMask = 0xFFFFFFFF;
@@ -3060,14 +3758,14 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
             else
                 for (var word = 2; word < this.nWords; word++) {
                         destWord = this.dest.bits[this.destIndex];
-                        mergeWord = this.mergeFn(halftoneWord, destWord);
+                        mergeWord = this.mergeFn(halftoneWord, destWord, 0xFFFFFFFF);
                         this.dest.bits[this.destIndex++] = mergeWord;
                 }
             //last word in row is masked
             if (this.nWords > 1) {
                     destMask = this.mask2;
                     destWord = this.dest.bits[this.destIndex];
-                    mergeWord = this.mergeFn(halftoneWord, destWord);
+                    mergeWord = this.mergeFn(halftoneWord, destWord, destMask);
                     destWord = (destMask & mergeWord) | (destWord & (~destMask));
                     this.dest.bits[this.destIndex++] = destWord;
             }
@@ -3131,7 +3829,7 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
                 | (((this.skew < 0) ? ( (thisWord & skewMask) >>> -this.skew) : ( (thisWord & skewMask) << this.skew)));
             prevWord = thisWord;
             var destWord = this.dest.bits[this.destIndex];
-            var mergeWord = this.mergeFn(skewWord & halftoneWord, destWord);
+            var mergeWord = this.mergeFn(skewWord & halftoneWord, destWord, destMask);
             destWord = (destMask & mergeWord) | (destWord & (~destMask));
             this.dest.bits[this.destIndex] = destWord;
             //The central horizontal loop requires no store masking */
@@ -3140,20 +3838,25 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
             if (this.combinationRule == 3) { //Store mode avoids dest merge function
                 if ((this.skew === 0) && (halftoneWord === 0xFFFFFFFF)) {
                     //Non-skewed with no halftone
-                    if (this.hDir == -1) {
-                        for (var word = 2; word < this.nWords; word++) {
-                            thisWord = this.source.bits[this.sourceIndex];
-                            this.dest.bits[this.destIndex] = thisWord;
-                            this.sourceIndex += hInc;
-                            this.destIndex += hInc;
-                        }
-                    } else {
-                        for (var word = 2; word < this.nWords; word++) {
+                    var n = this.nWords - 2; // without first and last word
+                    if (n > 0) {
+                        if (hInc > 0) {
                             this.dest.bits[this.destIndex] = prevWord;
-                            prevWord = this.source.bits[this.sourceIndex];
-                            this.destIndex += hInc;
-                            this.sourceIndex += hInc;
+                            if (n > 1) {
+                                var somebits = this.source.bits.subarray(this.sourceIndex, this.sourceIndex-1 + n);
+                                this.dest.bits.set(somebits, this.destIndex+1);
+                            }
+                            prevWord = this.source.bits[this.sourceIndex-1 + n];
+                        } else {
+                            if (n == 1) {
+                                this.dest.bits[this.destIndex] = this.source.bits[this.sourceIndex];
+                            } else {
+                                var somebits = this.source.bits.subarray(this.sourceIndex - n + 1, this.sourceIndex - 1);
+                                this.dest.bits.set(somebits, this.destIndex - n + 1);
+                            }
                         }
+                        this.sourceIndex += hInc * n;
+                        this.destIndex += hInc * n;
                     }
                 } else {
                     //skewed and/or halftoned
@@ -3176,7 +3879,7 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
                     skewWord = (((unskew < 0) ? ( (prevWord & notSkewMask) >>> -unskew) : ( (prevWord & notSkewMask) << unskew)))
                         | (((this.skew < 0) ? ( (thisWord & skewMask) >>> -this.skew) : ( (thisWord & skewMask) << this.skew)));
                     prevWord = thisWord;
-                    mergeWord = this.mergeFn(skewWord & halftoneWord, this.dest.bits[this.destIndex]);
+                    mergeWord = this.mergeFn(skewWord & halftoneWord, this.dest.bits[this.destIndex], 0xFFFFFFFF);
                     this.dest.bits[this.destIndex] = mergeWord;
                     this.destIndex += hInc;
                 }
@@ -3193,7 +3896,7 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
                 skewWord = (((unskew < 0) ? ((prevWord & notSkewMask) >>> -unskew) : ((prevWord & notSkewMask) << unskew)))
                     | (((this.skew < 0) ? ( (thisWord & skewMask) >>> -this.skew) : ( (thisWord & skewMask) << this.skew)));
                 destWord = this.dest.bits[this.destIndex];
-                mergeWord = this.mergeFn(skewWord & halftoneWord, destWord);
+                mergeWord = this.mergeFn(skewWord & halftoneWord, destWord, destMask);
                 destWord = (destMask & mergeWord) | (destWord & (~destMask));
                 this.dest.bits[this.destIndex] = destWord;
                 this.destIndex += hInc;
@@ -3251,10 +3954,10 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
                 /* align next word to leftmost pixel */
                 this.dstBitShift = dstShiftLeft;
                 if (this.destMask === 0xFFFFFFFF) { // avoid read-modify-write
-                    this.dest.bits[this.destIndex] = this.mergeFn(skewWord & halftoneWord, this.dest.bits[this.destIndex]);
+                    this.dest.bits[this.destIndex] = this.mergeFn(skewWord & halftoneWord, this.dest.bits[this.destIndex], 0xFFFFFFFF);
                 } else { // General version using dest masking
                     var destWord = this.dest.bits[this.destIndex];
-                    var mergeWord = this.mergeFn(skewWord & halftoneWord, destWord & this.destMask);
+                    var mergeWord = this.mergeFn(skewWord & halftoneWord, destWord & this.destMask, this.destMask);
                     destWord = (this.destMask & mergeWord) | (destWord & (~this.destMask));
                     this.dest.bits[this.destIndex] = destWord;
                 }
@@ -3270,47 +3973,6 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
             this.sourceIndex += this.sourceDelta;
             this.destIndex += this.destDelta;
         }
-    },
-    pickSourcePixels: function(nPixels, srcMask, dstMask, srcShiftInc, dstShiftInc) {
-        /*	Pick nPix pixels starting at srcBitIndex from the source, map by the
-        color map, and justify them according to dstBitIndex in the resulting destWord. */
-        var sourceWord = this.source.bits[this.sourceIndex];
-        var destWord = 0;
-        var srcShift = this.srcBitShift; // put into temp for speed
-        var dstShift = this.dstBitShift;
-        var nPix = nPixels;
-        // always > 0 so we can use do { } while(--nPix);
-        if (this.cmLookupTable) { // a little optimization for (pretty crucial) blits using indexed lookups only
-            do {
-                var sourcePix = (sourceWord >>> srcShift) & srcMask;
-                var destPix = this.cmLookupTable[sourcePix & this.cmMask];
-                // adjust dest pix index
-                destWord = destWord | ((destPix & dstMask) << dstShift);
-                // adjust source pix index
-                dstShift += dstShiftInc;
-                if ((srcShift += srcShiftInc) & 0xFFFFFFE0) {
-                    if (this.source.msb) { srcShift += 32; }
-                    else { srcShift -= 32; }
-                    sourceWord = this.source.bits[++this.sourceIndex];
-                }
-            } while (--nPix);
-		} else {
-           do {
-                var sourcePix = (sourceWord >>> srcShift) & srcMask;
-                var destPix = this.mapPixel(sourcePix);
-                // adjust dest pix index
-                destWord = destWord | ((destPix & dstMask) << dstShift);
-                // adjust source pix index
-                dstShift += dstShiftInc;
-                if ((srcShift += srcShiftInc) & 0xFFFFFFE0) {
-                    if (this.source.msb) { srcShift += 32; }
-                    else { srcShift -= 32; }
-                    sourceWord = this.src.bits[++sourceIndex];
-                }
-            } while (--nPix);
-        }
-        this.srcBitShift = srcShift;  // Store back
-        return destWord;
     },
     sourceSkewAndPointerInit: function() {
         var pixPerM1 = this.dest.pixPerWord - 1;  //Pix per word is power of two, so this makes a mask
@@ -3417,14 +4079,441 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
             this.destDelta = (this.dest.pitch * this.vDir) - (this.nWords * this.hDir);
 		}
     },
-    partitionedANDtonBitsnPartitions: function(word1, word2, nBits, nParts) {
-        /* partition mask starts at the right */
-        var mask = this.maskTable[nBits];
-        var result = 0;
-        for (var i = 1; i <= nParts; i += 1) {
+    warpBits: function() {
+        var source = this.source;
+        if (!source) {this.bbW = this.bbH = 0; return} // so affectedRect() answers correctly
+        this.source = null; // suppresses sourceRect clipping
+        this.clipRange();
+        this.source = source;
+        if (this.bbW <= 0 || this.bbH <= 0) return;
+        this.destMaskAndPointerInit();
+        this.warpLoop();
+    },
+    warpLoop:  function() {
+        // This version of the bitblt loop traverses an arbitrary quadrilateral
+        // source, thus producing a general affine transformation.
+        // The quad vertices are p1 to p4. The outer loop traverses vertically
+        // from p1 to p4, the inner loop horizontally from p1 to p2
+        var ySteps = Math.max(1, this.height-1),
+            deltaP12x = this.warpDelta(this.p1x, this.p2x, ySteps),
+            deltaP12y = this.warpDelta(this.p1y, this.p2y, ySteps),
+            deltaP43x = this.warpDelta(this.p4x, this.p3x, ySteps),
+            deltaP43y = this.warpDelta(this.p4y, this.p3y, ySteps);
+        if (deltaP12x < 0) this.p1x = this.p2x - (ySteps*deltaP12x);
+        if (deltaP12y < 0) this.p1y = this.p2y - (ySteps*deltaP12y);
+        if (deltaP43x < 0) this.p4x = this.p3x - (ySteps*deltaP43x);
+        if (deltaP43y < 0) this.p4y = this.p3y - (ySteps*deltaP43y);
+    
+        var xSteps = Math.max(1, this.width - 1),
+            startBits = this.dest.pixPerWord - (this.dx & this.dest.pixPerWord-1),
+            endBits = ((this.dx + this.bbW - 1) & this.dest.pixPerWord-1) + 1;
+        if (this.bbW < startBits) startBits = this.bbW;
+        // Advance increments if there was clipping in y
+        if (this.destY < this.clipY) {
+            this.p1x += (this.clipY - this.destY) * deltaP12x;
+            this.p1y += (this.clipY - this.destY) * deltaP12y;
+            this.p4x += (this.clipY - this.destY) * deltaP43x;
+            this.p4y += (this.clipY - this.destY) * deltaP43y;
+        }
+        // Setup values for faster pixel fetching
+        this.warpPickSetup();
+        // Setup color mapping if not provided
+        if (this.warpSmoothing > 1 && !this.cmMaskTable) {
+            if (!this.cmLookupTable) {
+                if (this.dest.depth == 16) this.setupColorMasks(8, 5);
+            } else {
+                this.setupColorMasks(8, this.cmBitsPerColor);
+            }
+        }
+
+        var dstShiftInc = this.dest.msb ? -this.dest.depth : this.dest.depth,
+            dstShiftLeft = this.dest.msb ? 32 - this.dest.depth : 0,
+            halftoneWord = this.halftone ? this.halftone[0] : 0xFFFFFFFF,
+            halftoneHeight = this.halftone ? this.halftone.length : 0,
+            destIndex = this.destIndex;
+
+        // here is the vertical loop ...
+        for (var i = 0; i < this.bbH; i++) {
+            var xDelta = this.warpDelta(this.p1x, this.p4x, xSteps),
+                yDelta = this.warpDelta(this.p1y, this.p4y, xSteps);
+            this.sx = xDelta >= 0 ? this.p1x : this.p4x - (xSteps*xDelta),
+            this.sy = yDelta >= 0 ? this.p1y : this.p4y - (xSteps*yDelta);
+            // Advance increments if there was clipping in x
+            if (this.destX < this.clipX) {
+                this.sx += (this.clipX - this.destX) * xDelta;
+                this.sy += (this.clipX - this.destX) * yDelta;
+            }
+            var dstBitShift = this.dest.msb
+                ? (32 - ((this.dx & this.dest.pixPerWord - 1) + 1) * this.dest.depth)
+                : (this.dx & this.dest.pixPerWord - 1) * this.dest.depth;
+            if (halftoneHeight > 1)
+                halftoneWord = this.halftone.words[(this.dy+i) % halftoneHeight];
+            var destMask = this.mask1,
+                nPix = startBits,
+                words = this.nWords;
+            // Here is the inner loop ...
+            do {
+                var skewWord = this.warpSmoothing == 1
+                    ? this.warpPickSourcePixels(nPix, xDelta, yDelta, dstBitShift, dstShiftInc)
+                    : this.warpPickSmoothPixels(nPix, xDelta, yDelta, deltaP12x, deltaP12y, dstBitShift, dstShiftInc);
+                var destWord = this.dest.bits[destIndex],
+                    mergeWord = this.mergeFn(skewWord & halftoneWord, destWord & destMask, destMask);
+                this.dest.bits[destIndex] = (destMask & mergeWord) | (destWord & ~destMask);
+                destIndex++;
+                dstBitShift = dstShiftLeft; // align next word access to left most pixel
+                if (words == 2) { // is the next word the last word?
+                    destMask = this.mask2;
+                    nPix = endBits;
+                } else {
+                    destMask = 0xFFFFFFFF;
+                    nPix = this.dest.pixPerWord;
+                }
+            } while (--words);
+            // end of inner loop ---
+            this.p1x += deltaP12x;
+            this.p1y += deltaP12y;
+            this.p4x += deltaP43x;
+            this.p4y += deltaP43y;
+            destIndex += this.destDelta;
+        }
+	},
+    warpDelta: function(a, b, n) {
+        if (a == b) return 0;
+        return b > a
+            ?  ((b - a + 16384) / (n+1) + 1)
+            : -((a - b + 16384) / (n+1) + 1);
+	},
+},
+'mapping',
+{
+    setupColorMasks: function(srcBits, targetBits) {
+	    // Setup color masks for converting an incoming RGB pixel value from srcBits to targetBits per pixel
+        var deltaBits = targetBits - srcBits;
+        if (deltaBits == 0) return;
+        if (deltaBits < 0) { // e.g. from 8 to 5
+            var mask = (1 << targetBits) - 1;
+            this.cmMaskTable = [
+                mask << (srcBits*2 - deltaBits), mask << (srcBits - deltaBits), mask << (0 - deltaBits), 0];
+        } else { // e.g. from 5 to 8
+            var mask = (1 << srcBits) - 1;
+            this.cmMaskTable = [mask << (srcBits*2), mask << srcBits, mask, 0];
+        }
+        this.cmShiftTable = [deltaBits * 3, deltaBits * 2, deltaBits, 0];
+    },
+    mapPixel: function(val) {
+        if (this.cmMaskTable) {
+            var result = 0;
+            for (var i = 0; i < 4; i ++)
+                result |= this.cmShiftTable[i] < 0
+                    ? (val & this.cmMaskTable[i]) >> -this.cmShiftTable[i]
+                    : (val & this.cmMaskTable[i]) << this.cmShiftTable[i];
+            val = result;
+        }
+        if (this.cmLookupTable)
+            val = this.cmLookupTable[val & this.cmMask];
+        return val;
+    },
+    rgbMap16To32: function(pix) {
+        return ((pix & 0x1F) << 3) | ((pix & 0x3E0) << 6) | ((pix & 0x7C00) << 9);
+    },
+    pickSourcePixels: function(nPixels, srcMask, dstMask, srcShiftInc, dstShiftInc) {
+        /*	Pick nPix pixels starting at srcBitIndex from the source, map by the
+        color map, and justify them according to dstBitIndex in the resulting destWord. */
+        var sourceWord = this.source.bits[this.sourceIndex];
+        var destWord = 0;
+        var srcShift = this.srcBitShift; // put into temp for speed
+        var dstShift = this.dstBitShift;
+        var nPix = nPixels;
+        // always > 0 so we can use do { } while(--nPix);
+        if (this.cmLookupTable) { // a little optimization for (pretty crucial) blits using indexed lookups only
+            do {
+                var sourcePix = (sourceWord >>> srcShift) & srcMask;
+                var destPix = this.cmLookupTable[sourcePix & this.cmMask];
+                // adjust dest pix index
+                destWord = destWord | ((destPix & dstMask) << dstShift);
+                // adjust source pix index
+                dstShift += dstShiftInc;
+                if ((srcShift += srcShiftInc) & 0xFFFFFFE0) {
+                    if (this.source.msb) { srcShift += 32; }
+                    else { srcShift -= 32; }
+                    sourceWord = this.source.bits[++this.sourceIndex];
+                }
+            } while (--nPix);
+		} else {
+           do {
+                var sourcePix = (sourceWord >>> srcShift) & srcMask;
+                var destPix = this.mapPixel(sourcePix);
+                // adjust dest pix index
+                destWord = destWord | ((destPix & dstMask) << dstShift);
+                // adjust source pix index
+                dstShift += dstShiftInc;
+                if ((srcShift += srcShiftInc) & 0xFFFFFFE0) {
+                    if (this.source.msb) { srcShift += 32; }
+                    else { srcShift -= 32; }
+                    sourceWord = this.src.bits[++this.sourceIndex];
+                }
+            } while (--nPix);
+        }
+        this.srcBitShift = srcShift;  // Store back
+        return destWord;
+    },
+    warpPickSetup: function() {
+        // Setup values for faster pixel fetching
+        var log2 = [0,0,1,1,2,2,2,2,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,5],
+            warpSrcShift = log2[this.source.depth];
+        // Mask for extracting one pixel from source word
+        this.warpSrcMask = this.maskTable[this.source.depth];
+        // Shift for aligning x position to word boundary
+        this.warpAlignShift = 5 - warpSrcShift;
+        // Mask for extracting the pixel position from an x position
+        this.warpAlignMask = (1 << this.warpAlignShift) - 1;
+        // Shifts for each sub-word x value
+        this.warpBitShiftTable = [];
+        for (var i = 0; i <= this.warpAlignMask; i++)
+            this.warpBitShiftTable[i] = this.source.msb
+                ? 32 - ((i + 1) << warpSrcShift)
+                : i << warpSrcShift;
+    },
+    warpPickPixel: function(xx, yy) {
+        // Pick a single pixel from the source for WarpBlt
+        if (xx < 0  || yy < 0) return 0;
+        var x = xx >> 14,
+            y = yy >> 14;
+        if (x >= this.source.width || y >= this.source.height) return 0;
+        var sourceWord = this.source.bits[this.source.pitch * y + (x >> this.warpAlignShift)],
+            srcBitShift = this.warpBitShiftTable[x & this.warpAlignMask];
+        return (sourceWord >> srcBitShift) & this.warpSrcMask;
+	},
+    warpPickSmoothPixels:  function(nPixels, xDeltaH, yDeltaH, xDeltaV, yDeltaV, dstShift, dstShiftInc) {
+        // Pick n (sub-) pixels from the source form, mapped by sourceMap,
+        // average the RGB values, map by colorMap and return the new word;
+        // This version is only called from WarpBlt with smoothingCount > 1
+        var dstMask = this.maskTable[this.dest.depth],
+            painting = this.combinationRule == 25,
+            n = this.warpSmoothing,
+            threshold = painting ? n*n/2 : 0, // number of pixels to be non-transparent
+            xdh = xDeltaH / n, ydh = yDeltaH / n, 
+            xdv = xDeltaV / n, ydv = yDeltaV / n,
+            destWord = 0;
+        for (var i = 0; i < nPixels; i++) {
+            var x = this.sx,
+                y = this.sy,
+                a = 0, r = 0, g = 0, b = 0;
+            // Pick and average n*n subpixels
+            var nPix = 0; // actual number of pixels (not clipped and not transparent)
+            for (var j = 0; j < n; j++) {
+                var xx = x, yy = y;
+                for (var k = 0; k < n; k++) {
+                    // get a single subpixel
+                    var pix = this.warpPickPixel(xx, yy);
+                    xx += xdh;
+                    yy += ydh;
+                    if (painting && pix == 0) continue;
+                    // If not clipped and not transparent, then tally rgb values
+                    nPix++;
+                    var pix32 = this.source.depth < 16 ? this.warpSourceMap[pix] :
+                        this.source.depth == 16 ? this.rgbMap16To32(pix) : 
+                        pix;
+                    r += (pix32 >> 16) & 255;
+                    g += (pix32 >> 8) & 255;
+                    b += pix32 & 255;
+                    a += pix32 >> 24;
+                }
+                x += xdv;
+                y += ydv;
+            }
+            var destPix = 0;
+            if (nPix > threshold) { // if not transparent
+                // normalize rgba sums
+                r /= nPix; g /= nPix; b /= nPix; a /= nPix;
+                var rgb = (a << 24) + (r << 16) + (g << 8) + b;
+                // map the pixel
+                if (rgb == 0 && r + g + b + a > 0) {
+                    // only generate zero if pixel is really transparent
+                    rgb = 1;
+                }
+                destPix = this.mapPixel(rgb);
+            }
+            // Mix it in
+            destWord |= (destPix & dstMask) << dstShift;
+            dstShift += dstShiftInc;
+            this.sx += xDeltaH;
+            this.sy += yDeltaH;
+        }
+        return destWord;
+    },
+    warpPickSourcePixels:  function(nPixels, xDeltaH, yDeltaH, dstShift, dstShiftInc) {
+        // Pick n pixels from the source form,
+        // map by colorMap and return aligned by dstShift
+        // This version is only called from WarpBlt with smoothingCount == 1
+        var dstMask = this.maskTable[this.dest.depth],
+            destWord = 0;
+        while (nPixels--) {
+            var sourcePix = this.warpPickPixel(this.sx, this.sy),
+                destPix = this.mapPixel(sourcePix);
+			destWord |= (destPix & dstMask) << dstShift;
+			dstShift += dstShiftInc;
+			this.sx += xDeltaH;
+			this.sy += yDeltaH;
+        }
+        return destWord;
+    },
+},
+'rules', {
+    makeMergeFn: function(rule) {
+        var self = this;
+        switch(rule) {
+            case 0: return function() { return 0 };
+            case 1: return function(src, dst) { return src & dst };
+            case 2: return function(src, dst) { return src & (~dst) };
+            case 3: return function(src, dst) { return src };
+            case 4: return function(src, dst) { return (~src) & dst };
+            case 5: return function(src, dst) { return dst };
+            case 6: return function(src, dst) { return src ^ dst };
+            case 7: return function(src, dst) { return src | dst };
+            case 8: return function(src, dst) { return (~src) & (~dst) };
+            case 9: return function(src, dst) { return (~src) ^ dst };
+            case 10: return function(src, dst) { return ~dst };
+            case 11: return function(src, dst) { return src | (~dst) };
+            case 12: return function(src, dst) { return ~src };
+            case 13: return function(src, dst) { return (~src) | dst };
+            case 14: return function(src, dst) { return (~src) | (~dst) };
+            case 15: return function(src, dst) { return dst };
+            case 16: return function(src, dst) { return dst };
+            case 17: return function(src, dst) { return dst };
+            case 18: return function(src, dst) { return src + dst };
+            case 19: return function(src, dst) { return src - dst };
+            case 20: return function(src, dst) { return src };
+            case 21: return function(src, dst) { return src };
+            case 22: return function(src, dst) { return src };
+            case 23: return function(src, dst) { return src };
+            case 24: return function(src, dst) { return src };
+            case 25: return function(src, dst) { return src === 0 ? dst
+                : src | self.partitionedAND(~src, dst, self.dest.depth, self.dest.pixPerWord) };
+            case 26: return function(src, dst) {
+                return self.partitionedAND(~src, dst, self.dest.depth, self.dest.pixPerWord) };
+            case 30: return function(src, dst, mask) { return self.alphaBlendConst(src, dst, mask, false) };
+            case 31: return function(src, dst, mask) { return self.alphaBlendConst(src, dst, mask, true) };
+            case 32: return function(src, dst, mask) { // accumulate differences, do not modify dst 
+                self.rgbDiff(src, dst, mask, self.dest.depth, self.dest.pixPerWord);
+                return dst; };
+            case 34: return function(src, dst) { return self.alphaBlendScaled(src, dst) };
+        }
+        throw Error("bitblt rule " + rule + " not implemented yet");
+    },
+    rgbDiff: function(src, dst, mask, nBits, nParts) {
+        var pixMask = this.maskTable[nBits],
+            bitsPerColor = nBits == 16 ? 5 : 8,
+            rgbMask = this.maskTable[bitsPerColor];
+        var diff = 0;
+        for (var i = 0; i < nParts; i++) {
+            if (mask & pixMask) { // Only tally pixels within the destination rectangle
+                var dstPix = dst & pixMask,
+                    srcPix = src & pixMask;
+                if (nBits < 16) { // count whether pixel differs
+                    if (dstPix !== srcPix) this.bitCount++;
+                } else { // count rgb difference
+                    var diff = this.partitionedSub(srcPix, dstPix, bitsPerColor, 3);
+                    this.bitCount += (diff & rgbMask)
+                        + ((diff>>bitsPerColor) & rgbMask)
+                        + ((diff>>(bitsPerColor*2)) & rgbMask);
+                }
+            }
+            // shift next pixel into low bits 
+            src = src >>> nBits;
+            dst = dst >>> nBits;
+            mask = mask >>> nBits;
+        }
+    },
+    alphaBlendScaled: function(src, dst) {
+        // 	Blend srcWord with dstWord using the alpha value from srcWord.
+        // 	Alpha is encoded as 0 meaning 0.0, and 255 meaning 1.0.
+        // 	In contrast to alphaBlend() the color produced is
+        // 		srcColor + (1-srcAlpha) * dstColor
+        // 	i.e., it is assumed that the source color is already scaled.
+        var unAlpha = (255 - (src >>> 24)) / 255,
+            b = Math.min(255, unAlpha * (dst & 255) + (src & 255)),
+            g = Math.min(255, unAlpha * ((dst>>>8) & 255) + ((src>>>8) & 255)),
+            r = Math.min(255, unAlpha * ((dst>>>16) & 255) + ((src>>>16) & 255)),
+            a = Math.min(255, unAlpha * (dst>>>24) + (src>>>24));
+        return ((((((a << 8) + r) << 8) + g) << 8) + b) | 0;
+	},
+    alphaBlendConst: function(sourceWord, destWord, destMask, paintMode) {
+        // Blend sourceWord with destWord using a constant alpha.
+        // Alpha is encoded as 0 meaning 0.0, and 255 meaning 1.0.
+        // The blend produced is alpha*source + (1.0-alpha)*dest, with the
+        // computation being performed independently on each color component.
+        // This function could eventually blend into any depth destination,
+        // using the same color averaging and mapping as warpBlt.
+        // paintMode == true means do nothing if the source pixel value is zero.
+        if (this.dest.depth < 16 || (paintMode && sourceWord == 0))
+            return destWord; // no-op
+        var alpha = this.sourceAlpha,
+            unAlpha = 255 - alpha,
+            pixMask = this.maskTable[this.dest.depth],
+            bitsPerColor = this.dest.depth == 16 ? 5: 8,
+            rgbMask = (1<<bitsPerColor) - 1,
+            maskShifted = destMask,
+            destShifted = destWord,
+            sourceShifted = sourceWord,
+            result = destWord;
+        if (this.dest.depth == 32) { // 32bpp blends include alpha
+            result = 0;
+            for (var shift = 0; shift <= 24; shift += 8) {
+                var blend = ((((sourceWord>>shift) & rgbMask) * alpha
+                    + ((destWord>>shift) & rgbMask) * unAlpha
+                    + 254) / 255) & rgbMask;
+                result |= blend<<shift;
+            };
+        } else { // 16bpp
+            for (var j = 0; j < 2; j++) {
+                var sourcePixVal = sourceShifted & pixMask;
+                // no effect if outside of dest rectangle or painting a transparent pixel
+                if ((maskShifted & pixMask) && (!paintMode || sourcePixVal)) {
+                    var destPixVal = destShifted & pixMask,
+                        pixBlend = 0;
+                    for (var shift = 0; shift <= 10; shift += 5) {
+                        var blend = ((((sourcePixVal>>shift) & rgbMask) * alpha
+                            + ((destPixVal>>shift) & rgbMask) * unAlpha
+                            + 254) / 255) & rgbMask;
+                        pixBlend |= blend<<shift;
+                    }
+                    result = result & ~(pixMask << (j*16)) | (pixBlend << (j*16));
+                }
+                maskShifted = maskShifted >> 16;
+                sourceShifted = sourceShifted >> 16;
+                destShifted = destShifted >> 16;
+            }
+        }
+        return result;
+	},
+    partitionedSub: function(src, dst, nBits, nParts) {
+        var mask = this.maskTable[nBits],
+            result = 0;
+        for (var i = 0; i < nParts; i++) {
+            result |= (dst & mask) - (src & mask);
+        	mask = mask << nBits;
+    	}
+        return result;
+	},
+    partitionedAdd: function(src, dst, nBits, nParts) {
+        var mask = this.maskTable[nBits],
+            result = 0;
+        for (var i = 0; i < nParts; i++) {
+            result |= (dst & mask) + (src & mask);
+        	mask = mask << nBits;
+    	}
+        return result;
+	},
+    partitionedAND: function(word1, word2, nBits, nParts) {
+        // AND word1 to word2 as nParts partitions of nBits each.
+        // Any field of word1 not all-ones is treated as all-zeroes.
+        // Used for erasing, eg, brush shapes prior to ORing in a color
+        var mask = this.maskTable[nBits],
+            result = 0;
+        for (var i = 0; i < nParts; i++) {
         	if ((word1 & mask) === mask)
         		result = result | (word2 & mask);
-        	/* slide left to next partition */
         	mask = mask << nBits;
     	}
         return result;
@@ -3448,6 +4537,166 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
             affectedT = (this.dy - this.bbH) + 1;
             affectedB = this.dy + 1; }
         return {x: affectedL, y: affectedT, w: affectedR-affectedL, h: affectedB-affectedT};
+    },
+});
+
+Object.extend(Squeak, {
+    dbTransaction: function(mode, transactionFunc) {
+        // File contents is stored in the IndexedDB named "squeak" in object store "files"
+        // and directory entries in localStorage with prefix "squeak:"
+        if (typeof indexedDB == "undefined")
+            return transactionFunc(this.dbFake());
+
+        var startTransaction = function() {
+            var trans = SqueakDB.transaction("files", mode),
+                fileStore = trans.objectStore("files");
+            transactionFunc(fileStore);
+        };
+
+        // if database connection already opened, just do transaction
+        if (window.SqueakDB) return startTransaction();
+        
+        // otherwise, open SqueakDB first
+        var openReq = indexedDB.open("squeak");
+        openReq.onsuccess = function(e) {
+            window.SqueakDB = this.result;
+            SqueakDB.onversionchange = function(e) {
+                delete window.SqueakDB;
+                this.close();
+            };
+            startTransaction();
+        };
+        openReq.onupgradeneeded = function (e) {
+            // run only first time, or when version changed
+            console.log("Creating database version " + e.newVersion);
+            var db = e.target.result;
+            db.createObjectStore("files");
+        };
+        openReq.onerror = function(e) {
+            console.log("Error opening database: " + e.target.errorCode);
+        };
+        openReq.onblocked = function(e) {
+            // If some other tab is loaded with the database, then it needs to be closed
+            // before we can proceed upgrading the database.
+            alert("Database upgrade needed. Please close all other tabs with this site open!");
+        };
+    },
+    dbFake: function() {
+        // indexedDB is not supported by this browser, fake it in memory
+        if (typeof SqueakDBFake == "undefined") {
+            console.warn("IndexedDB not supported by this browser, Squeak files will not be persisted");
+            SqueakDBFake = {
+                files: {},
+                get: function(filename) {
+                    var req = { result: SqueakDBFake.files[filename] };
+                    window.setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
+                    return req;
+                },
+                put: function(contents, filename) {
+                    SqueakDBFake.files[filename] = contents;
+                    var req = {};
+                    window.setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
+                    return req;
+                },
+                delete: function(filename) {
+                    delete SqueakDBFake.files[filename];
+                    var req = {};
+                    window.setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
+                    return req;
+                },
+            }
+        }
+        return SqueakDBFake;
+    },
+    fileGet: function(filepath, thenDo, errorDo) {
+        if (!errorDo) errorDo = console.log;
+        var path = this.splitFilePath(filepath);
+        if (!path.basename) return errorDo("Invalid path: " + filepath);
+        this.dbTransaction("readonly", function(fileStore) {
+            var getReq = fileStore.get(path.fullname);
+            getReq.onerror = function(e) { errorDo(e.target.errorCode) };
+            getReq.onsuccess = function(e) {
+                if (this.result == undefined) 
+                    return errorDo("file not found: " + path.fullname);
+                thenDo(this.result);
+            };
+        });
+    },
+    filePut: function(filepath, contents) {
+        // store file, return dir entry if successful
+        var path = this.splitFilePath(filepath); if (!path.basename) return null;
+        var directory = this.dirList(path.dirname); if (!directory) return null;
+        // get or create entry
+        var entry = directory[path.basename],
+            now = this.totalSeconds();
+        if (!entry) { // new file
+            entry = [/*name*/ path.basename, /*ctime*/ now, /*mtime*/ 0, /*dir*/ false, /*size*/ 0];
+            directory[path.basename] = entry;
+        } else if (entry[3]) // is a directory
+            return null;
+        // update directory entry
+        entry[2] = now; // modification time
+        entry[4] = contents.byteLength || contents.length || 0;
+        localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
+        // put file contents (async)
+        this.dbTransaction("readwrite", function(fileStore) {
+            fileStore.put(contents, path.fullname);
+        });
+        return entry;
+    },
+    fileDelete: function(filepath) {
+        var path = this.splitFilePath(filepath); if (!path.basename) return false;
+        var directory = this.dirList(path.dirname); if (!directory) return false;
+        var entry = directory[path.basename]; if (!entry || entry[3]) return false; // not found or is a directory
+        // delete entry from directory
+        delete directory[path.basename];
+        localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
+        // delete file contents (async)
+        this.dbTransaction("readwrite", function(fileStore) {
+            fileStore['delete'](path.fullname);    // workaround for ometa parser
+        });
+        return true;
+    },
+    dirList: function(dirpath) {
+        // return directory entries or null
+        var path = this.splitFilePath(dirpath),
+            entries = localStorage["squeak:" + path.fullname];
+        if (entries) return JSON.parse(entries);
+        if (path.fullname == "/") return {};
+        return null;
+    },
+    splitFilePath: function(filepath) {
+        if (filepath[0] !== '/') filepath = '/' + filepath;
+        if (filepath[1] == '/') filepath = filepath.slice(1);      // make old images happy
+        var matches = filepath.match(/(.*)\/(.*)/),
+            dirname = matches[1] || '/',
+            basename = matches[2];
+        return {fullname: filepath, dirname: dirname, basename: basename};
+    },
+    flushFile: function(file) {
+        if (file.modified) {
+            var buffer = file.contents.buffer;
+            if (buffer.byteLength !== file.size) {
+                buffer = new ArrayBuffer(file.size);
+                (new Uint8Array(buffer)).set(file.contents.subarray(0, file.size));
+            }
+            Squeak.filePut(file.name, buffer);
+            file.modified = false;
+        }
+    },
+    flushAllFiles: function() {
+        if (typeof SqueakFiles == 'undefined') return;
+        for (var name in SqueakFiles)
+            this.flushFile(SqueakFiles[name]);
+    },
+    closeAllFiles: function() {
+        // close the files held open in memory
+        Squeak.flushAllFiles();
+        delete SqueakFiles;
+    },
+    totalSeconds: function() {
+        // seconds since 1901-01-01, local time
+        return Math.floor(Date.now()/1000) - Squeak.Epoch;
     },
 });
 
@@ -3525,7 +4774,8 @@ Object.subclass('users.bert.SqueakJS.vm.InstructionPrinter',
 	    this.print('push: thisContext');
     },
     pushConstant: function(obj) {
-    	this.print('pushConst: ' + obj.toString());
+        var value = obj.sqInstName ? obj.sqInstName() : obj.toString();
+        this.print('pushConst: ' + value);
     },
     pushLiteralVariable: function(anAssociation) {
     	this.print('pushBinding: ' + anAssociation.assnKeyAsString());
@@ -3591,7 +4841,7 @@ Object.subclass('users.bert.SqueakJS.vm.InstructionStream',
 			if (offset < 12) return client.methodReturnConstant(this.specialConstants[offset - 9]);
 			if (offset===12) return client.methodReturnTop();
 			if (offset===13) return client.blockReturnTop();
-			if (offset > 13) throw "unusedBytecode";
+			if (offset > 13) throw Error("unusedBytecode");
     	}
     	if (type === 8) return this.interpretExtension(offset, method, client);
     	if (type === 9) // short jumps
@@ -3628,13 +4878,13 @@ Object.subclass('users.bert.SqueakJS.vm.InstructionStream',
     			if (offset === 1) {
     			    if (type === 0) return client.storeIntoReceiverVariable(offset2);
     				if (type === 1) return client.storeIntoTemporaryVariable(offset2);
-    				if (type === 2) throw "illegalStore";
+    				if (type === 2) throw Error("illegalStore");
     				if (type === 3) return client.storeIntoLiteralVariable(this.method.methodGetLiteral(offset2));
     			}
     			if (offset === 2) {
         			if (type === 0) return client.popIntoReceiverVariable(offset2);
     				if (type === 1) return client.popIntoTemporaryVariable(offset2);
-    				if (type === 2) throw "illegalStore";
+    				if (type === 2) throw Error("illegalStore");
     				if (type === 3) return client.popIntoLiteralVariable(this.method.methodGetLiteral(offset2));
     			}
     		}
@@ -3661,7 +4911,7 @@ Object.subclass('users.bert.SqueakJS.vm.InstructionStream',
     	if (offset === 7) return client.doPop();
     	if (offset === 8) return client.doDup();
     	if (offset === 9) return client.pushActiveContext();
-    	throw "unusedBytecode";
+    	throw Error("unusedBytecode");
     }
 });
 

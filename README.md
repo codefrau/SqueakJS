@@ -7,8 +7,8 @@ Please visit the [project home page][homepage]!
 
 Which web browser
 -----------------
-Chrome and Safari work best at the moment, on both desktop and mobile.
-Fixes to improve browser compatibility are highly welcome!
+Chrome and Safari work best for development at the moment (mostly due to Lively Kernel restrictions), on both desktop and mobile. For running simple version without the Lively Kernel, you might find that Firefox and even IE11 sometimes outperform Chrome, though. We have only the included tinyBenchmarks to back this up, but better benchmarks are forthcoming.
+Fixes to improve browser compatibility are highly welcome! 
 
 Running locally
 ---------------

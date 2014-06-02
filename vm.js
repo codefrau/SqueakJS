@@ -4543,6 +4543,9 @@ Object.extend(Squeak, {
     dbTransaction: function(mode, transactionFunc) {
         // File contents is stored in the IndexedDB named "squeak" in object store "files"
         // and directory entries in localStorage with prefix "squeak:"
+        if (typeof indexedDB == "undefined")
+            return transactionFunc(this.dbFake());
+
         var startTransaction = function() {
             var trans = SqueakDB.transaction("files", mode),
                 fileStore = trans.objectStore("files");
@@ -4576,6 +4579,33 @@ Object.extend(Squeak, {
             // before we can proceed upgrading the database.
             alert("Database upgrade needed. Please close all other tabs with this site open!");
         };
+    },
+    dbFake: function() {
+        // indexedDB is not supported by this browser, fake it in memory
+        if (typeof SqueakDBFake == "undefined") {
+            console.warn("IndexedDB not supported by this browser, Squeak files will not be persisted");
+            SqueakDBFake = {
+                files: {},
+                get: function(filename) {
+                    var req = { result: SqueakDBFake.files[filename] };
+                    window.setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
+                    return req;
+                },
+                put: function(contents, filename) {
+                    SqueakDBFake.files[filename] = contents;
+                    var req = {};
+                    window.setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
+                    return req;
+                },
+                delete: function(filename) {
+                    delete SqueakDBFake.files[filename];
+                    var req = {};
+                    window.setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
+                    return req;
+                },
+            }
+        }
+        return SqueakDBFake;
     },
     fileGet: function(filepath, thenDo, errorDo) {
         if (!errorDo) errorDo = console.log;

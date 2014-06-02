@@ -719,8 +719,7 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
 },
 'printing', {
     toString: function() {
-        return Strings.format('sqObj(%s)',
-            this.sqClass.constructor == users.bert.SqueakJS.vm.Object ? this.sqInstName() : this.sqClass);
+        return "sqObj(" + (this.sqClass.constructor == users.bert.SqueakJS.vm.Object ? this.sqInstName() : this.sqClass) + ")";
     },
     bytesAsString: function() {
         if (!this.bytes) return '';

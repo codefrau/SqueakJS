@@ -22,18 +22,20 @@
 
 
 //////////////////////////////////////////////////////////////////////////////
-// these two functions fake the Lively module and class system
+// these functions fake the Lively module and class system
 // just enough so the loading of vm.js succeeds
 //////////////////////////////////////////////////////////////////////////////
 
-module = function (moduleName) {
+module = function(moduleName) {
+    // actual module hierarchy is implicitly created by subclass() below
     return {
-        requires: function() { return this; },
+        requires: function(ignored) { return this; },
         toRun: function(code) { code(); }
     };
 };
 
-Object.subclass = function(classPath) {
+Object.subclass = function(classPath /* + more args */ ) {
+    // create module hierarchy and new class
     var path = classPath.split("."),
         className = path.pop(),
         submodule = window;
@@ -43,13 +45,15 @@ Object.subclass = function(classPath) {
         if (this.initialize) this.initialize.apply(this, arguments);
         return this;
     };
+    // skip arg 0, copy properties of other args to class proto
     for (var i = 1; i < arguments.length; i++)
         for (name in arguments[i])
             aClass.prototype[name] = arguments[i][name];
     submodule[className] = aClass;
 };
 
-Object.extend = function(obj) {
+Object.extend = function(obj /* + more args */ ) {
+    // skip arg 0, copy properties of other args to obj
     for (var i = 1; i < arguments.length; i++)
         for (name in arguments[i])
             obj[name] = arguments[i][name];

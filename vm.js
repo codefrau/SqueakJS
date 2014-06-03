@@ -362,7 +362,6 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         var newObjects = this.markReachableObjects();
         var removedObjects = this.removeUnmarkedOldObjects();
         this.appendToOldObjects(newObjects);
-        this.relinkRemovedObjects(removedObjects);
         this.oldSpaceCount += newObjects.length - removedObjects.length;
         this.newSpaceCount = 0;
         this.gcCount++;
@@ -420,13 +419,7 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
                 var corpse = next; 
                 obj.nextObject = corpse.nextObject; // drop from list
                 removedBytes += corpse.totalBytes(); 
-                removed.push(corpse);               // remember for relinking
-                corpse.nextObject = obj;            // kludge: the corpse's nextObject
-                // must point into the old space list, so that enumerating will still work,
-                // even with a GC in the middle. So we point it to the surviving obj here.
-                // However, this would lead to obj being enumerated twice (because it preceded
-                // the corpse until now), so we'll relink this later, after the new objects
-                // have been tenured
+                removed.push(corpse);
             }
         }
     },
@@ -442,12 +435,6 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
             oldObj = newObj;
         }
         this.lastOldObject = oldObj;
-    },
-    relinkRemovedObjects: function(removed) {
-        // fix up the nextObject pointers of removed objects,
-        // which were set to the preceding object in removeUnmarkedOldObjects()
-        for (var i = 0; i < removed.length; i++)
-            removed[i].nextObject = removed[i].nextObject.nextObject;
     },
 },
 'creating', {

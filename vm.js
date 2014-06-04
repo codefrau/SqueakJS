@@ -370,6 +370,9 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
     markReachableObjects: function() {
         // Visit all reachable objects and mark them.
         // Return surviving new objects
+        // Contexts are handled specially: they have garbage beyond the stack pointer
+        // which must not be traced, and is cleared out here
+        this.vm.storeContextRegisters();        // update active context
         var todo = [this.specialObjectsArray, this.vm.activeContext];
         var newObjects = [];
         while (todo.length > 0) {
@@ -383,13 +386,15 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
             var body = object.pointers;
             if (body) {                   // trace all unmarked pointers
                 var n = body.length;
-                if (this.vm.isContext(object)) {      // contexts have garbage on the stack
+                if (this.vm.isContext(object)) {    // contexts have garbage beyond SP
                     var sp = object.pointers[Squeak.Context_stackPointer];
                     n = this.vm.decodeSqueakSP(typeof sp == "number" ? sp : 0) + 1;
                 }
                 for (var i = 0; i < n; i++)
                     if (typeof body[i] === "object" && !body[i].mark)      // except SmallInts
                         todo.push(body[i]);
+                while (n < body.length)             // clean garbage from contexts 
+                    body[n++] = this.vm.nilObj;
             }
         }
         // sort by oop to preserve creation order
@@ -1678,7 +1683,7 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
 },
 'stack access', {
     pop: function() {
-        //Note leaves garbage above SP.  Serious reclaim should store nils above SP
+        //Note leaves garbage above SP.  Cleaned out by fullGC.
         return this.activeContext.pointers[this.sp--];  
     },
     popN: function(nToPop) {
@@ -1750,19 +1755,6 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
         var shifted = bitsToShift<<shiftCount;
         if  ((shifted>>shiftCount) === bitsToShift) return shifted;
         return this.nonSmallInt;  //non-small result will cause failure
-    },
-},
-'snapshots', {
-    snapshotCleanUp: function() {
-        // nil out slots above stack pointer in all contexts
-        var obj = this.image.firstOldObject;
-        while (obj = obj.nextObject) {
-            if (!this.isContext(obj)) continue;
-            var sp = obj.getPointer(Squeak.Context_stackPointer);
-            if (sp.isNil) continue;
-            for (var i = this.decodeSqueakSP(sp) + 1; i < obj.pointers.length; i++)
-                obj.pointers[i] = this.nilObj;
-        }
     },
 },
 'utils',
@@ -3090,7 +3082,6 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         var proc = this.getScheduler().getPointer(Squeak.ProcSched_activeProcess);
         proc.setPointer(Squeak.Proc_suspendedContext, this.vm.activeContext); // store initial context
         this.vm.image.fullGC();                        // before cleanup so traversal works
-        this.vm.snapshotCleanUp();
         var buffer = this.vm.image.writeToBuffer();
         Squeak.flushAllFiles();                         // so there are no more writes pending
         Squeak.filePut(this.vm.image.name, buffer);

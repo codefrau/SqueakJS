@@ -403,6 +403,7 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         var removed = [],
             removedBytes = 0,
             obj = this.firstOldObject;
+        obj.mark = false; // we know the first object (nil) was marked
         while (true) {
             var next = obj.nextObject;
             if (!next) {// we're done
@@ -781,7 +782,9 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         return data;
     },
     setAddr: function(addr) {
-        // move oop during GC. Answer next object's address
+        // Move this object to addr by setting its oop. Answer address after this object.
+        // Used to assign an oop for the first time when tenuring this object during GC.
+        // When compacting, the oop is adjusted directly, since header size does not change.
         var words = this.snapshotSize();
         this.oop = addr + words.header * 4;
         return addr + (words.header + words.body) * 4; 

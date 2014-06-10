@@ -3650,34 +3650,35 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
         // ColorMap, if not nil, must be words, and 
         // 2^N long, where N = sourceDepth for 1, 2, 4, 8 bits, 
         // or N = 9, 12, or 15 (3, 4, 5 bits per color) for 16 or 32 bits.
-        if (colorMapObj.isNil) return true;
-        var oldStyle = !!colorMapObj.words,
-            colors, shifts, masks;
-        if (oldStyle) {
-            // This is an old-style color map (indexed only, with implicit RGBA conversion)
-		    colors = colorMapObj.words;
-        } else {
-            // A new-style color map (fully qualified)
-            if (colorMapObj.pointersSize() < 3) return false;
-            shifts = colorMapObj.pointers[0].words,
-            masks = colorMapObj.pointers[1].words;
-            colors = colorMapObj.pointers[2].words;
-            if (!shifts || shifts.length != 4 || !masks || masks.length != 4) return false;
-            this.cmShiftTable = new Int32Array(shifts.buffer);
-            this.cmMaskTable = masks;
-            this.cmLookupTable = colors;
+        if (!colorMapObj.isNil) {
+            var oldStyle = !!colorMapObj.words,
+                colors, shifts, masks;
+            if (oldStyle) {
+                // This is an old-style color map (indexed only, with implicit ARGB conversion)
+    		    colors = colorMapObj.words;
+            } else {
+                // A new-style color map (fully qualified)
+                if (colorMapObj.pointersSize() < 3) return false;
+                shifts = colorMapObj.pointers[0].words,
+                masks = colorMapObj.pointers[1].words;
+                colors = colorMapObj.pointers[2].words;
+                if (!shifts || shifts.length != 4 || !masks || masks.length != 4) return false;
+                this.cmShiftTable = new Int32Array(shifts.buffer);
+                this.cmMaskTable = masks;
+            }
+            if (colors && colors.length) {
+                this.cmLookupTable = colors;
+                this.cmSize = colors.length;
+                this.cmMask = this.cmSize - 1;
+                if (this.cmSize & this.cmMask) return false; // not a power of 2
+                this.cmBitsPerColor = 
+                    this.cmSize == 512 ? 3 :
+                    this.cmSize == 4096 ? 4 :
+                    this.cmSize == 32768 ? 5 : 0;
+            }
         }
-        if (colors && colors.length) {
-            this.cmLookupTable = colors;
-            this.cmSize = colors.length;
-            this.cmMask = this.cmSize - 1;
-            if (this.cmSize & this.cmMask) return false; // not a power of 2
-            this.cmBitsPerColor = 
-                this.cmSize == 512 ? 3 :
-                this.cmSize == 4096 ? 4 :
-                this.cmSize == 32768 ? 5 : 0;
-        }
-        if (oldStyle && this.source.depth > 8) { // needs implicit conversion
+        // set up mapping if none provided
+        if (!this.cmShiftTable && this.source.depth > 8 && this.source.depth != this.dest.depth) { // needs implicit conversion
             var srcBits = this.source.depth == 16 ? 5 : 8,
                 dstBits = this.cmBitsPerColor ? this.cmBitsPerColor 
                     : this.dest.depth == 16 ? 5
@@ -3711,7 +3712,8 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
             this.copyLoopNoSource();
         } else {
             this.checkSourceOverlap();
-            if (this.source.depth !== this.dest.depth) {
+            if (this.cmLookupTable || this.cmMaskTable || this.source.msb !== this.dest.msb) 
+            {
                 this.copyLoopPixMap();
             } else {
                 this.sourceSkewAndPointerInit();
@@ -4231,7 +4233,7 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
                 if ((srcShift += srcShiftInc) & 0xFFFFFFE0) {
                     if (this.source.msb) { srcShift += 32; }
                     else { srcShift -= 32; }
-                    sourceWord = this.src.bits[++this.sourceIndex];
+                    sourceWord = this.source.bits[++this.sourceIndex];
                 }
             } while (--nPix);
         }

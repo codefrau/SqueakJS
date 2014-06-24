@@ -2012,6 +2012,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             },
             BitBltPlugin: {
                 exports: {
+                    initializeModule: this.initializeModuleBitBlt.bind(this),
                     primitiveCopyBits: this.primitiveCopyBits.bind(this),
                     primitiveWarpBits: this.primitiveWarpBits.bind(this),
                 }
@@ -3512,6 +3513,9 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     },
 },
 'BitBltPlugin', {
+    initializeModuleBitBlt: function(interpreterProxy) {
+        this.bitBltStats = {};
+    },
 	primitiveCopyBits: function(argCount) {
         var bitbltObj = this.stackNonInteger(argCount),
             bitblt = new users.bert.SqueakJS.vm.BitBlt(this.vm);
@@ -3526,8 +3530,12 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
 			this.vm.pop();
     	}
     	
+    	var timer = window.performance || Date,
+    	    start = timer.now(),
+    	    mode = [bitblt.combinationRule, bitblt.source ? bitblt.source.depth : 0, bitblt.dest.depth].join("|");
         bitblt.copyBits();
-        
+        this.bitBltStats[mode] = (this.bitBltStats[mode] || 0) + (timer.now() - start);
+
         if (bitblt.combinationRule === 22 || bitblt.combinationRule === 32)
             this.vm.popNandPush(1, bitblt.bitCount);
         else if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay])

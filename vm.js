@@ -712,7 +712,7 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
 },
 'printing', {
     toString: function() {
-        return "sqObj(" + (this.sqClass.constructor == users.bert.SqueakJS.vm.Object ? this.sqInstName() : this.sqClass) + ")";
+        return this.sqInstName();
     },
     bytesAsString: function() {
         if (!this.bytes) return '';
@@ -740,17 +740,17 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         var className = this.sqClass.className();
         if (/ /.test(className))
             return 'the ' + className;
-        var inst = '';
         switch (className) {
             case 'String':
-            case 'ByteString':
-            case 'WideString':
+            case 'ByteString': return "'" + this.bytesAsString() + "'";
             case 'Symbol':
-            case 'WideSymbol':
-            case 'ByteSymbol':
-                inst = ' "'+this.bytesAsString()+'"'; break;            
+            case 'ByteSymbol':  return "#" + this.bytesAsString();         
+            case 'Point': return this.pointers.join("@");
+            case 'Rectangle': return this.pointers.join(" corner: ");
+            case 'Association':
+            case 'ReadOnlyVariableBinding': return this.pointers.join("->");
         }
-        return  (/^[aeiou]/i.test(className) ? 'an ' + className : 'a ' + className) + inst;
+        return  /^[aeiou]/i.test(className) ? 'an ' + className : 'a ' + className;
     },
 },
 'accessing', {

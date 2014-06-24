@@ -3719,13 +3719,17 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
         if (!this.source) {
             this.copyLoopNoSource();
         } else {
-            this.checkSourceOverlap();
-            if (this.cmLookupTable || this.cmMaskTable || this.source.msb !== this.dest.msb) 
-            {
-                this.copyLoopPixMap();
+            if (this.combinationRule === 34) { // alpha blending is special
+                this.copyLoopAlphaBlendScaled();
             } else {
-                this.sourceSkewAndPointerInit();
-                this.copyLoop();
+                this.checkSourceOverlap();
+                if (this.cmLookupTable || this.cmMaskTable || this.source.msb !== this.dest.msb) {
+                    // this is the most general loop
+                    this.copyLoopPixMap();
+                } else { // source and dest have same format
+                    this.sourceSkewAndPointerInit();
+                    this.copyLoop();
+                }
             }
         }
     },
@@ -3965,6 +3969,55 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
             this.destIndex += this.destDelta;
         }
     },
+    copyLoopAlphaBlendScaled: function() {
+        // rule 34 is special since it uses the 32-bit source's alpha channel
+        // (normal pixel mapping throws away that alpha before merging)
+        if (this.dest.depth === 32) return this.copyLoopAlphaBlendScaled32();
+        if (this.dest.depth === 16) return this.copyLoopAlphaBlendScaled16();
+        // others not implemented yet
+        console.warn("copyLoopAlphaBlendScaled8() not implemented yet");
+    },
+    copyLoopAlphaBlendScaled16: function() {
+        var srcY = this.sy,
+            dstY = this.dy,
+            srcShift = (this.dx & 1) * 16;
+        if (this.dest.msb) srcShift = 16 - srcShift;
+        var mask1 = 0xFFFF << (16 - srcShift);
+        for (var y = 0; y < this.bbH; y++) {
+            var srcIndex = srcY * this.source.pitch + this.sx,
+                dstIndex = dstY * this.dest.pitch + (this.dx / 2 | 0),
+                dstMask = mask1;
+            srcShift = dstMask == 0xFFFF ? 16  : 0;
+            for (var x = 0; x < this.bbW; x++) {
+                var sourceWord = this.source.bits[srcIndex],
+                    srcAlpha = sourceWord >>> 24;
+                if (srcAlpha >= 0xF8) { // opaque
+                    sourceWord = this.rgbMap32To16(sourceWord); // todo: implement dithering
+                    sourceWord = (sourceWord == 0 ? 1 : sourceWord) << srcShift;
+                    this.dest.bits[dstIndex] = this.dest.bits[dstIndex] & dstMask | sourceWord;
+                } else {
+                    if (srcAlpha > 8) { // not transparent
+                        var destWord = (this.dest.bits[dstIndex] & ~dstMask) >> srcShift;
+                        destWord = this.rgbMap16To32(destWord) | 0xFF000000; 
+                        sourceWord = this.alphaBlendScaled(sourceWord, destWord);
+                        sourceWord = this.rgbMap32To16(sourceWord); // todo: implement dithering
+                        sourceWord = (sourceWord == 0 ? 1 : sourceWord) << srcShift;
+                        this.dest.bits[dstIndex] = this.dest.bits[dstIndex] & dstMask | sourceWord;
+                    }
+                }
+                srcIndex++;
+                if (this.dest.msb == (srcShift == 0)) dstIndex++;
+                srcShift = srcShift ^ 16; // Toggle between 0 and 16
+                dstMask = ~dstMask;       // Mask other half word
+            }
+            srcY++;
+            dstY++;
+        }
+    },
+    copyLoopAlphaBlendScaled32: function() {
+        debugger;
+        console.warn("copyLoopAlphaBlendScaled32() not implemented yet");
+	},
     sourceSkewAndPointerInit: function() {
         var pixPerM1 = this.dest.pixPerWord - 1;  //Pix per word is power of two, so this makes a mask
         var sxLowBits = this.sx & pixPerM1;
@@ -4206,6 +4259,9 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
     },
     rgbMap16To32: function(pix) {
         return ((pix & 0x1F) << 3) | ((pix & 0x3E0) << 6) | ((pix & 0x7C00) << 9);
+    },
+    rgbMap32To16: function(pix) { // todo: implement dithering
+        return ((pix & 0xF8) >> 3) | ((pix & 0xF800) >> 6) | ((pix & 0xF80000) >> 9);
     },
     pickSourcePixels: function(nPixels, srcMask, dstMask, srcShiftInc, dstShiftInc) {
         /*	Pick nPix pixels starting at srcBitIndex from the source, map by the

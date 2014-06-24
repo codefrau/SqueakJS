@@ -4728,6 +4728,13 @@ Object.extend(Squeak, {
                 (new Uint8Array(buffer)).set(file.contents.subarray(0, file.size));
             }
             Squeak.filePut(file.name, buffer);
+            if (/SqueakDebug.log/.test(file.name)) {
+                var bytes = new Uint8Array(buffer),
+                    chars = [];
+                for (var i = 0; i < bytes.length; i++)
+                    chars.push(String.fromCharCode(bytes[i]));
+                console.warn(chars.join('').replace(/\r/g, '\n'));
+            }
             file.modified = false;
         }
     },

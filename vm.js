@@ -2022,45 +2022,45 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
                     // curry the primitive name and return value
                     primitiveAddActiveEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddActiveEdgeEntry", 0),
                     primitiveAddBezier: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddBezier", 0),
-                    primitiveAddBezierShape: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddBezierShape", 0),
+                    primitiveAddBezierShape: this.primitiveAddBezierShape.bind(this),
                     primitiveAddBitmapFill: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddBitmapFill", 0),
                     primitiveAddCompressedShape: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddCompressedShape", 0),
                     primitiveAddGradientFill: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddGradientFill", 0),
                     primitiveAddLine: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddLine", 0),
-                    primitiveAddOval: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddOval", 0),
-                    primitiveAddPolygon: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddPolygon", 0),
-                    primitiveAddRect: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddRect", 0),
+                    primitiveAddOval: this.primitiveAddOval.bind(this),
+                    primitiveAddPolygon: this.primitiveAddPolygon.bind(this),
+                    primitiveAddRect: this.primitiveAddRect.bind(this),
                     primitiveChangedActiveEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveChangedActiveEdgeEntry", 0),
                     primitiveCopyBuffer: this.fakePrimitive.bind(this, "B2DPlugin.primitiveCopyBuffer", 0),
                     primitiveDisplaySpanBuffer: this.fakePrimitive.bind(this, "B2DPlugin.primitiveDisplaySpanBuffer", 0),
                     primitiveDoProfileStats: this.fakePrimitive.bind(this, "B2DPlugin.primitiveDoProfileStats", 0),
-                    primitiveFinishedProcessing: this.fakePrimitive.bind(this, "B2DPlugin.primitiveFinishedProcessing", true),
+                    primitiveFinishedProcessing: this.primitiveFinishedProcessing.bind(this),
                     primitiveGetAALevel: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetAALevel", 0),
                     primitiveGetBezierStats: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetBezierStats", 0),
                     primitiveGetClipRect: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetClipRect", 0),
                     primitiveGetCounts: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetCounts", 0),
-                    primitiveGetDepth: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetDepth", 1),
+                    primitiveGetDepth: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetDepth", 32),
                     primitiveGetFailureReason: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetFailureReason", 0),
                     primitiveGetOffset: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetOffset", 0),
                     primitiveGetTimes: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetTimes", 0),
-                    primitiveInitializeBuffer: this.fakePrimitive.bind(this, "B2DPlugin.primitiveInitializeBuffer", 0),
+                    primitiveInitializeBuffer: this.primitiveInitializeBuffer.bind(this),
                     primitiveInitializeProcessing: this.fakePrimitive.bind(this, "B2DPlugin.primitiveInitializeProcessing", 0),
                     primitiveMergeFillFrom: this.fakePrimitive.bind(this, "B2DPlugin.primitiveMergeFillFrom", 0),
                     primitiveNeedsFlush: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNeedsFlush", false),
-                    primitiveNeedsFlushPut: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNeedsFlushPut", 0),
+                    primitiveNeedsFlushPut: this.primitiveNeedsFlushPut.bind(this),
                     primitiveNextActiveEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNextActiveEdgeEntry", 0),
                     primitiveNextFillEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNextFillEntry", 0),
                     primitiveNextGlobalEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNextGlobalEdgeEntry", 0),
                     primitiveRegisterExternalEdge: this.fakePrimitive.bind(this, "B2DPlugin.primitiveRegisterExternalEdge", 0),
                     primitiveRegisterExternalFill: this.fakePrimitive.bind(this, "B2DPlugin.primitiveRegisterExternalFill", 0),
-                    primitiveRenderImage: this.fakePrimitive.bind(this, "B2DPlugin.primitiveRenderImage", 0),
-                    primitiveRenderScanline: this.fakePrimitive.bind(this, "B2DPlugin.primitiveRenderScanline", 0),
+                    primitiveRenderImage: this.primitiveRenderImage.bind(this),
+                    primitiveRenderScanline: this.primitiveRenderImage.bind(this), // only image.
                     primitiveSetAALevel: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetAALevel", 0),
-                    primitiveSetBitBltPlugin: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetBitBltPlugin", 0),
-                    primitiveSetClipRect: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetClipRect", 0),
-                    primitiveSetColorTransform: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetColorTransform", 0),
+                    primitiveSetBitBltPlugin: this.primitiveSetBitBltPlugin.bind(this),
+                    primitiveSetClipRect: this.primitiveSetClipRect.bind(this),
+                    primitiveSetColorTransform: this.primitiveSetColorTransform.bind(this),
                     primitiveSetDepth: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetDepth", 0),
-                    primitiveSetEdgeTransform: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetEdgeTransform", 0),
+                    primitiveSetEdgeTransform: this.primitiveSetEdgeTransform.bind(this),
                     primitiveSetOffset: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetOffset", 0),
                 }
             },
@@ -2370,7 +2370,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         var bytes = stackVal.bytes;
         var value = 0;
         for (var i=0; i<4; i++)
-            value += ((bytes[i]&255)<<(8*i));
+            value += (bytes[i]&255) * (1 << 8*i);
         return value;
     },
     pos32BitIntFor: function(pos32Val) {
@@ -3576,6 +3576,336 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             array[index] = value;
             this.vm.popNandPush(argCount+1, this.vm.stackValue(0));
         }
+        return true;
+    },
+},
+'B2DPlugin', {
+    primitiveSetColorTransform: function(argCount) {
+        var trans = this.stackNonInteger(0);
+        if (this.success) {
+            if (!trans.isNil) {
+                var store = this.ensureB2DStore()
+                //this.storeAndFixTransform(store, trans)
+            }
+            this.vm.popNandPush(argCount, this.makeStObject(0));
+            return true;
+        } else {
+            return false;
+        }
+    },
+
+    primitiveSetEdgeTransform: function(argCount) {
+        var trans = this.stackNonInteger(0);
+        if (this.success && trans.words) {
+            if (trans.float32Array[0] != 0 ||
+                trans.float32Array[1] != 0 ||
+                trans.float32Array[2] != 0 ||
+                trans.float32Array[3] != 0 ||
+                trans.float32Array[4] != 0 ||
+                trans.float32Array[5] != 0)
+                debugger
+            var store = this.ensureB2DStore()
+            this.storeAndFixTransform(store, trans)
+            this.vm.popNandPush(argCount, this.makeStObject(0));
+            return true;
+        } else {
+            return false;
+        }
+    },
+    storeAndFixTransform: function(store, trans) {
+        /*
+            Transform is a Matrix:
+
+                ⎛a₁₁ a₁₂ a₁₃⎞
+                ⎝a₂₁ a₂₂ a₂₃⎠
+
+            Squeak Matrix2x3Transform stores this
+
+                [a₁₁, a₁₂, a₁₃, a₂₁, a₂₂, a₂₃]
+
+            but canvas expects
+
+                canvas.setTransform(a₁₁, a₂₁, a₁₂, a₂₂, a₁₃, a₂₃)
+
+            therefore we transform.
+        */
+        if (trans.float32Array) {
+            if (trans.float32Array == store.transform) return;
+            store.transform = new Float32Array(6)
+            store.transform[0] = trans.float32Array[0]
+            store.transform[1] = trans.float32Array[3]
+            store.transform[2] = trans.float32Array[1]
+            store.transform[3] = trans.float32Array[4]
+            store.transform[4] = trans.float32Array[2]
+            store.transform[5] = trans.float32Array[5]
+        } else {
+            if (trans.words == store.transform) return;
+            store.transform = new Uint32Array(6)
+            store.transform[0] = trans.words[0]
+            store.transform[1] = trans.words[3]
+            store.transform[2] = trans.words[1]
+            store.transform[3] = trans.words[4]
+            store.transform[4] = trans.words[2]
+            store.transform[5] = trans.words[5]
+        }
+    },
+    currentTransform: function() {
+        return this.ensureB2DStore().transform
+    },
+
+    primitiveSetClipRect: function(argCount) {
+        var rect = this.stackNonInteger(0);
+        var _engine = this.stackNonInteger(1);
+        if (this.success) {
+            var store = this.ensureB2DStore();
+            store.clipMin = [rect.getPointer(0).getPointer(0), rect.getPointer(0).getPointer(1)];
+            store.clipMax = [rect.getPointer(1).getPointer(0), rect.getPointer(1).getPointer(1)];
+            this.vm.popNandPush(argCount, this.makeStObject(0));
+            return true;
+        } else {
+            return false;
+        }
+    },
+    addGeometry: function(geometryObject) {
+        var store = this.ensureB2DStore();
+        geometryObject['transform'] = store.transform;
+        geometryObject['clipMin'] = store.clipMin;
+        geometryObject['clipMax'] = store.clipMax;
+        if (store.inChunk) {
+            store.chunkGeometry.push(geometryObject);
+        } else {
+            store.geometry.push(geometryObject);
+        }
+    },
+
+    primitiveSetBitBltPlugin: function(argCount) {
+        var pluginName = this.stackNonInteger(0)
+        if (this.success && pluginName.bytesAsString() == 'BitBltPlugin') {
+            this.vm.popNandPush(argCount+1, this.makeStObject(0));
+            return true;
+        } else {
+            return false;
+        }
+    },
+    oval_paintTo: function(store, display) {
+        var success = true;
+        return success;
+    },
+
+    rect_paintTo: function(store, display) {
+        var success = true;
+        return success;
+    },
+
+    poly_paintTo: function(store, display) {
+        var success = true;
+        return success;
+    },
+
+    bezier_paintTo: function(store, display) {
+        var success = true;
+        display.ctx.beginPath();
+        for (var i = 0; i < this.points.length; i += 3) {
+            var start = this.points[i];
+            var via = this.points[i + 1];
+            var end = this.points[i + 2];
+            
+            display.ctx.moveTo(start.x, start.y);
+            if ((start.x == via.x) && (start.y == via.y)) {
+                display.ctx.lineTo(end.x, end.y);
+            } else {
+                display.ctx.quadraticCurveTo(via.x, via.y, end.x, end.y)
+            }
+            
+        }
+        display.ctx.lineWidth = 1;
+        // line color
+        display.ctx.strokeStyle = 'black';
+        display.ctx.stroke();
+        return success;
+    },
+
+    renderImage: function(store) {
+        var success = true;
+        this.display.ctx.save();
+        for (var i = 0; success && i < store.geometry.length; i += 1) {
+            if (store.geometry.transform != null) {
+                var t = store.geometry.transform
+                this.display.ctx.setTransform(t[0], t[1], t[2], 
+                                              t[3], t[4], t[5])
+            }
+            this.display.ctx.beginPath();
+            this.display.ctx.rect(
+                Math.max(0, store.clipMin[0]),
+                Math.max(0, store.clipMin[1]),
+                Math.min(this.display.width, store.clipMax[0]),
+                Math.min(this.display.heigth, store.clipMax[1]));
+            this.display.ctx.clip();
+            success = store.geometry[i].paintTo(store, this.display);
+        }
+        this.display.ctx.restore();
+        return success;
+    },
+
+    primitiveRenderImage: function(argCount) {
+        var store = this.ensureB2DStore()
+        var success = true;
+        if (store.geometry.length > 0) {
+            success = this.renderImage(store);
+            this.flushB2DStore();
+        }
+        this.vm.popNandPush(argCount+1, this.makeStObject(0));
+        return success;
+    },
+
+
+    primitiveFinishedProcessing: function(argCount) {
+        if (this.ensureB2DStore().geometry.length == 0) {
+            this.vm.popNandPush(argCount+1, this.makeStObject(true));
+        } else {
+            this.vm.popNandPush(argCount+1, this.makeStObject(false));
+        }
+        return true;
+    },
+    primitiveNeedsFlushPut: function(argCount) {
+        var needsFlush = !!this.stackNonInteger(0).isTrue
+        if (!this.success) return false;
+        
+        var store = this.ensureB2DStore()
+        var neededFlush = store.needsFlush
+        store.needsFlush = needsFlush
+        this.vm.popNandPush(argCount+1, this.makeStObject(0));
+        
+        if (needsFlush && !neededFlush) {
+            store.inChunk = false
+            this.processGeometryChunk()
+        } else if (neededFlush && !needsFlush) {
+            if ((store.geometry.length > 0) && (store.chunkGeometry.length == 0)) {
+                store.chunkGeometry.push(store.geometry.pop())
+            }
+            store.inChunk = true
+        }
+        
+        return true;
+    },
+
+    processGeometryChunk: function() {
+        var store = this.ensureB2DStore();
+        if (store.chunkGeometry.length == 0) return;
+        if (store.chunkGeometry.length == 1) {
+            store.geometry.push(store.chunkGeometry.pop())
+            return;
+        }
+        debugger
+        store.chunkGeometry = []
+    },
+
+    primitiveInitializeBuffer: function(argCount) {
+        this.ensureB2DStore();
+        this.vm.popNandPush(argCount+1, this.makeStObject(0));
+        return true;
+    },
+    flushB2DStore: function() {
+        this.vm.__B2DStore = {
+            "clipMin": [0,0],
+            "clipMax": [0,0],
+            "geometry": [],
+            "needsFlush": false,
+            "chunkGeometry": [],
+            "inChunk": false,
+            "transform": null,
+            "colorTransform": [1.0,0.0, 1.0,0.0, 1.0,0.0, 1.0,0.0],
+        };
+    },
+
+    ensureB2DStore: function() {
+        if (!this.vm.hasOwnProperty('__B2DStore')) {
+            this.flushB2DStore();
+        }
+        return this.vm.__B2DStore;
+    },
+    primitiveAddOval: function(argCount) {
+        var borderIndex = this.stackPos32BitInt(0);
+        var borderWidth = this.stackInteger(1);
+	    var fillIndex   = this.stackPos32BitInt(2);
+	    var end         = this.stackNonInteger(3);
+	    var start       = this.stackNonInteger(4);
+	    if (!this.success) return false;
+	    // debugger
+        if ((fillIndex == 0) && ((borderIndex == 0) || (borderWidth <= 0))) {
+            this.vm.popNandPush(argCount+1, this.makeStObject(0));
+            return true;
+        }
+        this.addGeometry({paintTo: this.oval_paintTo, start: start, end: end})
+        this.vm.popNandPush(argCount+1, this.makeStObject(0));
+        return true;
+    },
+
+    primitiveAddBezierShape: function(argCount) {
+        var lineFill  = this.stackPos32BitInt(0);
+        var lineWidth = this.stackInteger(1);
+	    var fillIndex = this.stackPos32BitInt(2);
+	    var nSegments = this.stackInteger(3);
+	    var points    = this.stackNonInteger(4); // ShortPointArray?
+	    if (!this.success) return false;
+        if ((lineFill == 0) || ((lineWidth == 0) && (fillIndex == 0))) {
+            this.vm.popNandPush(argCount, this.makeStObject(0));
+            return true;
+        }
+        // for now
+        if (!points.words) return false;
+        var length = points.words.length
+        if ((length != nSegments * 3) && (length != nSegments * 6)) return false;
+        
+        var geo_points = []
+        if (nSegments * 3 == length) { //short points
+            for (var i = 0; i < length; i += 1) {
+                var num = points.words[i];
+                geo_points.push({'x': (num & 0xFFFF0000)>>16, 'y': num & 0x0000FFFF})
+            }
+        } else {
+            for (var i = 0; i < length; i += 2) {
+                geo_points.push({'x': points.words[i], 'y': points.words[i+1]})
+            }
+        }
+        
+        //debugger
+        this.addGeometry({paintTo: this.bezier_paintTo, points: geo_points})
+        this.vm.popNandPush(argCount, this.makeStObject(0));
+        return true;
+    },
+
+    primitiveAddPolygon: function(argCount) {
+        var lineFill  = this.stackPos32BitInt(0);
+        var lineWidth = this.stackInteger(1);
+	    var fillIndex = this.stackPos32BitInt(2);
+	    var nPoints   = this.stackInteger(3);
+	    var points    = this.stackNonInteger(4);
+	    if (!this.success) return false;
+	    // debugger
+        if ((lineFill == 0) || ((lineWidth == 0) && (fillIndex == 0))) {
+            this.vm.popNandPush(argCount+1, this.makeStObject(0));
+            return true;
+        }
+        debugger
+        this.addGeometry({ paintTo: this.poly_paintTo, points: points })
+        this.vm.popNandPush(argCount+1, this.makeStObject(0));
+        return true;
+    },
+
+    primitiveAddRect: function(argCount) {
+        var borderIndex = this.stackPos32BitInt(0);
+        var borderWidth = this.stackInteger(1);
+	    var fillIndex   = this.stackPos32BitInt(2);
+	    var endPoint    = this.stackNonInteger(3);
+	    var startPoint  = this.stackNonInteger(4);
+	    if (!this.success) return false;
+        if ((fillIndex == 0) && ((borderIndex == 0) || (borderWidth == 0))) {
+            this.vm.popNandPush(argCount, this.makeStObject(0));
+            return true;
+        }
+        this.addGeometry({ paintTo: this.rect_paintTo, start: startPoint, end: endPoint });
+        this.vm.popNandPush(argCount+1, this.makeStObject(0));
         return true;
     },
 });

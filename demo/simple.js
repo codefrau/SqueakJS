@@ -157,14 +157,15 @@ window.onload = function() {
             var image = new users.bert.SqueakJS.vm.Image(rq.response, url);
             var vm = new users.bert.SqueakJS.vm.Interpreter(image, createDisplay());
             var run = function() {
-                var ms = vm.interpret(20);
-                if (typeof ms === 'number') { // continue running
-                    window.setTimeout(run, ms);
-                } else { // quit
-                    canvas.style.webkitTransition = "-webkit-transform 0.5s";
-                    canvas.style.webkitTransform = "scale(0)";
-                    window.setTimeout(function(){canvas.style.display = 'none'}, 500);
-                }
+                vm.interpret(20, function(ms) {
+                    if (typeof ms === 'number') { // continue running
+                        window.setTimeout(run, ms);
+                    } else { // quit
+                        canvas.style.webkitTransition = "-webkit-transform 0.5s";
+                        canvas.style.webkitTransform = "scale(0)";
+                        window.setTimeout(function(){canvas.style.display = 'none'}, 500);
+                    }
+                });
             };
             run();
         };

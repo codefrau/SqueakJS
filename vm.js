@@ -4017,7 +4017,7 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
             }
         }
         // set up mapping if none provided
-        if (!this.cmShiftTable && this.source.depth > 8 && this.source.depth != this.dest.depth) { // needs implicit conversion
+        if (!this.cmShiftTable && this.source.depth > 8 && (this.source.depth != this.dest.depth || this.combinationRule == 33)) { // needs implicit conversion
             var srcBits = this.source.depth == 16 ? 5 : 8,
                 dstBits = this.cmBitsPerColor ? this.cmBitsPerColor 
                     : this.dest.depth == 16 ? 5
@@ -4025,6 +4025,11 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
                     : srcBits;
             if (srcBits != dstBits)
                 this.setupColorMasks(srcBits, dstBits);
+        }
+        // tallying is special
+        if (this.combinationRule == 33) {
+            this.cmTallyTable = this.cmLookupTable;
+            this.cmLookupTable = null;
         }
         return true;
     },
@@ -4052,6 +4057,9 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
         } else {
             if (this.combinationRule === 34) { // alpha blending is special
                 this.copyLoopAlphaBlendScaled();
+            } else if (this.combinationRule === 33) { // pixel tallying is special
+                this.sourceSkewAndPointerInit();
+                this.copyLoop();
             } else {
                 this.checkSourceOverlap();
                 if (this.cmLookupTable || this.cmMaskTable || this.source.msb !== this.dest.msb) {
@@ -4775,6 +4783,7 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
             case 32: return function(src, dst, mask) { // accumulate differences, do not modify dst 
                 self.rgbDiff(src, dst, mask, self.dest.depth, self.dest.pixPerWord);
                 return dst; };
+            case 33: return function(src, dst, mask) { return self.tallyIntoMap(src, dst, mask) };
             case 34: return function(src, dst) { return self.alphaBlendScaled(src, dst) };
         }
         throw Error("bitblt rule " + rule + " not implemented yet");
@@ -4896,6 +4905,31 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
     	}
         return result;
 	},
+	tallyIntoMap: function(src, dst, mask) {
+        // Tally pixels into the color map.  Those tallied are exactly those
+        // in the destination rectangle.  Note that the source should be 
+        // specified == destination, in order for the proper color map checks 
+        // to be performed at setup.
+        if (!this.cmTallyTable) return dst;
+        var destDepth = this.dest.depth;
+        if (destDepth == 32) {
+            var mapIndex = this.mapPixel(dst) & this.cmMask;
+            this.cmTallyTable[mapIndex]++;
+        } else {
+            var pixMask = this.maskTable[destDepth],
+                destShifted = dst,
+                maskShifted = mask;
+            while (maskShifted) {
+                if (maskShifted & pixMask) { // Only tally pixels within the destination rectangle
+                    var mapIndex = this.mapPixel(destShifted & pixMask) & this.cmMask;
+                    this.cmTallyTable[mapIndex]++;
+                }
+                maskShifted = maskShifted >>> destDepth;
+                destShifted = destShifted >>> destDepth;
+            }
+        }
+        return dst;  // For no effect on dest
+    },
 },
 'accessing', {
     affectedRect: function() {

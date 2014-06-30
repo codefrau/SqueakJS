@@ -3534,7 +3534,8 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     	    start = timer.now(),
     	    mode = [bitblt.combinationRule, bitblt.source ? bitblt.source.depth : 0, bitblt.dest.depth].join("|");
         bitblt.copyBits();
-        this.bitBltStats[mode] = (this.bitBltStats[mode] || 0) + (timer.now() - start);
+        if (this.bitBltStats)
+            this.bitBltStats[mode] = (this.bitBltStats[mode] || 0) + (timer.now() - start);
 
         if (bitblt.combinationRule === 22 || bitblt.combinationRule === 32)
             this.vm.popNandPush(1, bitblt.bitCount);
@@ -4135,7 +4136,7 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
         var y = this.dy;
         for (var i = 1; i <= this.bbH; i++) {
             if (halftoneHeight > 1) {
-                halftoneWord = this.halftone.words[y % halftoneHeight];
+                halftoneWord = this.halftone[y % halftoneHeight];
                 y += this.vDir;
             }
             var prevWord;

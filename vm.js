@@ -4960,12 +4960,24 @@ Object.extend(Squeak, {
     },
     dbFake: function() {
         // indexedDB is not supported by this browser, fake it using localStorage
+        // since localStorage space is severly limited, use LZString if loaded
+        // see https://github.com/pieroxy/lz-string
         if (typeof SqueakDBFake == "undefined") {
             if (typeof indexedDB == "undefined")
                 console.warn("IndexedDB not supported by this browser, using localStorage");
             SqueakDBFake = {
                 get: function(filename) {
                     var string = localStorage["squeak-file:" + filename];
+                    if (!string) {
+                        var compressed = localStorage["squeak-file.lz:" + filename];
+                        if (compressed) {
+                            if (typeof LZString == "object") {
+                                string = LZString.decompressFromUTF16(compressed);
+                            } else {
+                                console.error("LZString not loaded: cannot decompress " + filename);
+                            }
+                        }
+                    }
                     var bytes = new Uint8Array(string ? string.length : 0);
                     for (var i = 0; i < bytes.length; i++)
                         bytes[i] = string.charCodeAt(i) & 0xFF;
@@ -4982,13 +4994,20 @@ Object.extend(Squeak, {
                     for (var i = 0; i < bytes.length; i++)
                         chars.push(String.fromCharCode(bytes[i]));
                     var string = chars.join('');
+                    if (typeof LZString == "object") {
+                        var compressed = LZString.compressToUTF16(string);
+                        localStorage["squeak-file.lz:" + filename] = compressed;
+                        delete localStorage["squeak-file:" + filename];
+                    } else {
                         localStorage["squeak-file:" + filename] = string;
+                    }
                     var req = {};
                     setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
                     return req;
                 },
                 delete: function(filename) {
                     delete localStorage["squeak-file:" + filename];
+                    delete localStorage["squeak-file.lz:" + filename];
                     var req = {};
                     setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
                     return req;

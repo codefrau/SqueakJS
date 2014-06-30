@@ -4959,26 +4959,38 @@ Object.extend(Squeak, {
         };
     },
     dbFake: function() {
-        // indexedDB is not supported by this browser, fake it in memory
+        // indexedDB is not supported by this browser, fake it using localStorage
         if (typeof SqueakDBFake == "undefined") {
-            console.warn("IndexedDB not supported by this browser, Squeak files will not be persisted");
+            if (typeof indexedDB == "undefined")
+                console.warn("IndexedDB not supported by this browser, using localStorage");
             SqueakDBFake = {
-                files: {},
                 get: function(filename) {
-                    var req = { result: SqueakDBFake.files[filename] };
-                    window.setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
+                    var string = localStorage["squeak-file:" + filename];
+                    var bytes = new Uint8Array(string ? string.length : 0);
+                    for (var i = 0; i < bytes.length; i++)
+                        bytes[i] = string.charCodeAt(i) & 0xFF;
+                    var req = {result: bytes.buffer};
+                    setTimeout(function(){
+                        if (string && req.onsuccess) req.onsuccess();
+                        if (!string && req.onerror) req.onerror();
+                    }, 0);
                     return req;
                 },
-                put: function(contents, filename) {
-                    SqueakDBFake.files[filename] = contents;
+                put: function(buffer, filename) {
+                    var bytes = new Uint8Array(buffer),
+                        chars = [];
+                    for (var i = 0; i < bytes.length; i++)
+                        chars.push(String.fromCharCode(bytes[i]));
+                    var string = chars.join('');
+                        localStorage["squeak-file:" + filename] = string;
                     var req = {};
-                    window.setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
+                    setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
                     return req;
                 },
                 delete: function(filename) {
-                    delete SqueakDBFake.files[filename];
+                    delete localStorage["squeak-file:" + filename];
                     var req = {};
-                    window.setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
+                    setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
                     return req;
                 },
             }
@@ -4991,10 +5003,15 @@ Object.extend(Squeak, {
         if (!path.basename) return errorDo("Invalid path: " + filepath);
         this.dbTransaction("readonly", function(fileStore) {
             var getReq = fileStore.get(path.fullname);
-            getReq.onerror = function(e) { errorDo(e.target.errorCode) };
+            getReq.onerror = function(e) { errorDo(this.errorCode) };
             getReq.onsuccess = function(e) {
-                if (this.result == undefined) 
-                    return errorDo("file not found: " + path.fullname);
+                if (this.result == undefined) {
+                    // fall back on fake db, may be file is there
+                    var fakeReq = Squeak.dbFake().get(path.fullname);
+                    fakeReq.onerror = function(e) { errorDo("file not found: " + path.fullname) };
+                    fakeReq.onsuccess = function(e) { thenDo(this.result); }
+                    return;
+                }
                 thenDo(this.result);
             };
         });

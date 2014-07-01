@@ -3602,21 +3602,11 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
 
     primitiveSetEdgeTransform: function(argCount) {
         var trans = this.stackNonInteger(0);
-        if (this.success && trans.words) {
-            if (trans.float32Array[0] != 0 ||
-                trans.float32Array[1] != 0 ||
-                trans.float32Array[2] != 0 ||
-                trans.float32Array[3] != 0 ||
-                trans.float32Array[4] != 0 ||
-                trans.float32Array[5] != 0)
-                debugger
-            var store = this.ensureB2DStore()
-            this.storeAndFixTransform(store, trans)
-            this.vm.popNandPush(argCount, this.makeStObject(0));
-            return true;
-        } else {
-            return false;
-        }
+        if (!this.success) return false;
+        var store = this.ensureB2DStore();
+        this.storeAndFixTransform(store, trans);
+        this.vm.popNandPush(argCount, 0);
+        return true;
     },
     storeAndFixTransform: function(store, trans) {
         /*
@@ -3635,6 +3625,10 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
 
             therefore we transform.
         */
+        if (trans.isNil) {
+            store.transform = null; 
+            return;
+        }
         if (trans.float32Array) {
             if (trans.float32Array == store.transform) return;
             store.transform = new Float32Array(6)

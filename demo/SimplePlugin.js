@@ -30,10 +30,8 @@ var SimplePlugin = function() {
     };
 
     return {
-        exports: {
-            initializeModule: initializeModule,
-            primitiveNavigatorInfo: primitiveNavigatorInfo,
-        }
+        initializeModule: initializeModule,
+        primitiveNavigatorInfo: primitiveNavigatorInfo,
     }
 };
 

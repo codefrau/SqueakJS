@@ -1845,10 +1845,14 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
     },
     breakOn: function(classAndMethodString) {
         // classAndMethodString is 'Class>>method'
-        var found;
+        var found,
+            className = classAndMethodString.split('>>')[0],
+            methodName = classAndMethodString.split('>>')[1];
         this.allMethodsDo(function(classObj, methodObj, selectorObj) {
-            if (classAndMethodString == (classObj.className() + '>>' + selectorObj.bytesAsString()))
-                return found = methodObj;
+            if (methodName.length == selectorObj.bytesSize()
+                && methodName == selectorObj.bytesAsString() 
+                && className == classObj.className())
+                    return found = methodObj;
         });
         this.breakOnMethod = found;
         return found;

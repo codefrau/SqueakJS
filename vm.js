@@ -4790,8 +4790,23 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
                 return dst; };
             case 33: return function(src, dst, mask) { return self.tallyIntoMap(src, dst, mask) };
             case 34: return function(src, dst) { return self.alphaBlendScaled(src, dst) };
+            case 37: return function(src, dst) { return self.rgbMul(src, dst) };
         }
         throw Error("bitblt rule " + rule + " not implemented yet");
+    },
+    rgbMul: function(src, dst) {
+        if (this.dest.depth < 16 ) {
+            // Mul each pixel separately
+            return this.partitionedMul(src, dst, this.dest.depth, this.dest.pixPerWord);
+        } else {
+            if (this.dest.depth == 16) {
+                // Mul RGB components of each pixel separately
+                return this.partitionedMul(src, dst, 5, 3) | (this.partitionedMul(src>>16, dst>>16, 5, 3) << 16);
+            } else {
+                // Mul RGBA components of the pixel separately
+                return this.partitionedMul(src, dst, 8, 4);
+            }
+        }
     },
     rgbDiff: function(src, dst, mask, nBits, nParts) {
         var pixMask = this.maskTable[nBits],
@@ -4895,6 +4910,15 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
             result |= (dst & mask) + (src & mask);
         	mask = mask << nBits;
     	}
+        return result;
+	},
+    partitionedMul: function(word1, word2, nBits, nParts) {
+        var mask = this.maskTable[nBits],
+            result = 0;
+        for (var i = 0, ofs = 0; i < nParts; i++, ofs += nBits) {
+            var product = (((word1>>ofs & mask)+1) * ((word2>>ofs & mask)+1)) - 1;
+            result |= (product>>nBits & mask) << ofs;
+        }
         return result;
 	},
     partitionedAND: function(word1, word2, nBits, nParts) {

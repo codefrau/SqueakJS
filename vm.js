@@ -4359,8 +4359,21 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
         }
     },
     copyLoopAlphaBlendScaled32: function() {
-        debugger;
-        console.warn("copyLoopAlphaBlendScaled32() not implemented yet");
+        var srcIndex = this.sy * this.source.pitch + this.sx,
+            dstIndex = this.dy * this.dest.pitch + this.dx,
+            srcDelta = this.source.pitch - this.bbW,
+            dstDelta = this.destDelta;
+        for (var y = 0; y < this.bbH; y++) {
+            for (var x = 0; x < this.bbW; x++) {
+                var srcWord = this.source.bits[srcIndex],
+                    dstWord = this.dest.bits[dstIndex];
+                this.dest.bits[dstIndex] = this.alphaBlendScaled(srcWord, dstWord);
+                srcIndex++;
+                dstIndex++;
+            }
+            srcIndex += srcDelta;
+            dstIndex += dstDelta;
+        }
 	},
     sourceSkewAndPointerInit: function() {
         var pixPerM1 = this.dest.pixPerWord - 1;  //Pix per word is power of two, so this makes a mask

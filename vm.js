@@ -700,9 +700,15 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         return bytes;
     },
     decodeFloat: function(theBits, littleEndian) {
-        var data = new DataView(theBits.buffer, theBits.byteOffset),
-            float = data.getFloat64(0, littleEndian);
-        return float;
+        var data = new DataView(theBits.buffer, theBits.byteOffset);
+        // it's either big endian ...
+        if (!littleEndian) return data.getFloat64(0, false);
+        // or little endian, but with swapped words
+        var buffer = new ArrayBuffer(8),
+            swapped = new DataView(buffer);
+        swapped.setUint32(0, data.getUint32(4));
+        swapped.setUint32(4, data.getUint32(0));
+        return swapped.getFloat64(0, true);
     },
     fillArray: function(length, filler) {
         for (var array = [], i = 0; i < length; i++)

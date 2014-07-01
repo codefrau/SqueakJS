@@ -1959,12 +1959,9 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         this.loadedModules = {};
         this.builtinModules = {
             MiscPrimitivePlugin: {
-                exports: {
                     primitiveStringHash: this.primitiveStringHash.bind(this),
-                }
             },
             FilePlugin: {
-                exports: {
                     primitiveDirectoryDelimitor: this.primitiveDirectoryDelimitor.bind(this),
                     primitiveDirectoryCreate: this.primitiveDirectoryCreate.bind(this),
                     primitiveDirectoryDelete: this.primitiveDirectoryDelete.bind(this),
@@ -1984,17 +1981,13 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
                     primitiveFileStdioHandles: this.primitiveFileStdioHandles.bind(this),
                     primitiveFileTruncate: this.primitiveFileTruncate.bind(this),
                     primitiveFileWrite: this.primitiveFileWrite.bind(this),
-                }
             },
             BitBltPlugin: {
-                exports: {
                     initializeModule: this.initializeModuleBitBlt.bind(this),
                     primitiveCopyBits: this.primitiveCopyBits.bind(this),
                     primitiveWarpBits: this.primitiveWarpBits.bind(this),
-                }
             },
             B2DPlugin: {
-                exports: {
                     // curry the primitive name and return value
                     primitiveAddActiveEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddActiveEdgeEntry", 0),
                     primitiveAddBezier: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddBezier", 0),
@@ -2038,13 +2031,10 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
                     primitiveSetDepth: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetDepth", 0),
                     primitiveSetEdgeTransform: this.primitiveSetEdgeTransform.bind(this),
                     primitiveSetOffset: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetOffset", 0),
-                }
             },
             FloatArrayPlugin: {
-                exports: {
                     primitiveAt: this.primitiveFloatArrayAtAndPut.bind(this),
                     primitiveAtPut: this.primitiveFloatArrayAtAndPut.bind(this),
-                }
             },
         };
     },
@@ -2270,7 +2260,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             this.loadedModules[moduleName] = module;
         }
         if (module) {
-            var primitive = module.exports[functionName];
+            var primitive = module[functionName];
             if (primitive) return primitive(argCount);
         }
         this.missingPrimitive(moduleName + '.' + functionName);
@@ -2304,9 +2294,9 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     },
     loadModule: function(moduleName) {
         var module = Squeak.externalModules[moduleName] || this.builtinModules[moduleName];
-        if (!module || !module.exports) return null;
-        if (module.exports.initializeModule)
-            module.exports.initializeModule(this);
+        if (!module) return null;
+        if (module.initializeModule)
+            module.initializeModule(this);
         return module;
     },
 },

@@ -3742,10 +3742,10 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             }
             this.display.ctx.beginPath();
             this.display.ctx.rect(
-                Math.max(0, store.clipMin[0]),
-                Math.max(0, store.clipMin[1]),
-                Math.min(this.display.width, store.clipMax[0]),
-                Math.min(this.display.heigth, store.clipMax[1]));
+                store.clipMin[0],
+                store.clipMin[1],
+                store.clipMax[0],
+                store.clipMax[1]);
             this.display.ctx.clip();
             success = store.geometry[i].paintTo(store, this.display);
         }

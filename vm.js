@@ -1995,19 +1995,19 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
                     // curry the primitive name and return value
                     primitiveAddActiveEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddActiveEdgeEntry", 0),
                     primitiveAddBezier: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddBezier", 0),
-                    primitiveAddBezierShape: this.primitiveAddBezierShape.bind(this),
+                    primitiveAddBezierShape: this.b2d_primitiveAddBezierShape.bind(this),
                     primitiveAddBitmapFill: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddBitmapFill", 0),
                     primitiveAddCompressedShape: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddCompressedShape", 0),
                     primitiveAddGradientFill: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddGradientFill", 0),
                     primitiveAddLine: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddLine", 0),
-                    primitiveAddOval: this.primitiveAddOval.bind(this),
-                    primitiveAddPolygon: this.primitiveAddPolygon.bind(this),
-                    primitiveAddRect: this.primitiveAddRect.bind(this),
+                    primitiveAddOval: this.b2d_primitiveAddOval.bind(this),
+                    primitiveAddPolygon: this.b2d_primitiveAddPolygon.bind(this),
+                    primitiveAddRect: this.b2d_primitiveAddRect.bind(this),
                     primitiveChangedActiveEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveChangedActiveEdgeEntry", 0),
                     primitiveCopyBuffer: this.fakePrimitive.bind(this, "B2DPlugin.primitiveCopyBuffer", 0),
                     primitiveDisplaySpanBuffer: this.fakePrimitive.bind(this, "B2DPlugin.primitiveDisplaySpanBuffer", 0),
                     primitiveDoProfileStats: this.fakePrimitive.bind(this, "B2DPlugin.primitiveDoProfileStats", 0),
-                    primitiveFinishedProcessing: this.primitiveFinishedProcessing.bind(this),
+                    primitiveFinishedProcessing: this.b2d_primitiveFinishedProcessing.bind(this),
                     primitiveGetAALevel: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetAALevel", 0),
                     primitiveGetBezierStats: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetBezierStats", 0),
                     primitiveGetClipRect: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetClipRect", 0),
@@ -2016,24 +2016,24 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
                     primitiveGetFailureReason: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetFailureReason", 0),
                     primitiveGetOffset: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetOffset", 0),
                     primitiveGetTimes: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetTimes", 0),
-                    primitiveInitializeBuffer: this.primitiveInitializeBuffer.bind(this),
+                    primitiveInitializeBuffer: this.b2d_primitiveInitializeBuffer.bind(this),
                     primitiveInitializeProcessing: this.fakePrimitive.bind(this, "B2DPlugin.primitiveInitializeProcessing", 0),
                     primitiveMergeFillFrom: this.fakePrimitive.bind(this, "B2DPlugin.primitiveMergeFillFrom", 0),
                     primitiveNeedsFlush: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNeedsFlush", false),
-                    primitiveNeedsFlushPut: this.primitiveNeedsFlushPut.bind(this),
+                    primitiveNeedsFlushPut: this.b2d_primitiveNeedsFlushPut.bind(this),
                     primitiveNextActiveEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNextActiveEdgeEntry", 0),
                     primitiveNextFillEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNextFillEntry", 0),
                     primitiveNextGlobalEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNextGlobalEdgeEntry", 0),
                     primitiveRegisterExternalEdge: this.fakePrimitive.bind(this, "B2DPlugin.primitiveRegisterExternalEdge", 0),
                     primitiveRegisterExternalFill: this.fakePrimitive.bind(this, "B2DPlugin.primitiveRegisterExternalFill", 0),
-                    primitiveRenderImage: this.primitiveRenderImage.bind(this),
-                    primitiveRenderScanline: this.primitiveRenderImage.bind(this), // only image.
+                    primitiveRenderImage: this.b2d_primitiveRenderImage.bind(this),
+                    primitiveRenderScanline: this.b2d_primitiveRenderImage.bind(this), // only image.
                     primitiveSetAALevel: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetAALevel", 0),
-                    primitiveSetBitBltPlugin: this.primitiveSetBitBltPlugin.bind(this),
-                    primitiveSetClipRect: this.primitiveSetClipRect.bind(this),
-                    primitiveSetColorTransform: this.primitiveSetColorTransform.bind(this),
+                    primitiveSetBitBltPlugin: this.b2d_primitiveSetBitBltPlugin.bind(this),
+                    primitiveSetClipRect: this.b2d_primitiveSetClipRect.bind(this),
+                    primitiveSetColorTransform: this.b2d_primitiveSetColorTransform.bind(this),
                     primitiveSetDepth: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetDepth", 0),
-                    primitiveSetEdgeTransform: this.primitiveSetEdgeTransform.bind(this),
+                    primitiveSetEdgeTransform: this.b2d_primitiveSetEdgeTransform.bind(this),
                     primitiveSetOffset: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetOffset", 0),
             },
             FloatArrayPlugin: {
@@ -3586,11 +3586,11 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     },
 },
 'B2DPlugin', {
-    primitiveSetColorTransform: function(argCount) {
+    b2d_primitiveSetColorTransform: function(argCount) {
         var trans = this.stackNonInteger(0);
         if (this.success) {
             if (!trans.isNil) {
-                var store = this.ensureB2DStore()
+                var store = this.b2d_ensureB2DStore()
                 //this.storeAndFixTransform(store, trans)
             }
             this.vm.popNandPush(argCount, this.makeStObject(0));
@@ -3600,14 +3600,15 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         }
     },
 
-    primitiveSetEdgeTransform: function(argCount) {
+    b2d_primitiveSetEdgeTransform: function(argCount) {
         var trans = this.stackNonInteger(0);
         if (!this.success) return false;
-        var store = this.ensureB2DStore();
-        this.storeAndFixTransform(store, trans);
+        var store = this.b2d_ensureB2DStore();
+        this.b2d_storeAndFixTransform(store, trans);
         this.vm.popNandPush(argCount, 0);
         return true;
     },
+    b2d_storeAndFixTransform: function(store, trans) {
         if (trans.isNil) {
             store.transform = null; 
             return;
@@ -3620,15 +3621,15 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
            debugger;
         }
     },
-    currentTransform: function() {
-        return this.ensureB2DStore().transform
+    b2d_currentTransform: function() {
+        return this.b2d_ensureB2DStore().transform
     },
 
-    primitiveSetClipRect: function(argCount) {
+    b2d_primitiveSetClipRect: function(argCount) {
         var rect = this.stackNonInteger(0);
         var _engine = this.stackNonInteger(1);
         if (this.success) {
-            var store = this.ensureB2DStore();
+            var store = this.b2d_ensureB2DStore();
             store.clipMin = [rect.getPointer(0).getPointer(0), rect.getPointer(0).getPointer(1)];
             store.clipMax = [rect.getPointer(1).getPointer(0), rect.getPointer(1).getPointer(1)];
             this.vm.popNandPush(argCount, this.makeStObject(0));
@@ -3637,8 +3638,8 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             return false;
         }
     },
-    addGeometry: function(geometryObject) {
-        var store = this.ensureB2DStore();
+    b2d_addGeometry: function(geometryObject) {
+        var store = this.b2d_ensureB2DStore();
         geometryObject['transform'] = store.transform;
         geometryObject['clipMin'] = store.clipMin;
         geometryObject['clipMax'] = store.clipMax;
@@ -3649,7 +3650,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         }
     },
 
-    primitiveSetBitBltPlugin: function(argCount) {
+    b2d_primitiveSetBitBltPlugin: function(argCount) {
         var pluginName = this.stackNonInteger(0)
         if (this.success && pluginName.bytesAsString() == 'BitBltPlugin') {
             this.vm.popNandPush(argCount+1, this.makeStObject(0));
@@ -3658,22 +3659,22 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             return false;
         }
     },
-    oval_paintTo: function(store, display) {
+    b2d_oval_paintTo: function(store, display) {
         var success = true;
         return success;
     },
 
-    rect_paintTo: function(store, display) {
+    b2d_rect_paintTo: function(store, display) {
         var success = true;
         return success;
     },
 
-    poly_paintTo: function(store, display) {
+    b2d_poly_paintTo: function(store, display) {
         var success = true;
         return success;
     },
 
-    bezier_paintTo: function(store, display) {
+    b2d_bezier_paintTo: function(store, display) {
         var success = true;
         display.ctx.beginPath();
         for (var i = 0; i < this.points.length; i += 3) {
@@ -3696,7 +3697,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         return success;
     },
 
-    renderImage: function(store) {
+    b2d_renderImage: function(store) {
         var success = true;
         this.display.ctx.save();
         for (var i = 0; success && i < store.geometry.length; i += 1) {
@@ -3734,38 +3735,38 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         return success;
     },
 
-    primitiveRenderImage: function(argCount) {
-        var store = this.ensureB2DStore()
+    b2d_primitiveRenderImage: function(argCount) {
+        var store = this.b2d_ensureB2DStore()
         var success = true;
         if (store.geometry.length > 0) {
-            success = this.renderImage(store);
-            this.flushB2DStore();
+            success = this.b2d_renderImage(store);
+            this.b2d_flushB2DStore();
         }
         this.vm.popNandPush(argCount+1, this.makeStObject(0));
         return success;
     },
 
 
-    primitiveFinishedProcessing: function(argCount) {
-        if (this.ensureB2DStore().geometry.length == 0) {
+    b2d_primitiveFinishedProcessing: function(argCount) {
+        if (this.b2d_ensureB2DStore().geometry.length == 0) {
             this.vm.popNandPush(argCount+1, this.makeStObject(true));
         } else {
             this.vm.popNandPush(argCount+1, this.makeStObject(false));
         }
         return true;
     },
-    primitiveNeedsFlushPut: function(argCount) {
+    b2d_primitiveNeedsFlushPut: function(argCount) {
         var needsFlush = !!this.stackNonInteger(0).isTrue
         if (!this.success) return false;
         
-        var store = this.ensureB2DStore()
+        var store = this.b2d_ensureB2DStore()
         var neededFlush = store.needsFlush
         store.needsFlush = needsFlush
         this.vm.popNandPush(argCount+1, this.makeStObject(0));
         
         if (needsFlush && !neededFlush) {
             store.inChunk = false
-            this.processGeometryChunk()
+            this.b2d_processGeometryChunk()
         } else if (neededFlush && !needsFlush) {
             if ((store.geometry.length > 0) && (store.chunkGeometry.length == 0)) {
                 store.chunkGeometry.push(store.geometry.pop())
@@ -3776,8 +3777,8 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         return true;
     },
 
-    processGeometryChunk: function() {
-        var store = this.ensureB2DStore();
+    b2d_processGeometryChunk: function() {
+        var store = this.b2d_ensureB2DStore();
         if (store.chunkGeometry.length == 0) return;
         if (store.chunkGeometry.length == 1) {
             store.geometry.push(store.chunkGeometry.pop())
@@ -3787,12 +3788,12 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         store.chunkGeometry = []
     },
 
-    primitiveInitializeBuffer: function(argCount) {
-        this.ensureB2DStore();
+    b2d_primitiveInitializeBuffer: function(argCount) {
+        this.b2d_ensureB2DStore();
         this.vm.popNandPush(argCount+1, this.makeStObject(0));
         return true;
     },
-    flushB2DStore: function() {
+    b2d_flushB2DStore: function() {
         this.vm.__B2DStore = {
             "clipMin": [0,0],
             "clipMax": [0,0],
@@ -3805,13 +3806,13 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         };
     },
 
-    ensureB2DStore: function() {
+    b2d_ensureB2DStore: function() {
         if (!this.vm.hasOwnProperty('__B2DStore')) {
-            this.flushB2DStore();
+            this.b2d_flushB2DStore();
         }
         return this.vm.__B2DStore;
     },
-    primitiveAddOval: function(argCount) {
+    b2d_primitiveAddOval: function(argCount) {
         var borderIndex = this.stackPos32BitInt(0);
         var borderWidth = this.stackInteger(1);
 	    var fillIndex   = this.stackPos32BitInt(2);
@@ -3823,12 +3824,12 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             this.vm.popNandPush(argCount+1, this.makeStObject(0));
             return true;
         }
-        this.addGeometry({paintTo: this.oval_paintTo, start: start, end: end})
+        this.b2d_addGeometry({paintTo: this.b2d_oval_paintTo, start: start, end: end})
         this.vm.popNandPush(argCount+1, this.makeStObject(0));
         return true;
     },
 
-    primitiveAddBezierShape: function(argCount) {
+    b2d_primitiveAddBezierShape: function(argCount) {
         var lineFill  = this.stackPos32BitInt(0);
         var lineWidth = this.stackInteger(1);
 	    var fillIndex = this.stackPos32BitInt(2);
@@ -3857,12 +3858,12 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         }
         
         //debugger
-        this.addGeometry({paintTo: this.bezier_paintTo, points: geo_points})
+        this.b2d_addGeometry({paintTo: this.b2d_bezier_paintTo, points: geo_points})
         this.vm.popNandPush(argCount, this.makeStObject(0));
         return true;
     },
 
-    primitiveAddPolygon: function(argCount) {
+    b2d_primitiveAddPolygon: function(argCount) {
         var lineFill  = this.stackPos32BitInt(0);
         var lineWidth = this.stackInteger(1);
 	    var fillIndex = this.stackPos32BitInt(2);
@@ -3875,12 +3876,12 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             return true;
         }
         debugger
-        this.addGeometry({ paintTo: this.poly_paintTo, points: points })
+        this.b2d_addGeometry({ paintTo: this.b2d_poly_paintTo, points: points })
         this.vm.popNandPush(argCount+1, this.makeStObject(0));
         return true;
     },
 
-    primitiveAddRect: function(argCount) {
+    b2d_primitiveAddRect: function(argCount) {
         var borderIndex = this.stackPos32BitInt(0);
         var borderWidth = this.stackInteger(1);
 	    var fillIndex   = this.stackPos32BitInt(2);
@@ -3891,7 +3892,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             this.vm.popNandPush(argCount, this.makeStObject(0));
             return true;
         }
-        this.addGeometry({ paintTo: this.rect_paintTo, start: startPoint, end: endPoint });
+        this.b2d_addGeometry({ paintTo: this.b2d_rect_paintTo, start: startPoint, end: endPoint });
         this.vm.popNandPush(argCount+1, this.makeStObject(0));
         return true;
     },

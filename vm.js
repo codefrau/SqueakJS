@@ -2270,7 +2270,10 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         }
         if (module) {
             var primitive = module[functionName];
-            if (primitive) return primitive(argCount);
+            if (typeof primitive == 'string')
+                primitive = this[primitive].bind(this); // allow late binding
+            if (primitive)
+                return primitive(argCount);
         }
         this.missingPrimitive(moduleName + '.' + functionName);
         return false;
@@ -2304,8 +2307,9 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     loadModule: function(moduleName) {
         var module = Squeak.externalModules[moduleName] || this.builtinModules[moduleName];
         if (!module) return null;
-        if (module.initializeModule)
-            module.initializeModule(this);
+        var initFunc = module.initializeModule;
+        if (typeof initFunc == 'string') initFunc = this[initFunc].bind(this); // allow late binding
+        if (initFunc) initFunc(this);
         return module;
     },
 },

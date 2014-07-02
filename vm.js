@@ -1996,50 +1996,50 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
                     primitiveWarpBits: this.primitiveWarpBits.bind(this),
             },
             B2DPlugin: {
-                    initializeModule: this.b2d_initializeModule.bind(this),
-                    // curry the primitive name and return value
-                    primitiveAddActiveEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddActiveEdgeEntry", 0),
-                    primitiveAddBezier: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddBezier", 0),
-                    primitiveAddBezierShape: this.b2d_primitiveAddBezierShape.bind(this),
-                    primitiveAddBitmapFill: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddBitmapFill", 0),
-                    primitiveAddCompressedShape: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddCompressedShape", 0),
-                    primitiveAddGradientFill: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddGradientFill", 0),
-                    primitiveAddLine: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddLine", 0),
-                    primitiveAddOval: this.b2d_primitiveAddOval.bind(this),
-                    primitiveAddPolygon: this.b2d_primitiveAddPolygon.bind(this),
-                    primitiveAddRect: this.b2d_primitiveAddRect.bind(this),
-                    primitiveChangedActiveEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveChangedActiveEdgeEntry", 0),
-                    primitiveCopyBuffer: this.fakePrimitive.bind(this, "B2DPlugin.primitiveCopyBuffer", 0),
-                    primitiveDisplaySpanBuffer: this.fakePrimitive.bind(this, "B2DPlugin.primitiveDisplaySpanBuffer", 0),
-                    primitiveDoProfileStats: this.fakePrimitive.bind(this, "B2DPlugin.primitiveDoProfileStats", 0),
-                    primitiveFinishedProcessing: this.b2d_primitiveFinishedProcessing.bind(this),
-                    primitiveGetAALevel: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetAALevel", 0),
-                    primitiveGetBezierStats: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetBezierStats", 0),
-                    primitiveGetClipRect: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetClipRect", 0),
-                    primitiveGetCounts: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetCounts", 0),
-                    primitiveGetDepth: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetDepth", 32),
-                    primitiveGetFailureReason: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetFailureReason", 0),
-                    primitiveGetOffset: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetOffset", 0),
-                    primitiveGetTimes: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetTimes", 0),
-                    primitiveInitializeBuffer: this.b2d_primitiveInitializeBuffer.bind(this),
-                    primitiveInitializeProcessing: this.fakePrimitive.bind(this, "B2DPlugin.primitiveInitializeProcessing", 0),
-                    primitiveMergeFillFrom: this.fakePrimitive.bind(this, "B2DPlugin.primitiveMergeFillFrom", 0),
-                    primitiveNeedsFlush: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNeedsFlush", false),
-                    primitiveNeedsFlushPut: this.b2d_primitiveNeedsFlushPut.bind(this),
-                    primitiveNextActiveEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNextActiveEdgeEntry", 0),
-                    primitiveNextFillEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNextFillEntry", 0),
-                    primitiveNextGlobalEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNextGlobalEdgeEntry", 0),
-                    primitiveRegisterExternalEdge: this.fakePrimitive.bind(this, "B2DPlugin.primitiveRegisterExternalEdge", 0),
-                    primitiveRegisterExternalFill: this.fakePrimitive.bind(this, "B2DPlugin.primitiveRegisterExternalFill", 0),
-                    primitiveRenderImage: this.b2d_primitiveRenderImage.bind(this),
-                    primitiveRenderScanline: this.b2d_primitiveRenderImage.bind(this), // only image.
-                    primitiveSetAALevel: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetAALevel", 0),
-                    primitiveSetBitBltPlugin: this.b2d_primitiveSetBitBltPlugin.bind(this),
-                    primitiveSetClipRect: this.b2d_primitiveSetClipRect.bind(this),
-                    primitiveSetColorTransform: this.b2d_primitiveSetColorTransform.bind(this),
-                    primitiveSetDepth: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetDepth", 0),
-                    primitiveSetEdgeTransform: this.b2d_primitiveSetEdgeTransform.bind(this),
-                    primitiveSetOffset: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetOffset", 0),
+                    // late-bound for nicer debugging
+                    initializeModule: "b2d_initializeModule",
+                    primitiveAddActiveEdgeEntry: "b2d_primitiveAddActiveEdgeEntry",
+                    primitiveAddBezier: "b2d_primitiveAddBezier",
+                    primitiveAddBezierShape: "b2d_primitiveAddBezierShape",
+                    primitiveAddBitmapFill: "b2d_primitiveAddBitmapFill",
+                    primitiveAddCompressedShape: "b2d_primitiveAddCompressedShape",
+                    primitiveAddGradientFill: "b2d_primitiveAddGradientFill",
+                    primitiveAddLine: "b2d_primitiveAddLine",
+                    primitiveAddOval: "b2d_primitiveAddOval",
+                    primitiveAddPolygon: "b2d_primitiveAddPolygon",
+                    primitiveAddRect: "b2d_primitiveAddRect",
+                    primitiveChangedActiveEdgeEntry: "b2d_primitiveChangedActiveEdgeEntry",
+                    primitiveCopyBuffer: "b2d_primitiveCopyBuffer",
+                    primitiveDisplaySpanBuffer: "b2d_primitiveDisplaySpanBuffer",
+                    primitiveDoProfileStats: "b2d_primitiveDoProfileStats",
+                    primitiveFinishedProcessing: "b2d_primitiveFinishedProcessing",
+                    primitiveGetAALevel: "b2d_primitiveGetAALevel",
+                    primitiveGetBezierStats: "b2d_primitiveGetBezierStats",
+                    primitiveGetClipRect: "b2d_primitiveGetClipRect",
+                    primitiveGetCounts: "b2d_primitiveGetCounts",
+                    primitiveGetDepth: "b2d_primitiveGetDepth",
+                    primitiveGetFailureReason: "b2d_primitiveGetFailureReason",
+                    primitiveGetOffset: "b2d_primitiveGetOffset",
+                    primitiveGetTimes: "b2d_primitiveGetTimes",
+                    primitiveInitializeBuffer: "b2d_primitiveInitializeBuffer",
+                    primitiveInitializeProcessing: "b2d_primitiveInitializeProcessing",
+                    primitiveMergeFillFrom: "b2d_primitiveMergeFillFrom",
+                    primitiveNeedsFlush: "b2d_primitiveNeedsFlush",
+                    primitiveNeedsFlushPut: "b2d_primitiveNeedsFlushPut",
+                    primitiveNextActiveEdgeEntry: "b2d_primitiveNextActiveEdgeEntry",
+                    primitiveNextFillEntry: "b2d_primitiveNextFillEntry",
+                    primitiveNextGlobalEdgeEntry: "b2d_primitiveNextGlobalEdgeEntry",
+                    primitiveRegisterExternalEdge: "b2d_primitiveRegisterExternalEdge",
+                    primitiveRegisterExternalFill: "b2d_primitiveRegisterExternalFill",
+                    primitiveRenderImage: "b2d_primitiveRenderImage",
+                    primitiveRenderScanline: "b2d_primitiveRenderScanline",
+                    primitiveSetAALevel: "b2d_primitiveSetAALevel",
+                    primitiveSetBitBltPlugin: "b2d_primitiveSetBitBltPlugin",
+                    primitiveSetClipRect: "b2d_primitiveSetClipRect",
+                    primitiveSetColorTransform: "b2d_primitiveSetColorTransform",
+                    primitiveSetDepth: "b2d_primitiveSetDepth",
+                    primitiveSetEdgeTransform: "b2d_primitiveSetEdgeTransform",
+                    primitiveSetOffset: "b2d_primitiveSetOffset",
             },
             FloatArrayPlugin: {
                     primitiveAt: this.primitiveFloatArrayAtAndPut.bind(this),
@@ -3598,11 +3598,21 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     b2d_initializeModule: function() {
         this.b2d_reset();
     },
-    b2d_primitiveSetColorTransform: function(argCount) {
+    b2d_primitiveSetDepth: function(argCount) {
+        var depth = this.stackInteger(0);
+        if (!this.success) return false;
+        this.b2d_log("b2d_primitiveSetDepth " + depth);
+        this.b2d_state.currentZ = depth;
         this.vm.popN(argCount);
         return true;
     },
+    b2d_primitiveGetDepth: function(argCount) {
+        this.b2d_log("b2d_primitiveGetDepth => " + this.b2d_state.currentZ);
+        this.vm.popNandPush(argCount + 1, this.b2d_state.currentZ);
+        return true;
+    },
     b2d_primitiveSetEdgeTransform: function(argCount) {
+        this.b2d_log("b2d_primitiveSetEdgeTransform");
         var trans = this.stackNonInteger(0);
         if (!this.success) return false;
         this.b2d_state.transform = trans.isNil ? null : trans.wordsAsFloat32Array();
@@ -3610,6 +3620,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         return true;
     },
     b2d_primitiveSetClipRect: function(argCount) {
+        this.b2d_log("b2d_primitiveSetClipRect");
         var rect = this.stackNonInteger(0);
         var _engine = this.stackNonInteger(1);
         if (this.success) {
@@ -3633,10 +3644,6 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             store.geometry.push(geometryObject);
         }
     },
-    b2d_primitiveSetBitBltPlugin: function(argCount) {
-        this.vm.popN(argCount);
-        return true;
-    },
     b2d_oval_paintTo: function(store, display) {
         console.warn("B2D: oval not implemented yet");
     },
@@ -3654,13 +3661,17 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         }
         display.ctx.fill();
     },
-    b2d_renderImage: function(store) {
+    b2d_render: function() {
+        this.b2d_log("b2d_render");
+        // do the actual rendering
+        var shapes = this.b2d_state.geometry;
+        if (shapes.length == 0) return;
         var ctx = this.display.ctx;
         ctx.save();
         ctx.lineWidth = 2;
-        for (var i = 0; i < store.geometry.length; i++) {
-            if (store.geometry[i].transform) {
-                var t = store.geometry[i].transform;
+        while (shapes.length) {
+            var shape = shapes.shift();
+            if (shape.transform) {
                 /* Transform is a matrix:
                         ⎛a₁₁ a₁₂ a₁₃⎞
                         ⎝a₂₁ a₂₂ a₂₃⎠
@@ -3669,39 +3680,41 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
                     but canvas expects
                         [a₁₁, a₂₁, a₁₂, a₂₂, a₁₃, a₂₃]
                 */
-                ctx.setTransform(t[0] * 2, t[3] * 2, t[1] * 2, t[4] * 2, t[2] + 10, t[5] + 600);
+                var t = shape.transform;
+                ctx.setTransform(t[0], t[3], t[1], t[4], t[2] + 10, t[5] + 600);
             }
-            store.geometry[i].paintTo(store, this.display);
-            this.vm.breakOutOfInterpreter = true;
+            shape.paintTo(this.b2d_state, this.display);
+            //this.vm.breakOutOfInterpreter = 'break';
         }
         ctx.restore();
+        return 0; // answer stop reason
     },
     b2d_primitiveRenderImage: function(argCount) {
-        var store = this.b2d_state
-        if (store.geometry.length > 0) {
-            this.b2d_renderImage(store);
-            this.b2d_reset();
-        }
-        this.vm.popNandPush(argCount+1, 0);
+        this.b2d_log("b2d_primitiveRenderImage");
+        var stopReason = this.b2d_render();
+        this.vm.popNandPush(argCount + 1, stopReason);
+        return true;
+    },
+    b2d_primitiveRenderScanline: function(argCount) {
+        this.b2d_log("b2d_primitiveRenderScanline");
+        var stopReason = this.b2d_render();
+        this.vm.popNandPush(argCount + 1, stopReason);
         return true;
     },
     b2d_primitiveFinishedProcessing: function(argCount) {
-        if (this.b2d_state.geometry.length == 0) {
-            this.vm.popNandPush(argCount+1, this.makeStObject(true));
-        } else {
-            this.vm.popNandPush(argCount+1, this.makeStObject(false));
-        }
+        var finished = this.b2d_state.geometry.length == 0;
+        this.b2d_log("b2d_primitiveFinishedProcessing => " + finished);
+        this.vm.popNandPush(argCount+1, this.makeStObject(finished));
         return true;
     },
     b2d_primitiveNeedsFlushPut: function(argCount) {
-        var needsFlush = !!this.stackNonInteger(0).isTrue
+        var needsFlush = !!this.stackNonInteger(0).isTrue;
+        this.b2d_log("b2d_primitiveNeedsFlushPut: " + needsFlush);
         if (!this.success) return false;
-        
         var store = this.b2d_state
         var neededFlush = store.needsFlush
         store.needsFlush = needsFlush
         this.vm.popNandPush(argCount+1, 0);
-        
         if (needsFlush && !neededFlush) {
             store.inChunk = false
             this.b2d_processGeometryChunk()
@@ -3711,7 +3724,6 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             }
             store.inChunk = true
         }
-        
         return true;
     },
     b2d_processGeometryChunk: function() {
@@ -3725,11 +3737,13 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         store.chunkGeometry = []
     },
     b2d_primitiveInitializeBuffer: function(argCount) {
-        this.b2d_state;
-        this.vm.popNandPush(argCount+1, 0);
+        this.b2d_log("b2d_primitiveInitializeBuffer");
+        this.b2d_reset();
+        this.vm.popN(argCount);
         return true;
     },
     b2d_reset: function() {
+        this.b2d_log("b2d_reset");
         this.b2d_state= {
             clipMin: [0,0],
             clipMax: [0,0],
@@ -3738,10 +3752,11 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             chunkGeometry: [],
             inChunk: false,
             transform: null,
-            colorTransform: [1.0,0.0, 1.0,0.0, 1.0,0.0, 1.0,0.0],
+            currentZ: 0,
         };
     },
     b2d_primitiveAddOval: function(argCount) {
+        this.b2d_log("b2d_primitiveAddOval");
         var borderIndex = this.stackPos32BitInt(0);
         var borderWidth = this.stackInteger(1);
 	    var fillIndex   = this.stackPos32BitInt(2);
@@ -3757,8 +3772,8 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         this.vm.popNandPush(argCount+1, 0);
         return true;
     },
-
     b2d_primitiveAddBezierShape: function(argCount) {
+        this.b2d_log("b2d_primitiveAddBezierShape");
         var lineFill  = this.stackPos32BitInt(0);
         var lineWidth = this.stackInteger(1);
 	    var fillIndex = this.stackPos32BitInt(2);
@@ -3779,8 +3794,8 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         this.vm.popNandPush(argCount, 0);
         return true;
     },
-
     b2d_primitiveAddPolygon: function(argCount) {
+        this.b2d_log("b2d_primitiveAddPolygon");
         var lineFill  = this.stackPos32BitInt(0);
         var lineWidth = this.stackInteger(1);
 	    var fillIndex = this.stackPos32BitInt(2);
@@ -3792,13 +3807,12 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             this.vm.popNandPush(argCount+1, 0);
             return true;
         }
-        debugger
         this.b2d_addGeometry({ paintTo: this.b2d_poly_paintTo, points: points })
         this.vm.popNandPush(argCount+1, 0);
         return true;
     },
-
     b2d_primitiveAddRect: function(argCount) {
+        this.b2d_log("b2d_primitiveAddRect");
         var borderIndex = this.stackPos32BitInt(0);
         var borderWidth = this.stackInteger(1);
 	    var fillIndex   = this.stackPos32BitInt(2);
@@ -3813,7 +3827,70 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         this.vm.popNandPush(argCount+1, 0);
         return true;
     },
+    b2d_primitiveAddBezier: function(argCount) {
+        this.b2d_log("b2d_primitiveAddBezier");
+        this.vm.popN(argCount);
+        return true;
+    },
+    b2d_primitiveAddBitmapFill: function(argCount) {
+        this.b2d_log("b2d_primitiveAddBitmapFill");
+        var fillId = 0;
+        this.vm.popNandPush(argCount+1, fillId);
+        return true;
+    },
+    b2d_primitiveAddCompressedShape: function(argCount) {
+        this.b2d_log("b2d_primitiveAddCompressedShape");
+        this.vm.popN(argCount);
+        return true;
+    },
+    b2d_primitiveAddGradientFill: function(argCount) {
+        this.b2d_log("b2d_primitiveAddGradientFill");
+        var fillId = 0;
+        this.vm.popNandPush(argCount+1, fillId);
+        return true;
+    },
+    b2d_primitiveAddLine: function(argCount) {
+        this.b2d_log("b2d_primitiveAddLine");
+        this.vm.popN(argCount);
+        return true;
+    },
+    b2d_primitiveNeedsFlush: function(argCount) {
+        this.b2d_log("b2d_primitiveNeedsFlush => " + this.b2d_state.needsFlush);
+        this.vm.popNandPush(argCount, this.makeStObject(this.b2d_state.needsFlush));
+        return true;
+    },
+    b2d_primitiveSetOffset: function(argCount) {
+        this.b2d_log("b2d_primitiveSetOffset");
+        this.vm.popN(argCount);
+        return true;
+    },
+    b2d_primitiveGetFailureReason: function(argCount) { this.vm.popN(argCount+1, 0); return true; },
+    b2d_primitiveSetColorTransform: function(argCount) {this.vm.popN(argCount); return true;},
+    b2d_primitiveSetAALevel: function(argCount) { this.vm.popN(argCount); return true; },
+    b2d_primitiveGetAALevel: function(argCount) { return false; },
+    b2d_primitiveGetClipRect: function(argCount) { return false; },
+    b2d_primitiveGetOffset: function(argCount) { return false; },
+    b2d_primitiveSetBitBltPlugin: function(argCount) { this.vm.popN(argCount); return true; },
+    b2d_primitiveDoProfileStats: function(argCount) { this.vm.popN(argCount); return true; },
+    b2d_primitiveGetBezierStats: function(argCount) { this.vm.popN(argCount); return true; },
+    b2d_primitiveGetCounts: function(argCount) { this.vm.popN(argCount); return true; },
+    b2d_primitiveGetTimes: function(argCount) { this.vm.popN(argCount); return true; },
+    b2d_primitiveInitializeProcessing: function(argCount) { return false; },
+    b2d_primitiveAddActiveEdgeEntry: function(argCount) { return false; },
+    b2d_primitiveChangedActiveEdgeEntry: function(argCount) { return false; },
+    b2d_primitiveNextActiveEdgeEntry: function(argCount) { return false; },
+    b2d_primitiveNextGlobalEdgeEntry: function(argCount) { return false; },
+    b2d_primitiveDisplaySpanBuffer: function(argCount) { return false; },
+    b2d_primitiveCopyBuffer: function(argCount) { return false; },
+    b2d_primitiveNextFillEntry: function(argCount) { return false; },
+    b2d_primitiveMergeFillFrom: function(argCount) { return false; },
+    b2d_primitiveRegisterExternalEdge: function(argCount) { return false; },
+    b2d_primitiveRegisterExternalFill: function(argCount) { return false; },
+    b2d_log: function(msg) {
+        //console.log(msg);
+    },
 });
+
 Object.subclass('users.bert.SqueakJS.vm.BitBlt',
 'initialization', {
     initialize: function(vm) {

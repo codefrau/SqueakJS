@@ -796,6 +796,10 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         return this.float32Array
             || (this.words && (this.float32Array = new Float32Array(this.words.buffer)));
     },
+    wordsAsInt16Array: function() {
+        return this.int16Array
+            || (this.words && (this.int16Array = new Int16Array(this.words.buffer)));
+    },
     setAddr: function(addr) {
         // Move this object to addr by setting its oop. Answer address after this object.
         // Used to assign an oop for the first time when tenuring this object during GC.
@@ -2687,7 +2691,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     primitiveShortAtAndPut:  function(argCount) {
         var rcvr = this.stackNonInteger(argCount),
             index = this.stackInteger(argCount-1) - 1, // make zero-based
-            array = rcvr.int16Array || (rcvr.words && (rcvr.int16Array = new Int16Array(rcvr.words.buffer)));
+            array = rcvr.wordsAsInt16Array();
         if (!this.success || !array || index < 0 || index >= array.length)
             return false;
         var value;
@@ -3675,26 +3679,12 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     },
 
     b2d_bezier_paintTo: function(store, display) {
-        var success = true;
         display.ctx.beginPath();
-        for (var i = 0; i < this.points.length; i += 3) {
-            var start = this.points[i];
-            var via = this.points[i + 1];
-            var end = this.points[i + 2];
-            
-            display.ctx.moveTo(start.x, start.y);
-            if ((start.x == via.x) && (start.y == via.y)) {
-                display.ctx.lineTo(end.x, end.y);
-            } else {
-                display.ctx.quadraticCurveTo(via.x, via.y, end.x, end.y)
-            }
-            
+        display.ctx.moveTo(this.points[0], this.points[1]);
+        for (var i = 0; i < this.points.length; i += 6) {
+            display.ctx.quadraticCurveTo(this.points[i+2], this.points[i+3], this.points[i+4], this.points[i+5]);
         }
-        display.ctx.lineWidth = 1;
-        // line color
-        display.ctx.strokeStyle = 'black';
-        display.ctx.stroke();
-        return success;
+        display.ctx.fill();
     },
 
     b2d_renderImage: function(store) {
@@ -3837,29 +3827,17 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
 	    var points    = this.stackNonInteger(4); // ShortPointArray?
 	    if (!this.success) return false;
         if ((lineFill == 0) || ((lineWidth == 0) && (fillIndex == 0))) {
-            this.vm.popNandPush(argCount, this.makeStObject(0));
+            this.vm.popNandPush(argCount, 0);
             return true;
         }
-        // for now
         if (!points.words) return false;
-        var length = points.words.length
-        if ((length != nSegments * 3) && (length != nSegments * 6)) return false;
+        var length = points.words.length;
+        if (length != nSegments * 3 && length != nSegments * 6) return false;
         
-        var geo_points = []
-        if (nSegments * 3 == length) { //short points
-            for (var i = 0; i < length; i += 1) {
-                var num = points.words[i];
-                geo_points.push({'x': (num & 0xFFFF0000)>>16, 'y': num & 0x0000FFFF})
-            }
-        } else {
-            for (var i = 0; i < length; i += 2) {
-                geo_points.push({'x': points.words[i], 'y': points.words[i+1]})
-            }
-        }
-        
-        //debugger
+        var geo_points = length == nSegments * 3 ? points.wordsAsInt16Array() : points.words;
+
         this.b2d_addGeometry({paintTo: this.b2d_bezier_paintTo, points: geo_points})
-        this.vm.popNandPush(argCount, this.makeStObject(0));
+        this.vm.popNandPush(argCount, 0);
         return true;
     },
 

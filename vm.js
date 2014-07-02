@@ -792,6 +792,10 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         //2nd word is data.getUint32(4, false);
         return data;
     },
+    ensureFloat32Array: function() {
+        return this.float32Array
+            || (this.words && (this.float32Array = new Float32Array(this.words.buffer)));
+    },
     setAddr: function(addr) {
         // Move this object to addr by setting its oop. Answer address after this object.
         // Used to assign an oop for the first time when tenuring this object during GC.
@@ -3566,7 +3570,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     primitiveFloatArrayAtAndPut: function(argCount) {
         var rcvr = this.stackNonInteger(argCount),
             index = this.stackPos32BitInt(argCount-1) - 1,
-            array = rcvr.float32Array || (rcvr.words && (rcvr.float32Array = new Float32Array(rcvr.words.buffer)));
+            array = rcvr.ensureFloat32Array();
         if (!this.success || index < 0 || index >= array.length)
             return false;
         if (argCount < 2) {// at:
@@ -3604,45 +3608,16 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         this.vm.popNandPush(argCount, 0);
         return true;
     },
-    storeAndFixTransform: function(store, trans) {
-        /*
-            Transform is a Matrix:
-
-                ⎛a₁₁ a₁₂ a₁₃⎞
-                ⎝a₂₁ a₂₂ a₂₃⎠
-
-            Squeak Matrix2x3Transform stores this
-
-                [a₁₁, a₁₂, a₁₃, a₂₁, a₂₂, a₂₃]
-
-            but canvas expects
-
-                canvas.setTransform(a₁₁, a₂₁, a₁₂, a₂₂, a₁₃, a₂₃)
-
-            therefore we transform.
-        */
         if (trans.isNil) {
             store.transform = null; 
             return;
         }
-        if (trans.float32Array) {
+        if (trans.words) {
             if (trans.float32Array == store.transform) return;
-            store.transform = new Float32Array(6)
-            store.transform[0] = trans.float32Array[0]
-            store.transform[1] = trans.float32Array[3]
-            store.transform[2] = trans.float32Array[1]
-            store.transform[3] = trans.float32Array[4]
-            store.transform[4] = trans.float32Array[2]
-            store.transform[5] = trans.float32Array[5]
+            store.transform = trans.ensureFloat32Array();
         } else {
-            if (trans.words == store.transform) return;
-            store.transform = new Uint32Array(6)
-            store.transform[0] = trans.words[0]
-            store.transform[1] = trans.words[3]
-            store.transform[2] = trans.words[1]
-            store.transform[3] = trans.words[4]
-            store.transform[4] = trans.words[2]
-            store.transform[5] = trans.words[5]
+           console.warn("B2D: got non-word transform");
+           debugger;
         }
     },
     currentTransform: function() {
@@ -3726,9 +3701,25 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         this.display.ctx.save();
         for (var i = 0; success && i < store.geometry.length; i += 1) {
             if (store.geometry.transform != null) {
-                var t = store.geometry.transform
-                this.display.ctx.setTransform(t[0], t[1], t[2], 
-                                              t[3], t[4], t[5])
+                var t = store.geometry.transform;
+                /*
+                    Transform is a Matrix:
+        
+                        ⎛a₁₁ a₁₂ a₁₃⎞
+                        ⎝a₂₁ a₂₂ a₂₃⎠
+        
+                    Squeak Matrix2x3Transform stores this
+        
+                        [a₁₁, a₁₂, a₁₃, a₂₁, a₂₂, a₂₃]
+        
+                    but canvas expects
+        
+                        canvas.setTransform(a₁₁, a₂₁, a₁₂, a₂₂, a₁₃, a₂₃)
+        
+                    therefore we transform.
+                */
+                this.display.ctx.setTransform(t[0], t[3], t[1], 
+                                              t[4], t[2], t[5])
             }
             this.display.ctx.beginPath();
             this.display.ctx.rect(

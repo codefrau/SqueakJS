@@ -2690,7 +2690,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         while (stackp < newStackp)
             ctxt.pointers[this.vm.decodeSqueakSP(++stackp)] = this.vm.nilObj;
         ctxt.pointers[Squeak.Context_stackPointer] = newStackp;
-        this.vm.pop(argCount);
+        this.vm.popN(argCount);
         return true;
     },
     primitiveShortAtAndPut:  function(argCount) {
@@ -3382,7 +3382,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             handle = this.stackNonInteger(1);
         if (!this.success || !handle.file) return false;
         handle.filePos = pos;
-        this.vm.pop(argCount);
+        this.vm.popN(argCount);
         return true;
     },
     primitiveFileSize: function(argCount) {

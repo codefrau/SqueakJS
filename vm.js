@@ -1991,9 +1991,9 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
                     primitiveFileWrite: this.primitiveFileWrite.bind(this),
             },
             BitBltPlugin: {
-                    initializeModule: this.initializeModuleBitBlt.bind(this),
-                    primitiveCopyBits: this.primitiveCopyBits.bind(this),
-                    primitiveWarpBits: this.primitiveWarpBits.bind(this),
+                    initializeModule: "bitblt_initializeModule",
+                    primitiveCopyBits: "bitblt_primitiveCopyBits",
+                    primitiveWarpBits: "bitblt_primitiveWarpBits",
             },
             B2DPlugin: {
                     // late-bound for nicer debugging
@@ -3495,8 +3495,8 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     },
 },
 'BitBltPlugin', {
-    initializeModuleBitBlt: function(interpreterProxy) {
-        this.bitBltStats = {};
+    bitblt_initializeModule: function(interpreterProxy) {
+        this.bitblt_stats = {};
         this.indexedColors = [
             0xFFFFFFFF, 0xFF000001, 0xFFFFFFFF, 0xFF808080, 0xFFFF0000, 0xFF00FF00, 0xFF0000FF, 0xFF00FFFF,
             0xFFFFFF00, 0xFFFF00FF, 0xFF202020, 0xFF404040, 0xFF606060, 0xFF9F9F9F, 0xFFBFBFBF, 0xFFDFDFDF,
@@ -3531,7 +3531,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             0xFFFF6699, 0xFFFF9999, 0xFFFFCC99, 0xFFFFFF99, 0xFFFF00CC, 0xFFFF33CC, 0xFFFF66CC, 0xFFFF99CC, 
             0xFFFFCCCC, 0xFFFFFFCC, 0xFFFF00FF, 0xFFFF33FF, 0xFFFF66FF, 0xFFFF99FF, 0xFFFFCCFF, 0xFFFFFFFF];
     },
-	primitiveCopyBits: function(argCount) {
+	bitblt_primitiveCopyBits: function(argCount) {
         var bitbltObj = this.stackNonInteger(argCount),
             bitblt = new users.bert.SqueakJS.vm.BitBlt(this.vm);
         if (!bitblt.loadBitBlt(bitbltObj)) return false;
@@ -3549,7 +3549,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     	    start = timer.now(),
     	    mode = [bitblt.combinationRule, bitblt.source ? bitblt.source.depth : 0, bitblt.dest.depth].join("|");
         bitblt.copyBits();
-        this.bitBltStats[mode] = (this.bitBltStats[mode] || 0) + (timer.now() - start);
+        this.bitblt_stats[mode] = (this.bitblt_stats[mode] || 0) + (timer.now() - start);
 
         if (bitblt.combinationRule === 22 || bitblt.combinationRule === 32)
             this.vm.popNandPush(1, bitblt.bitCount);
@@ -3557,7 +3557,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             this.showOnDisplay(bitblt.dest, bitblt.affectedRect());
         return true;
 	},
-	primitiveWarpBits: function(argCount) {
+	bitblt_primitiveWarpBits: function(argCount) {
         var bitbltObj = this.stackNonInteger(argCount),
             smoothing = argCount == 2 ? Math.max(1, this.stackInteger(1)) : 1,
             sourceMap = argCount == 2 ? this.stackNonInteger(0).words : null;

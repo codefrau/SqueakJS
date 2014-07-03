@@ -3605,8 +3605,79 @@ Object.subclass('Squeak.Primitives',
 },
 'B2DPlugin', {
     b2d_initializeModule: function() {
-        this.b2d_reset();
         this.b2d_debug = false;
+        this.b2d_state = {
+            bitblt: new Squeak.BitBlt(),
+            bitbltObj: null,
+        };
+    },
+    b2d_reset: function(bitbltObj) {
+        if (this.b2d_debug) console.log("-- b2d_reset");
+        var state = this.b2d_state;
+        state.needsFlush = false;
+        state.hasFill = false;
+        state.hasStroke = false;
+        state.fills = [];
+        // Reuse drawing context if possible
+        if (state.bitbltObj != bitbltObj) {
+            state.bitbltObj = bitbltObj;
+            state.bitblt.loadBitBlt(bitbltObj);
+            this.b2d_setupCanvas();
+        }
+    },
+    b2d_setupCanvas: function() {
+        var state = this.b2d_state;
+        // create canvas and drawing context
+        if (!state.context) {
+            var canvas = document.getElementById("SqueakB2DCanvas");
+            if (!canvas) {
+                canvas = document.createElement("canvas");
+                canvas.id = "SqueakB2DCanvas";
+                if (this.b2d_debug) {
+                    canvas.setAttribute("style", "position:fixed;top:20px;left:950px;background:rgba(255,255,255,0.5)");
+                    document.body.appendChild(canvas);
+                }
+            }
+            state.context = canvas.getContext("2d");
+            if (!state.context) alert("B2D: cannot create context");
+        };
+        // set canvas size, which also clears it
+        var form = state.bitblt.dest,
+            canvas = state.context.canvas;
+        canvas.width = form.width;
+        canvas.height = form.height;
+    },
+    b2d_render: function() {
+        if (this.b2d_debug) console.log("-- b2d_render");
+        var state = this.b2d_state;
+        if (state.flushNeeded) {
+            // fill and stroke path
+            if (state.hasFill) {
+                state.context.closePath();
+                state.context.fill();
+                if (this.b2d_debug) console.log("==> filling");
+            }
+            if (state.hasStroke) {
+                state.context.stroke();
+                if (this.b2d_debug) console.log("==> stroking");
+            }
+            state.context.beginPath();
+            state.flushNeeded = false;
+            this.b2d_readPixels();
+        }
+        return 0; // answer stop reason
+    },
+    b2d_readPixels: function() {
+        var state = this.b2d_state,
+            form = state.bitblt.dest,
+            canvasBytes = state.context.getImageData(0, 0, form.width, form.height).data;
+        if (form.depth == 32) {
+            var canvasWords = new Uint32Array(canvasBytes.buffer);
+            form.bits.set(canvasWords);
+        } else {
+            console.warn("B2D: drawing to non-32 bit forms not supported yet");
+        }
+        if (this.b2d_debug) this.vm.breakOutOfInterpreter = 'break';
     },
     b2d_setClip: function(minx, miny, maxx, maxy) {
         
@@ -3620,7 +3691,7 @@ Object.subclass('Squeak.Primitives',
             but canvas expects
                 [a₁₁, a₂₁, a₁₂, a₂₂, a₁₃, a₂₃]
         */
-        this.b2d_state.ctx.setTransform(t[0], t[3], t[1], t[4], t[2], t[5]);
+        this.b2d_state.context.setTransform(t[0], t[3], t[1], t[4], t[2], t[5]);
         if (this.b2d_debug) console.log("==> transform: " + [t[0], t[3], t[1], t[4], t[2], t[5]].join(','));
     },
     b2d_setStyle: function(fillIndex, borderIndex, borderWidth) {
@@ -3630,13 +3701,13 @@ Object.subclass('Squeak.Primitives',
         state.hasFill = hasFill;
         state.hasStroke = hasStroke;
         if (hasFill) {
-            state.ctx.fillStyle = this.b2d_styleFrom(fillIndex);
-            if (this.b2d_debug) console.log("==> fill style: " + state.ctx.fillStyle);
+            state.context.fillStyle = this.b2d_styleFrom(fillIndex);
+            if (this.b2d_debug) console.log("==> fill style: " + state.context.fillStyle);
         }
         if (hasStroke) {
-            state.ctx.strokeStyle = this.b2d_styleFrom(borderIndex);
-            state.ctx.lineWidth = borderWidth;
-            if (this.b2d_debug) console.log("==> stroke style: " + state.ctx.strokeStyle + '@' + borderWidth);
+            state.context.strokeStyle = this.b2d_styleFrom(borderIndex);
+            state.context.lineWidth = borderWidth;
+            if (this.b2d_debug) console.log("==> stroke style: " + state.context.strokeStyle + '@' + borderWidth);
         }
         return hasFill || hasStroke;
     },
@@ -3668,34 +3739,15 @@ Object.subclass('Squeak.Primitives',
         this.vm.popN(argCount);
         return true;
     },
-    b2d_flush: function() {
-        if (this.b2d_debug) console.log("-- b2d_flush");
-        var state = this.b2d_state;
-        if (state.flushNeeded) {
-            if (state.hasFill) {
-                state.ctx.closePath();
-                state.ctx.fill();
-                if (this.b2d_debug) console.log("==> filling");
-            }
-            if (state.hasStroke) {
-                state.ctx.stroke();
-                if (this.b2d_debug) console.log("==> stroking");
-            }
-            state.ctx.beginPath();
-            state.flushNeeded = false;
-            if (this.b2d_debug) this.vm.breakOutOfInterpreter = 'break';
-        }
-        return 0; // answer stop reason
-    },
     b2d_primitiveRenderImage: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveRenderImage");
-        var stopReason = this.b2d_flush();
+        var stopReason = this.b2d_render();
         this.vm.popNandPush(argCount + 1, stopReason);
         return true;
     },
     b2d_primitiveRenderScanline: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveRenderScanline");
-        var stopReason = this.b2d_flush();
+        var stopReason = this.b2d_render();
         this.vm.popNandPush(argCount + 1, stopReason);
         return true;
     },
@@ -3715,19 +3767,11 @@ Object.subclass('Squeak.Primitives',
     },
     b2d_primitiveInitializeBuffer: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveInitializeBuffer");
-        this.b2d_reset();
+        var engine = this.stackNonInteger(argCount),
+            bitblt = engine.pointers[2]; // BEBitBltIndex
+        this.b2d_reset(bitblt);
         this.vm.popN(argCount);
         return true;
-    },
-    b2d_reset: function() {
-        if (this.b2d_debug) console.log("-- b2d_reset");
-        this.b2d_state= {
-            ctx: this.display.ctx,
-            needsFlush: false,
-            hasFill: false,
-            hasStroke: false,
-            fills: [],
-        };
     },
     b2d_primitiveAddOval: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveAddOval");
@@ -3753,7 +3797,7 @@ Object.subclass('Squeak.Primitives',
             var p = points.words;
             if (p.length == nSegments * 3) p = points.wordsAsInt16Array();  // ShortPointArray
             else if (p.length != nSegments * 6) return false;
-            var ctx = this.b2d_state.ctx;
+            var ctx = this.b2d_state.context;
             ctx.moveTo(p[0], p[1]);
             for (var i = 0; i < p.length; i += 6)
                 ctx.quadraticCurveTo(p[i+2], p[i+3], p[i+4], p[i+5]);
@@ -3788,7 +3832,7 @@ Object.subclass('Squeak.Primitives',
                 y = this.floatOrInt(origin.pointers[1]),
                 w = this.floatOrInt(corner.pointers[0]) - x,
                 h = this.floatOrInt(corner.pointers[1]) - y; 
-            this.b2d_state.ctx.rect(x, y, w, h);
+            this.b2d_state.context.rect(x, y, w, h);
             if (this.b2d_debug) console.log("==> rect " + [x, y, w, h].join(','));
             this.b2d_state.flushNeeded = true;
         }

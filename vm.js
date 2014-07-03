@@ -2408,6 +2408,11 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     },
 },
 'utils', {
+    floatOrInt: function(obj) {
+        if (obj.isFloat) return obj.float;
+        if (this.vm.isSmallInt(obj)) return obj;
+        return 0;
+    },
     checkFloat: function(maybeFloat) { // returns a float and sets success
         if (maybeFloat.isFloat)
             return maybeFloat.float;
@@ -3597,270 +3602,236 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
 'B2DPlugin', {
     b2d_initializeModule: function() {
         this.b2d_reset();
+        this.b2d_debug = false;
     },
-    b2d_primitiveSetDepth: function(argCount) {
-        var depth = this.stackInteger(0);
-        if (!this.success) return false;
-        this.b2d_log("b2d_primitiveSetDepth " + depth);
-        this.b2d_state.currentZ = depth;
-        this.vm.popN(argCount);
-        return true;
+    b2d_setClip: function(minx, miny, maxx, maxy) {
+        
     },
-    b2d_primitiveGetDepth: function(argCount) {
-        this.b2d_log("b2d_primitiveGetDepth => " + this.b2d_state.currentZ);
-        this.vm.popNandPush(argCount + 1, this.b2d_state.currentZ);
-        return true;
+    b2d_setTransform: function(t) {
+        /* Transform is a matrix:
+                ⎛a₁₁ a₁₂ a₁₃⎞
+                ⎝a₂₁ a₂₂ a₂₃⎠
+            Squeak Matrix2x3Transform stores as
+                [a₁₁, a₁₂, a₁₃, a₂₁, a₂₂, a₂₃]
+            but canvas expects
+                [a₁₁, a₂₁, a₁₂, a₂₂, a₁₃, a₂₃]
+        */
+        this.b2d_state.ctx.setTransform(t[0], t[3], t[1], t[4], t[2], t[5]);
+        if (this.b2d_debug) console.log("==> transform: " + [t[0], t[3], t[1], t[4], t[2], t[5]].join(','));
+    },
+    b2d_setStyle: function(fillIndex, borderIndex, borderWidth) {
+        var hasFill = !!fillIndex,
+            hasStroke = borderIndex && borderWidth > 0,
+            state = this.b2d_state;
+        state.hasFill = hasFill;
+        state.hasStroke = hasStroke;
+        if (hasFill) {
+            state.ctx.fillStyle = this.b2d_styleFrom(fillIndex);
+            if (this.b2d_debug) console.log("==> fill style: " + state.ctx.fillStyle);
+        }
+        if (hasStroke) {
+            state.ctx.strokeStyle = this.b2d_styleFrom(borderIndex);
+            state.ctx.lineWidth = borderWidth;
+            if (this.b2d_debug) console.log("==> stroke style: " + state.ctx.strokeStyle + '@' + borderWidth);
+        }
+        return hasFill || hasStroke;
+    },
+    b2d_styleFrom: function(index) {
+        if (index == 0) return null;
+        var fills = this.b2d_state.fills;
+        if (index <= fills.length) return fills[index - 1];
+        var b = index & 0xFF,
+            g = (index & 0xFF00) >>> 8,
+            r = (index & 0xFF0000) >>> 16,
+            a = ( (index & 0xFF000000) >>> 24 ) / 255;
+        return "rgba(" + [r, g, b, a].join(",") + ")";
     },
     b2d_primitiveSetEdgeTransform: function(argCount) {
-        this.b2d_log("b2d_primitiveSetEdgeTransform");
-        var trans = this.stackNonInteger(0);
+        if (this.b2d_debug) console.log("b2d_primitiveSetEdgeTransform");
+        var transform = this.stackNonInteger(0);
         if (!this.success) return false;
-        this.b2d_state.transform = trans.isNil ? null : trans.wordsAsFloat32Array();
+        if (transform.words) this.b2d_setTransform(transform.wordsAsFloat32Array());
         this.vm.popN(argCount);
         return true;
     },
     b2d_primitiveSetClipRect: function(argCount) {
-        this.b2d_log("b2d_primitiveSetClipRect");
+        if (this.b2d_debug) console.log("b2d_primitiveSetClipRect");
         var rect = this.stackNonInteger(0);
-        var _engine = this.stackNonInteger(1);
-        if (this.success) {
-            var store = this.b2d_state;
-            store.clipMin = [rect.getPointer(0).getPointer(0), rect.getPointer(0).getPointer(1)];
-            store.clipMax = [rect.getPointer(1).getPointer(0), rect.getPointer(1).getPointer(1)];
-            this.vm.popNandPush(argCount, 0);
-            return true;
-        } else {
-            return false;
-        }
+        if (!this.success) return false;
+        var origin = rect.pointers[0].pointers,
+            corner = rect.pointers[1].pointers;
+        this.b2d_setClip(origin[0], origin[1], corner[0], corner[1]);
+        this.vm.popN(argCount);
+        return true;
     },
-    b2d_addGeometry: function(geometryObject) {
-        var store = this.b2d_state;
-        geometryObject.transform = store.transform;
-        geometryObject.clipMin = store.clipMin;
-        geometryObject.clipMax = store.clipMax;
-        if (store.inChunk) {
-            store.chunkGeometry.push(geometryObject);
-        } else {
-            store.geometry.push(geometryObject);
-        }
-    },
-    b2d_oval_paintTo: function(store, display) {
-        console.warn("B2D: oval not implemented yet");
-    },
-    b2d_rect_paintTo: function(store, display) {
-        console.warn("B2D: rect not implemented yet");
-    },
-    b2d_poly_paintTo: function(store, display) {
-        console.warn("B2D: poly not implemented yet");
-    },
-    b2d_bezier_paintTo: function(store, display) {
-        display.ctx.beginPath();
-        display.ctx.moveTo(this.points[0], this.points[1]);
-        for (var i = 0; i < this.points.length; i += 6) {
-            display.ctx.quadraticCurveTo(this.points[i+2], this.points[i+3], this.points[i+4], this.points[i+5]);
-        }
-        display.ctx.fill();
-    },
-    b2d_render: function() {
-        this.b2d_log("b2d_render");
-        // do the actual rendering
-        var shapes = this.b2d_state.geometry;
-        if (shapes.length == 0) return;
-        var ctx = this.display.ctx;
-        ctx.save();
-        ctx.lineWidth = 2;
-        while (shapes.length) {
-            var shape = shapes.shift();
-            if (shape.transform) {
-                /* Transform is a matrix:
-                        ⎛a₁₁ a₁₂ a₁₃⎞
-                        ⎝a₂₁ a₂₂ a₂₃⎠
-                    Squeak Matrix2x3Transform stores as
-                        [a₁₁, a₁₂, a₁₃, a₂₁, a₂₂, a₂₃]
-                    but canvas expects
-                        [a₁₁, a₂₁, a₁₂, a₂₂, a₁₃, a₂₃]
-                */
-                var t = shape.transform;
-                ctx.setTransform(t[0], t[3], t[1], t[4], t[2] + 10, t[5] + 600);
+    b2d_flush: function() {
+        if (this.b2d_debug) console.log("-- b2d_flush");
+        var state = this.b2d_state;
+        if (state.flushNeeded) {
+            if (state.hasFill) {
+                state.ctx.closePath();
+                state.ctx.fill();
+                if (this.b2d_debug) console.log("==> filling");
             }
-            shape.paintTo(this.b2d_state, this.display);
-            //this.vm.breakOutOfInterpreter = 'break';
+            if (state.hasStroke) {
+                state.ctx.stroke();
+                if (this.b2d_debug) console.log("==> stroking");
+            }
+            state.ctx.beginPath();
+            state.flushNeeded = false;
+            if (this.b2d_debug) this.vm.breakOutOfInterpreter = 'break';
         }
-        ctx.restore();
         return 0; // answer stop reason
     },
     b2d_primitiveRenderImage: function(argCount) {
-        this.b2d_log("b2d_primitiveRenderImage");
-        var stopReason = this.b2d_render();
+        if (this.b2d_debug) console.log("b2d_primitiveRenderImage");
+        var stopReason = this.b2d_flush();
         this.vm.popNandPush(argCount + 1, stopReason);
         return true;
     },
     b2d_primitiveRenderScanline: function(argCount) {
-        this.b2d_log("b2d_primitiveRenderScanline");
-        var stopReason = this.b2d_render();
+        if (this.b2d_debug) console.log("b2d_primitiveRenderScanline");
+        var stopReason = this.b2d_flush();
         this.vm.popNandPush(argCount + 1, stopReason);
         return true;
     },
     b2d_primitiveFinishedProcessing: function(argCount) {
-        var finished = this.b2d_state.geometry.length == 0;
-        this.b2d_log("b2d_primitiveFinishedProcessing => " + finished);
+        var finished = !this.b2d_state.flushNeeded;
+        if (this.b2d_debug) console.log("b2d_primitiveFinishedProcessing => " + finished);
         this.vm.popNandPush(argCount+1, this.makeStObject(finished));
         return true;
     },
     b2d_primitiveNeedsFlushPut: function(argCount) {
-        var needsFlush = !!this.stackNonInteger(0).isTrue;
-        this.b2d_log("b2d_primitiveNeedsFlushPut: " + needsFlush);
+        var needsFlush = this.stackNonInteger(0).isTrue;
         if (!this.success) return false;
-        var store = this.b2d_state
-        var neededFlush = store.needsFlush
-        store.needsFlush = needsFlush
-        this.vm.popNandPush(argCount+1, 0);
-        if (needsFlush && !neededFlush) {
-            store.inChunk = false
-            this.b2d_processGeometryChunk()
-        } else if (neededFlush && !needsFlush) {
-            if ((store.geometry.length > 0) && (store.chunkGeometry.length == 0)) {
-                store.chunkGeometry.push(store.geometry.pop())
-            }
-            store.inChunk = true
-        }
+        this.b2d_state.needsFlush = !!needsFlush;
+        if (this.b2d_debug) console.log("b2d_primitiveNeedsFlushPut: " + !!needsFlush);
+        this.vm.popN(argCount);
         return true;
     },
-    b2d_processGeometryChunk: function() {
-        var store = this.b2d_state;
-        if (store.chunkGeometry.length == 0) return;
-        if (store.chunkGeometry.length == 1) {
-            store.geometry.push(store.chunkGeometry.pop())
-            return;
-        }
-        debugger
-        store.chunkGeometry = []
-    },
     b2d_primitiveInitializeBuffer: function(argCount) {
-        this.b2d_log("b2d_primitiveInitializeBuffer");
+        if (this.b2d_debug) console.log("b2d_primitiveInitializeBuffer");
         this.b2d_reset();
         this.vm.popN(argCount);
         return true;
     },
     b2d_reset: function() {
-        this.b2d_log("b2d_reset");
+        if (this.b2d_debug) console.log("-- b2d_reset");
         this.b2d_state= {
-            clipMin: [0,0],
-            clipMax: [0,0],
-            geometry: [],
+            ctx: this.display.ctx,
             needsFlush: false,
-            chunkGeometry: [],
-            inChunk: false,
-            transform: null,
-            currentZ: 0,
+            hasFill: false,
+            hasStroke: false,
+            fills: [],
         };
     },
     b2d_primitiveAddOval: function(argCount) {
-        this.b2d_log("b2d_primitiveAddOval");
+        if (this.b2d_debug) console.log("b2d_primitiveAddOval");
         var borderIndex = this.stackPos32BitInt(0);
         var borderWidth = this.stackInteger(1);
-	    var fillIndex   = this.stackPos32BitInt(2);
-	    var end         = this.stackNonInteger(3);
-	    var start       = this.stackNonInteger(4);
-	    if (!this.success) return false;
-	    // debugger
-        if ((fillIndex == 0) && ((borderIndex == 0) || (borderWidth <= 0))) {
-            this.vm.popNandPush(argCount+1, 0);
-            return true;
-        }
-        this.b2d_addGeometry({paintTo: this.b2d_oval_paintTo, start: start, end: end})
-        this.vm.popNandPush(argCount+1, 0);
+        var fillIndex   = this.stackPos32BitInt(2);
+        var end         = this.stackNonInteger(3);
+        var start       = this.stackNonInteger(4);
+        if (!this.success) return false;
+        console.warn("B2D: oval not implemented yet");
+        this.vm.popN(argCount);
         return true;
     },
     b2d_primitiveAddBezierShape: function(argCount) {
-        this.b2d_log("b2d_primitiveAddBezierShape");
-        var lineFill  = this.stackPos32BitInt(0);
-        var lineWidth = this.stackInteger(1);
-	    var fillIndex = this.stackPos32BitInt(2);
-	    var nSegments = this.stackInteger(3);
-	    var points    = this.stackNonInteger(4); // ShortPointArray?
-	    if (!this.success) return false;
-        if ((lineFill == 0) || ((lineWidth == 0) && (fillIndex == 0))) {
-            this.vm.popNandPush(argCount, 0);
-            return true;
+        if (this.b2d_debug) console.log("b2d_primitiveAddBezierShape");
+        var borderIndex = this.stackPos32BitInt(0),
+            borderWidth = this.stackInteger(1),
+            fillIndex   = this.stackPos32BitInt(2),
+            nSegments   = this.stackInteger(3),
+            points      = this.stackNonInteger(4);
+        if (!this.success || !points.words) return false;
+        if (this.b2d_setStyle(fillIndex, borderIndex, borderWidth)) {
+            var p = points.words;
+            if (p.length == nSegments * 3) p = points.wordsAsInt16Array();  // ShortPointArray
+            else if (p.length != nSegments * 6) return false;
+            var ctx = this.b2d_state.ctx;
+            ctx.moveTo(p[0], p[1]);
+            for (var i = 0; i < p.length; i += 6)
+                ctx.quadraticCurveTo(p[i+2], p[i+3], p[i+4], p[i+5]);
+            if (this.b2d_debug) console.log("==> beziershape");
+            this.b2d_state.flushNeeded = true;
         }
-        if (!points.words) return false;
-        var length = points.words.length;
-        if (length != nSegments * 3 && length != nSegments * 6) return false;
-        
-        var geo_points = length == nSegments * 3 ? points.wordsAsInt16Array() : points.words;
-
-        this.b2d_addGeometry({paintTo: this.b2d_bezier_paintTo, points: geo_points})
-        this.vm.popNandPush(argCount, 0);
+        this.vm.popN(argCount);
         return true;
     },
     b2d_primitiveAddPolygon: function(argCount) {
-        this.b2d_log("b2d_primitiveAddPolygon");
-        var lineFill  = this.stackPos32BitInt(0);
-        var lineWidth = this.stackInteger(1);
-	    var fillIndex = this.stackPos32BitInt(2);
-	    var nPoints   = this.stackInteger(3);
-	    var points    = this.stackNonInteger(4);
-	    if (!this.success) return false;
-	    // debugger
-        if ((lineFill == 0) || ((lineWidth == 0) && (fillIndex == 0))) {
-            this.vm.popNandPush(argCount+1, 0);
-            return true;
-        }
-        this.b2d_addGeometry({ paintTo: this.b2d_poly_paintTo, points: points })
-        this.vm.popNandPush(argCount+1, 0);
-        return true;
-    },
-    b2d_primitiveAddRect: function(argCount) {
-        this.b2d_log("b2d_primitiveAddRect");
+        if (this.b2d_debug) console.log("b2d_primitiveAddPolygon");
         var borderIndex = this.stackPos32BitInt(0);
         var borderWidth = this.stackInteger(1);
 	    var fillIndex   = this.stackPos32BitInt(2);
-	    var endPoint    = this.stackNonInteger(3);
-	    var startPoint  = this.stackNonInteger(4);
+	    var nPoints     = this.stackInteger(3);
+	    var points      = this.stackNonInteger(4);
 	    if (!this.success) return false;
-        if ((fillIndex == 0) && ((borderIndex == 0) || (borderWidth == 0))) {
-            this.vm.popNandPush(argCount, 0);
-            return true;
+        console.warn("B2D: polygons not implemented yet");
+        this.vm.popNandPush(argCount);
+        return true;
+    },
+    b2d_primitiveAddRect: function(argCount) {
+        if (this.b2d_debug) console.log("b2d_primitiveAddRect");
+        var borderIndex = this.stackPos32BitInt(0);
+        var borderWidth = this.stackInteger(1);
+	    var fillIndex   = this.stackPos32BitInt(2);
+	    var corner      = this.stackNonInteger(3);
+	    var origin      = this.stackNonInteger(4);
+	    if (!this.success) return false;
+        if (this.b2d_setStyle(fillIndex, borderIndex, borderWidth)) {
+            var x = this.floatOrInt(origin.pointers[0]),
+                y = this.floatOrInt(origin.pointers[1]),
+                w = this.floatOrInt(corner.pointers[0]) - x,
+                h = this.floatOrInt(corner.pointers[1]) - y; 
+            this.b2d_state.ctx.rect(x, y, w, h);
+            if (this.b2d_debug) console.log("==> rect " + [x, y, w, h].join(','));
+            this.b2d_state.flushNeeded = true;
         }
-        this.b2d_addGeometry({ paintTo: this.b2d_rect_paintTo, start: startPoint, end: endPoint });
         this.vm.popNandPush(argCount+1, 0);
         return true;
     },
     b2d_primitiveAddBezier: function(argCount) {
-        this.b2d_log("b2d_primitiveAddBezier");
+        if (this.b2d_debug) console.log("b2d_primitiveAddBezier");
+        console.warn("B2D: beziers not implemented yet");
+        this.vm.popN(argCount);
+        return true;
+    },
+    b2d_primitiveAddCompressedShape: function(argCount) {
+        if (this.b2d_debug) console.log("b2d_primitiveAddCompressedShape");
+        console.warn("B2D: compressed shapes not implemented yet");
+        this.vm.popN(argCount);
+        return true;
+    },
+    b2d_primitiveAddLine: function(argCount) {
+        if (this.b2d_debug) console.log("b2d_primitiveAddLine");
+        console.warn("B2D: lines not implemented yet");
         this.vm.popN(argCount);
         return true;
     },
     b2d_primitiveAddBitmapFill: function(argCount) {
-        this.b2d_log("b2d_primitiveAddBitmapFill");
-        var fillId = 0;
-        this.vm.popNandPush(argCount+1, fillId);
-        return true;
-    },
-    b2d_primitiveAddCompressedShape: function(argCount) {
-        this.b2d_log("b2d_primitiveAddCompressedShape");
-        this.vm.popN(argCount);
+        if (this.b2d_debug) console.log("b2d_primitiveAddBitmapFill");
+        console.warn("B2D: bitmap fills not implemented yet");
+        var fills = this.b2d_state.fills;
+        fills.push('red');
+        this.vm.popNandPush(argCount+1, fills.length);
         return true;
     },
     b2d_primitiveAddGradientFill: function(argCount) {
-        this.b2d_log("b2d_primitiveAddGradientFill");
-        var fillId = 0;
-        this.vm.popNandPush(argCount+1, fillId);
-        return true;
-    },
-    b2d_primitiveAddLine: function(argCount) {
-        this.b2d_log("b2d_primitiveAddLine");
-        this.vm.popN(argCount);
+        if (this.b2d_debug) console.log("b2d_primitiveAddGradientFill");
+        console.warn("B2D: gradient fills not implemented yet");
+        var fills = this.b2d_state.fills;
+        fills.push('green');
+        this.vm.popNandPush(argCount+1, fills.length);
         return true;
     },
     b2d_primitiveNeedsFlush: function(argCount) {
-        this.b2d_log("b2d_primitiveNeedsFlush => " + this.b2d_state.needsFlush);
+        if (this.b2d_debug) console.log("b2d_primitiveNeedsFlush => " + this.b2d_state.needsFlush);
         this.vm.popNandPush(argCount, this.makeStObject(this.b2d_state.needsFlush));
         return true;
     },
     b2d_primitiveSetOffset: function(argCount) {
-        this.b2d_log("b2d_primitiveSetOffset");
+        if (this.b2d_debug) console.log("b2d_primitiveSetOffset");
         this.vm.popN(argCount);
         return true;
     },
@@ -3868,6 +3839,8 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     b2d_primitiveSetColorTransform: function(argCount) {this.vm.popN(argCount); return true;},
     b2d_primitiveSetAALevel: function(argCount) { this.vm.popN(argCount); return true; },
     b2d_primitiveGetAALevel: function(argCount) { return false; },
+    b2d_primitiveSetDepth: function(argCount) {this.vm.popN(argCount); return true; },
+    b2d_primitiveGetDepth: function(argCount) {this.vm.popNandPush(argCount+1, 0); return true; },
     b2d_primitiveGetClipRect: function(argCount) { return false; },
     b2d_primitiveGetOffset: function(argCount) { return false; },
     b2d_primitiveSetBitBltPlugin: function(argCount) { this.vm.popN(argCount); return true; },
@@ -3886,9 +3859,6 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     b2d_primitiveMergeFillFrom: function(argCount) { return false; },
     b2d_primitiveRegisterExternalEdge: function(argCount) { return false; },
     b2d_primitiveRegisterExternalFill: function(argCount) { return false; },
-    b2d_log: function(msg) {
-        //console.log(msg);
-    },
 });
 
 Object.subclass('users.bert.SqueakJS.vm.BitBlt',

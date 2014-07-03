@@ -3505,7 +3505,8 @@ Object.subclass('Squeak.Primitives',
 },
 'BitBltPlugin', {
     bitblt_initializeModule: function(interpreterProxy) {
-        this.bitblt_stats = {};
+        this.bitblt = new Squeak.BitBlt(this.vm);
+        this.bitblt.stats = {};
         this.indexedColors = [
             0xFFFFFFFF, 0xFF000001, 0xFFFFFFFF, 0xFF808080, 0xFFFF0000, 0xFF00FF00, 0xFF0000FF, 0xFF00FFFF,
             0xFFFFFF00, 0xFFFF00FF, 0xFF202020, 0xFF404040, 0xFF606060, 0xFF9F9F9F, 0xFFBFBFBF, 0xFFDFDFDF,
@@ -3542,7 +3543,7 @@ Object.subclass('Squeak.Primitives',
     },
 	bitblt_primitiveCopyBits: function(argCount) {
         var bitbltObj = this.stackNonInteger(argCount),
-            bitblt = new Squeak.BitBlt(this.vm);
+            bitblt = this.bitblt;
         if (!bitblt.loadBitBlt(bitbltObj)) return false;
 
         if (bitblt.combinationRule === 30 || bitblt.combinationRule === 31) {
@@ -3558,7 +3559,7 @@ Object.subclass('Squeak.Primitives',
     	    start = timer.now(),
     	    mode = [bitblt.combinationRule, bitblt.source ? bitblt.source.depth : 0, bitblt.dest.depth].join("|");
         bitblt.copyBits();
-        this.bitblt_stats[mode] = (this.bitblt_stats[mode] || 0) + (timer.now() - start);
+        bitblt.stats[mode] = (bitblt.stats[mode] || 0) + (timer.now() - start);
 
         if (bitblt.combinationRule === 22 || bitblt.combinationRule === 32)
             this.vm.popNandPush(1, bitblt.bitCount);
@@ -3569,9 +3570,9 @@ Object.subclass('Squeak.Primitives',
 	bitblt_primitiveWarpBits: function(argCount) {
         var bitbltObj = this.stackNonInteger(argCount),
             smoothing = argCount == 2 ? Math.max(1, this.stackInteger(1)) : 1,
-            sourceMap = argCount == 2 ? this.stackNonInteger(0).words : null;
+            sourceMap = argCount == 2 ? this.stackNonInteger(0).words : null,
+            bitblt = this.bitblt;
         if (!this.success) return false;
-        var bitblt = new Squeak.BitBlt(this.vm);
         if (!bitblt.loadBitBlt(bitbltObj, smoothing, sourceMap)) return false;
         // color map is required to smooth non-RGB dest
 		if (smoothing > 1 && bitblt.source.depth < 16)
@@ -3875,9 +3876,15 @@ Object.subclass('Squeak.BitBlt',
             0x1FFFFF, 0x3FFFFF, 0x7FFFFF, 0xFFFFFF, 0x1FFFFFF, 0x3FFFFFF, 0x7FFFFFF,
             0xFFFFFFF, 0x1FFFFFFF, 0x3FFFFFFF, 0x7FFFFFFF, 0xFFFFFFFF];
     }, 
+    reset: function() {
+        this.success = true;
+        this.dest = this.source = null;
+        this.cmLookupTable = this.cmMaskTable = this.cmShiftTable = null;
+        this.warpSmoothing = this.warpSourceMap = null;
+    },
     loadBitBlt: function(bitbltObj, warpSmoothing, warpSourceMap) {
         var bitblt = bitbltObj.pointers;
-        this.success = true;
+        this.reset();
         this.destForm = bitblt[Squeak.BitBlt_dest];
         this.dest = this.loadForm(this.destForm);
         if (!this.dest) return false;

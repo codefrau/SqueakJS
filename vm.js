@@ -1,6 +1,6 @@
 module('users.bert.SqueakJS.vm').requires().toRun(function() {
 /*
- * Copyright (c) 2013 Bert Freudenberg
+ * Copyright (c) 2013,2014 Bert Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,9 +20,11 @@ module('users.bert.SqueakJS.vm').requires().toRun(function() {
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+ 
+// shorter name for convenience
+Squeak = users.bert.SqueakJS.vm;
 
-
-Squeak = {
+Object.extend(Squeak, {
     // system attributes
     vmVersion: "SqueakJS 0.1",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
@@ -176,21 +178,23 @@ Squeak = {
 
     // other constants
     Epoch: Date.UTC(1901,0,1)/1000 + (new Date()).getTimezoneOffset()*60,         // local timezone
-    
-    // External modules
-    externalModules: {},
+});
+
+Object.extend(Squeak, {
+    // don't clobber registered modules
+    externalModules: Squeak.externalModules || {},
     registerExternalModule: function(name, module) {
         this.externalModules[name] = module;
     },
-};
+});
 
-Object.subclass('users.bert.SqueakJS.vm.Image',
+Object.subclass('Squeak.Image',
 'about', {
     about: function() {
     /*
     Object Format
     =============
-    Each Squeak object is a users.bert.SqueakJS.vm.Object, only SmallIntegers are JS numbers.
+    Each Squeak object is a Squeak.Object instance, only SmallIntegers are JS numbers.
     Instance variables/fields reference other objects directly via the "pointers" property.
     {
         sqClass: reference to class object
@@ -306,7 +310,7 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
                 bits = readBits(nWords, format);
             ptr += nWords * 4;
 
-            var object = new users.bert.SqueakJS.vm.Object();
+            var object = new Squeak.Object();
             object.initFromImage(oop, classInt, format, hash, bits);
             if (prevObj) prevObj.nextObject = object;
             this.oldSpaceCount++;
@@ -452,13 +456,13 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         return this.lastHash & 0xFFF;
     },
     instantiateClass: function(aClass, indexableSize, filler) {
-        var newObject = new users.bert.SqueakJS.vm.Object();
+        var newObject = new Squeak.Object();
         var hash = this.registerObject(newObject);
         newObject.initInstanceOf(aClass, indexableSize, hash, filler);
         return newObject;
     },
     clone: function(object) {
-        var newObject = new users.bert.SqueakJS.vm.Object();
+        var newObject = new Squeak.Object();
         var hash = this.registerObject(newObject);
         newObject.initAsClone(object, hash);
         return newObject;
@@ -574,7 +578,7 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
     },
 });
 
-Object.subclass('users.bert.SqueakJS.vm.Object',
+Object.subclass('Squeak.Object',
 'initialization', {
     initInstanceOf: function(aClass, indexableSize, hash, nilObj) {
         this.sqClass = aClass;
@@ -973,14 +977,14 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
     },
 });
 
-Object.subclass('users.bert.SqueakJS.vm.Interpreter',
+Object.subclass('Squeak.Interpreter',
 'initialization', {
     initialize: function(image, display) {
         console.log('squeak: initializing interpreter');
         this.image = image;
         this.image.vm = this;
         this.initConstants();
-        this.primHandler = new users.bert.SqueakJS.vm.Primitives(this, display);
+        this.primHandler = new Squeak.Primitives(this, display);
         this.loadImageState();
         this.initVMState();
         this.loadInitialContext();
@@ -1917,7 +1921,7 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
     },
     printByteCodes: function(aMethod, optionalIndent, optionalHighlight, optionalPC) {
         if (!aMethod) aMethod = this.method;
-        var printer = new users.bert.SqueakJS.vm.InstructionPrinter(aMethod, this);
+        var printer = new Squeak.InstructionPrinter(aMethod, this);
         return printer.printInstructions(optionalIndent, optionalHighlight, optionalPC);
     },
     willSendOrReturn: function() {
@@ -1953,7 +1957,7 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
     },
 });
 
-Object.subclass('users.bert.SqueakJS.vm.Primitives',
+Object.subclass('Squeak.Primitives',
 'initialization', {
     initialize: function(vm, display) {
         this.vm = vm;
@@ -3105,7 +3109,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     },
     redrawFullDisplay: function() {
         var displayObj = this.vm.specialObjects[Squeak.splOb_TheDisplay];
-        var display = (new users.bert.SqueakJS.vm.BitBlt()).loadForm(displayObj);
+        var display = (new Squeak.BitBlt()).loadForm(displayObj);
         var bounds = {x: 0, y: 0, w: display.width, h: display.height};
         this.showOnDisplay(display, bounds);
     },
@@ -3538,7 +3542,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     },
 	bitblt_primitiveCopyBits: function(argCount) {
         var bitbltObj = this.stackNonInteger(argCount),
-            bitblt = new users.bert.SqueakJS.vm.BitBlt(this.vm);
+            bitblt = new Squeak.BitBlt(this.vm);
         if (!bitblt.loadBitBlt(bitbltObj)) return false;
 
         if (bitblt.combinationRule === 30 || bitblt.combinationRule === 31) {
@@ -3567,7 +3571,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             smoothing = argCount == 2 ? Math.max(1, this.stackInteger(1)) : 1,
             sourceMap = argCount == 2 ? this.stackNonInteger(0).words : null;
         if (!this.success) return false;
-        var bitblt = new users.bert.SqueakJS.vm.BitBlt(this.vm);
+        var bitblt = new Squeak.BitBlt(this.vm);
         if (!bitblt.loadBitBlt(bitbltObj, smoothing, sourceMap)) return false;
         // color map is required to smooth non-RGB dest
 		if (smoothing > 1 && bitblt.source.depth < 16)
@@ -3861,7 +3865,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     b2d_primitiveRegisterExternalFill: function(argCount) { return false; },
 });
 
-Object.subclass('users.bert.SqueakJS.vm.BitBlt',
+Object.subclass('Squeak.BitBlt',
 'initialization', {
     initialize: function(vm) {
         this.vm = vm;
@@ -5143,7 +5147,7 @@ Object.extend(Squeak, {
     },
 });
 
-Object.subclass('users.bert.SqueakJS.vm.InstructionPrinter',
+Object.subclass('Squeak.InstructionPrinter',
 'initialization', {
     initialize: function(method, vm) {
         this.method = method;
@@ -5157,7 +5161,7 @@ Object.subclass('users.bert.SqueakJS.vm.InstructionPrinter',
         this.highlight = highlight;     // prepend to highlighted line
         this.highlightPC = highlightPC; // PC of highlighted line
         this.result = '';
-        this.scanner = new users.bert.SqueakJS.vm.InstructionStream(this.method, this.vm);
+        this.scanner = new Squeak.InstructionStream(this.method, this.vm);
         this.oldPC = this.scanner.pc;
         var end = this.method.methodEndPC();
     	while (this.scanner.pc < end)
@@ -5246,7 +5250,7 @@ Object.subclass('users.bert.SqueakJS.vm.InstructionPrinter',
     },
 });
 
-Object.subclass('users.bert.SqueakJS.vm.InstructionStream',
+Object.subclass('Squeak.InstructionStream',
 'initialization', {
     initialize: function(method, vm) {
         this.vm = vm;

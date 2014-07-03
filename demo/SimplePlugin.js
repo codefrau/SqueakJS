@@ -18,7 +18,7 @@ var SimplePlugin = function() {
         if (argCount !== 1) return false; // fail
         var which = proxy.stackInteger(0);
         if (!proxy.success) return false; // fail
-        var result = this.getNavigatorInfo(which);
+        var result = getNavigatorInfo(which);
         if (!result) return false; // fail
         var resultObj = proxy.makeStString(result);
         proxy.popNandPushIfOK(1 + argCount, resultObj);
@@ -34,13 +34,13 @@ var SimplePlugin = function() {
 
     // hide private functions
     return {
-        initializeModule: initializeModule.bind(this),
-        primitiveNavigatorInfo: primitiveNavigatorInfo.bind(this),
+        initializeModule: initializeModule,
+        primitiveNavigatorInfo: primitiveNavigatorInfo,
     }
 };
 
 // register plugin in global Squeak object
-Squeak.registerExternalModule('SimplePlugin', SimplePlugin());
+Squeak.registerExternalModule('SimplePlugin', new SimplePlugin());
 
 
 /**********************************

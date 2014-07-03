@@ -3108,14 +3108,13 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     redrawFullDisplay: function() {
-        var displayObj = this.vm.specialObjects[Squeak.splOb_TheDisplay];
-        var display = (new Squeak.BitBlt()).loadForm(displayObj);
-        var bounds = {x: 0, y: 0, w: display.width, h: display.height};
-        this.showOnDisplay(display, bounds);
+        var displayObj = this.vm.specialObjects[Squeak.splOb_TheDisplay],
+            display = (new Squeak.BitBlt()).loadForm(displayObj),
+            bounds = {x: 0, y: 0, w: display.width, h: display.height};
+        this.showForm(this.display.ctx, display, bounds);
     },
-    showOnDisplay: function(form, rect) {
+    showForm: function(ctx, form, rect) {
         if (!rect) return;
-        var ctx = this.display.ctx;
         var pixels = ctx.createImageData(rect.w, rect.h);
         var dest = new Uint32Array(pixels.data.buffer);
         switch (form.depth) {
@@ -3564,7 +3563,7 @@ Object.subclass('Squeak.Primitives',
         if (bitblt.combinationRule === 22 || bitblt.combinationRule === 32)
             this.vm.popNandPush(1, bitblt.bitCount);
         else if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay])
-            this.showOnDisplay(bitblt.dest, bitblt.affectedRect());
+            this.showForm(this.display.ctx, bitblt.dest, bitblt.affectedRect());
         return true;
 	},
 	bitblt_primitiveWarpBits: function(argCount) {
@@ -3580,7 +3579,7 @@ Object.subclass('Squeak.Primitives',
                 return false; 	// sourceMap must be long enough for source depth
         bitblt.warpBits();
         if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay])
-            this.showOnDisplay(bitblt.dest, bitblt.affectedRect());
+            this.showForm(this.display.ctx, bitblt.dest, bitblt.affectedRect());
         this.vm.popN(argCount);
         return true;
 	},

@@ -3505,7 +3505,7 @@ Object.subclass('Squeak.Primitives',
 },
 'BitBltPlugin', {
     bitblt_initializeModule: function(interpreterProxy) {
-        this.bitblt = new Squeak.BitBlt(this.vm);
+        this.bitblt = new Squeak.BitBlt();
         this.bitblt.stats = {};
         this.indexedColors = [
             0xFFFFFFFF, 0xFF000001, 0xFFFFFFFF, 0xFF808080, 0xFFFF0000, 0xFF00FF00, 0xFF0000FF, 0xFF00FFFF,
@@ -3868,8 +3868,7 @@ Object.subclass('Squeak.Primitives',
 
 Object.subclass('Squeak.BitBlt',
 'initialization', {
-    initialize: function(vm) {
-        this.vm = vm;
+    initialize: function() {
         this.maskTable = [
             0x0, 0x1, 0x3, 0x7, 0xF, 0x1F, 0x3F, 0x7F, 0xFF, 0x1FF, 0x3FF, 0x7FF, 0xFFF,
             0x1FFF, 0x3FFF, 0x7FFF, 0xFFFF, 0x1FFFF, 0x3FFFF, 0x7FFFF, 0xFFFFF,
@@ -3996,7 +3995,7 @@ Object.subclass('Squeak.BitBlt',
         return true;
     },
     intOrFloatIfNil: function(intOrFloat, valueIfNil) {
-        if (this.vm.isSmallInt(intOrFloat)) return intOrFloat;
+        if (typeof intOrFloat == "number") return intOrFloat;
         if (intOrFloat.isNil) return valueIfNil;
         if (intOrFloat.isFloat) {
             var floatValue = intOrFloat.float;

@@ -1,6 +1,6 @@
 module('users.bert.SqueakJS.vm').requires().toRun(function() {
 /*
- * Copyright (c) 2013 Bert Freudenberg
+ * Copyright (c) 2013,2014 Bert Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,11 +20,13 @@ module('users.bert.SqueakJS.vm').requires().toRun(function() {
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+ 
+// shorter name for convenience
+Squeak = users.bert.SqueakJS.vm;
 
-
-Squeak = {
+Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.1",
+    vmVersion: "SqueakJS 0.2",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/users/bert/SqueakJS/",    // entirely made up
     osName: "Web",
@@ -176,21 +178,23 @@ Squeak = {
 
     // other constants
     Epoch: Date.UTC(1901,0,1)/1000 + (new Date()).getTimezoneOffset()*60,         // local timezone
-    
-    // External modules
-    externalModules: {},
+});
+
+Object.extend(Squeak, {
+    // don't clobber registered modules
+    externalModules: Squeak.externalModules || {},
     registerExternalModule: function(name, module) {
         this.externalModules[name] = module;
     },
-};
+});
 
-Object.subclass('users.bert.SqueakJS.vm.Image',
+Object.subclass('Squeak.Image',
 'about', {
     about: function() {
     /*
     Object Format
     =============
-    Each Squeak object is a users.bert.SqueakJS.vm.Object, only SmallIntegers are JS numbers.
+    Each Squeak object is a Squeak.Object instance, only SmallIntegers are JS numbers.
     Instance variables/fields reference other objects directly via the "pointers" property.
     {
         sqClass: reference to class object
@@ -306,7 +310,7 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
                 bits = readBits(nWords, format);
             ptr += nWords * 4;
 
-            var object = new users.bert.SqueakJS.vm.Object();
+            var object = new Squeak.Object();
             object.initFromImage(oop, classInt, format, hash, bits);
             if (prevObj) prevObj.nextObject = object;
             this.oldSpaceCount++;
@@ -362,7 +366,6 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         var newObjects = this.markReachableObjects();
         var removedObjects = this.removeUnmarkedOldObjects();
         this.appendToOldObjects(newObjects);
-        this.relinkRemovedObjects(removedObjects);
         this.oldSpaceCount += newObjects.length - removedObjects.length;
         this.newSpaceCount = 0;
         this.gcCount++;
@@ -371,6 +374,9 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
     markReachableObjects: function() {
         // Visit all reachable objects and mark them.
         // Return surviving new objects
+        // Contexts are handled specially: they have garbage beyond the stack pointer
+        // which must not be traced, and is cleared out here
+        this.vm.storeContextRegisters();        // update active context
         var todo = [this.specialObjectsArray, this.vm.activeContext];
         var newObjects = [];
         while (todo.length > 0) {
@@ -384,13 +390,15 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
             var body = object.pointers;
             if (body) {                   // trace all unmarked pointers
                 var n = body.length;
-                if (this.vm.isContext(object)) {      // contexts have garbage on the stack
+                if (this.vm.isContext(object)) {    // contexts have garbage beyond SP
                     var sp = object.pointers[Squeak.Context_stackPointer];
                     n = this.vm.decodeSqueakSP(typeof sp == "number" ? sp : 0) + 1;
                 }
                 for (var i = 0; i < n; i++)
                     if (typeof body[i] === "object" && !body[i].mark)      // except SmallInts
                         todo.push(body[i]);
+                while (n < body.length)             // clean garbage from contexts 
+                    body[n++] = this.vm.nilObj;
             }
         }
         // sort by oop to preserve creation order
@@ -404,6 +412,7 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         var removed = [],
             removedBytes = 0,
             obj = this.firstOldObject;
+        obj.mark = false; // we know the first object (nil) was marked
         while (true) {
             var next = obj.nextObject;
             if (!next) {// we're done
@@ -420,13 +429,7 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
                 var corpse = next; 
                 obj.nextObject = corpse.nextObject; // drop from list
                 removedBytes += corpse.totalBytes(); 
-                removed.push(corpse);               // remember for relinking
-                corpse.nextObject = obj;            // kludge: the corpse's nextObject
-                // must point into the old space list, so that enumerating will still work,
-                // even with a GC in the middle. So we point it to the surviving obj here.
-                // However, this would lead to obj being enumerated twice (because it preceded
-                // the corpse until now), so we'll relink this later, after the new objects
-                // have been tenured
+                removed.push(corpse);
             }
         }
     },
@@ -443,12 +446,6 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         }
         this.lastOldObject = oldObj;
     },
-    relinkRemovedObjects: function(removed) {
-        // fix up the nextObject pointers of removed objects,
-        // which were set to the preceding object in removeUnmarkedOldObjects()
-        for (var i = 0; i < removed.length; i++)
-            removed[i].nextObject = removed[i].nextObject.nextObject;
-    },
 },
 'creating', {
     registerObject: function(obj) {
@@ -459,13 +456,13 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
         return this.lastHash & 0xFFF;
     },
     instantiateClass: function(aClass, indexableSize, filler) {
-        var newObject = new users.bert.SqueakJS.vm.Object();
+        var newObject = new Squeak.Object();
         var hash = this.registerObject(newObject);
         newObject.initInstanceOf(aClass, indexableSize, hash, filler);
         return newObject;
     },
     clone: function(object) {
-        var newObject = new users.bert.SqueakJS.vm.Object();
+        var newObject = new Squeak.Object();
         var hash = this.registerObject(newObject);
         newObject.initAsClone(object, hash);
         return newObject;
@@ -581,7 +578,7 @@ Object.subclass('users.bert.SqueakJS.vm.Image',
     },
 });
 
-Object.subclass('users.bert.SqueakJS.vm.Object',
+Object.subclass('Squeak.Object',
 'initialization', {
     initInstanceOf: function(aClass, indexableSize, hash, nilObj) {
         this.sqClass = aClass;
@@ -707,9 +704,15 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         return bytes;
     },
     decodeFloat: function(theBits, littleEndian) {
-        var data = new DataView(theBits.buffer, theBits.byteOffset),
-            float = data.getFloat64(0, littleEndian);
-        return float;
+        var data = new DataView(theBits.buffer, theBits.byteOffset);
+        // it's either big endian ...
+        if (!littleEndian) return data.getFloat64(0, false);
+        // or little endian, but with swapped words
+        var buffer = new ArrayBuffer(8),
+            swapped = new DataView(buffer);
+        swapped.setUint32(0, data.getUint32(4));
+        swapped.setUint32(4, data.getUint32(0));
+        return swapped.getFloat64(0, true);
     },
     fillArray: function(length, filler) {
         for (var array = [], i = 0; i < length; i++)
@@ -719,7 +722,7 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
 },
 'printing', {
     toString: function() {
-        return "sqObj(" + (this.sqClass.constructor == users.bert.SqueakJS.vm.Object ? this.sqInstName() : this.sqClass) + ")";
+        return this.sqInstName();
     },
     bytesAsString: function() {
         if (!this.bytes) return '';
@@ -747,17 +750,17 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         var className = this.sqClass.className();
         if (/ /.test(className))
             return 'the ' + className;
-        var inst = '';
         switch (className) {
             case 'String':
-            case 'ByteString':
-            case 'WideString':
+            case 'ByteString': return "'" + this.bytesAsString() + "'";
             case 'Symbol':
-            case 'WideSymbol':
-            case 'ByteSymbol':
-                inst = ' "'+this.bytesAsString()+'"'; break;            
+            case 'ByteSymbol':  return "#" + this.bytesAsString();         
+            case 'Point': return this.pointers.join("@");
+            case 'Rectangle': return this.pointers.join(" corner: ");
+            case 'Association':
+            case 'ReadOnlyVariableBinding': return this.pointers.join("->");
         }
-        return  (/^[aeiou]/i.test(className) ? 'an ' + className : 'a ' + className) + inst;
+        return  /^[aeiou]/i.test(className) ? 'an ' + className : 'a ' + className;
     },
 },
 'accessing', {
@@ -793,8 +796,18 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
         //2nd word is data.getUint32(4, false);
         return data;
     },
+    wordsAsFloat32Array: function() {
+        return this.float32Array
+            || (this.words && (this.float32Array = new Float32Array(this.words.buffer)));
+    },
+    wordsAsInt16Array: function() {
+        return this.int16Array
+            || (this.words && (this.int16Array = new Int16Array(this.words.buffer)));
+    },
     setAddr: function(addr) {
-        // move oop during GC. Answer next object's address
+        // Move this object to addr by setting its oop. Answer address after this object.
+        // Used to assign an oop for the first time when tenuring this object during GC.
+        // When compacting, the oop is adjusted directly, since header size does not change.
         var words = this.snapshotSize();
         this.oop = addr + words.header * 4;
         return addr + (words.header + words.body) * 4; 
@@ -964,14 +977,14 @@ Object.subclass('users.bert.SqueakJS.vm.Object',
     },
 });
 
-Object.subclass('users.bert.SqueakJS.vm.Interpreter',
+Object.subclass('Squeak.Interpreter',
 'initialization', {
     initialize: function(image, display) {
         console.log('squeak: initializing interpreter');
         this.image = image;
         this.image.vm = this;
         this.initConstants();
-        this.primHandler = new users.bert.SqueakJS.vm.Primitives(this, display);
+        this.primHandler = new Squeak.Primitives(this, display);
         this.loadImageState();
         this.initVMState();
         this.loadInitialContext();
@@ -1688,7 +1701,7 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
 },
 'stack access', {
     pop: function() {
-        //Note leaves garbage above SP.  Serious reclaim should store nils above SP
+        //Note leaves garbage above SP.  Cleaned out by fullGC.
         return this.activeContext.pointers[this.sp--];  
     },
     popN: function(nToPop) {
@@ -1760,19 +1773,6 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
         var shifted = bitsToShift<<shiftCount;
         if  ((shifted>>shiftCount) === bitsToShift) return shifted;
         return this.nonSmallInt;  //non-small result will cause failure
-    },
-},
-'snapshots', {
-    snapshotCleanUp: function() {
-        // nil out slots above stack pointer in all contexts
-        var obj = this.image.firstOldObject;
-        while (obj = obj.nextObject) {
-            if (!this.isContext(obj)) continue;
-            var sp = obj.getPointer(Squeak.Context_stackPointer);
-            if (sp.isNil) continue;
-            for (var i = this.decodeSqueakSP(sp) + 1; i < obj.pointers.length; i++)
-                obj.pointers[i] = this.nilObj;
-        }
     },
 },
 'utils',
@@ -1863,10 +1863,14 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
     },
     breakOn: function(classAndMethodString) {
         // classAndMethodString is 'Class>>method'
-        var found;
+        var found,
+            className = classAndMethodString.split('>>')[0],
+            methodName = classAndMethodString.split('>>')[1];
         this.allMethodsDo(function(classObj, methodObj, selectorObj) {
-            if (classAndMethodString == (classObj.className() + '>>' + selectorObj.bytesAsString()))
-                return found = methodObj;
+            if (methodName.length == selectorObj.bytesSize()
+                && methodName == selectorObj.bytesAsString() 
+                && className == classObj.className())
+                    return found = methodObj;
         });
         this.breakOnMethod = found;
         return found;
@@ -1917,7 +1921,7 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
     },
     printByteCodes: function(aMethod, optionalIndent, optionalHighlight, optionalPC) {
         if (!aMethod) aMethod = this.method;
-        var printer = new users.bert.SqueakJS.vm.InstructionPrinter(aMethod, this);
+        var printer = new Squeak.InstructionPrinter(aMethod, this);
         return printer.printInstructions(optionalIndent, optionalHighlight, optionalPC);
     },
     willSendOrReturn: function() {
@@ -1953,60 +1957,23 @@ Object.subclass('users.bert.SqueakJS.vm.Interpreter',
     },
 });
 
-Object.subclass('users.bert.SqueakJS.vm.Primitives',
+Object.subclass('Squeak.Primitives',
 'initialization', {
     initialize: function(vm, display) {
         this.vm = vm;
         this.display = display;
         this.display.vm = this.vm;
+        this.warnings = {};
         this.initAtCache();
         this.initModules();
-        this.indexedColors = [
-            0xFFFFFFFF, 0xFF000001, 0xFFFFFFFF, 0xFF808080, 0xFFFF0000, 0xFF00FF00, 0xFF0000FF, 0xFF00FFFF,
-            0xFFFFFF00, 0xFFFF00FF, 0xFF202020, 0xFF404040, 0xFF606060, 0xFF9F9F9F, 0xFFBFBFBF, 0xFFDFDFDF,
-            0xFF080808, 0xFF101010, 0xFF181818, 0xFF282828, 0xFF303030, 0xFF383838, 0xFF484848, 0xFF505050,
-            0xFF585858, 0xFF686868, 0xFF707070, 0xFF787878, 0xFF878787, 0xFF8F8F8F, 0xFF979797, 0xFFA7A7A7,
-            0xFFAFAFAF, 0xFFB7B7B7, 0xFFC7C7C7, 0xFFCFCFCF, 0xFFD7D7D7, 0xFFE7E7E7, 0xFFEFEFEF, 0xFFF7F7F7,
-            0xFF000001, 0xFF003300, 0xFF006600, 0xFF009900, 0xFF00CC00, 0xFF00FF00, 0xFF000033, 0xFF003333,
-            0xFF006633, 0xFF009933, 0xFF00CC33, 0xFF00FF33, 0xFF000066, 0xFF003366, 0xFF006666, 0xFF009966,
-            0xFF00CC66, 0xFF00FF66, 0xFF000099, 0xFF003399, 0xFF006699, 0xFF009999, 0xFF00CC99, 0xFF00FF99, 
-            0xFF0000CC, 0xFF0033CC, 0xFF0066CC, 0xFF0099CC, 0xFF00CCCC, 0xFF00FFCC, 0xFF0000FF, 0xFF0033FF, 
-            0xFF0066FF, 0xFF0099FF, 0xFF00CCFF, 0xFF00FFFF, 0xFF330000, 0xFF333300, 0xFF336600, 0xFF339900, 
-            0xFF33CC00, 0xFF33FF00, 0xFF330033, 0xFF333333, 0xFF336633, 0xFF339933, 0xFF33CC33, 0xFF33FF33, 
-            0xFF330066, 0xFF333366, 0xFF336666, 0xFF339966, 0xFF33CC66, 0xFF33FF66, 0xFF330099, 0xFF333399, 
-            0xFF336699, 0xFF339999, 0xFF33CC99, 0xFF33FF99, 0xFF3300CC, 0xFF3333CC, 0xFF3366CC, 0xFF3399CC,
-            0xFF33CCCC, 0xFF33FFCC, 0xFF3300FF, 0xFF3333FF, 0xFF3366FF, 0xFF3399FF, 0xFF33CCFF, 0xFF33FFFF,
-            0xFF660000, 0xFF663300, 0xFF666600, 0xFF669900, 0xFF66CC00, 0xFF66FF00, 0xFF660033, 0xFF663333,
-            0xFF666633, 0xFF669933, 0xFF66CC33, 0xFF66FF33, 0xFF660066, 0xFF663366, 0xFF666666, 0xFF669966, 
-            0xFF66CC66, 0xFF66FF66, 0xFF660099, 0xFF663399, 0xFF666699, 0xFF669999, 0xFF66CC99, 0xFF66FF99, 
-            0xFF6600CC, 0xFF6633CC, 0xFF6666CC, 0xFF6699CC, 0xFF66CCCC, 0xFF66FFCC, 0xFF6600FF, 0xFF6633FF, 
-            0xFF6666FF, 0xFF6699FF, 0xFF66CCFF, 0xFF66FFFF, 0xFF990000, 0xFF993300, 0xFF996600, 0xFF999900, 
-            0xFF99CC00, 0xFF99FF00, 0xFF990033, 0xFF993333, 0xFF996633, 0xFF999933, 0xFF99CC33, 0xFF99FF33, 
-            0xFF990066, 0xFF993366, 0xFF996666, 0xFF999966, 0xFF99CC66, 0xFF99FF66, 0xFF990099, 0xFF993399, 
-            0xFF996699, 0xFF999999, 0xFF99CC99, 0xFF99FF99, 0xFF9900CC, 0xFF9933CC, 0xFF9966CC, 0xFF9999CC, 
-            0xFF99CCCC, 0xFF99FFCC, 0xFF9900FF, 0xFF9933FF, 0xFF9966FF, 0xFF9999FF, 0xFF99CCFF, 0xFF99FFFF, 
-            0xFFCC0000, 0xFFCC3300, 0xFFCC6600, 0xFFCC9900, 0xFFCCCC00, 0xFFCCFF00, 0xFFCC0033, 0xFFCC3333, 
-            0xFFCC6633, 0xFFCC9933, 0xFFCCCC33, 0xFFCCFF33, 0xFFCC0066, 0xFFCC3366, 0xFFCC6666, 0xFFCC9966,
-            0xFFCCCC66, 0xFFCCFF66, 0xFFCC0099, 0xFFCC3399, 0xFFCC6699, 0xFFCC9999, 0xFFCCCC99, 0xFFCCFF99,
-            0xFFCC00CC, 0xFFCC33CC, 0xFFCC66CC, 0xFFCC99CC, 0xFFCCCCCC, 0xFFCCFFCC, 0xFFCC00FF, 0xFFCC33FF, 
-            0xFFCC66FF, 0xFFCC99FF, 0xFFCCCCFF, 0xFFCCFFFF, 0xFFFF0000, 0xFFFF3300, 0xFFFF6600, 0xFFFF9900, 
-            0xFFFFCC00, 0xFFFFFF00, 0xFFFF0033, 0xFFFF3333, 0xFFFF6633, 0xFFFF9933, 0xFFFFCC33, 0xFFFFFF33,
-            0xFFFF0066, 0xFFFF3366, 0xFFFF6666, 0xFFFF9966, 0xFFFFCC66, 0xFFFFFF66, 0xFFFF0099, 0xFFFF3399, 
-            0xFFFF6699, 0xFFFF9999, 0xFFFFCC99, 0xFFFFFF99, 0xFFFF00CC, 0xFFFF33CC, 0xFFFF66CC, 0xFFFF99CC, 
-            0xFFFFCCCC, 0xFFFFFFCC, 0xFFFF00FF, 0xFFFF33FF, 0xFFFF66FF, 0xFFFF99FF, 0xFFFFCCFF, 0xFFFFFFFF];
     },
     initModules: function() {
-        this.missingPrimitives = {};
         this.loadedModules = {};
-        this.externalModules = {};
         this.builtinModules = {
             MiscPrimitivePlugin: {
-                exports: {
                     primitiveStringHash: this.primitiveStringHash.bind(this),
-                }
             },
             FilePlugin: {
-                exports: {
                     primitiveDirectoryDelimitor: this.primitiveDirectoryDelimitor.bind(this),
                     primitiveDirectoryCreate: this.primitiveDirectoryCreate.bind(this),
                     primitiveDirectoryDelete: this.primitiveDirectoryDelete.bind(this),
@@ -2026,66 +1993,61 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
                     primitiveFileStdioHandles: this.primitiveFileStdioHandles.bind(this),
                     primitiveFileTruncate: this.primitiveFileTruncate.bind(this),
                     primitiveFileWrite: this.primitiveFileWrite.bind(this),
-                }
             },
             BitBltPlugin: {
-                exports: {
-                    primitiveCopyBits: this.primitiveCopyBits.bind(this),
-                    primitiveWarpBits: this.primitiveWarpBits.bind(this),
-                }
+                    initializeModule: "bitblt_initializeModule",
+                    primitiveCopyBits: "bitblt_primitiveCopyBits",
+                    primitiveWarpBits: "bitblt_primitiveWarpBits",
             },
             B2DPlugin: {
-                exports: {
-                    // curry the primitive name and return value
-                    primitiveAddActiveEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddActiveEdgeEntry", 0),
-                    primitiveAddBezier: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddBezier", 0),
-                    primitiveAddBezierShape: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddBezierShape", 0),
-                    primitiveAddBitmapFill: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddBitmapFill", 0),
-                    primitiveAddCompressedShape: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddCompressedShape", 0),
-                    primitiveAddGradientFill: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddGradientFill", 0),
-                    primitiveAddLine: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddLine", 0),
-                    primitiveAddOval: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddOval", 0),
-                    primitiveAddPolygon: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddPolygon", 0),
-                    primitiveAddRect: this.fakePrimitive.bind(this, "B2DPlugin.primitiveAddRect", 0),
-                    primitiveChangedActiveEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveChangedActiveEdgeEntry", 0),
-                    primitiveCopyBuffer: this.fakePrimitive.bind(this, "B2DPlugin.primitiveCopyBuffer", 0),
-                    primitiveDisplaySpanBuffer: this.fakePrimitive.bind(this, "B2DPlugin.primitiveDisplaySpanBuffer", 0),
-                    primitiveDoProfileStats: this.fakePrimitive.bind(this, "B2DPlugin.primitiveDoProfileStats", 0),
-                    primitiveFinishedProcessing: this.fakePrimitive.bind(this, "B2DPlugin.primitiveFinishedProcessing", true),
-                    primitiveGetAALevel: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetAALevel", 0),
-                    primitiveGetBezierStats: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetBezierStats", 0),
-                    primitiveGetClipRect: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetClipRect", 0),
-                    primitiveGetCounts: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetCounts", 0),
-                    primitiveGetDepth: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetDepth", 1),
-                    primitiveGetFailureReason: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetFailureReason", 0),
-                    primitiveGetOffset: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetOffset", 0),
-                    primitiveGetTimes: this.fakePrimitive.bind(this, "B2DPlugin.primitiveGetTimes", 0),
-                    primitiveInitializeBuffer: this.fakePrimitive.bind(this, "B2DPlugin.primitiveInitializeBuffer", 0),
-                    primitiveInitializeProcessing: this.fakePrimitive.bind(this, "B2DPlugin.primitiveInitializeProcessing", 0),
-                    primitiveMergeFillFrom: this.fakePrimitive.bind(this, "B2DPlugin.primitiveMergeFillFrom", 0),
-                    primitiveNeedsFlush: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNeedsFlush", false),
-                    primitiveNeedsFlushPut: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNeedsFlushPut", 0),
-                    primitiveNextActiveEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNextActiveEdgeEntry", 0),
-                    primitiveNextFillEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNextFillEntry", 0),
-                    primitiveNextGlobalEdgeEntry: this.fakePrimitive.bind(this, "B2DPlugin.primitiveNextGlobalEdgeEntry", 0),
-                    primitiveRegisterExternalEdge: this.fakePrimitive.bind(this, "B2DPlugin.primitiveRegisterExternalEdge", 0),
-                    primitiveRegisterExternalFill: this.fakePrimitive.bind(this, "B2DPlugin.primitiveRegisterExternalFill", 0),
-                    primitiveRenderImage: this.fakePrimitive.bind(this, "B2DPlugin.primitiveRenderImage", 0),
-                    primitiveRenderScanline: this.fakePrimitive.bind(this, "B2DPlugin.primitiveRenderScanline", 0),
-                    primitiveSetAALevel: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetAALevel", 0),
-                    primitiveSetBitBltPlugin: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetBitBltPlugin", 0),
-                    primitiveSetClipRect: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetClipRect", 0),
-                    primitiveSetColorTransform: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetColorTransform", 0),
-                    primitiveSetDepth: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetDepth", 0),
-                    primitiveSetEdgeTransform: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetEdgeTransform", 0),
-                    primitiveSetOffset: this.fakePrimitive.bind(this, "B2DPlugin.primitiveSetOffset", 0),
-                }
+                    // late-bound for nicer debugging
+                    initializeModule: "b2d_initializeModule",
+                    primitiveAddActiveEdgeEntry: "b2d_primitiveAddActiveEdgeEntry",
+                    primitiveAddBezier: "b2d_primitiveAddBezier",
+                    primitiveAddBezierShape: "b2d_primitiveAddBezierShape",
+                    primitiveAddBitmapFill: "b2d_primitiveAddBitmapFill",
+                    primitiveAddCompressedShape: "b2d_primitiveAddCompressedShape",
+                    primitiveAddGradientFill: "b2d_primitiveAddGradientFill",
+                    primitiveAddLine: "b2d_primitiveAddLine",
+                    primitiveAddOval: "b2d_primitiveAddOval",
+                    primitiveAddPolygon: "b2d_primitiveAddPolygon",
+                    primitiveAddRect: "b2d_primitiveAddRect",
+                    primitiveChangedActiveEdgeEntry: "b2d_primitiveChangedActiveEdgeEntry",
+                    primitiveCopyBuffer: "b2d_primitiveCopyBuffer",
+                    primitiveDisplaySpanBuffer: "b2d_primitiveDisplaySpanBuffer",
+                    primitiveDoProfileStats: "b2d_primitiveDoProfileStats",
+                    primitiveFinishedProcessing: "b2d_primitiveFinishedProcessing",
+                    primitiveGetAALevel: "b2d_primitiveGetAALevel",
+                    primitiveGetBezierStats: "b2d_primitiveGetBezierStats",
+                    primitiveGetClipRect: "b2d_primitiveGetClipRect",
+                    primitiveGetCounts: "b2d_primitiveGetCounts",
+                    primitiveGetDepth: "b2d_primitiveGetDepth",
+                    primitiveGetFailureReason: "b2d_primitiveGetFailureReason",
+                    primitiveGetOffset: "b2d_primitiveGetOffset",
+                    primitiveGetTimes: "b2d_primitiveGetTimes",
+                    primitiveInitializeBuffer: "b2d_primitiveInitializeBuffer",
+                    primitiveInitializeProcessing: "b2d_primitiveInitializeProcessing",
+                    primitiveMergeFillFrom: "b2d_primitiveMergeFillFrom",
+                    primitiveNeedsFlush: "b2d_primitiveNeedsFlush",
+                    primitiveNeedsFlushPut: "b2d_primitiveNeedsFlushPut",
+                    primitiveNextActiveEdgeEntry: "b2d_primitiveNextActiveEdgeEntry",
+                    primitiveNextFillEntry: "b2d_primitiveNextFillEntry",
+                    primitiveNextGlobalEdgeEntry: "b2d_primitiveNextGlobalEdgeEntry",
+                    primitiveRegisterExternalEdge: "b2d_primitiveRegisterExternalEdge",
+                    primitiveRegisterExternalFill: "b2d_primitiveRegisterExternalFill",
+                    primitiveRenderImage: "b2d_primitiveRenderImage",
+                    primitiveRenderScanline: "b2d_primitiveRenderScanline",
+                    primitiveSetAALevel: "b2d_primitiveSetAALevel",
+                    primitiveSetBitBltPlugin: "b2d_primitiveSetBitBltPlugin",
+                    primitiveSetClipRect: "b2d_primitiveSetClipRect",
+                    primitiveSetColorTransform: "b2d_primitiveSetColorTransform",
+                    primitiveSetDepth: "b2d_primitiveSetDepth",
+                    primitiveSetEdgeTransform: "b2d_primitiveSetEdgeTransform",
+                    primitiveSetOffset: "b2d_primitiveSetOffset",
             },
             FloatArrayPlugin: {
-                exports: {
                     primitiveAt: this.primitiveFloatArrayAtAndPut.bind(this),
                     primitiveAtPut: this.primitiveFloatArrayAtAndPut.bind(this),
-                }
             },
         };
     },
@@ -2114,7 +2076,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         }
         return false;
     },
-    doPrimitive: function(index, argCount, newMethod) {
+    doPrimitive: function(index, argCount, primMethod) {
         this.success = true;
         switch (index) {
             case 1: return this.popNandPushIntIfOK(2,this.stackInteger(1) + this.stackInteger(0));  // Integer.add
@@ -2212,7 +2174,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 93: return false; // primitiveInputSemaphore
             case 94: return false; // primitiveGetNextEvent				"Blue Book: primitiveSampleInterval"
             case 95: return false; // primitiveInputWord
-            case 96: return this.primitiveCopyBits(argCount);  // BitBlt.copyBits
+            case 96: return this.namedPrimitive('BitBltPlugin', 'primitiveCopyBits', argCount);
             case 97: return this.primitiveSnapshot(argCount);
             //case 98: return false; // primitiveStoreImageSegment
             //case 99: return false; // primitiveLoadImageSegment
@@ -2233,7 +2195,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 114: return this.primitiveExitToDebugger(argCount);
             //case 115: return false; //TODO primitiveChangeClass					"Blue Book: primitiveOopsLeft"
             case 116: return this.vm.flushMethodCacheForMethod(this.vm.top());
-            case 117: return this.doNamedPrimitive(argCount, newMethod); // named prims
+            case 117: return this.doNamedPrimitive(primMethod, argCount); // named prims
             //case 118: return false; //TODO primitiveDoPrimitiveWithArgs
             case 119: return this.vm.flushMethodCacheForSelector(this.vm.top());
             case 120: return false; //primitiveCalloutToFFI
@@ -2263,7 +2225,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             case 144: return this.primitiveShortAtAndPut(argCount);
             case 145: return this.primitiveConstantFill(argCount);
             case 146: return false; // TODO primitiveReadJoystick
-            case 147: return this.primitiveWarpBits(argCount);
+            case 147: return this.namedPrimitive('BitBltPlugin', 'primitiveWarpBits', argCount);
             case 148: return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); //shallowCopy
             case 149: return this.primitiveGetAttribute(argCount);
             case 150: return this.primitiveFileAtEnd(argCount);
@@ -2303,12 +2265,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         throw Error("primitive " + index + " not implemented yet");
         return false;
     },
-    doNamedPrimitive: function(argCount, newMethod) {
-        if (newMethod.pointersSize() < 2) return false;
-        var firstLiteral = newMethod.pointers[1]; // skip method header
-        if (firstLiteral.pointersSize() !== 4) return false;
-        var moduleName = firstLiteral.pointers[0].bytesAsString();
-        var functionName = firstLiteral.pointers[1].bytesAsString();
+    namedPrimitive: function(moduleName, functionName, argCount) {
         var module = this.loadedModules[moduleName];
         if (!module) {
             if (module !== undefined) return false; // earlier load failed
@@ -2316,35 +2273,46 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             this.loadedModules[moduleName] = module;
         }
         if (module) {
-            var primitive = module.exports[functionName];
-            if (primitive) return primitive(argCount);
+            var primitive = module[functionName];
+            if (typeof primitive == 'string')
+                primitive = this[primitive].bind(this); // allow late binding
+            if (primitive)
+                return primitive(argCount);
         }
-        this.missingPrimitive(moduleName + '.' + functionName);
+        this.warnOnce("missing primitive: " + moduleName + "." + functionName);
         return false;
     },
-    missingPrimitive: function(prim) {
-        // warn once about missing primitives
-        if (this.missingPrimitives[prim]) {
-            this.missingPrimitives[prim]++;
+    doNamedPrimitive: function(primMethod, argCount) {
+        if (primMethod.pointersSize() < 2) return false;
+        var firstLiteral = primMethod.pointers[1]; // skip method header
+        if (firstLiteral.pointersSize() !== 4) return false;
+        var moduleName = firstLiteral.pointers[0].bytesAsString();
+        var functionName = firstLiteral.pointers[1].bytesAsString();
+        return this.namedPrimitive(moduleName, functionName, argCount);
+    },
+    warnOnce: function(message) {
+        if (this.warnings[message]) {
+            this.warnings[message]++;
         } else {
-            this.missingPrimitives[prim] = 1;
-            console.warn('primitive missing: ' + prim);
+            this.warnings[message] = 1;
+            console.warn(message);
         }
     },
     fakePrimitive: function(prim, retVal, argCount) {
         // fake a named primitive
         // prim and retVal need to be curried when used:
         //  this.fakePrimitive.bind(this, "Module.primitive", 42)
-        this.missingPrimitive(prim);
+        this.warnOnce("missing primitive: " + prim);
         if (retVal === undefined) this.vm.popN(argCount);
         else this.vm.popNandPush(argCount+1, this.makeStObject(retVal));
         return true;
     },
     loadModule: function(moduleName) {
         var module = Squeak.externalModules[moduleName] || this.builtinModules[moduleName];
-        if (!module || !module.exports) return null;
-        if (module.exports.initializeModule)
-            module.exports.initializeModule(this);
+        if (!module) return null;
+        var initFunc = module.initializeModule;
+        if (typeof initFunc == 'string') initFunc = this[initFunc].bind(this); // allow late binding
+        if (initFunc) initFunc(this);
         return module;
     },
 },
@@ -2387,7 +2355,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         var bytes = stackVal.bytes;
         var value = 0;
         for (var i=0; i<4; i++)
-            value += ((bytes[i]&255)<<(8*i));
+            value += (bytes[i]&255) * (1 << 8*i);
         return value;
     },
     pos32BitIntFor: function(pos32Val) {
@@ -2443,6 +2411,11 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     },
 },
 'utils', {
+    floatOrInt: function(obj) {
+        if (obj.isFloat) return obj.float;
+        if (this.vm.isSmallInt(obj)) return obj;
+        return 0;
+    },
     checkFloat: function(maybeFloat) { // returns a float and sets success
         if (maybeFloat.isFloat)
             return maybeFloat.float;
@@ -2725,13 +2698,13 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         while (stackp < newStackp)
             ctxt.pointers[this.vm.decodeSqueakSP(++stackp)] = this.vm.nilObj;
         ctxt.pointers[Squeak.Context_stackPointer] = newStackp;
-        this.vm.pop(argCount);
+        this.vm.popN(argCount);
         return true;
     },
     primitiveShortAtAndPut:  function(argCount) {
         var rcvr = this.stackNonInteger(argCount),
             index = this.stackInteger(argCount-1) - 1, // make zero-based
-            array = rcvr.int16Array || (rcvr.words && (rcvr.int16Array = new Int16Array(rcvr.words.buffer)));
+            array = rcvr.wordsAsInt16Array();
         if (!this.success || !array || index < 0 || index >= array.length)
             return false;
         var value;
@@ -3100,7 +3073,6 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         var proc = this.getScheduler().getPointer(Squeak.ProcSched_activeProcess);
         proc.setPointer(Squeak.Proc_suspendedContext, this.vm.activeContext); // store initial context
         this.vm.image.fullGC();                        // before cleanup so traversal works
-        this.vm.snapshotCleanUp();
         var buffer = this.vm.image.writeToBuffer();
         Squeak.flushAllFiles();                         // so there are no more writes pending
         Squeak.filePut(this.vm.image.name, buffer);
@@ -3135,14 +3107,13 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         return true;
     },
     redrawFullDisplay: function() {
-        var displayObj = this.vm.specialObjects[Squeak.splOb_TheDisplay];
-        var display = (new users.bert.SqueakJS.vm.BitBlt()).loadForm(displayObj);
-        var bounds = {x: 0, y: 0, w: display.width, h: display.height};
-        this.showOnDisplay(display, bounds);
+        var displayObj = this.vm.specialObjects[Squeak.splOb_TheDisplay],
+            display = (new Squeak.BitBlt()).loadForm(displayObj),
+            bounds = {x: 0, y: 0, w: display.width, h: display.height};
+        this.showForm(this.display.ctx, display, bounds);
     },
-    showOnDisplay: function(form, rect) {
+    showForm: function(ctx, form, rect) {
         if (!rect) return;
-        var ctx = this.display.ctx;
         var pixels = ctx.createImageData(rect.w, rect.h);
         var dest = new Uint32Array(pixels.data.buffer);
         switch (form.depth) {
@@ -3418,7 +3389,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
             handle = this.stackNonInteger(1);
         if (!this.success || !handle.file) return false;
         handle.filePos = pos;
-        this.vm.pop(argCount);
+        this.vm.popN(argCount);
         return true;
     },
     primitiveFileSize: function(argCount) {
@@ -3531,9 +3502,46 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     },
 },
 'BitBltPlugin', {
-	primitiveCopyBits: function(argCount) {
+    bitblt_initializeModule: function(interpreterProxy) {
+        this.bitblt = new Squeak.BitBlt();
+        this.bitblt.stats = {};
+        this.indexedColors = [
+            0xFFFFFFFF, 0xFF000001, 0xFFFFFFFF, 0xFF808080, 0xFFFF0000, 0xFF00FF00, 0xFF0000FF, 0xFF00FFFF,
+            0xFFFFFF00, 0xFFFF00FF, 0xFF202020, 0xFF404040, 0xFF606060, 0xFF9F9F9F, 0xFFBFBFBF, 0xFFDFDFDF,
+            0xFF080808, 0xFF101010, 0xFF181818, 0xFF282828, 0xFF303030, 0xFF383838, 0xFF484848, 0xFF505050,
+            0xFF585858, 0xFF686868, 0xFF707070, 0xFF787878, 0xFF878787, 0xFF8F8F8F, 0xFF979797, 0xFFA7A7A7,
+            0xFFAFAFAF, 0xFFB7B7B7, 0xFFC7C7C7, 0xFFCFCFCF, 0xFFD7D7D7, 0xFFE7E7E7, 0xFFEFEFEF, 0xFFF7F7F7,
+            0xFF000001, 0xFF003300, 0xFF006600, 0xFF009900, 0xFF00CC00, 0xFF00FF00, 0xFF000033, 0xFF003333,
+            0xFF006633, 0xFF009933, 0xFF00CC33, 0xFF00FF33, 0xFF000066, 0xFF003366, 0xFF006666, 0xFF009966,
+            0xFF00CC66, 0xFF00FF66, 0xFF000099, 0xFF003399, 0xFF006699, 0xFF009999, 0xFF00CC99, 0xFF00FF99, 
+            0xFF0000CC, 0xFF0033CC, 0xFF0066CC, 0xFF0099CC, 0xFF00CCCC, 0xFF00FFCC, 0xFF0000FF, 0xFF0033FF, 
+            0xFF0066FF, 0xFF0099FF, 0xFF00CCFF, 0xFF00FFFF, 0xFF330000, 0xFF333300, 0xFF336600, 0xFF339900, 
+            0xFF33CC00, 0xFF33FF00, 0xFF330033, 0xFF333333, 0xFF336633, 0xFF339933, 0xFF33CC33, 0xFF33FF33, 
+            0xFF330066, 0xFF333366, 0xFF336666, 0xFF339966, 0xFF33CC66, 0xFF33FF66, 0xFF330099, 0xFF333399, 
+            0xFF336699, 0xFF339999, 0xFF33CC99, 0xFF33FF99, 0xFF3300CC, 0xFF3333CC, 0xFF3366CC, 0xFF3399CC,
+            0xFF33CCCC, 0xFF33FFCC, 0xFF3300FF, 0xFF3333FF, 0xFF3366FF, 0xFF3399FF, 0xFF33CCFF, 0xFF33FFFF,
+            0xFF660000, 0xFF663300, 0xFF666600, 0xFF669900, 0xFF66CC00, 0xFF66FF00, 0xFF660033, 0xFF663333,
+            0xFF666633, 0xFF669933, 0xFF66CC33, 0xFF66FF33, 0xFF660066, 0xFF663366, 0xFF666666, 0xFF669966, 
+            0xFF66CC66, 0xFF66FF66, 0xFF660099, 0xFF663399, 0xFF666699, 0xFF669999, 0xFF66CC99, 0xFF66FF99, 
+            0xFF6600CC, 0xFF6633CC, 0xFF6666CC, 0xFF6699CC, 0xFF66CCCC, 0xFF66FFCC, 0xFF6600FF, 0xFF6633FF, 
+            0xFF6666FF, 0xFF6699FF, 0xFF66CCFF, 0xFF66FFFF, 0xFF990000, 0xFF993300, 0xFF996600, 0xFF999900, 
+            0xFF99CC00, 0xFF99FF00, 0xFF990033, 0xFF993333, 0xFF996633, 0xFF999933, 0xFF99CC33, 0xFF99FF33, 
+            0xFF990066, 0xFF993366, 0xFF996666, 0xFF999966, 0xFF99CC66, 0xFF99FF66, 0xFF990099, 0xFF993399, 
+            0xFF996699, 0xFF999999, 0xFF99CC99, 0xFF99FF99, 0xFF9900CC, 0xFF9933CC, 0xFF9966CC, 0xFF9999CC, 
+            0xFF99CCCC, 0xFF99FFCC, 0xFF9900FF, 0xFF9933FF, 0xFF9966FF, 0xFF9999FF, 0xFF99CCFF, 0xFF99FFFF, 
+            0xFFCC0000, 0xFFCC3300, 0xFFCC6600, 0xFFCC9900, 0xFFCCCC00, 0xFFCCFF00, 0xFFCC0033, 0xFFCC3333, 
+            0xFFCC6633, 0xFFCC9933, 0xFFCCCC33, 0xFFCCFF33, 0xFFCC0066, 0xFFCC3366, 0xFFCC6666, 0xFFCC9966,
+            0xFFCCCC66, 0xFFCCFF66, 0xFFCC0099, 0xFFCC3399, 0xFFCC6699, 0xFFCC9999, 0xFFCCCC99, 0xFFCCFF99,
+            0xFFCC00CC, 0xFFCC33CC, 0xFFCC66CC, 0xFFCC99CC, 0xFFCCCCCC, 0xFFCCFFCC, 0xFFCC00FF, 0xFFCC33FF, 
+            0xFFCC66FF, 0xFFCC99FF, 0xFFCCCCFF, 0xFFCCFFFF, 0xFFFF0000, 0xFFFF3300, 0xFFFF6600, 0xFFFF9900, 
+            0xFFFFCC00, 0xFFFFFF00, 0xFFFF0033, 0xFFFF3333, 0xFFFF6633, 0xFFFF9933, 0xFFFFCC33, 0xFFFFFF33,
+            0xFFFF0066, 0xFFFF3366, 0xFFFF6666, 0xFFFF9966, 0xFFFFCC66, 0xFFFFFF66, 0xFFFF0099, 0xFFFF3399, 
+            0xFFFF6699, 0xFFFF9999, 0xFFFFCC99, 0xFFFFFF99, 0xFFFF00CC, 0xFFFF33CC, 0xFFFF66CC, 0xFFFF99CC, 
+            0xFFFFCCCC, 0xFFFFFFCC, 0xFFFF00FF, 0xFFFF33FF, 0xFFFF66FF, 0xFFFF99FF, 0xFFFFCCFF, 0xFFFFFFFF];
+    },
+	bitblt_primitiveCopyBits: function(argCount) {
         var bitbltObj = this.stackNonInteger(argCount),
-            bitblt = new users.bert.SqueakJS.vm.BitBlt(this.vm);
+            bitblt = this.bitblt;
         if (!bitblt.loadBitBlt(bitbltObj)) return false;
 
         if (bitblt.combinationRule === 30 || bitblt.combinationRule === 31) {
@@ -3545,20 +3553,24 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
 			this.vm.pop();
     	}
     	
+    	var timer = window.performance || Date,
+    	    start = timer.now(),
+    	    mode = [bitblt.combinationRule, bitblt.source ? bitblt.source.depth : 0, bitblt.dest.depth].join("|");
         bitblt.copyBits();
-        
+        bitblt.stats[mode] = (bitblt.stats[mode] || 0) + (timer.now() - start);
+
         if (bitblt.combinationRule === 22 || bitblt.combinationRule === 32)
             this.vm.popNandPush(1, bitblt.bitCount);
         else if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay])
-            this.showOnDisplay(bitblt.dest, bitblt.affectedRect());
+            this.showForm(this.display.ctx, bitblt.dest, bitblt.affectedRect());
         return true;
 	},
-	primitiveWarpBits: function(argCount) {
+	bitblt_primitiveWarpBits: function(argCount) {
         var bitbltObj = this.stackNonInteger(argCount),
             smoothing = argCount == 2 ? Math.max(1, this.stackInteger(1)) : 1,
-            sourceMap = argCount == 2 ? this.stackNonInteger(0).words : null;
+            sourceMap = argCount == 2 ? this.stackNonInteger(0).words : null,
+            bitblt = this.bitblt;
         if (!this.success) return false;
-        var bitblt = new users.bert.SqueakJS.vm.BitBlt(this.vm);
         if (!bitblt.loadBitBlt(bitbltObj, smoothing, sourceMap)) return false;
         // color map is required to smooth non-RGB dest
 		if (smoothing > 1 && bitblt.source.depth < 16)
@@ -3566,7 +3578,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
                 return false; 	// sourceMap must be long enough for source depth
         bitblt.warpBits();
         if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay])
-            this.showOnDisplay(bitblt.dest, bitblt.affectedRect());
+            this.showForm(this.display.ctx, bitblt.dest, bitblt.affectedRect());
         this.vm.popN(argCount);
         return true;
 	},
@@ -3575,7 +3587,7 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
     primitiveFloatArrayAtAndPut: function(argCount) {
         var rcvr = this.stackNonInteger(argCount),
             index = this.stackPos32BitInt(argCount-1) - 1,
-            array = rcvr.float32Array || (rcvr.words && (rcvr.float32Array = new Float32Array(rcvr.words.buffer)));
+            array = rcvr.wordsAsFloat32Array();
         if (!this.success || index < 0 || index >= array.length)
             return false;
         if (argCount < 2) {// at:
@@ -3589,20 +3601,331 @@ Object.subclass('users.bert.SqueakJS.vm.Primitives',
         }
         return true;
     },
+},
+'B2DPlugin', {
+    b2d_initializeModule: function() {
+        this.b2d_debug = false;
+        this.b2d_state = {
+            bitblt: new Squeak.BitBlt(),
+            bitbltObj: null,
+        };
+    },
+    b2d_reset: function(bitbltObj) {
+        if (this.b2d_debug) console.log("-- b2d_reset");
+        var state = this.b2d_state;
+        state.needsFlush = false;
+        state.hasFill = false;
+        state.hasStroke = false;
+        state.fills = [];
+        // Reuse drawing context if possible
+        if (state.bitbltObj != bitbltObj) {
+            state.bitbltObj = bitbltObj;
+            state.bitblt.loadBitBlt(bitbltObj);
+            this.b2d_setupCanvas();
+        }
+    },
+    b2d_setupCanvas: function() {
+        var state = this.b2d_state;
+        // create canvas and drawing context
+        if (!state.context) {
+            var canvas = document.getElementById("SqueakB2DCanvas");
+            if (!canvas) {
+                canvas = document.createElement("canvas");
+                canvas.id = "SqueakB2DCanvas";
+                if (this.b2d_debug) {
+                    canvas.setAttribute("style", "position:fixed;top:20px;left:950px;background:rgba(255,255,255,0.5)");
+                    document.body.appendChild(canvas);
+                }
+            }
+            state.context = canvas.getContext("2d");
+            if (!state.context) alert("B2D: cannot create context");
+        };
+        // set canvas size, which also clears it
+        var form = state.bitblt.dest,
+            canvas = state.context.canvas;
+        canvas.width = form.width;
+        canvas.height = form.height;
+    },
+    b2d_render: function() {
+        if (this.b2d_debug) console.log("-- b2d_render");
+        var state = this.b2d_state;
+        if (state.flushNeeded) {
+            // fill and stroke path
+            if (state.hasFill) {
+                state.context.closePath();
+                state.context.fill();
+                if (this.b2d_debug) console.log("==> filling");
+            }
+            if (state.hasStroke) {
+                state.context.stroke();
+                if (this.b2d_debug) console.log("==> stroking");
+            }
+            state.context.beginPath();
+            state.flushNeeded = false;
+            this.b2d_readPixels();
+        }
+        return 0; // answer stop reason
+    },
+    b2d_readPixels: function() {
+        var state = this.b2d_state,
+            form = state.bitblt.dest,
+            canvasBytes = state.context.getImageData(0, 0, form.width, form.height).data;
+        if (form.depth == 32) {
+            var canvasWords = new Uint32Array(canvasBytes.buffer);
+            form.bits.set(canvasWords);
+        } else {
+            this.warnOnce("B2D: drawing to non-32 bit forms not supported yet");
+        }
+        if (this.b2d_debug) this.vm.breakOutOfInterpreter = 'break';
+    },
+    b2d_setClip: function(minx, miny, maxx, maxy) {
+        
+    },
+    b2d_setTransform: function(t) {
+        /* Transform is a matrix:
+                ⎛a₁₁ a₁₂ a₁₃⎞
+                ⎝a₂₁ a₂₂ a₂₃⎠
+            Squeak Matrix2x3Transform stores as
+                [a₁₁, a₁₂, a₁₃, a₂₁, a₂₂, a₂₃]
+            but canvas expects
+                [a₁₁, a₂₁, a₁₂, a₂₂, a₁₃, a₂₃]
+        */
+        this.b2d_state.context.setTransform(t[0], t[3], t[1], t[4], t[2], t[5]);
+        if (this.b2d_debug) console.log("==> transform: " + [t[0], t[3], t[1], t[4], t[2], t[5]].join(','));
+    },
+    b2d_setStyle: function(fillIndex, borderIndex, borderWidth) {
+        var hasFill = !!fillIndex,
+            hasStroke = borderIndex && borderWidth > 0,
+            state = this.b2d_state;
+        state.hasFill = hasFill;
+        state.hasStroke = hasStroke;
+        if (hasFill) {
+            state.context.fillStyle = this.b2d_styleFrom(fillIndex);
+            if (this.b2d_debug) console.log("==> fill style: " + state.context.fillStyle);
+        }
+        if (hasStroke) {
+            state.context.strokeStyle = this.b2d_styleFrom(borderIndex);
+            state.context.lineWidth = borderWidth;
+            if (this.b2d_debug) console.log("==> stroke style: " + state.context.strokeStyle + '@' + borderWidth);
+        }
+        return hasFill || hasStroke;
+    },
+    b2d_styleFrom: function(index) {
+        if (index == 0) return null;
+        var fills = this.b2d_state.fills;
+        if (index <= fills.length) return fills[index - 1];
+        var b = index & 0xFF,
+            g = (index & 0xFF00) >>> 8,
+            r = (index & 0xFF0000) >>> 16,
+            a = ( (index & 0xFF000000) >>> 24 ) / 255;
+        return "rgba(" + [r, g, b, a].join(",") + ")";
+    },
+    b2d_primitiveSetEdgeTransform: function(argCount) {
+        if (this.b2d_debug) console.log("b2d_primitiveSetEdgeTransform");
+        var transform = this.stackNonInteger(0);
+        if (!this.success) return false;
+        if (transform.words) this.b2d_setTransform(transform.wordsAsFloat32Array());
+        this.vm.popN(argCount);
+        return true;
+    },
+    b2d_primitiveSetClipRect: function(argCount) {
+        if (this.b2d_debug) console.log("b2d_primitiveSetClipRect");
+        var rect = this.stackNonInteger(0);
+        if (!this.success) return false;
+        var origin = rect.pointers[0].pointers,
+            corner = rect.pointers[1].pointers;
+        this.b2d_setClip(origin[0], origin[1], corner[0], corner[1]);
+        this.vm.popN(argCount);
+        return true;
+    },
+    b2d_primitiveRenderImage: function(argCount) {
+        if (this.b2d_debug) console.log("b2d_primitiveRenderImage");
+        var stopReason = this.b2d_render();
+        this.vm.popNandPush(argCount + 1, stopReason);
+        return true;
+    },
+    b2d_primitiveRenderScanline: function(argCount) {
+        if (this.b2d_debug) console.log("b2d_primitiveRenderScanline");
+        var stopReason = this.b2d_render();
+        this.vm.popNandPush(argCount + 1, stopReason);
+        return true;
+    },
+    b2d_primitiveFinishedProcessing: function(argCount) {
+        var finished = !this.b2d_state.flushNeeded;
+        if (this.b2d_debug) console.log("b2d_primitiveFinishedProcessing => " + finished);
+        this.vm.popNandPush(argCount+1, this.makeStObject(finished));
+        return true;
+    },
+    b2d_primitiveNeedsFlushPut: function(argCount) {
+        var needsFlush = this.stackNonInteger(0).isTrue;
+        if (!this.success) return false;
+        this.b2d_state.needsFlush = !!needsFlush;
+        if (this.b2d_debug) console.log("b2d_primitiveNeedsFlushPut: " + !!needsFlush);
+        this.vm.popN(argCount);
+        return true;
+    },
+    b2d_primitiveInitializeBuffer: function(argCount) {
+        if (this.b2d_debug) console.log("b2d_primitiveInitializeBuffer");
+        var engine = this.stackNonInteger(argCount),
+            bitblt = engine.pointers[2]; // BEBitBltIndex
+        this.b2d_reset(bitblt);
+        this.vm.popN(argCount);
+        return true;
+    },
+    b2d_primitiveAddOval: function(argCount) {
+        if (this.b2d_debug) console.log("b2d_primitiveAddOval");
+        var borderIndex = this.stackPos32BitInt(0);
+        var borderWidth = this.stackInteger(1);
+        var fillIndex   = this.stackPos32BitInt(2);
+        var end         = this.stackNonInteger(3);
+        var start       = this.stackNonInteger(4);
+        if (!this.success) return false;
+        this.warnOnce("B2D: oval not implemented yet");
+        this.vm.popN(argCount);
+        return true;
+    },
+    b2d_primitiveAddBezierShape: function(argCount) {
+        if (this.b2d_debug) console.log("b2d_primitiveAddBezierShape");
+        var borderIndex = this.stackPos32BitInt(0),
+            borderWidth = this.stackInteger(1),
+            fillIndex   = this.stackPos32BitInt(2),
+            nSegments   = this.stackInteger(3),
+            points      = this.stackNonInteger(4);
+        if (!this.success || !points.words) return false;
+        if (this.b2d_setStyle(fillIndex, borderIndex, borderWidth)) {
+            var p = points.words;
+            if (p.length == nSegments * 3) p = points.wordsAsInt16Array();  // ShortPointArray
+            else if (p.length != nSegments * 6) return false;
+            var ctx = this.b2d_state.context;
+            ctx.moveTo(p[0], p[1]);
+            for (var i = 0; i < p.length; i += 6)
+                ctx.quadraticCurveTo(p[i+2], p[i+3], p[i+4], p[i+5]);
+            if (this.b2d_debug) console.log("==> beziershape");
+            this.b2d_state.flushNeeded = true;
+        }
+        this.vm.popN(argCount);
+        return true;
+    },
+    b2d_primitiveAddPolygon: function(argCount) {
+        if (this.b2d_debug) console.log("b2d_primitiveAddPolygon");
+        var borderIndex = this.stackPos32BitInt(0);
+        var borderWidth = this.stackInteger(1);
+	    var fillIndex   = this.stackPos32BitInt(2);
+	    var nPoints     = this.stackInteger(3);
+	    var points      = this.stackNonInteger(4);
+	    if (!this.success) return false;
+        this.warnOnce("B2D: polygons not implemented yet");
+        this.vm.popNandPush(argCount);
+        return true;
+    },
+    b2d_primitiveAddRect: function(argCount) {
+        if (this.b2d_debug) console.log("b2d_primitiveAddRect");
+        var borderIndex = this.stackPos32BitInt(0);
+        var borderWidth = this.stackInteger(1);
+	    var fillIndex   = this.stackPos32BitInt(2);
+	    var corner      = this.stackNonInteger(3);
+	    var origin      = this.stackNonInteger(4);
+	    if (!this.success) return false;
+        if (this.b2d_setStyle(fillIndex, borderIndex, borderWidth)) {
+            var x = this.floatOrInt(origin.pointers[0]),
+                y = this.floatOrInt(origin.pointers[1]),
+                w = this.floatOrInt(corner.pointers[0]) - x,
+                h = this.floatOrInt(corner.pointers[1]) - y; 
+            this.b2d_state.context.rect(x, y, w, h);
+            if (this.b2d_debug) console.log("==> rect " + [x, y, w, h].join(','));
+            this.b2d_state.flushNeeded = true;
+        }
+        this.vm.popNandPush(argCount+1, 0);
+        return true;
+    },
+    b2d_primitiveAddBezier: function(argCount) {
+        if (this.b2d_debug) console.log("b2d_primitiveAddBezier");
+        this.warnOnce("B2D: beziers not implemented yet");
+        this.vm.popN(argCount);
+        return true;
+    },
+    b2d_primitiveAddCompressedShape: function(argCount) {
+        if (this.b2d_debug) console.log("b2d_primitiveAddCompressedShape");
+        this.warnOnce("B2D: compressed shapes not implemented yet");
+        this.vm.popN(argCount);
+        return true;
+    },
+    b2d_primitiveAddLine: function(argCount) {
+        if (this.b2d_debug) console.log("b2d_primitiveAddLine");
+        this.warnOnce("B2D: lines not implemented yet");
+        this.vm.popN(argCount);
+        return true;
+    },
+    b2d_primitiveAddBitmapFill: function(argCount) {
+        if (this.b2d_debug) console.log("b2d_primitiveAddBitmapFill");
+        this.warnOnce("B2D: bitmap fills not implemented yet");
+        var fills = this.b2d_state.fills;
+        fills.push('red');
+        this.vm.popNandPush(argCount+1, fills.length);
+        return true;
+    },
+    b2d_primitiveAddGradientFill: function(argCount) {
+        if (this.b2d_debug) console.log("b2d_primitiveAddGradientFill");
+        this.warnOnce("B2D: gradient fills not implemented yet");
+        var fills = this.b2d_state.fills;
+        fills.push('green');
+        this.vm.popNandPush(argCount+1, fills.length);
+        return true;
+    },
+    b2d_primitiveNeedsFlush: function(argCount) {
+        if (this.b2d_debug) console.log("b2d_primitiveNeedsFlush => " + this.b2d_state.needsFlush);
+        this.vm.popNandPush(argCount, this.makeStObject(this.b2d_state.needsFlush));
+        return true;
+    },
+    b2d_primitiveSetOffset: function(argCount) {
+        if (this.b2d_debug) console.log("b2d_primitiveSetOffset");
+        this.vm.popN(argCount);
+        return true;
+    },
+    b2d_primitiveGetFailureReason: function(argCount) { this.vm.popN(argCount+1, 0); return true; },
+    b2d_primitiveSetColorTransform: function(argCount) {this.vm.popN(argCount); return true;},
+    b2d_primitiveSetAALevel: function(argCount) { this.vm.popN(argCount); return true; },
+    b2d_primitiveGetAALevel: function(argCount) { return false; },
+    b2d_primitiveSetDepth: function(argCount) {this.vm.popN(argCount); return true; },
+    b2d_primitiveGetDepth: function(argCount) {this.vm.popNandPush(argCount+1, 0); return true; },
+    b2d_primitiveGetClipRect: function(argCount) { return false; },
+    b2d_primitiveGetOffset: function(argCount) { return false; },
+    b2d_primitiveSetBitBltPlugin: function(argCount) { this.vm.popN(argCount); return true; },
+    b2d_primitiveDoProfileStats: function(argCount) { this.vm.popN(argCount); return true; },
+    b2d_primitiveGetBezierStats: function(argCount) { this.vm.popN(argCount); return true; },
+    b2d_primitiveGetCounts: function(argCount) { this.vm.popN(argCount); return true; },
+    b2d_primitiveGetTimes: function(argCount) { this.vm.popN(argCount); return true; },
+    b2d_primitiveInitializeProcessing: function(argCount) { return false; },
+    b2d_primitiveAddActiveEdgeEntry: function(argCount) { return false; },
+    b2d_primitiveChangedActiveEdgeEntry: function(argCount) { return false; },
+    b2d_primitiveNextActiveEdgeEntry: function(argCount) { return false; },
+    b2d_primitiveNextGlobalEdgeEntry: function(argCount) { return false; },
+    b2d_primitiveDisplaySpanBuffer: function(argCount) { return false; },
+    b2d_primitiveCopyBuffer: function(argCount) { return false; },
+    b2d_primitiveNextFillEntry: function(argCount) { return false; },
+    b2d_primitiveMergeFillFrom: function(argCount) { return false; },
+    b2d_primitiveRegisterExternalEdge: function(argCount) { return false; },
+    b2d_primitiveRegisterExternalFill: function(argCount) { return false; },
 });
-Object.subclass('users.bert.SqueakJS.vm.BitBlt',
+
+Object.subclass('Squeak.BitBlt',
 'initialization', {
-    initialize: function(vm) {
-        this.vm = vm;
+    initialize: function() {
         this.maskTable = [
             0x0, 0x1, 0x3, 0x7, 0xF, 0x1F, 0x3F, 0x7F, 0xFF, 0x1FF, 0x3FF, 0x7FF, 0xFFF,
             0x1FFF, 0x3FFF, 0x7FFF, 0xFFFF, 0x1FFFF, 0x3FFFF, 0x7FFFF, 0xFFFFF,
             0x1FFFFF, 0x3FFFFF, 0x7FFFFF, 0xFFFFFF, 0x1FFFFFF, 0x3FFFFFF, 0x7FFFFFF,
             0xFFFFFFF, 0x1FFFFFFF, 0x3FFFFFFF, 0x7FFFFFFF, 0xFFFFFFFF];
     }, 
+    reset: function() {
+        this.success = true;
+        this.dest = this.source = null;
+        this.cmLookupTable = this.cmMaskTable = this.cmShiftTable = null;
+        this.warpSmoothing = this.warpSourceMap = null;
+    },
     loadBitBlt: function(bitbltObj, warpSmoothing, warpSourceMap) {
         var bitblt = bitbltObj.pointers;
-        this.success = true;
+        this.reset();
         this.destForm = bitblt[Squeak.BitBlt_dest];
         this.dest = this.loadForm(this.destForm);
         if (!this.dest) return false;
@@ -3669,34 +3992,35 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
         // ColorMap, if not nil, must be words, and 
         // 2^N long, where N = sourceDepth for 1, 2, 4, 8 bits, 
         // or N = 9, 12, or 15 (3, 4, 5 bits per color) for 16 or 32 bits.
-        if (colorMapObj.isNil) return true;
-        var oldStyle = !!colorMapObj.words,
-            colors, shifts, masks;
-        if (oldStyle) {
-            // This is an old-style color map (indexed only, with implicit RGBA conversion)
-		    colors = colorMapObj.words;
-        } else {
-            // A new-style color map (fully qualified)
-            if (colorMapObj.pointersSize() < 3) return false;
-            shifts = colorMapObj.pointers[0].words,
-            masks = colorMapObj.pointers[1].words;
-            colors = colorMapObj.pointers[2].words;
-            if (!shifts || shifts.length != 4 || !masks || masks.length != 4) return false;
-            this.cmShiftTable = new Int32Array(shifts.buffer);
-            this.cmMaskTable = masks;
-            this.cmLookupTable = colors;
+        if (!colorMapObj.isNil) {
+            var oldStyle = !!colorMapObj.words,
+                colors, shifts, masks;
+            if (oldStyle) {
+                // This is an old-style color map (indexed only, with implicit ARGB conversion)
+    		    colors = colorMapObj.words;
+            } else {
+                // A new-style color map (fully qualified)
+                if (colorMapObj.pointersSize() < 3) return false;
+                shifts = colorMapObj.pointers[0].words,
+                masks = colorMapObj.pointers[1].words;
+                colors = colorMapObj.pointers[2].words;
+                if (!shifts || shifts.length != 4 || !masks || masks.length != 4) return false;
+                this.cmShiftTable = new Int32Array(shifts.buffer);
+                this.cmMaskTable = masks;
+            }
+            if (colors && colors.length) {
+                this.cmLookupTable = colors;
+                this.cmSize = colors.length;
+                this.cmMask = this.cmSize - 1;
+                if (this.cmSize & this.cmMask) return false; // not a power of 2
+                this.cmBitsPerColor = 
+                    this.cmSize == 512 ? 3 :
+                    this.cmSize == 4096 ? 4 :
+                    this.cmSize == 32768 ? 5 : 0;
+            }
         }
-        if (colors && colors.length) {
-            this.cmLookupTable = colors;
-            this.cmSize = colors.length;
-            this.cmMask = this.cmSize - 1;
-            if (this.cmSize & this.cmMask) return false; // not a power of 2
-            this.cmBitsPerColor = 
-                this.cmSize == 512 ? 3 :
-                this.cmSize == 4096 ? 4 :
-                this.cmSize == 32768 ? 5 : 0;
-        }
-        if (oldStyle && this.source.depth > 8) { // needs implicit conversion
+        // set up mapping if none provided
+        if (!this.cmShiftTable && this.source.depth > 8 && (this.source.depth != this.dest.depth || this.combinationRule == 33)) { // needs implicit conversion
             var srcBits = this.source.depth == 16 ? 5 : 8,
                 dstBits = this.cmBitsPerColor ? this.cmBitsPerColor 
                     : this.dest.depth == 16 ? 5
@@ -3705,10 +4029,15 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
             if (srcBits != dstBits)
                 this.setupColorMasks(srcBits, dstBits);
         }
+        // tallying is special
+        if (this.combinationRule == 33) {
+            this.cmTallyTable = this.cmLookupTable;
+            this.cmLookupTable = null;
+        }
         return true;
     },
     intOrFloatIfNil: function(intOrFloat, valueIfNil) {
-        if (this.vm.isSmallInt(intOrFloat)) return intOrFloat;
+        if (typeof intOrFloat == "number") return intOrFloat;
         if (intOrFloat.isNil) return valueIfNil;
         if (intOrFloat.isFloat) {
             var floatValue = intOrFloat.float;
@@ -3729,12 +4058,20 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
         if (!this.source) {
             this.copyLoopNoSource();
         } else {
-            this.checkSourceOverlap();
-            if (this.source.depth !== this.dest.depth) {
-                this.copyLoopPixMap();
-            } else {
+            if (this.combinationRule === 34) { // alpha blending is special
+                this.copyLoopAlphaBlendScaled();
+            } else if (this.combinationRule === 33) { // pixel tallying is special
                 this.sourceSkewAndPointerInit();
                 this.copyLoop();
+            } else {
+                this.checkSourceOverlap();
+                if (this.cmLookupTable || this.cmMaskTable || this.source.msb !== this.dest.msb) {
+                    // this is the most general loop
+                    this.copyLoopPixMap();
+                } else { // source and dest have same format
+                    this.sourceSkewAndPointerInit();
+                    this.copyLoop();
+                }
             }
         }
     },
@@ -3810,7 +4147,7 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
         var y = this.dy;
         for (var i = 1; i <= this.bbH; i++) {
             if (halftoneHeight > 1) {
-                halftoneWord = this.halftone.words[y % halftoneHeight];
+                halftoneWord = this.halftone[y % halftoneHeight];
                 y += this.vDir;
             }
             var prevWord;
@@ -3974,6 +4311,68 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
             this.destIndex += this.destDelta;
         }
     },
+    copyLoopAlphaBlendScaled: function() {
+        // rule 34 is special since it uses the 32-bit source's alpha channel
+        // (normal pixel mapping throws away that alpha before merging)
+        if (this.dest.depth === 32) return this.copyLoopAlphaBlendScaled32();
+        if (this.dest.depth === 16) return this.copyLoopAlphaBlendScaled16();
+        // others not implemented yet
+        console.warn("copyLoopAlphaBlendScaled8() not implemented yet");
+    },
+    copyLoopAlphaBlendScaled16: function() {
+        var srcY = this.sy,
+            dstY = this.dy,
+            srcShift = (this.dx & 1) * 16;
+        if (this.dest.msb) srcShift = 16 - srcShift;
+        var mask1 = 0xFFFF << (16 - srcShift);
+        for (var y = 0; y < this.bbH; y++) {
+            var srcIndex = srcY * this.source.pitch + this.sx,
+                dstIndex = dstY * this.dest.pitch + (this.dx / 2 | 0),
+                dstMask = mask1;
+            srcShift = dstMask == 0xFFFF ? 16  : 0;
+            for (var x = 0; x < this.bbW; x++) {
+                var sourceWord = this.source.bits[srcIndex],
+                    srcAlpha = sourceWord >>> 24;
+                if (srcAlpha >= 0xF8) { // opaque
+                    sourceWord = this.rgbMap32To16(sourceWord); // todo: implement dithering
+                    sourceWord = (sourceWord == 0 ? 1 : sourceWord) << srcShift;
+                    this.dest.bits[dstIndex] = this.dest.bits[dstIndex] & dstMask | sourceWord;
+                } else {
+                    if (srcAlpha > 8) { // not transparent
+                        var destWord = (this.dest.bits[dstIndex] & ~dstMask) >> srcShift;
+                        destWord = this.rgbMap16To32(destWord) | 0xFF000000; 
+                        sourceWord = this.alphaBlendScaled(sourceWord, destWord);
+                        sourceWord = this.rgbMap32To16(sourceWord); // todo: implement dithering
+                        sourceWord = (sourceWord == 0 ? 1 : sourceWord) << srcShift;
+                        this.dest.bits[dstIndex] = this.dest.bits[dstIndex] & dstMask | sourceWord;
+                    }
+                }
+                srcIndex++;
+                if (this.dest.msb == (srcShift == 0)) dstIndex++;
+                srcShift = srcShift ^ 16; // Toggle between 0 and 16
+                dstMask = ~dstMask;       // Mask other half word
+            }
+            srcY++;
+            dstY++;
+        }
+    },
+    copyLoopAlphaBlendScaled32: function() {
+        var srcIndex = this.sy * this.source.pitch + this.sx,
+            dstIndex = this.dy * this.dest.pitch + this.dx,
+            srcDelta = this.source.pitch - this.bbW,
+            dstDelta = this.destDelta;
+        for (var y = 0; y < this.bbH; y++) {
+            for (var x = 0; x < this.bbW; x++) {
+                var srcWord = this.source.bits[srcIndex],
+                    dstWord = this.dest.bits[dstIndex];
+                this.dest.bits[dstIndex] = this.alphaBlendScaled(srcWord, dstWord);
+                srcIndex++;
+                dstIndex++;
+            }
+            srcIndex += srcDelta;
+            dstIndex += dstDelta;
+        }
+	},
     sourceSkewAndPointerInit: function() {
         var pixPerM1 = this.dest.pixPerWord - 1;  //Pix per word is power of two, so this makes a mask
         var sxLowBits = this.sx & pixPerM1;
@@ -4216,6 +4615,9 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
     rgbMap16To32: function(pix) {
         return ((pix & 0x1F) << 3) | ((pix & 0x3E0) << 6) | ((pix & 0x7C00) << 9);
     },
+    rgbMap32To16: function(pix) { // todo: implement dithering
+        return ((pix & 0xF8) >> 3) | ((pix & 0xF800) >> 6) | ((pix & 0xF80000) >> 9);
+    },
     pickSourcePixels: function(nPixels, srcMask, dstMask, srcShiftInc, dstShiftInc) {
         /*	Pick nPix pixels starting at srcBitIndex from the source, map by the
         color map, and justify them according to dstBitIndex in the resulting destWord. */
@@ -4250,7 +4652,7 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
                 if ((srcShift += srcShiftInc) & 0xFFFFFFE0) {
                     if (this.source.msb) { srcShift += 32; }
                     else { srcShift -= 32; }
-                    sourceWord = this.src.bits[++this.sourceIndex];
+                    sourceWord = this.source.bits[++this.sourceIndex];
                 }
             } while (--nPix);
         }
@@ -4397,9 +4799,25 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
             case 32: return function(src, dst, mask) { // accumulate differences, do not modify dst 
                 self.rgbDiff(src, dst, mask, self.dest.depth, self.dest.pixPerWord);
                 return dst; };
+            case 33: return function(src, dst, mask) { return self.tallyIntoMap(src, dst, mask) };
             case 34: return function(src, dst) { return self.alphaBlendScaled(src, dst) };
+            case 37: return function(src, dst) { return self.rgbMul(src, dst) };
         }
         throw Error("bitblt rule " + rule + " not implemented yet");
+    },
+    rgbMul: function(src, dst) {
+        if (this.dest.depth < 16 ) {
+            // Mul each pixel separately
+            return this.partitionedMul(src, dst, this.dest.depth, this.dest.pixPerWord);
+        } else {
+            if (this.dest.depth == 16) {
+                // Mul RGB components of each pixel separately
+                return this.partitionedMul(src, dst, 5, 3) | (this.partitionedMul(src>>16, dst>>16, 5, 3) << 16);
+            } else {
+                // Mul RGBA components of the pixel separately
+                return this.partitionedMul(src, dst, 8, 4);
+            }
+        }
     },
     rgbDiff: function(src, dst, mask, nBits, nParts) {
         var pixMask = this.maskTable[nBits],
@@ -4505,6 +4923,15 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
     	}
         return result;
 	},
+    partitionedMul: function(word1, word2, nBits, nParts) {
+        var mask = this.maskTable[nBits],
+            result = 0;
+        for (var i = 0, ofs = 0; i < nParts; i++, ofs += nBits) {
+            var product = (((word1>>ofs & mask)+1) * ((word2>>ofs & mask)+1)) - 1;
+            result |= (product>>nBits & mask) << ofs;
+        }
+        return result;
+	},
     partitionedAND: function(word1, word2, nBits, nParts) {
         // AND word1 to word2 as nParts partitions of nBits each.
         // Any field of word1 not all-ones is treated as all-zeroes.
@@ -4518,6 +4945,31 @@ Object.subclass('users.bert.SqueakJS.vm.BitBlt',
     	}
         return result;
 	},
+	tallyIntoMap: function(src, dst, mask) {
+        // Tally pixels into the color map.  Those tallied are exactly those
+        // in the destination rectangle.  Note that the source should be 
+        // specified == destination, in order for the proper color map checks 
+        // to be performed at setup.
+        if (!this.cmTallyTable) return dst;
+        var destDepth = this.dest.depth;
+        if (destDepth == 32) {
+            var mapIndex = this.mapPixel(dst) & this.cmMask;
+            this.cmTallyTable[mapIndex]++;
+        } else {
+            var pixMask = this.maskTable[destDepth],
+                destShifted = dst,
+                maskShifted = mask;
+            while (maskShifted) {
+                if (maskShifted & pixMask) { // Only tally pixels within the destination rectangle
+                    var mapIndex = this.mapPixel(destShifted & pixMask) & this.cmMask;
+                    this.cmTallyTable[mapIndex]++;
+                }
+                maskShifted = maskShifted >>> destDepth;
+                destShifted = destShifted >>> destDepth;
+            }
+        }
+        return dst;  // For no effect on dest
+    },
 },
 'accessing', {
     affectedRect: function() {
@@ -4582,26 +5034,57 @@ Object.extend(Squeak, {
         };
     },
     dbFake: function() {
-        // indexedDB is not supported by this browser, fake it in memory
+        // indexedDB is not supported by this browser, fake it using localStorage
+        // since localStorage space is severly limited, use LZString if loaded
+        // see https://github.com/pieroxy/lz-string
         if (typeof SqueakDBFake == "undefined") {
-            console.warn("IndexedDB not supported by this browser, Squeak files will not be persisted");
+            if (typeof indexedDB == "undefined")
+                console.warn("IndexedDB not supported by this browser, using localStorage");
             SqueakDBFake = {
-                files: {},
                 get: function(filename) {
-                    var req = { result: SqueakDBFake.files[filename] };
-                    window.setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
+                    var string = localStorage["squeak-file:" + filename];
+                    if (!string) {
+                        var compressed = localStorage["squeak-file.lz:" + filename];
+                        if (compressed) {
+                            if (typeof LZString == "object") {
+                                string = LZString.decompressFromUTF16(compressed);
+                            } else {
+                                console.error("LZString not loaded: cannot decompress " + filename);
+                            }
+                        }
+                    }
+                    var bytes = new Uint8Array(string ? string.length : 0);
+                    for (var i = 0; i < bytes.length; i++)
+                        bytes[i] = string.charCodeAt(i) & 0xFF;
+                    var req = {result: bytes.buffer};
+                    setTimeout(function(){
+                        if (string && req.onsuccess) req.onsuccess();
+                        if (!string && req.onerror) req.onerror();
+                    }, 0);
                     return req;
                 },
-                put: function(contents, filename) {
-                    SqueakDBFake.files[filename] = contents;
+                put: function(buffer, filename) {
+                    var bytes = new Uint8Array(buffer),
+                        chars = [];
+                    for (var i = 0; i < bytes.length; i++)
+                        chars.push(String.fromCharCode(bytes[i]));
+                    var string = chars.join('');
+                    if (typeof LZString == "object") {
+                        var compressed = LZString.compressToUTF16(string);
+                        localStorage["squeak-file.lz:" + filename] = compressed;
+                        delete localStorage["squeak-file:" + filename];
+                    } else {
+                        localStorage["squeak-file:" + filename] = string;
+                    }
                     var req = {};
-                    window.setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
+                    setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
                     return req;
                 },
                 delete: function(filename) {
-                    delete SqueakDBFake.files[filename];
+                    delete localStorage["squeak-file:" + filename];
+                    delete localStorage["squeak-file.lz:" + filename];
                     var req = {};
-                    window.setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
+                    setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
                     return req;
                 },
             }
@@ -4614,10 +5097,15 @@ Object.extend(Squeak, {
         if (!path.basename) return errorDo("Invalid path: " + filepath);
         this.dbTransaction("readonly", function(fileStore) {
             var getReq = fileStore.get(path.fullname);
-            getReq.onerror = function(e) { errorDo(e.target.errorCode) };
+            getReq.onerror = function(e) { errorDo(this.errorCode) };
             getReq.onsuccess = function(e) {
-                if (this.result == undefined) 
-                    return errorDo("file not found: " + path.fullname);
+                if (this.result == undefined) {
+                    // fall back on fake db, may be file is there
+                    var fakeReq = Squeak.dbFake().get(path.fullname);
+                    fakeReq.onerror = function(e) { errorDo("file not found: " + path.fullname) };
+                    fakeReq.onsuccess = function(e) { thenDo(this.result); }
+                    return;
+                }
                 thenDo(this.result);
             };
         });
@@ -4681,6 +5169,13 @@ Object.extend(Squeak, {
                 (new Uint8Array(buffer)).set(file.contents.subarray(0, file.size));
             }
             Squeak.filePut(file.name, buffer);
+            if (/SqueakDebug.log/.test(file.name)) {
+                var bytes = new Uint8Array(buffer),
+                    chars = [];
+                for (var i = 0; i < bytes.length; i++)
+                    chars.push(String.fromCharCode(bytes[i]));
+                console.warn(chars.join('').replace(/\r/g, '\n'));
+            }
             file.modified = false;
         }
     },
@@ -4700,7 +5195,7 @@ Object.extend(Squeak, {
     },
 });
 
-Object.subclass('users.bert.SqueakJS.vm.InstructionPrinter',
+Object.subclass('Squeak.InstructionPrinter',
 'initialization', {
     initialize: function(method, vm) {
         this.method = method;
@@ -4714,7 +5209,7 @@ Object.subclass('users.bert.SqueakJS.vm.InstructionPrinter',
         this.highlight = highlight;     // prepend to highlighted line
         this.highlightPC = highlightPC; // PC of highlighted line
         this.result = '';
-        this.scanner = new users.bert.SqueakJS.vm.InstructionStream(this.method, this.vm);
+        this.scanner = new Squeak.InstructionStream(this.method, this.vm);
         this.oldPC = this.scanner.pc;
         var end = this.method.methodEndPC();
     	while (this.scanner.pc < end)
@@ -4803,7 +5298,7 @@ Object.subclass('users.bert.SqueakJS.vm.InstructionPrinter',
     },
 });
 
-Object.subclass('users.bert.SqueakJS.vm.InstructionStream',
+Object.subclass('Squeak.InstructionStream',
 'initialization', {
     initialize: function(method, vm) {
         this.vm = vm;

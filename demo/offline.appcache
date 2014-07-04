@@ -1,11 +1,12 @@
 CACHE MANIFEST
-# Version: Jun  2 18:05:13 2014
+# Version: Jul  4 14:48:40 2014
 CACHE:
 ../vm.js
 simple.html
 simple.css
 simple.js
 SimplePlugin.js
+lz-string.js
 mini.image
 icon.png
 add2home.css

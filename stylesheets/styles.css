@@ -758,8 +758,18 @@ header p {
 }
 #banner .demo {
     position: fixed;
+    right: 50%;
+    margin-right: -20px;
+    padding: 10px 12px;
+    margin-top: 6px;
+    line-height: 14px;
+    font-size: 14px;
+    background-color: #FFE788;
+}
+#banner .etoys {
+    position: fixed;
     left: 50%;
-    margin-left: -30px;
+    margin-left: 30px;
     padding: 10px 12px;
     margin-top: 6px;
     line-height: 14px;

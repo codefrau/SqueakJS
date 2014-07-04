@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Bert Freudenberg
+ * Copyright (c) 2013,2014 Bert Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,34 +22,38 @@
 
 
 //////////////////////////////////////////////////////////////////////////////
-// these two functions fake the Lively module and class system
+// these functions fake the Lively module and class system
 // just enough so the loading of vm.js succeeds
 //////////////////////////////////////////////////////////////////////////////
 
-module = function (moduleName) {
-    return {
-        requires: function() { return this; },
+module = function(dottedPath) {
+    if (dottedPath == "") return window;
+    var path = dottedPath.split("."),
+        name = path.pop(),
+        parent = module(path.join("."));
+    if (!parent[name]) parent[name] = {
+        requires: function(ignored) { return this; },
         toRun: function(code) { code(); }
     };
+    return parent[name];
 };
 
-Object.subclass = function(classPath) {
+Object.subclass = function(classPath /* + more args */ ) {
     var path = classPath.split("."),
-        className = path.pop(),
-        submodule = window;
-    for (var i = 0; i < path.length; i++)
-        submodule = submodule[path[i]] = submodule[path[i]] || {};
-    var aClass = function() {
+        className = path.pop();
+    var newClass = function() {
         if (this.initialize) this.initialize.apply(this, arguments);
         return this;
     };
+    // skip arg 0, copy properties of other args to class proto
     for (var i = 1; i < arguments.length; i++)
         for (name in arguments[i])
-            aClass.prototype[name] = arguments[i][name];
-    submodule[className] = aClass;
+            newClass.prototype[name] = arguments[i][name];
+    module(path.join('.'))[className] = newClass;
 };
 
-Object.extend = function(obj) {
+Object.extend = function(obj /* + more args */ ) {
+    // skip arg 0, copy properties of other args to obj
     for (var i = 1; i < arguments.length; i++)
         for (name in arguments[i])
             obj[name] = arguments[i][name];
@@ -150,17 +154,18 @@ window.onload = function() {
         rq.onload = function(e) {
             progress.style.display = "none";
             canvas.focus();
-            var image = new users.bert.SqueakJS.vm.Image(rq.response, url);
-            var vm = new users.bert.SqueakJS.vm.Interpreter(image, createDisplay());
+            var image = new Squeak.Image(rq.response, url);
+            var vm = new Squeak.Interpreter(image, createDisplay());
             var run = function() {
-                var ms = vm.interpret(20);
-                if (typeof ms === 'number') { // continue running
-                    window.setTimeout(run, ms);
-                } else { // quit
-                    canvas.style.webkitTransition = "-webkit-transform 0.5s";
-                    canvas.style.webkitTransform = "scale(0)";
-                    window.setTimeout(function(){canvas.style.display = 'none'}, 500);
-                }
+                vm.interpret(20, function(ms) {
+                    if (typeof ms === 'number') { // continue running
+                        window.setTimeout(run, ms);
+                    } else { // quit
+                        canvas.style.webkitTransition = "-webkit-transform 0.5s";
+                        canvas.style.webkitTransform = "scale(0)";
+                        window.setTimeout(function(){canvas.style.display = 'none'}, 500);
+                    }
+                });
             };
             run();
         };

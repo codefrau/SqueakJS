@@ -35,8 +35,13 @@ lively.data.FileUpload.Handler.subclass('users.bert.SqueakJS.ui.ImageLoader', {
     },
     openImage: function(name, mime, buffer, pos) {
         var morph = this.findSqueakMorph();
-        if (morph) return morph.loadImageFromBuffer(buffer, name);
-        alert("Please open a Squeak morph first");
+        if (morph) {
+            morph.loadImageFromBuffer(buffer, name, function() {
+                morph.run();
+            });
+        } else {
+            alert("Please open a Squeak morph first");
+        }
     },
     findSqueakMorph: function() {
         return $world.submorphs.detect(function(morph){return !!morph.loadImageFromBuffer});

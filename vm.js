@@ -3728,7 +3728,8 @@ Object.subclass('Squeak.Primitives',
             g = (index & 0xFF00) >>> 8,
             r = (index & 0xFF0000) >>> 16,
             a = ( (index & 0xFF000000) >>> 24 ) / 255;
-        return "rgba(" + [r, g, b, a].join(",") + ")";
+        // swap blue and red to match Squeak component layout
+        return "rgba(" + [b, g, r, a].join(",") + ")";
     },
     b2d_primitiveSetEdgeTransform: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveSetEdgeTransform");

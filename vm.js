@@ -3989,7 +3989,11 @@ Object.subclass('Squeak.BitBlt',
         form.height = formObj.pointers[Squeak.Form_height];
         if (form.width === 0 || form.height === 0) return form;
         if (!(form.width > 0 && form.height > 0)) return null;
-        if (!form.bits) return null;    // checks for words
+        if (!form.bits) {
+            var bytes = formObj.pointers[Squeak.Form_bits].bytes;
+            if (!bytes || (bytes.length & 3)) return null;
+            form.bits = new Uint32Array(bytes.buffer);
+        }
         form.msb = form.depth > 0;
         if (!form.msb) form.depth = -form.depth;
         if (!(form.depth > 0)) return null; // happens if not int

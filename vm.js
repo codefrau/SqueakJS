@@ -800,6 +800,10 @@ Object.subclass('Squeak.Object',
         return this.float32Array
             || (this.words && (this.float32Array = new Float32Array(this.words.buffer)));
     },
+    wordsAsInt32Array: function() {
+        return this.int32Array
+            || (this.words && (this.int32Array = new Int32Array(this.words.buffer)));
+    },
     wordsAsInt16Array: function() {
         return this.int16Array
             || (this.words && (this.int16Array = new Int16Array(this.words.buffer)));
@@ -2241,6 +2245,8 @@ Object.subclass('Squeak.Primitives',
             //case 160: return false; // TODO primitiveAdoptInstance
             case 161: return this.primitiveDirectoryDelimitor(argCount);
             case 162: return this.primitiveDirectoryLookup(argCount);
+            case 165:
+            case 166: return this.primitiveIntegerAtAndPut(argCount);
             case 167: return false; // Processor.yield
             case 188: return this.primitiveExecuteMethodArgsArray(argCount);
             case 195: return false; // Context.findNextUnwindContextUpTo:
@@ -2367,6 +2373,38 @@ Object.subclass('Squeak.Primitives',
         var bytes = lgIntObj.bytes;
         for (var i=0; i<4; i++)
             bytes[i] = (pos32Val>>>(8*i))&255;
+        return lgIntObj;
+    },
+    stackSigned32BitInt: function(nDeep) {
+        var stackVal = this.vm.stackValue(nDeep);
+        if (this.vm.isSmallInt(stackVal)) {
+            return stackVal;
+        }
+        if (stackVal.bytesSize() !== 4) {
+            this.success = false;
+            return 0;
+        }
+        var bytes = stackVal.bytes,
+            value = 0;
+        for (var i=0; i<4; i++)
+            value += (bytes[i]&255) * (1 << 8*i);
+        if (this.isA(stackVal, Squeak.splOb_ClassLargePositiveInteger)) 
+            return value;
+        if (this.isA(stackVal, Squeak.splOb_ClassLargeNegativeInteger)) 
+            return -value;
+        this.success = false;
+        return 0;
+    },
+    signed32BitIntegerFor: function(signed32Val) {
+        // Return the 32-bit quantity as a signed 32-bit integer
+        if (this.vm.canBeSmallInt(signed32Val)) return signed32Val;
+        var negative = signed32Val < 0,
+            lgIntClass = negative ? Squeak.splOb_ClassLargeNegativeInteger : Squeak.splOb_ClassLargePositiveInteger,
+            lgIntObj = this.vm.instantiateClass(this.vm.specialObjects[lgIntClass], 4),
+            bytes = lgIntObj.bytes,
+            pos = -signed32Val;
+        for (var i=0; i<4; i++)
+            bytes[i] = (pos>>>(8*i))&255;
         return lgIntObj;
     },
     stackFloat: function(nDeep) {
@@ -2713,6 +2751,24 @@ Object.subclass('Squeak.Primitives',
         } else { // shortAt:put:
             value = this.stackInteger(0);
             if (value < -32768 || value > 32767)
+                return false;
+            array[index] = value;
+        }
+        this.popNandPushIfOK(argCount+1, value);
+        return true;
+    },
+    primitiveIntegerAtAndPut:  function(argCount) {
+        var rcvr = this.stackNonInteger(argCount),
+            index = this.stackInteger(argCount-1) - 1, // make zero-based
+            array = rcvr.wordsAsInt32Array();
+        if (!this.success || !array || index < 0 || index >= array.length)
+            return false;
+        var value;
+        if (argCount < 2) { // integerAt:
+            value = this.signed32BitIntegerFor(array[index]);
+        } else { // integerAt:put:
+            value = this.stackSigned32BitInt(0);
+            if (!this.success)
                 return false;
             array[index] = value;
         }

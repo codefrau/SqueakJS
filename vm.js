@@ -3115,7 +3115,11 @@ Object.subclass('Squeak.Primitives',
     showForm: function(ctx, form, rect) {
         if (!rect) return;
         var pixels = ctx.createImageData(rect.w, rect.h);
-        var dest = new Uint32Array(pixels.data.buffer);
+        var pixelData = pixels.data;
+        if (pixelData.buffer === undefined) { // mobile IE uses a different data-structure
+            pixelData = new Uint8Array(new ArrayBuffer(rect.w * rect.h * 4));
+        }
+        var dest = new Uint32Array(pixelData.buffer);
         switch (form.depth) {
             case 1:
             case 2:
@@ -3186,6 +3190,12 @@ Object.subclass('Squeak.Primitives',
                 break;
             default: throw Error("depth not implemented");
         };
+        if (pixels.data !== pixelData) {
+            // TODO: implement a faster solution for mobile IE
+            for (var i = 0; i < pixelData.length; i++) {
+                pixels.data[i] = pixelData[i];
+            }
+        }
         ctx.putImageData(pixels, rect.x, rect.y);
     },
     primitiveForceDisplayUpdate: function(argCount) {

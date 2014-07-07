@@ -1,13 +1,13 @@
 CACHE MANIFEST
-# Version: Jul  5 00:24:48 2014
+# Version: Jul  7 15:32:54 2014
 CACHE:
 ../vm.js
 index.html
 etoys.css
 etoys.js
-lz-string.js
 etoys.png
-addtohomescreen.css
-addtohomescreen.js
-gh-fork-ribbon.css
+../demo/lz-string.js
+../demo/addtohomescreen.css
+../demo/addtohomescreen.js
+../demo/gh-fork-ribbon.css
 http://freudenbergs.de/bert/squeakjs/etoys.image

@@ -174,4 +174,6 @@ window.onload = function() {
     loadAndRunImage('mini.image');
 };
 
-var addToHomeConfig = {touchIcon: true};
+addToHomescreen({
+   appID: 'de.freudenbergs.bert.squeakjs.demo',
+});

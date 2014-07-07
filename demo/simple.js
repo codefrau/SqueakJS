@@ -63,10 +63,11 @@ Object.extend = function(obj /* + more args */ ) {
 // now for the good stuff
 //////////////////////////////////////////////////////////////////////////////
 
+var fullscreen = navigator.standalone;
 
 window.onload = function() {
     var canvas = document.getElementsByTagName("canvas")[0];
-    if (navigator.standalone) {
+    if (fullscreen) {
         document.body.style.margin = 0;
         document.body.style.backgroundColor = 'black';
         ['h1','p','div'].forEach(function(n){document.getElementsByTagName(n)[0].style.display="none"});
@@ -174,6 +175,8 @@ window.onload = function() {
     loadAndRunImage('mini.image');
 };
 
-addToHomescreen({
-   appID: 'de.freudenbergs.bert.squeakjs.demo',
+if (addToHomescreen.isStandalone)
+    fullscreen = true;
+else addToHomescreen({
+   appID: 'squeakjs.demo.add2home',
 });

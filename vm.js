@@ -26,7 +26,7 @@ Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.2",
+    vmVersion: "SqueakJS 0.2.1",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/users/bert/SqueakJS/",    // entirely made up
     osName: "Web",
@@ -799,6 +799,10 @@ Object.subclass('Squeak.Object',
     wordsAsFloat32Array: function() {
         return this.float32Array
             || (this.words && (this.float32Array = new Float32Array(this.words.buffer)));
+    },
+    wordsAsInt32Array: function() {
+        return this.int32Array
+            || (this.words && (this.int32Array = new Int32Array(this.words.buffer)));
     },
     wordsAsInt16Array: function() {
         return this.int16Array
@@ -2241,6 +2245,8 @@ Object.subclass('Squeak.Primitives',
             //case 160: return false; // TODO primitiveAdoptInstance
             case 161: return this.primitiveDirectoryDelimitor(argCount);
             case 162: return this.primitiveDirectoryLookup(argCount);
+            case 165:
+            case 166: return this.primitiveIntegerAtAndPut(argCount);
             case 167: return false; // Processor.yield
             case 188: return this.primitiveExecuteMethodArgsArray(argCount);
             case 195: return false; // Context.findNextUnwindContextUpTo:
@@ -2367,6 +2373,38 @@ Object.subclass('Squeak.Primitives',
         var bytes = lgIntObj.bytes;
         for (var i=0; i<4; i++)
             bytes[i] = (pos32Val>>>(8*i))&255;
+        return lgIntObj;
+    },
+    stackSigned32BitInt: function(nDeep) {
+        var stackVal = this.vm.stackValue(nDeep);
+        if (this.vm.isSmallInt(stackVal)) {
+            return stackVal;
+        }
+        if (stackVal.bytesSize() !== 4) {
+            this.success = false;
+            return 0;
+        }
+        var bytes = stackVal.bytes,
+            value = 0;
+        for (var i=0; i<4; i++)
+            value += (bytes[i]&255) * (1 << 8*i);
+        if (this.isA(stackVal, Squeak.splOb_ClassLargePositiveInteger)) 
+            return value;
+        if (this.isA(stackVal, Squeak.splOb_ClassLargeNegativeInteger)) 
+            return -value;
+        this.success = false;
+        return 0;
+    },
+    signed32BitIntegerFor: function(signed32Val) {
+        // Return the 32-bit quantity as a signed 32-bit integer
+        if (this.vm.canBeSmallInt(signed32Val)) return signed32Val;
+        var negative = signed32Val < 0,
+            lgIntClass = negative ? Squeak.splOb_ClassLargeNegativeInteger : Squeak.splOb_ClassLargePositiveInteger,
+            lgIntObj = this.vm.instantiateClass(this.vm.specialObjects[lgIntClass], 4),
+            bytes = lgIntObj.bytes,
+            pos = -signed32Val;
+        for (var i=0; i<4; i++)
+            bytes[i] = (pos>>>(8*i))&255;
         return lgIntObj;
     },
     stackFloat: function(nDeep) {
@@ -2713,6 +2751,24 @@ Object.subclass('Squeak.Primitives',
         } else { // shortAt:put:
             value = this.stackInteger(0);
             if (value < -32768 || value > 32767)
+                return false;
+            array[index] = value;
+        }
+        this.popNandPushIfOK(argCount+1, value);
+        return true;
+    },
+    primitiveIntegerAtAndPut:  function(argCount) {
+        var rcvr = this.stackNonInteger(argCount),
+            index = this.stackInteger(argCount-1) - 1, // make zero-based
+            array = rcvr.wordsAsInt32Array();
+        if (!this.success || !array || index < 0 || index >= array.length)
+            return false;
+        var value;
+        if (argCount < 2) { // integerAt:
+            value = this.signed32BitIntegerFor(array[index]);
+        } else { // integerAt:put:
+            value = this.stackSigned32BitInt(0);
+            if (!this.success)
                 return false;
             array[index] = value;
         }
@@ -3115,7 +3171,11 @@ Object.subclass('Squeak.Primitives',
     showForm: function(ctx, form, rect) {
         if (!rect) return;
         var pixels = ctx.createImageData(rect.w, rect.h);
-        var dest = new Uint32Array(pixels.data.buffer);
+        var pixelData = pixels.data;
+        if (!pixelData.buffer) { // mobile IE uses a different data-structure
+            pixelData = new Uint8Array(rect.w * rect.h * 4);
+        }
+        var dest = new Uint32Array(pixelData.buffer);
         switch (form.depth) {
             case 1:
             case 2:
@@ -3186,6 +3246,12 @@ Object.subclass('Squeak.Primitives',
                 break;
             default: throw Error("depth not implemented");
         };
+        if (pixels.data !== pixelData) {
+            // TODO: implement a faster solution for mobile IE
+            for (var i = 0; i < pixelData.length; i++) {
+                pixels.data[i] = pixelData[i];
+            }
+        }
         ctx.putImageData(pixels, rect.x, rect.y);
     },
     primitiveForceDisplayUpdate: function(argCount) {
@@ -3718,7 +3784,8 @@ Object.subclass('Squeak.Primitives',
             g = (index & 0xFF00) >>> 8,
             r = (index & 0xFF0000) >>> 16,
             a = ( (index & 0xFF000000) >>> 24 ) / 255;
-        return "rgba(" + [r, g, b, a].join(",") + ")";
+        // swap blue and red to match Squeak component layout
+        return "rgba(" + [b, g, r, a].join(",") + ")";
     },
     b2d_primitiveSetEdgeTransform: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveSetEdgeTransform");
@@ -3979,7 +4046,11 @@ Object.subclass('Squeak.BitBlt',
         form.height = formObj.pointers[Squeak.Form_height];
         if (form.width === 0 || form.height === 0) return form;
         if (!(form.width > 0 && form.height > 0)) return null;
-        if (!form.bits) return null;    // checks for words
+        if (!form.bits) {
+            var bytes = formObj.pointers[Squeak.Form_bits].bytes;
+            if (!bytes || (bytes.length & 3)) return null;
+            form.bits = new Uint32Array(bytes.buffer);
+        }
         form.msb = form.depth > 0;
         if (!form.msb) form.depth = -form.depth;
         if (!(form.depth > 0)) return null; // happens if not int

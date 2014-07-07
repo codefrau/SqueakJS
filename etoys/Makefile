@@ -3,19 +3,23 @@
 #
 # copy files to publishing directory and create an offline manifest
 
-PUB=../gh-pages/etoys
-MANIFEST=$(PUB)/offline.appcache
-CACHED=../vm.js index.html etoys.css etoys.js lz-string.js etoys.png \
-	addtohomescreen.css addtohomescreen.js gh-fork-ribbon.css
+ETOYSDIR=../gh-pages/etoys
+MANIFEST=$(ETOYSDIR)/offline.appcache
+DEMODIR=../gh-pages/demo
+DEMO=../demo/lz-string.js ../demo/addtohomescreen.css ../demo/addtohomescreen.js ../demo/gh-fork-ribbon.css
+CACHED=../vm.js index.html etoys.css etoys.js etoys.png $(DEMO)
 EXTRA=http://freudenbergs.de/bert/squeakjs/etoys.image
 
-$(MANIFEST): Makefile $(PUB) $(CACHED)
+$(MANIFEST): Makefile $(ETOYSDIR) $(CACHED)
 	@rm -f $@
 	@echo "CACHE MANIFEST" > $@
 	@stat -f '# Version: %Sm' `ls -t $(CACHED) | head -n1` | tee -a $@
 	@echo "CACHE:" >> $@
 	@for f in $(CACHED) $(EXTRA); do echo $$f >> $@ ; done
 
-$(PUB): $(CACHED)
+$(ETOYSDIR): $(DEMODIR) $(CACHED)
 	@if [ ! -d $@ ] ; then mkdir -p $@ ; fi
-	@for f in $^ ; do install -pvm 444 $$f $@/$$f ; done
+	@for f in $(CACHED); do install -pvm 444 $$f $@/$$f ; done
+
+$(DEMODIR): $(DEMO)
+	$(MAKE) -C ../demo

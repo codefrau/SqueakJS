@@ -5,7 +5,8 @@
 
 PUB=../gh-pages/demo
 MANIFEST=$(PUB)/offline.appcache
-CACHED=../vm.js simple.html simple.css simple.js SimplePlugin.js lz-string.js mini.image icon.png add2home.css add2home.js gh-fork-ribbon.css
+CACHED=../vm.js simple.html simple.css simple.js SimplePlugin.js mini.image icon.png \
+	lz-string.js addtohomescreen.css addtohomescreen.js gh-fork-ribbon.css
 
 $(MANIFEST): Makefile $(PUB) $(CACHED)
 	@rm -f $@

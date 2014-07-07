@@ -1,5 +1,5 @@
 body {
-    background-color: #EEE;
+    background-color: #eae6d1;
     font-family: sans-serif;
 }
 progress {
@@ -15,10 +15,4 @@ canvas {
     -ms-user-select: none;
     -o-user-select: none;
     user-select: none;
-}
-img {
-    position: absolute;
-    top: 0;
-    right: 0;
-    border: 0;
 }

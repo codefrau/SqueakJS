@@ -3116,8 +3116,8 @@ Object.subclass('Squeak.Primitives',
         if (!rect) return;
         var pixels = ctx.createImageData(rect.w, rect.h);
         var pixelData = pixels.data;
-        if (pixelData.buffer === undefined) { // mobile IE uses a different data-structure
-            pixelData = new Uint8Array(new ArrayBuffer(rect.w * rect.h * 4));
+        if (!pixelData.buffer) { // mobile IE uses a different data-structure
+            pixelData = new Uint8Array(rect.w * rect.h * 4);
         }
         var dest = new Uint32Array(pixelData.buffer);
         switch (form.depth) {

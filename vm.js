@@ -3372,7 +3372,10 @@ Object.subclass('Squeak.Primitives',
             dirNameObj = this.stackNonInteger(1);
         if (!this.success) return false;
         var entries = Squeak.dirList(dirNameObj.bytesAsString());
-        if (!entries) return false;
+        if (!entries) {
+            console.log("Directory not found: " + dirNameObj.bytesAsString());
+            return false;
+        }
         var keys = Object.keys(entries);
         this.popNandPushIfOK(argCount+1, this.makeStObject(entries[keys[index - 1]]));  // entry or nil
         return true;
@@ -3523,10 +3526,16 @@ Object.subclass('Squeak.Primitives',
         var entry = directory[path.basename],
             contents = null;
         if (!entry) {
-            if (!writeFlag) return null;
+            if (!writeFlag) {
+                console.log("File not found: " + path.fullname);
+                return null;
+            }
             contents = new Uint8Array();
             entry = Squeak.filePut(path.fullname, contents.buffer);
-            if (!entry) return null;
+            if (!entry) {
+                console.log("Cannot create file: " + path.fullname);
+                return null;
+            }
         }
         // make the file object
         file = {

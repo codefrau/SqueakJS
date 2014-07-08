@@ -1976,6 +1976,7 @@ Object.subclass('Squeak.Primitives',
         this.builtinModules = {
             MiscPrimitivePlugin: {
                     primitiveStringHash: this.primitiveStringHash.bind(this),
+                    primitiveCompareString: this.primitiveCompareString.bind(this),
             },
             FilePlugin: {
                     primitiveDirectoryDelimitor: this.primitiveDirectoryDelimitor.bind(this),
@@ -2258,7 +2259,7 @@ Object.subclass('Squeak.Primitives',
             case 231: return this.primitiveForceDisplayUpdate(argCount);
             case 233: return this.primitiveSetFullScreen(argCount);
             case 234: return false; // primBitmapdecompressfromByteArrayat
-            case 235: return false; // primStringcomparewithcollated
+            case 235: return this.primitiveCompareString(argCount); // primStringcomparewithcollated
             case 236: return false; // primSampledSoundconvert8bitSignedFromto16Bit
             case 237: return false; // primBitmapcompresstoByteArray
             case 238: case 239: case 240: case 241: return false; // serial port primitives
@@ -3349,7 +3350,30 @@ Object.subclass('Squeak.Primitives',
     	}
     	this.vm.popNandPush(3, hash);
         return true;
-    }
+    },
+    primitiveCompareString: function(argCount) {
+        var string1 = this.stackNonInteger(2).bytes,
+            string2 = this.stackNonInteger(1).bytes,
+            order = this.stackNonInteger(0).bytes;
+        if (!string1 || !string2 || !order) return false;
+        if (string1 === string2) {
+            this.vm.popNandPush(4, 2);
+            return true;
+        }
+        var len1 = string1.length,
+            len2 = string2.length,
+            len = Math.min(len1, len2);
+        for (var i = 0; i < len; i++) {
+            var c1 = order[string1[i]],
+                c2 = order[string2[i]];
+            if (c1 !== c2) {
+                this.vm.popNandPush(4, c1 < c2 ? 1 : 3);
+                return true;
+            }
+        }
+        this.vm.popNandPush(4, len1 === len2 ? 2 : len1 < len2 ? 1 : 3); 
+        return true;
+    },
 },
 'FilePlugin', {
     primitiveDirectoryCreate: function(argCount) {

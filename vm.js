@@ -3796,7 +3796,7 @@ Object.subclass('Squeak.Primitives',
             // which works fine for TTF glyphs, but we should check that the form was
             // never written to before.
             var canvasWords = new Uint32Array(canvasBytes.buffer);
-            form.bits.set(canvasWords);
+            form.bits.set(canvasWords); // set big-endian ARGB from little-endian RGBA
             // TODO implement proper blending over old contents
         } else if (form.depth == 16) {
             // TODO: track dirty rectangle so we don't have to check the full canvas
@@ -3847,7 +3847,7 @@ Object.subclass('Squeak.Primitives',
         return array;
     },
     b2d_setClip: function(minx, miny, maxx, maxy) {
-        
+        if (this.b2d_debug) console.log("==> clip " + minx + "," + miny + "," + maxx + "," + maxy + " (ignored)");
     },
     b2d_setTransform: function(t) {
         /* Transform is a matrix:
@@ -3862,8 +3862,8 @@ Object.subclass('Squeak.Primitives',
         if (this.b2d_debug) console.log("==> transform: " + [t[0], t[3], t[1], t[4], t[2], t[5]].join(','));
     },
     b2d_setStyle: function(fillIndex, borderIndex, borderWidth) {
-        var hasFill = !!fillIndex,
-            hasStroke = borderIndex && borderWidth > 0,
+        var hasFill = fillIndex !== 0,
+            hasStroke = borderIndex !== 0 && borderWidth > 0,
             state = this.b2d_state;
         state.hasFill = hasFill;
         state.hasStroke = hasStroke;
@@ -3879,7 +3879,7 @@ Object.subclass('Squeak.Primitives',
         return hasFill || hasStroke;
     },
     b2d_styleFrom: function(index) {
-        if (index == 0) return null;
+        if (index === 0) return null;
         var fills = this.b2d_state.fills;
         if (index <= fills.length) return fills[index - 1];
         var b = index & 0xFF,
@@ -3926,10 +3926,10 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     b2d_primitiveNeedsFlushPut: function(argCount) {
-        var needsFlush = this.stackNonInteger(0).isTrue;
+        var needsFlush = !!this.stackNonInteger(0).isTrue;
         if (!this.success) return false;
-        this.b2d_state.needsFlush = !!needsFlush;
-        if (this.b2d_debug) console.log("b2d_primitiveNeedsFlushPut: " + !!needsFlush);
+        this.b2d_state.needsFlush = needsFlush;
+        if (this.b2d_debug) console.log("b2d_primitiveNeedsFlushPut: " + needsFlush);
         this.vm.popN(argCount);
         return true;
     },
@@ -3955,11 +3955,11 @@ Object.subclass('Squeak.Primitives',
     },
     b2d_primitiveAddBezierShape: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveAddBezierShape");
-        var borderIndex = this.stackPos32BitInt(0),
-            borderWidth = this.stackInteger(1),
-            fillIndex   = this.stackPos32BitInt(2),
+        var points      = this.stackNonInteger(4),
             nSegments   = this.stackInteger(3),
-            points      = this.stackNonInteger(4);
+            fillIndex   = this.stackPos32BitInt(2),
+            borderWidth = this.stackInteger(1),
+            borderIndex = this.stackPos32BitInt(0);
         if (!this.success) return false;
         if (this.b2d_setStyle(fillIndex, borderIndex, borderWidth)) {
             var p = this.b2d_pointsFrom(points, nSegments * 3);
@@ -3976,11 +3976,11 @@ Object.subclass('Squeak.Primitives',
     },
     b2d_primitiveAddPolygon: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveAddPolygon");
-        var borderIndex = this.stackPos32BitInt(0);
-        var borderWidth = this.stackInteger(1);
-        var fillIndex   = this.stackPos32BitInt(2);
-        var nPoints     = this.stackInteger(3);
-        var points      = this.stackNonInteger(4);
+        var points      = this.stackNonInteger(4),
+            nPoints     = this.stackInteger(3),
+            fillIndex   = this.stackPos32BitInt(2),
+            borderWidth = this.stackInteger(1),
+            borderIndex = this.stackPos32BitInt(0);
         if (!this.success) return false;
         if (this.b2d_setStyle(fillIndex, borderIndex, borderWidth)) {
             var p = this.b2d_pointsFrom(points, nPoints);
@@ -3996,17 +3996,17 @@ Object.subclass('Squeak.Primitives',
     },
     b2d_primitiveAddRect: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveAddRect");
-        var borderIndex = this.stackPos32BitInt(0);
-        var borderWidth = this.stackInteger(1);
-	    var fillIndex   = this.stackPos32BitInt(2);
-	    var corner      = this.stackNonInteger(3);
-	    var origin      = this.stackNonInteger(4);
-	    if (!this.success) return false;
+        var origin      = this.stackNonInteger(4).pointers,
+            corner      = this.stackNonInteger(3).pointers,
+            fillIndex   = this.stackPos32BitInt(2),
+            borderWidth = this.stackInteger(1),
+            borderIndex = this.stackPos32BitInt(0);
+        if (!this.success) return false;
         if (this.b2d_setStyle(fillIndex, borderIndex, borderWidth)) {
-            var x = this.floatOrInt(origin.pointers[0]),
-                y = this.floatOrInt(origin.pointers[1]),
-                w = this.floatOrInt(corner.pointers[0]) - x,
-                h = this.floatOrInt(corner.pointers[1]) - y; 
+            var x = this.floatOrInt(origin[0]),
+                y = this.floatOrInt(origin[1]),
+                w = this.floatOrInt(corner[0]) - x,
+                h = this.floatOrInt(corner[1]) - y; 
             this.b2d_state.context.rect(x, y, w, h);
             if (this.b2d_debug) console.log("==> rect " + [x, y, w, h].join(','));
             this.b2d_state.flushNeeded = true;

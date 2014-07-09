@@ -3790,12 +3790,41 @@ Object.subclass('Squeak.Primitives',
         var state = this.b2d_state,
             form = state.bitblt.dest,
             canvasBytes = state.context.getImageData(0, 0, form.width, form.height).data;
+        if (!form.msb) this.warnOnce("B2D: drawing to little-endian forms not implemented yet");
         if (form.depth == 32) {
+            // KLUDGE: this clobbers the original pixels instead of blending over them
+            // which works fine for TTF glyphs, but we should check that the form was
+            // never written to before.
             var canvasWords = new Uint32Array(canvasBytes.buffer);
             form.bits.set(canvasWords);
+            // TODO implement proper blending over old contents
+        } else if (form.depth == 16) {
+            // TODO: track dirty rectangle so we don't have to check the full canvas
+            for (var p = 0; p < canvasBytes.length; p += 8) {
+                if (!(canvasBytes[p+3] | canvasBytes[p+7]))
+                    continue; // skip pixel if fully transparent.
+                var dstPixels = form.bits[p/8],  // two 16-bit pixels
+                    dstShift = 16,
+                    pp = p,
+                    result = 0;
+                for (var i = 0; i < 2; i++) {
+                    var alpha = canvasBytes[pp+3] / 255,
+                        oneMinusAlpha = 1 - alpha,
+                        pix = dstPixels >> dstShift,
+                        r = alpha * canvasBytes[pp+2] + oneMinusAlpha * ((pix >> 7) & 0xF8),
+                        g = alpha * canvasBytes[pp+1] + oneMinusAlpha * ((pix >> 2) & 0xF8),
+                        b = alpha * canvasBytes[pp  ] + oneMinusAlpha * ((pix << 3) & 0xF8),
+                        res = (r & 0xF8) << 7 | (g & 0xF8) << 2 | (b & 0xF8) >> 3;  
+                    result = result | (res << dstShift);
+                    dstShift -= 16;
+                    pp += 4;
+                }
+                form.bits[p/8] = result;
+            }
         } else {
-            this.warnOnce("B2D: drawing to non-32 bit forms not supported yet");
+            this.warnOnce("B2D: drawing to " + form.depth + " bit forms not supported yet");
         }
+        // TODO: if drawing to display, refresh it
         if (this.b2d_debug) this.vm.breakOutOfInterpreter = 'break';
     },
     b2d_pointsFrom: function(arrayObj, nPoints) {

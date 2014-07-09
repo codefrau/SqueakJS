@@ -3798,6 +3798,25 @@ Object.subclass('Squeak.Primitives',
         }
         if (this.b2d_debug) this.vm.breakOutOfInterpreter = 'break';
     },
+    b2d_pointsFrom: function(arrayObj, nPoints) {
+        var words = arrayObj.words;
+        if (words) {
+            if (words.length == nPoints) return arrayObj.wordsAsInt16Array();       // ShortPointArray
+            if (words.length == nPoints * 2) return arrayObj.wordsAsInt32Array();   // PointArray
+            return null;
+        }
+        // Array of Points
+        var points = arrayObj.pointers;
+        if (!points || points.length != nPoints)
+            return null;
+        var array = [];
+        for (var i = 0; i < nPoints; i++) {
+            var p = points[i].pointers;         // Point
+            array.push(this.floatOrInt(p[0]));  // x
+            array.push(this.floatOrInt(p[1]));  // y
+        }
+        return array;
+    },
     b2d_setClip: function(minx, miny, maxx, maxy) {
         
     },
@@ -3912,11 +3931,10 @@ Object.subclass('Squeak.Primitives',
             fillIndex   = this.stackPos32BitInt(2),
             nSegments   = this.stackInteger(3),
             points      = this.stackNonInteger(4);
-        if (!this.success || !points.words) return false;
+        if (!this.success) return false;
         if (this.b2d_setStyle(fillIndex, borderIndex, borderWidth)) {
-            var p = points.words;
-            if (p.length == nSegments * 3) p = points.wordsAsInt16Array();  // ShortPointArray
-            else if (p.length != nSegments * 6) return false;
+            var p = this.b2d_pointsFrom(points, nSegments * 3);
+            if (!p) return false;
             var ctx = this.b2d_state.context;
             ctx.moveTo(p[0], p[1]);
             for (var i = 0; i < p.length; i += 6)
@@ -3931,12 +3949,20 @@ Object.subclass('Squeak.Primitives',
         if (this.b2d_debug) console.log("b2d_primitiveAddPolygon");
         var borderIndex = this.stackPos32BitInt(0);
         var borderWidth = this.stackInteger(1);
-	    var fillIndex   = this.stackPos32BitInt(2);
-	    var nPoints     = this.stackInteger(3);
-	    var points      = this.stackNonInteger(4);
-	    if (!this.success) return false;
-        this.warnOnce("B2D: polygons not implemented yet");
-        this.vm.popNandPush(argCount);
+        var fillIndex   = this.stackPos32BitInt(2);
+        var nPoints     = this.stackInteger(3);
+        var points      = this.stackNonInteger(4);
+        if (!this.success) return false;
+        if (this.b2d_setStyle(fillIndex, borderIndex, borderWidth)) {
+            var p = this.b2d_pointsFrom(points, nPoints);
+            if (!p) return false;
+            var ctx = this.b2d_state.context;
+            ctx.moveTo(p[0], p[1]);
+            for (var i = 2; i < p.length; i += 2)
+                ctx.lineTo(p[i], p[i+1]);
+            if (this.b2d_debug) console.log("==> polygon");
+            this.b2d_state.flushNeeded = true;
+        }
         return true;
     },
     b2d_primitiveAddRect: function(argCount) {

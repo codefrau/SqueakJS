@@ -1977,6 +1977,7 @@ Object.subclass('Squeak.Primitives',
             MiscPrimitivePlugin: {
                     primitiveStringHash: this.primitiveStringHash.bind(this),
                     primitiveCompareString: this.primitiveCompareString.bind(this),
+                    primitiveFindSubstring: this.primitiveFindSubstring.bind(this),
             },
             FilePlugin: {
                     primitiveDirectoryDelimitor: this.primitiveDirectoryDelimitor.bind(this),
@@ -2259,12 +2260,12 @@ Object.subclass('Squeak.Primitives',
             case 231: return this.primitiveForceDisplayUpdate(argCount);
             case 233: return this.primitiveSetFullScreen(argCount);
             case 234: return false; // primBitmapdecompressfromByteArrayat
-            case 235: return this.primitiveCompareString(argCount); // primStringcomparewithcollated
+            case 235: return this.primitiveCompareString(argCount);
             case 236: return false; // primSampledSoundconvert8bitSignedFromto16Bit
             case 237: return false; // primBitmapcompresstoByteArray
             case 238: case 239: case 240: case 241: return false; // serial port primitives
             case 243: return false; // primStringtranslatefromtotable
-            case 244: return false; // primStringfindFirstInStringinSetstartingAt
+            case 244: return this.primitiveFindSubstring(argCount);
             case 245: return false; // primStringindexOfAsciiinStringstartingAt
             case 246: return false; // primStringfindSubstringinstartingAtmatchTable
             case 254: return this.primitiveVMParameter(argCount);
@@ -3373,6 +3374,24 @@ Object.subclass('Squeak.Primitives',
         }
         this.vm.popNandPush(4, len1 === len2 ? 2 : len1 < len2 ? 1 : 3); 
         return true;
+    },
+    primitiveFindSubstring: function(argCount) {
+        var key = this.stackNonInteger(3).bytes,
+            body = this.stackNonInteger(2).bytes,
+            start = this.stackInteger(1) - 1, // make zero-based
+            matchTable = this.stackNonInteger(0).bytes;
+        if (!this.success || !key || !body || start < 0 || !matchTable) return false;
+        if (key.length > 0) {
+            var endIndex = body.length - key.length;
+            for (var startIndex = start; startIndex <= endIndex; startIndex++) {
+                var index = 0;
+                while (matchTable[body[startIndex+index]] == matchTable[key[index]]) {
+                    if (++index == key.length)
+                        return this.popNandPushIfOK(5, startIndex + 1); // make 1-based
+                }
+            }
+        }
+        return this.popNandPushIfOK(5, 0);
     },
 },
 'FilePlugin', {

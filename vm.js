@@ -3943,13 +3943,26 @@ Object.subclass('Squeak.Primitives',
     },
     b2d_primitiveAddOval: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveAddOval");
-        var borderIndex = this.stackPos32BitInt(0);
-        var borderWidth = this.stackInteger(1);
-        var fillIndex   = this.stackPos32BitInt(2);
-        var end         = this.stackNonInteger(3);
-        var start       = this.stackNonInteger(4);
+        var origin      = this.stackNonInteger(4).pointers,
+            corner      = this.stackNonInteger(3).pointers,
+            fillIndex   = this.stackPos32BitInt(2),
+            borderWidth = this.stackInteger(1),
+            borderIndex = this.stackPos32BitInt(0);
         if (!this.success) return false;
-        this.warnOnce("B2D: oval not implemented yet");
+        if (this.b2d_setStyle(fillIndex, borderIndex, borderWidth)) {
+            var ctx = this.b2d_state.context,
+                x = this.floatOrInt(origin[0]),
+                y = this.floatOrInt(origin[1]),
+                w = this.floatOrInt(corner[0]) - x,
+                h = this.floatOrInt(corner[1]) - y;
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(w, h);
+            ctx.arc(0.5, 0.5, 0.5, 0, Math.PI * 2);
+            ctx.restore();
+            if (this.b2d_debug) console.log("==> oval " + [x, y, w, h].join(','));
+            this.b2d_state.flushNeeded = true;
+        }
         this.vm.popN(argCount);
         return true;
     },

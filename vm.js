@@ -3679,8 +3679,10 @@ Object.subclass('Squeak.Primitives',
 
         if (bitblt.combinationRule === 22 || bitblt.combinationRule === 32)
             this.vm.popNandPush(1, bitblt.bitCount);
-        else if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay])
+        else if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay]) {
+            this.display.lastTick = this.vm.lastTick;
             this.showForm(this.display.ctx, bitblt.dest, bitblt.affectedRect());
+        }
         return true;
 	},
 	bitblt_primitiveWarpBits: function(argCount) {

@@ -1421,11 +1421,11 @@ Object.subclass('Squeak.Interpreter',
     },
     executeNewMethod: function(newRcvr, newMethod, argumentCount, primitiveIndex) {
         this.sendCount++;
-        if (newMethod === this.breakOnMethod) this.breakOutOfInterpreter = 'break';
+        if (newMethod === this.breakOnMethod) this.breakNow("executing method " + this.printMethod(newMethod));
         if (this.logSends) console.log(this.sendCount + ' ' + this.printMethod(newMethod));
         if (this.breakOnContextChanged) {
             this.breakOnContextChanged = false;
-            this.breakOutOfInterpreter = 'break';
+            this.breakNow();
         }
         if (primitiveIndex > 0)
             if (this.tryPrimitive(primitiveIndex, argumentCount, newMethod))
@@ -1478,7 +1478,7 @@ Object.subclass('Squeak.Interpreter',
         while (thisContext !== targetContext) {
             if (this.breakOnContextReturned === thisContext) {
                 this.breakOnContextReturned = null;
-                this.breakOutOfInterpreter = 'break';
+                this.breakNow();
             }
             nextContext = thisContext.getPointer(Squeak.Context_sender);
             thisContext.setPointer(Squeak.Context_sender, this.nilObj);
@@ -1494,7 +1494,7 @@ Object.subclass('Squeak.Interpreter',
         this.push(returnValue);
         if (this.breakOnContextChanged) {
             this.breakOnContextChanged = false;
-            this.breakOutOfInterpreter = 'break';
+            this.breakNow();
         }
     },
     tryPrimitive: function(primIndex, argCount, newMethod) {
@@ -1865,7 +1865,7 @@ Object.subclass('Squeak.Interpreter',
         }
         return stack;
     },
-    breakOn: function(classAndMethodString) {
+    findMethod: function(classAndMethodString) {
         // classAndMethodString is 'Class>>method'
         var found,
             className = classAndMethodString.split('>>')[0],
@@ -1876,8 +1876,15 @@ Object.subclass('Squeak.Interpreter',
                 && className == classObj.className())
                     return found = methodObj;
         });
-        this.breakOnMethod = found;
         return found;
+    },
+    breakNow: function(msg) {
+        if (msg) console.log("Break: " + msg);
+        this.breakOutOfInterpreter = 'break';
+    },
+    breakOn: function(classAndMethodString) {
+        // classAndMethodString is 'Class>>method'
+        return this.breakOnMethod = classAndMethodString && this.findMethod(classAndMethodString);
     },
     breakOnReturn: function() {
         this.breakOnContextChanged = false;

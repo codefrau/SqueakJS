@@ -3878,16 +3878,19 @@ Object.subclass('Squeak.Primitives',
         }
         return hasFill || hasStroke;
     },
+    b2d_colorFrom: function(word) {
+        var b = word & 0xFF,
+            g = (word & 0xFF00) >>> 8,
+            r = (word & 0xFF0000) >>> 16,
+            a = ((word & 0xFF000000) >>> 24) / 255;
+        // swap blue and red to fake Squeak component layout
+        return "rgba(" + [b, g, r, a].join(",") + ")";
+    },
     b2d_styleFrom: function(index) {
         if (index === 0) return null;
         var fills = this.b2d_state.fills;
         if (index <= fills.length) return fills[index - 1];
-        var b = index & 0xFF,
-            g = (index & 0xFF00) >>> 8,
-            r = (index & 0xFF0000) >>> 16,
-            a = ( (index & 0xFF000000) >>> 24 ) / 255;
-        // swap blue and red to match Squeak component layout
-        return "rgba(" + [b, g, r, a].join(",") + ")";
+        return this.b2d_colorFrom(index);
     },
     b2d_primitiveSetEdgeTransform: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveSetEdgeTransform");
@@ -4055,10 +4058,29 @@ Object.subclass('Squeak.Primitives',
     },
     b2d_primitiveAddGradientFill: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveAddGradientFill");
-        this.warnOnce("B2D: gradient fills not implemented yet");
-        var fills = this.b2d_state.fills;
-        fills.push('green');
-        this.vm.popNandPush(argCount+1, fills.length);
+        var ramp = this.stackNonInteger(4).words,
+            origin = this.stackNonInteger(3).pointers,
+            direction = this.stackNonInteger(2).pointers,
+            //normal = this.stackNonInteger(1).pointers,
+            isRadial = this.stackNonInteger(0).isTrue;
+        if (!this.success) return false;
+        var x = this.floatOrInt(origin[0]),
+            y = this.floatOrInt(origin[1]),
+            dx = this.floatOrInt(direction[0]),
+            dy = this.floatOrInt(direction[1]),
+            state = this.b2d_state,
+            ctx = state.context,
+            gradient = isRadial
+                ? ctx.createRadialGradient(x, y, 0, x, y, Math.sqrt(dx*dx + dy*dy))
+                : ctx.createLinearGradient(x, y, x + dx, y + dy);
+        // we get a 512-step color ramp here. Going to assume it's made from only two colors.
+        gradient.addColorStop(0, this.b2d_colorFrom(ramp[0]));
+        gradient.addColorStop(1, this.b2d_colorFrom(ramp[ramp.length - 1]));
+        // TODO: use more than two stops
+        // IDEA: the original gradient is likely in a temp at this.vm.stackValue(7)
+        //       so we could get the original color stops from it
+        state.fills.push(gradient);
+        this.vm.popNandPush(argCount+1, state.fills.length);
         return true;
     },
     b2d_primitiveNeedsFlush: function(argCount) {

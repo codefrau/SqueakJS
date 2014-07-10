@@ -952,17 +952,17 @@ Object.subclass('Squeak.Object',
         this.setPointer(1+zeroBasedIndex, value); // step over header
     },
     methodEndPC: function() {
-    	// index after the last bytecode
-    	var length = this.bytes.length;
-    	var flagByte = this.bytes[length - 1];
-    	if (flagByte === 0) // If last byte == 0, may be either 0, 0, 0, 0 or just 0
-    		for (var i = 2; i <= 5 ; i++) 
-    		    if (this.bytes[length - i] !== 0)
-    		        return length - i + 1;
-    	if (flagByte < 252) // Magic sources (tempnames encoded in last few bytes)
-    	    return length - flagByte - 1;
-    	// Normal 4-byte source pointer
-    	return length - 4;
+        // index after the last bytecode
+        var length = this.bytes.length;
+        var flagByte = this.bytes[length - 1];
+        if (flagByte === 0) // If last byte == 0, may be either 0, 0, 0, 0 or just 0
+        for (var i = 2; i <= 5 ; i++) 
+            if (this.bytes[length - i] !== 0)
+                return length - i + 1;
+        if (flagByte < 252) // Magic sources (tempnames encoded in last few bytes)
+            return length - flagByte - 1;
+        // Normal 4-byte source pointer
+        return length - 4;
     },
 },
 'as context',
@@ -1404,8 +1404,8 @@ Object.subclass('Squeak.Interpreter',
         var dictSize = mDict.pointersSize();
         var mask = (dictSize - Squeak.MethodDict_selectorStart) - 1;
         var index = (mask & messageSelector.hash) + Squeak.MethodDict_selectorStart;
-    	// If there are no nils (should always be), then stop looping on second wrap.
-    	var hasWrapped = false;
+        // If there are no nils (should always be), then stop looping on second wrap.
+        var hasWrapped = false;
         while (true) {
             var nextSelector = mDict.getPointer(index);
             if (nextSelector === messageSelector) {
@@ -1433,7 +1433,7 @@ Object.subclass('Squeak.Interpreter',
                 return;  //Primitive succeeded -- end of story
         if (newMethod === this.ignoreMethod) return; // ignoring this method
         var newContext = this.allocateOrRecycleContext(newMethod.methodNeedsLargeFrame());
-    	var tempCount = newMethod.methodTempCount();
+        var tempCount = newMethod.methodTempCount();
         var newPC = 0; // direct zero-based index into byte codes
         var newSP = Squeak.Context_tempFrameStart + tempCount - 1; // direct zero-based index into context pointers
         newContext.setPointer(Squeak.Context_method, newMethod);
@@ -1446,7 +1446,7 @@ Object.subclass('Squeak.Interpreter',
         //...and fill the remaining temps with nil
         this.arrayFill(newContext.pointers, Squeak.Context_tempFrameStart+argumentCount, Squeak.Context_tempFrameStart+tempCount, this.nilObj);
         this.popN(argumentCount+1);
-	    this.reclaimableContextCount++;
+        this.reclaimableContextCount++;
         this.storeContextRegisters();
         /////// Woosh //////
         this.activeContext = newContext; //We're off and running...
@@ -1557,7 +1557,7 @@ Object.subclass('Squeak.Interpreter',
             var cls = this.getClass(rcvr);
             while (cls !== lookupClass) {
                 cls = cls.pointers[Squeak.Class_superclass];
-		        if (cls.isNil) return false;
+                if (cls.isNil) return false;
             }
         }
         var trueArgCount = args.pointersSize();
@@ -2697,7 +2697,7 @@ Object.subclass('Squeak.Primitives',
         var info;
         var cacheable =
             (this.vm.verifyAtSelector === atOrPutSelector)         //is at or atPut
-		    && (this.vm.verifyAtClass === array.sqClass)           //not a super send
+            && (this.vm.verifyAtClass === array.sqClass)           //not a super send
             && !(array.format === 3 && this.vm.isContext(array));  //not a context (size can change)
         info = cacheable ? atOrPutCache[array.hash & this.atCacheMask] : this.nonCachedInfo;
         info.array = array;
@@ -2849,7 +2849,7 @@ Object.subclass('Squeak.Primitives',
         if (!this.success) return dst; //some integer not right
         var srcFmt = src.format;
         var dstFmt = dst.format;
-    	if (dstFmt < 8)
+        if (dstFmt < 8)
             if (dstFmt != srcFmt) {this.success = false; return dst;} //incompatible formats
         else
             if ((dstFmt&0xC) != (srcFmt&0xC)) {this.success = false; return dst;} //incompatible formats
@@ -3116,14 +3116,14 @@ Object.subclass('Squeak.Primitives',
 		2 args:	set the VM indicated parameter. */
 		var paramsArraySize = 40;
 		switch (argCount) {
-		    case 0:
-		        var arrayObj = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassArray], paramsArraySize);
-		        arrayObj.pointers = this.vm.fillArray(paramsArraySize, 0);
-		        return this.popNandPushIfOK(1, arrayObj);
-		    case 1:
-		        return this.popNandPushIfOK(2, 0);
-		    case 2:
-		        return this.popNandPushIfOK(3, 0);
+            case 0:
+                var arrayObj = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassArray], paramsArraySize);
+                arrayObj.pointers = this.vm.fillArray(paramsArraySize, 0);
+                return this.popNandPushIfOK(1, arrayObj);
+            case 1:
+                return this.popNandPushIfOK(2, 0);
+            case 2:
+                return this.popNandPushIfOK(3, 0);
 		};
 		return false;
     },
@@ -3352,13 +3352,13 @@ Object.subclass('Squeak.Primitives',
         if (!this.success) return false;
         var stringSize = stringObj.bytesSize();
         var string = stringObj.bytes;
-    	var hash = initialHash & 0x0FFFFFFF;
-    	for (var i = 0; i < stringSize; i++) {
-    		hash += string[i];
-    		var low = hash & 0x3FFF;
-    		hash = (0x260D * low + ((0x260D * (hash >>> 14) + (0x0065 * low) & 16383) * 16384)) & 0x0FFFFFFF;
-    	}
-    	this.vm.popNandPush(3, hash);
+        var hash = initialHash & 0x0FFFFFFF;
+        for (var i = 0; i < stringSize; i++) {
+            hash += string[i];
+            var low = hash & 0x3FFF;
+            hash = (0x260D * low + ((0x260D * (hash >>> 14) + (0x0065 * low) & 16383) * 16384)) & 0x0FFFFFFF;
+        }
+        this.vm.popNandPush(3, hash);
         return true;
     },
     primitiveCompareString: function(argCount) {
@@ -3489,7 +3489,6 @@ Object.subclass('Squeak.Primitives',
         }
         if (startIndex < 0 || startIndex + count > arrayObj.bytes.length)
             return false;
-
         return this.fileContentsDo(handle.file, function(file) {
             if (!file.contents)
                 return this.popNandPushIfOK(argCount+1, 0);
@@ -3540,7 +3539,6 @@ Object.subclass('Squeak.Primitives',
         }
         if (startIndex < 0 || startIndex + count > arrayObj.bytes.length)
             return false;
-
         return this.fileContentsDo(handle.file, function(file) {
             var srcArray = arrayObj.bytes,
                 dstArray = file.contents || [];
@@ -3673,16 +3671,16 @@ Object.subclass('Squeak.Primitives',
 
         if (bitblt.combinationRule === 30 || bitblt.combinationRule === 31) {
             // fetch source alpha parameter for alpha blend
-        	if (argCount !== 1) return false;
+        if (argCount !== 1) return false;
             bitblt.sourceAlpha = this.stackInteger(0);
             if (!this.success || bitblt.sourceAlpha < 0 || bitblt.sourceAlpha > 255)
 				return false;
 			this.vm.pop();
-    	}
+        }
     	
-    	var timer = window.performance || Date,
-    	    start = timer.now(),
-    	    mode = [bitblt.combinationRule, bitblt.source ? bitblt.source.depth : 0, bitblt.dest.depth].join("|");
+        var timer = window.performance || Date,
+            start = timer.now(),
+            mode = [bitblt.combinationRule, bitblt.source ? bitblt.source.depth : 0, bitblt.dest.depth].join("|");
         bitblt.copyBits();
         bitblt.stats[mode] = (bitblt.stats[mode] || 0) + (timer.now() - start);
 
@@ -4251,7 +4249,7 @@ Object.subclass('Squeak.BitBlt',
                 colors, shifts, masks;
             if (oldStyle) {
                 // This is an old-style color map (indexed only, with implicit ARGB conversion)
-    		    colors = colorMapObj.words;
+                colors = colorMapObj.words;
             } else {
                 // A new-style color map (fully qualified)
                 if (colorMapObj.pointersSize() < 3) return false;
@@ -4348,17 +4346,17 @@ Object.subclass('Squeak.BitBlt',
                     this.dest.bits[this.destIndex++] = halftoneWord;
             else
                 for (var word = 2; word < this.nWords; word++) {
-                        destWord = this.dest.bits[this.destIndex];
-                        mergeWord = this.mergeFn(halftoneWord, destWord, 0xFFFFFFFF);
-                        this.dest.bits[this.destIndex++] = mergeWord;
+                    destWord = this.dest.bits[this.destIndex];
+                    mergeWord = this.mergeFn(halftoneWord, destWord, 0xFFFFFFFF);
+                    this.dest.bits[this.destIndex++] = mergeWord;
                 }
             //last word in row is masked
             if (this.nWords > 1) {
-                    destMask = this.mask2;
-                    destWord = this.dest.bits[this.destIndex];
-                    mergeWord = this.mergeFn(halftoneWord, destWord, destMask);
-                    destWord = (destMask & mergeWord) | (destWord & (~destMask));
-                    this.dest.bits[this.destIndex++] = destWord;
+                destMask = this.mask2;
+                destWord = this.dest.bits[this.destIndex];
+                mergeWord = this.mergeFn(halftoneWord, destWord, destMask);
+                destWord = (destMask & mergeWord) | (destWord & (~destMask));
+                this.dest.bits[this.destIndex++] = destWord;
             }
             this.destIndex += this.destDelta;
         }
@@ -4684,31 +4682,31 @@ Object.subclass('Squeak.BitBlt',
         this.dx = this.destX + leftOffset;
         this.bbW = this.width - leftOffset;
         var rightOffset = (this.dx + this.bbW) - (this.clipX + this.clipW);
-    	if (rightOffset > 0)
-    		this.bbW -= rightOffset;
+        if (rightOffset > 0)
+            this.bbW -= rightOffset;
         var topOffset = Math.max(this.clipY - this.destY, 0);
         this.sy = this.sourceY + topOffset;
         this.dy = this.destY + topOffset;
         this.bbH = this.height - topOffset;
         var bottomOffset = (this.dy + this.bbH) - (this.clipY + this.clipH);
-    	if (bottomOffset > 0)
-    		this.bbH -= bottomOffset;
+        if (bottomOffset > 0)
+        this.bbH -= bottomOffset;
         // intersect with sourceForm bounds
-    	if (!this.source) return;
-    	if (this.sx < 0) {
-    		this.dx -= this.sx;
-    		this.bbW += this.sx;
-    		this.sx = 0;
-    	}
-    	if ((this.sx + this.bbW) > this.source.width)
-    		this.bbW -= (this.sx + this.bbW) - this.source.width;
-    	if (this.sy < 0) {
-    		this.dy -= this.sy;
-    		this.bbH += this.sy;
-    		this.sy = 0;
-    	}
-    	if ((this.sy + this.bbH) > this.source.height)
-    		this.bbH -= (this.sy + this.bbH) - this.source.height;
+        if (!this.source) return;
+        if (this.sx < 0) {
+            this.dx -= this.sx;
+            this.bbW += this.sx;
+            this.sx = 0;
+        }
+        if ((this.sx + this.bbW) > this.source.width)
+            this.bbW -= (this.sx + this.bbW) - this.source.width;
+        if (this.sy < 0) {
+            this.dy -= this.sy;
+            this.bbH += this.sy;
+            this.sy = 0;
+        }
+        if ((this.sy + this.bbH) > this.source.height)
+            this.bbH -= (this.sy + this.bbH) - this.source.height;
 	},
     checkSourceOverlap: function() {
         if (this.sourceForm === this.destForm && this.dy >= this.sy) {
@@ -4840,7 +4838,7 @@ Object.subclass('Squeak.BitBlt',
 'mapping',
 {
     setupColorMasks: function(srcBits, targetBits) {
-	    // Setup color masks for converting an incoming RGB pixel value from srcBits to targetBits per pixel
+        // Setup color masks for converting an incoming RGB pixel value from srcBits to targetBits per pixel
         var deltaBits = targetBits - srcBits;
         if (deltaBits == 0) return;
         if (deltaBits < 0) { // e.g. from 8 to 5

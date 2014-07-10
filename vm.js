@@ -3738,7 +3738,7 @@ Object.subclass('Squeak.Primitives',
         };
     },
     b2d_reset: function(bitbltObj) {
-        if (this.b2d_debug) console.log("-- b2d_reset");
+        if (this.b2d_debug) console.log("-- reset");
         var state = this.b2d_state;
         state.needsFlush = false;
         state.hasFill = false;
@@ -3750,6 +3750,10 @@ Object.subclass('Squeak.Primitives',
             state.bitblt.loadBitBlt(bitbltObj);
             this.b2d_setupCanvas();
         }
+        state.minX = 0;
+        state.minY = 0;
+        state.maxX = state.bitblt.dest.width;
+        state.maxY = state.bitblt.dest.height;
     },
     b2d_setupCanvas: function() {
         var state = this.b2d_state;
@@ -3774,7 +3778,7 @@ Object.subclass('Squeak.Primitives',
         canvas.height = form.height;
     },
     b2d_render: function() {
-        if (this.b2d_debug) console.log("-- b2d_render");
+        if (this.b2d_debug) console.log("-- render");
         var state = this.b2d_state;
         if (state.flushNeeded) {
             // fill and stroke path
@@ -3795,38 +3799,52 @@ Object.subclass('Squeak.Primitives',
     },
     b2d_readPixels: function() {
         var state = this.b2d_state,
-            form = state.bitblt.dest,
-            canvasBytes = state.context.getImageData(0, 0, form.width, form.height).data;
+            form = state.bitblt.dest;
+        if (this.b2d_debug) console.log("==> read into " + form.width + "x" + form.height + "@" + form.depth);
         if (!form.msb) this.warnOnce("B2D: drawing to little-endian forms not implemented yet");
         if (form.depth == 32) {
             // KLUDGE: this clobbers the original pixels instead of blending over them
             // which works fine for TTF glyphs, but we should check that the form was
             // never written to before.
-            var canvasWords = new Uint32Array(canvasBytes.buffer);
+            var canvasWords = new Uint32Array(state.context.getImageData(0, 0, form.width, form.height).data.buffer);
             form.bits.set(canvasWords); // set big-endian ARGB from little-endian RGBA
-            // TODO implement proper blending over old contents
+            // TODO implement proper blending over old contents, as for 16 bits
         } else if (form.depth == 16) {
-            // TODO: track dirty rectangle so we don't have to check the full canvas
-            for (var p = 0; p < canvasBytes.length; p += 8) {
-                if (!(canvasBytes[p+3] | canvasBytes[p+7]))
-                    continue; // skip pixel if fully transparent.
-                var dstPixels = form.bits[p/8],  // two 16-bit pixels
-                    dstShift = 16,
-                    pp = p,
-                    result = 0;
-                for (var i = 0; i < 2; i++) {
-                    var alpha = canvasBytes[pp+3] / 255,
-                        oneMinusAlpha = 1 - alpha,
-                        pix = dstPixels >> dstShift,
-                        r = alpha * canvasBytes[pp+2] + oneMinusAlpha * ((pix >> 7) & 0xF8),
-                        g = alpha * canvasBytes[pp+1] + oneMinusAlpha * ((pix >> 2) & 0xF8),
-                        b = alpha * canvasBytes[pp  ] + oneMinusAlpha * ((pix << 3) & 0xF8),
-                        res = (r & 0xF8) << 7 | (g & 0xF8) << 2 | (b & 0xF8) >> 3;  
-                    result = result | (res << dstShift);
-                    dstShift -= 16;
-                    pp += 4;
+            // since we have two pixels per word, grab from even positions
+            var minX = state.minX & ~1,
+                minY = state.minY,
+                maxX = (state.maxX + 1) & ~1,
+                maxY = state.maxY,
+                width = maxX - minX,
+                height = maxY - minY,
+                canvasBytes = state.context.getImageData(minX, minY, width, height).data,
+                srcIndex = 0;
+            if (this.b2d_debug) console.log("==> clipped to " + width + "x" + height);
+            for (var y = minY; y < maxY; y++) {
+                var dstIndex = y * form.pitch + (minX / 2);
+                for (var x = minX; x < maxX; x += 2) {
+                    if (!(canvasBytes[srcIndex+3] | canvasBytes[srcIndex+7])) {
+                        srcIndex += 8; dstIndex++; // skip pixels if fully transparent
+                        continue;
+                    }
+                    var dstPixels = form.bits[dstIndex],  // two 16-bit pixels
+                        dstShift = 16,
+                        result = 0;
+                    for (var i = 0; i < 2; i++) {
+                        var alpha = canvasBytes[srcIndex+3] / 255,
+                            oneMinusAlpha = 1 - alpha,
+                            pix = dstPixels >> dstShift,
+                            r = alpha * canvasBytes[srcIndex+2] + oneMinusAlpha * ((pix >> 7) & 0xF8),
+                            g = alpha * canvasBytes[srcIndex+1] + oneMinusAlpha * ((pix >> 2) & 0xF8),
+                            b = alpha * canvasBytes[srcIndex  ] + oneMinusAlpha * ((pix << 3) & 0xF8),
+                            res = (r & 0xF8) << 7 | (g & 0xF8) << 2 | (b & 0xF8) >> 3;  
+                        result = result | (res << dstShift);
+                        dstShift -= 16;
+                        srcIndex += 4;
+                    }
+                    form.bits[dstIndex] = result;
+                    dstIndex++;
                 }
-                form.bits[p/8] = result;
             }
         } else {
             this.warnOnce("B2D: drawing to " + form.depth + " bit forms not supported yet");
@@ -3852,8 +3870,13 @@ Object.subclass('Squeak.Primitives',
         }
         return array;
     },
-    b2d_setClip: function(minx, miny, maxx, maxy) {
-        if (this.b2d_debug) console.log("==> clip " + minx + "," + miny + "," + maxx + "," + maxy + " (ignored)");
+    b2d_setClip: function(minX, minY, maxX, maxY) {
+        if (this.b2d_debug) console.log("==> clip " + minX + "," + minY + "," + maxX + "," + maxY);
+        var state = this.b2d_state;
+        if (state.minX < minX) state.minX = minX;
+        if (state.minY < minY) state.minY = minY;
+        if (state.maxX > maxX) state.maxX = maxX;
+        if (state.maxY > maxY) state.maxY = maxY;
     },
     b2d_setOffset: function(x, y) {
         // TODO: make offset work together with transform

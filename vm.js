@@ -992,6 +992,7 @@ Object.subclass('Squeak.Interpreter',
         this.loadImageState();
         this.initVMState();
         this.loadInitialContext();
+        this.ignoreMethod = this.findMethod("String>>translatedInAllDomains");
         console.log('squeak: interpreter ready');
     },
     initConstants: function() {
@@ -1430,6 +1431,7 @@ Object.subclass('Squeak.Interpreter',
         if (primitiveIndex > 0)
             if (this.tryPrimitive(primitiveIndex, argumentCount, newMethod))
                 return;  //Primitive succeeded -- end of story
+        if (newMethod === this.ignoreMethod) return; // ignoring this method
         var newContext = this.allocateOrRecycleContext(newMethod.methodNeedsLargeFrame());
     	var tempCount = newMethod.methodTempCount();
         var newPC = 0; // direct zero-based index into byte codes

@@ -3825,7 +3825,6 @@ Object.subclass('Squeak.Primitives',
             this.warnOnce("B2D: drawing to " + form.depth + " bit forms not supported yet");
         }
         // TODO: if drawing to display, refresh it
-        if (this.b2d_debug) this.vm.breakOutOfInterpreter = 'break';
     },
     b2d_pointsFrom: function(arrayObj, nPoints) {
         var words = arrayObj.words;
@@ -3848,6 +3847,11 @@ Object.subclass('Squeak.Primitives',
     },
     b2d_setClip: function(minx, miny, maxx, maxy) {
         if (this.b2d_debug) console.log("==> clip " + minx + "," + miny + "," + maxx + "," + maxy + " (ignored)");
+    },
+    b2d_setOffset: function(x, y) {
+        // TODO: make offset work together with transform
+        this.b2d_state.context.setTransform(1, 0, 0, 1, x, y);
+        if (this.b2d_debug) console.log("==> translate " + x +"," + y);
     },
     b2d_setTransform: function(t) {
         /* Transform is a matrix:
@@ -4090,6 +4094,9 @@ Object.subclass('Squeak.Primitives',
     },
     b2d_primitiveSetOffset: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveSetOffset");
+        var offset = this.stackNonInteger(0).pointers;
+        if (!offset) return false;
+        this.b2d_setOffset(this.floatOrInt(offset[0]), this.floatOrInt(offset[1]));
         this.vm.popN(argCount);
         return true;
     },

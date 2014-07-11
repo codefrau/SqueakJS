@@ -3869,23 +3869,24 @@ Object.subclass('Squeak.Primitives',
             height = maxY - minY,
             canvasBytes = state.context.getImageData(minX, minY, width, height).data,
             form = state.bitblt.dest,
-            formBytes = new Uint8ClampedArray(form.bits.buffer),
             srcIndex = 0;
         if (this.b2d_debug) console.log("==> reading " + width + "x" + height + " pixels");
         for (var y = minY; y < maxY; y++) {
-            var dstIndex = (y * form.pitch + minX) * 4;
+            var dstIndex = y * form.pitch + minX;
             for (var x = minX; x < maxX; x++) {
                 var srcAlpha = canvasBytes[srcIndex+3];
                 if (srcAlpha !== 0) { // skip pixel if fully transparent
                     var alpha = srcAlpha / 255,
-                        oneMinusAlpha = 1 - alpha;
-                    formBytes[dstIndex+3] =                        srcAlpha + oneMinusAlpha * formBytes[dstIndex+3];
-                    formBytes[dstIndex+2] = alpha * canvasBytes[srcIndex  ] + oneMinusAlpha * formBytes[dstIndex+2];
-                    formBytes[dstIndex+1] = alpha * canvasBytes[srcIndex+1] + oneMinusAlpha * formBytes[dstIndex+1];
-                    formBytes[dstIndex  ] = alpha * canvasBytes[srcIndex+2] + oneMinusAlpha * formBytes[dstIndex  ];
+                        oneMinusAlpha = 1 - alpha,
+                        pix = form.bits[dstIndex],
+                        a =                        srcAlpha + oneMinusAlpha * ((pix >> 24) & 0xFF),
+                        r = alpha * canvasBytes[srcIndex  ] + oneMinusAlpha * ((pix >> 16) & 0xFF),
+                        g = alpha * canvasBytes[srcIndex+1] + oneMinusAlpha * ((pix >>  8) & 0xFF),
+                        b = alpha * canvasBytes[srcIndex+2] + oneMinusAlpha * ( pix        & 0xFF);
+                    form.bits[dstIndex] = (a << 24) | (r << 16) | (g << 8) | b;
                 }
-                srcIndex += 4;
-                dstIndex += 4;
+                srcIndex+= 4;
+                dstIndex++;
             }
         }
     },

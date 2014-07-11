@@ -144,7 +144,51 @@ window.onload = function() {
         };
         return display;
     };
-    function loadAndRunImage(url) {
+    var loop;
+    function runImage(buffer, name) {
+        window.clearTimeout(loop);
+        canvas.width = canvas.width;
+        canvas.focus();
+        var image = new Squeak.Image(buffer, name);
+        var vm = new Squeak.Interpreter(image, createDisplay());
+        var run = function() {
+            vm.interpret(20, function(ms) {
+                if (typeof ms === 'number') { // continue running
+                    loop = window.setTimeout(run, ms);
+                } else { // quit
+                    canvas.style.webkitTransition = "-webkit-transform 0.5s";
+                    canvas.style.webkitTransform = "scale(0)";
+                    window.setTimeout(function(){canvas.style.display = 'none'}, 500);
+                }
+            });
+        };
+        run();        
+    };
+    document.body.addEventListener('dragover', function(evt) {
+        evt.stopPropagation();
+        evt.preventDefault();
+        evt.dataTransfer.dropEffect = 'copy';
+        return false;
+    });
+    document.body.addEventListener('drop', function(evt) {
+        evt.stopPropagation();
+        evt.preventDefault();
+        var files = evt.dataTransfer.files;
+        for (var i = 0, f; f = files[i]; i++) {
+            var reader = new FileReader();
+            reader.onload = (function closure(f) {return function onload() {
+                var buffer = this.result;
+                if (/.*image$/.test(f.name)) {
+                    runImage(buffer, f.name);
+                } else if (confirm('Got file "' + f.name + '" (' + buffer.byteLength + ' bytes).\nStore for Squeak?')) {
+                    Squeak.filePut(f.name, buffer);
+                }
+            }})(f);
+            reader.readAsArrayBuffer(f);
+        }
+        return false;
+    });
+    function downloadImage(url) {
         var progress = document.getElementsByTagName("progress")[0];
         var rq = new XMLHttpRequest();
         rq.open('GET', url);
@@ -154,25 +198,11 @@ window.onload = function() {
         }
         rq.onload = function(e) {
             progress.style.display = "none";
-            canvas.focus();
-            var image = new Squeak.Image(rq.response, url);
-            var vm = new Squeak.Interpreter(image, createDisplay());
-            var run = function() {
-                vm.interpret(20, function(ms) {
-                    if (typeof ms === 'number') { // continue running
-                        window.setTimeout(run, ms);
-                    } else { // quit
-                        canvas.style.webkitTransition = "-webkit-transform 0.5s";
-                        canvas.style.webkitTransform = "scale(0)";
-                        window.setTimeout(function(){canvas.style.display = 'none'}, 500);
-                    }
-                });
-            };
-            run();
+            runImage(rq.response, url);
         };
         rq.send();
     };
-    loadAndRunImage('mini.image');
+    downloadImage('mini.image');
 };
 
 if (addToHomescreen.isStandalone)

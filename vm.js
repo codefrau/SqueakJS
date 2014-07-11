@@ -1044,13 +1044,22 @@ Object.subclass('Squeak.Interpreter',
         this.reclaimableContextCount = 0;
     },
     hackImage: function() {
-        // Etoys fallback for missing translation files is hugely inefficient.
-        // This speeds up opening a viewer by 10x (!) Remove when we added translation files.
-        var primitiveReturnSelf = 256,
-            methods = ["String>>translated", "String>>translatedInAllDomains"];
-        methods.forEach(function(each) {
-            var method = this.findMethod(each);
-            if (method) method.pointers[0] |= primitiveReturnSelf;
+        // hack methods to make work for now
+        var returnSelf = 256,
+            returnNil = 259;
+        [
+            // Etoys fallback for missing translation files is hugely inefficient.
+            // This speeds up opening a viewer by 10x (!)
+            // Remove when we added translation files.
+            {method: "String>>translated", primitive: returnSelf},
+            {method: "String>>translatedInAllDomains", primitive: returnSelf},
+            // Scratch relies on event prims. We don't have those yet.
+            //{method: "InputSensor>>fileDropPoint", primitive: returnNil},
+            //{method: "InputSensor class>>startUp", primitive: returnNil},
+            //{method: "ScratchTranslator class>>importLanguagesList", primitive: returnNil},
+        ].forEach(function(each) {
+            var m = this.findMethod(each.method);
+            if (m) m.pointers[0] |= each.primitive;
         }, this);
     },
 },

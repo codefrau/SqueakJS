@@ -26,7 +26,7 @@ Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.2.1",
+    vmVersion: "SqueakJS 0.2.2",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/users/bert/SqueakJS/",    // entirely made up
     osName: "Web",
@@ -583,7 +583,7 @@ Object.subclass('Squeak.Object',
     initInstanceOf: function(aClass, indexableSize, hash, nilObj) {
         this.sqClass = aClass;
         this.hash = hash;
-        var instSpec = aClass.getPointer(Squeak.Class_format),
+        var instSpec = aClass.pointers[Squeak.Class_format],
             instSize = ((instSpec>>1) & 0x3F) + ((instSpec>>10) & 0xC0) - 1; //0-255
         this.format = (instSpec>>7) & 0xF; //This is the 0-15 code
 
@@ -732,7 +732,7 @@ Object.subclass('Squeak.Object',
         return chars.join('');
     },
     assnKeyAsString: function() {
-        return this.getPointer(Squeak.Assn_key).bytesAsString();  
+        return this.pointers[Squeak.Assn_key].bytesAsString();  
     },
     slotNameAt: function(index) {
         // one-based index
@@ -767,12 +767,6 @@ Object.subclass('Squeak.Object',
     isWordsOrBytes: function() {
         var fmt = this.format;
         return fmt == 6  || (fmt >= 8 && fmt <= 11);
-    },
-    getPointer: function(zeroBasedIndex){
-        return this.pointers[zeroBasedIndex];
-    },
-    setPointer: function(zeroBasedIndex, value){
-        return this.pointers[zeroBasedIndex] = value;
     },
     pointersSize: function() {
     	return this.pointers ? this.pointers.length : 0;
@@ -883,7 +877,7 @@ Object.subclass('Squeak.Object',
 'as class', {
     classInstSize: function() {
         // this is a class, answer number of named inst vars
-        var format = this.getPointer(Squeak.Class_format);
+        var format = this.pointers[Squeak.Class_format];
         return ((format >> 10) & 0xC0) + ((format >> 1) & 0x3F) - 1;
     },
     instVarNames: function() {
@@ -914,7 +908,7 @@ Object.subclass('Squeak.Object',
 },
 'as method', {
     methodHeader: function() {
-        return this.getPointer(0);
+        return this.pointers[0];
     },
     methodNumLits: function() {
         return (this.methodHeader()>>9) & 0xFF;
@@ -930,8 +924,8 @@ Object.subclass('Squeak.Object',
             return primBits;
     },
     methodClassForSuper: function() {//assn found in last literal
-        var assn = this.getPointer(this.methodNumLits());
-        return assn.getPointer(Squeak.Assn_value);
+        var assn = this.pointers[this.methodNumLits()];
+        return assn.pointers[Squeak.Assn_value];
     },
     methodNeedsLargeFrame: function() {
         return (this.methodHeader() & 0x20000) > 0; 
@@ -943,26 +937,26 @@ Object.subclass('Squeak.Object',
         return (this.methodHeader()>>18) & 63; 
     },
     methodGetLiteral: function(zeroBasedIndex) {
-        return this.getPointer(1+zeroBasedIndex); // step over header
+        return this.pointers[1+zeroBasedIndex]; // step over header
     },
     methodGetSelector: function(zeroBasedIndex) {
-        return this.getPointer(1+zeroBasedIndex); // step over header 
+        return this.pointers[1+zeroBasedIndex]; // step over header 
     },
     methodSetLiteral: function(zeroBasedIndex, value) {
-        this.setPointer(1+zeroBasedIndex, value); // step over header
+        this.pointers[1+zeroBasedIndex] = value; // step over header
     },
     methodEndPC: function() {
-    	// index after the last bytecode
-    	var length = this.bytes.length;
-    	var flagByte = this.bytes[length - 1];
-    	if (flagByte === 0) // If last byte == 0, may be either 0, 0, 0, 0 or just 0
-    		for (var i = 2; i <= 5 ; i++) 
-    		    if (this.bytes[length - i] !== 0)
-    		        return length - i + 1;
-    	if (flagByte < 252) // Magic sources (tempnames encoded in last few bytes)
-    	    return length - flagByte - 1;
-    	// Normal 4-byte source pointer
-    	return length - 4;
+        // index after the last bytecode
+        var length = this.bytes.length;
+        var flagByte = this.bytes[length - 1];
+        if (flagByte === 0) // If last byte == 0, may be either 0, 0, 0, 0 or just 0
+        for (var i = 2; i <= 5 ; i++) 
+            if (this.bytes[length - i] !== 0)
+                return length - i + 1;
+        if (flagByte < 252) // Magic sources (tempnames encoded in last few bytes)
+            return length - flagByte - 1;
+        // Normal 4-byte source pointer
+        return length - 4;
     },
 },
 'as context',
@@ -990,6 +984,7 @@ Object.subclass('Squeak.Interpreter',
         this.initConstants();
         this.primHandler = new Squeak.Primitives(this, display);
         this.loadImageState();
+        this.hackImage();
         this.initVMState();
         this.loadInitialContext();
         console.log('squeak: interpreter ready');
@@ -1042,11 +1037,21 @@ Object.subclass('Squeak.Interpreter',
     },
     loadInitialContext: function() {
         var schedAssn = this.specialObjects[Squeak.splOb_SchedulerAssociation];
-        var sched = schedAssn.getPointer(Squeak.Assn_value);
-        var proc = sched.getPointer(Squeak.ProcSched_activeProcess);
-        this.activeContext = proc.getPointer(Squeak.Proc_suspendedContext);
+        var sched = schedAssn.pointers[Squeak.Assn_value];
+        var proc = sched.pointers[Squeak.ProcSched_activeProcess];
+        this.activeContext = proc.pointers[Squeak.Proc_suspendedContext];
         this.fetchContextRegisters(this.activeContext);
         this.reclaimableContextCount = 0;
+    },
+    hackImage: function() {
+        // Etoys fallback for missing translation files is hugely inefficient.
+        // This speeds up opening a viewer by 10x (!) Remove when we added translation files.
+        var primitiveReturnSelf = 256,
+            methods = ["String>>translated", "String>>translatedInAllDomains"];
+        methods.forEach(function(each) {
+            var method = this.findMethod(each);
+            if (method) method.pointers[0] |= primitiveReturnSelf;
+        }, this);
     },
 },
 'interpreting', {
@@ -1059,12 +1064,12 @@ Object.subclass('Squeak.Interpreter',
             // load receiver variable
             case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7: 
             case 8: case 9: case 10: case 11: case 12: case 13: case 14: case 15: 
-                this.push(this.receiver.getPointer(b&0xF)); break;
+                this.push(this.receiver.pointers[b&0xF]); break;
 
             // load temporary variable
             case 16: case 17: case 18: case 19: case 20: case 21: case 22: case 23: 
             case 24: case 25: case 26: case 27: case 28: case 29: case 30: case 31: 
-                this.push(this.homeContext.getPointer(Squeak.Context_tempFrameStart+(b&0xF))); break;
+                this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&0xF)]); break;
 
             // loadLiteral
             case 32: case 33: case 34: case 35: case 36: case 37: case 38: case 39: 
@@ -1078,13 +1083,13 @@ Object.subclass('Squeak.Interpreter',
             case 72: case 73: case 74: case 75: case 76: case 77: case 78: case 79: 
             case 80: case 81: case 82: case 83: case 84: case 85: case 86: case 87: 
             case 88: case 89: case 90: case 91: case 92: case 93: case 94: case 95: 
-                this.push((this.method.methodGetLiteral(b&0x1F)).getPointer(Squeak.Assn_value)); break;
+                this.push((this.method.methodGetLiteral(b&0x1F)).pointers[Squeak.Assn_value]); break;
 
             // storeAndPop rcvr, temp
             case 96: case 97: case 98: case 99: case 100: case 101: case 102: case 103: 
-                this.receiver.setPointer(b&7, this.pop()); break;
+                this.receiver.pointers[b&7] = this.pop(); break;
             case 104: case 105: case 106: case 107: case 108: case 109: case 110: case 111: 
-                this.homeContext.setPointer(Squeak.Context_tempFrameStart+(b&7), this.pop()); break;
+                this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&7)] = this.pop(); break;
 
             // Quick push
             case 112: this.push(this.receiver); break;
@@ -1097,12 +1102,12 @@ Object.subclass('Squeak.Interpreter',
             case 119: this.push(2); break;
 
             // Quick return
-            case 120: this.doReturn(this.receiver, this.homeContext.getPointer(Squeak.Context_sender)); break;
-            case 121: this.doReturn(this.trueObj, this.homeContext.getPointer(Squeak.Context_sender)); break;
-            case 122: this.doReturn(this.falseObj, this.homeContext.getPointer(Squeak.Context_sender)); break;
-            case 123: this.doReturn(this.nilObj, this.homeContext.getPointer(Squeak.Context_sender)); break;
-            case 124: this.doReturn(this.pop(), this.homeContext.getPointer(Squeak.Context_sender)); break;
-            case 125: this.doReturn(this.pop(), this.activeContext.getPointer(Squeak.BlockContext_caller)); break; // blockReturn
+            case 120: this.doReturn(this.receiver, this.homeContext.pointers[Squeak.Context_sender]); break;
+            case 121: this.doReturn(this.trueObj, this.homeContext.pointers[Squeak.Context_sender]); break;
+            case 122: this.doReturn(this.falseObj, this.homeContext.pointers[Squeak.Context_sender]); break;
+            case 123: this.doReturn(this.nilObj, this.homeContext.pointers[Squeak.Context_sender]); break;
+            case 124: this.doReturn(this.pop(), this.homeContext.pointers[Squeak.Context_sender]); break;
+            case 125: this.doReturn(this.pop(), this.activeContext.pointers[Squeak.BlockContext_caller]); break; // blockReturn
             case 126: this.nono(); break;
             case 127: this.nono(); break;
 
@@ -1292,28 +1297,28 @@ Object.subclass('Squeak.Interpreter',
     extendedPush: function(nextByte) {
         var lobits = nextByte & 63;
         switch (nextByte>>6) {
-            case 0: this.push(this.receiver.getPointer(lobits));break;
-            case 1: this.push(this.homeContext.getPointer(Squeak.Context_tempFrameStart+lobits)); break;
+            case 0: this.push(this.receiver.pointers[lobits]);break;
+            case 1: this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+lobits]); break;
             case 2: this.push(this.method.methodGetLiteral(lobits)); break;
-            case 3: this.push(this.method.methodGetLiteral(lobits).getPointer(Squeak.Assn_value)); break;
+            case 3: this.push(this.method.methodGetLiteral(lobits).pointers[Squeak.Assn_value]); break;
         }
     },
     extendedStore: function( nextByte) {
         var lobits = nextByte & 63;
         switch (nextByte>>6) {
-            case 0: this.receiver.setPointer(lobits, this.top()); break;
-            case 1: this.homeContext.setPointer(Squeak.Context_tempFrameStart+lobits, this.top()); break;
+            case 0: this.receiver.pointers[lobits] = this.top(); break;
+            case 1: this.homeContext.pointers[Squeak.Context_tempFrameStart+lobits] = this.top(); break;
             case 2: this.nono(); break;
-            case 3: this.method.methodGetLiteral(lobits).setPointer(Squeak.Assn_value, this.top()); break;
+            case 3: this.method.methodGetLiteral(lobits).pointers[Squeak.Assn_value] = this.top(); break;
         }
     },
     extendedStorePop: function(nextByte) {
         var lobits = nextByte & 63;
         switch (nextByte>>6) {
-            case 0: this.receiver.setPointer(lobits, this.pop()); break;
-            case 1: this.homeContext.setPointer(Squeak.Context_tempFrameStart+lobits, this.pop()); break;
+            case 0: this.receiver.pointers[lobits] = this.pop(); break;
+            case 1: this.homeContext.pointers[Squeak.Context_tempFrameStart+lobits] = this.pop(); break;
             case 2: this.nono(); break;
-            case 3: this.method.methodGetLiteral(lobits).setPointer(Squeak.Assn_value, this.pop()); break;
+            case 3: this.method.methodGetLiteral(lobits).pointers[Squeak.Assn_value] = this.pop(); break;
         }
     },
     doubleExtendedDoAnything: function(byte2) {
@@ -1321,12 +1326,12 @@ Object.subclass('Squeak.Interpreter',
         switch (byte2>>5) {
             case 0: this.send(this.method.methodGetSelector(byte3), byte2&31, false); break;
             case 1: this.send(this.method.methodGetSelector(byte3), byte2&31, true); break;
-            case 2: this.push(this.receiver.getPointer(byte3)); break;
+            case 2: this.push(this.receiver.pointers[byte3]); break;
             case 3: this.push(this.method.methodGetLiteral(byte3)); break;
-            case 4: this.push(this.method.methodGetLiteral(byte3).getPointer(Squeak.Assn_value)); break;
-            case 5: this.receiver.setPointer(byte3, this.top()); break;
-            case 6: this.receiver.setPointer(byte3, this.pop()); break;
-            case 7: this.method.methodGetLiteral(byte3).setPointer(Squeak.Assn_value, this.top()); break;
+            case 4: this.push(this.method.methodGetLiteral(byte3).pointers[Squeak.Assn_value]); break;
+            case 5: this.receiver.pointers[byte3] = this.top(); break;
+            case 6: this.receiver.pointers[byte3] = this.pop(); break;
+            case 7: this.method.methodGetLiteral(byte3).pointers[Squeak.Assn_value] = this.top(); break;
         }
     },
     jumpIfTrue: function(delta) {
@@ -1355,7 +1360,7 @@ Object.subclass('Squeak.Interpreter',
         var lookupClass = this.getClass(newRcvr);
         if (doSuper) {
             lookupClass = this.method.methodClassForSuper();
-            lookupClass = lookupClass.getPointer(Squeak.Class_superclass);
+            lookupClass = lookupClass.pointers[Squeak.Class_superclass];
         }
         var entry = this.findSelectorInClass(selector, argCount, lookupClass);
         if (entry.primIndex) {
@@ -1371,7 +1376,7 @@ Object.subclass('Squeak.Interpreter',
         var currentClass = startingClass;
         var mDict;
         while (!currentClass.isNil) {
-            mDict = currentClass.getPointer(Squeak.Class_mdict);
+            mDict = currentClass.pointers[Squeak.Class_mdict];
             if (mDict.isNil) {
 //                ["MethodDict pointer is nil (hopefully due a swapped out stub)
 //                        -- raise exception #cannotInterpret:."
@@ -1388,7 +1393,7 @@ Object.subclass('Squeak.Interpreter',
                 cacheEntry.argCount = argCount;
                 return cacheEntry;
             }  
-            currentClass = currentClass.getPointer(Squeak.Class_superclass);
+            currentClass = currentClass.pointers[Squeak.Class_superclass];
         }
         //Cound not find a normal message -- send #doesNotUnderstand:
         var dnuSel = this.specialObjects[Squeak.splOb_SelectorDoesNotUnderstand];
@@ -1403,13 +1408,13 @@ Object.subclass('Squeak.Interpreter',
         var dictSize = mDict.pointersSize();
         var mask = (dictSize - Squeak.MethodDict_selectorStart) - 1;
         var index = (mask & messageSelector.hash) + Squeak.MethodDict_selectorStart;
-    	// If there are no nils (should always be), then stop looping on second wrap.
-    	var hasWrapped = false;
+        // If there are no nils (should always be), then stop looping on second wrap.
+        var hasWrapped = false;
         while (true) {
-            var nextSelector = mDict.getPointer(index);
+            var nextSelector = mDict.pointers[index];
             if (nextSelector === messageSelector) {
-                var methArray = mDict.getPointer(Squeak.MethodDict_array);
-                return methArray.getPointer(index - Squeak.MethodDict_selectorStart);
+                var methArray = mDict.pointers[Squeak.MethodDict_array];
+                return methArray.pointers[index - Squeak.MethodDict_selectorStart];
             }
             if (nextSelector.isNil) return this.nilObj;
             if (++index === dictSize) {
@@ -1421,30 +1426,30 @@ Object.subclass('Squeak.Interpreter',
     },
     executeNewMethod: function(newRcvr, newMethod, argumentCount, primitiveIndex) {
         this.sendCount++;
-        if (newMethod === this.breakOnMethod) this.breakOutOfInterpreter = 'break';
+        if (newMethod === this.breakOnMethod) this.breakNow("executing method " + this.printMethod(newMethod));
         if (this.logSends) console.log(this.sendCount + ' ' + this.printMethod(newMethod));
         if (this.breakOnContextChanged) {
             this.breakOnContextChanged = false;
-            this.breakOutOfInterpreter = 'break';
+            this.breakNow();
         }
         if (primitiveIndex > 0)
             if (this.tryPrimitive(primitiveIndex, argumentCount, newMethod))
                 return;  //Primitive succeeded -- end of story
         var newContext = this.allocateOrRecycleContext(newMethod.methodNeedsLargeFrame());
-    	var tempCount = newMethod.methodTempCount();
+        var tempCount = newMethod.methodTempCount();
         var newPC = 0; // direct zero-based index into byte codes
         var newSP = Squeak.Context_tempFrameStart + tempCount - 1; // direct zero-based index into context pointers
-        newContext.setPointer(Squeak.Context_method, newMethod);
+        newContext.pointers[Squeak.Context_method] = newMethod;
         //Following store is in case we alloc without init; all other fields get stored
-        newContext.setPointer(Squeak.BlockContext_initialIP, this.nilObj);
-        newContext.setPointer(Squeak.Context_sender, this.activeContext);
+        newContext.pointers[Squeak.BlockContext_initialIP] = this.nilObj;
+        newContext.pointers[Squeak.Context_sender] = this.activeContext;
         //Copy receiver and args to new context
         //Note this statement relies on the receiver slot being contiguous with args...
         this.arrayCopy(this.activeContext.pointers, this.sp-argumentCount, newContext.pointers, Squeak.Context_tempFrameStart-1, argumentCount+1);
         //...and fill the remaining temps with nil
         this.arrayFill(newContext.pointers, Squeak.Context_tempFrameStart+argumentCount, Squeak.Context_tempFrameStart+tempCount, this.nilObj);
         this.popN(argumentCount+1);
-	    this.reclaimableContextCount++;
+        this.reclaimableContextCount++;
         this.storeContextRegisters();
         /////// Woosh //////
         this.activeContext = newContext; //We're off and running...
@@ -1455,13 +1460,13 @@ Object.subclass('Squeak.Interpreter',
         this.pc = newPC;
         this.sp = newSP;
         this.storeContextRegisters(); // not really necessary, I claim
-        this.receiver = newContext.getPointer(Squeak.Context_receiver);
+        this.receiver = newContext.pointers[Squeak.Context_receiver];
         if (this.receiver !== newRcvr)
             throw Error("receivers don't match");
         this.checkForInterrupts();
     },
     doReturn: function(returnValue, targetContext) {
-        if (targetContext.isNil || targetContext.getPointer(Squeak.Context_instructionPointer).isNil)
+        if (targetContext.isNil || targetContext.pointers[Squeak.Context_instructionPointer].isNil)
             this.cannotReturn();
         // search up stack for unwind
         var thisContext = this.activeContext;
@@ -1470,7 +1475,7 @@ Object.subclass('Squeak.Interpreter',
                 this.cannotReturn();
             if (this.isUnwindMarked(thisContext))
                 this.aboutToReturn(returnValue,thisContext);
-            thisContext = thisContext.getPointer(Squeak.Context_sender);
+            thisContext = thisContext.pointers[Squeak.Context_sender];
         }
         // no unwind to worry about, just peel back the stack (usually just to sender)
         var nextContext;
@@ -1478,11 +1483,11 @@ Object.subclass('Squeak.Interpreter',
         while (thisContext !== targetContext) {
             if (this.breakOnContextReturned === thisContext) {
                 this.breakOnContextReturned = null;
-                this.breakOutOfInterpreter = 'break';
+                this.breakNow();
             }
-            nextContext = thisContext.getPointer(Squeak.Context_sender);
-            thisContext.setPointer(Squeak.Context_sender, this.nilObj);
-            thisContext.setPointer(Squeak.Context_instructionPointer, this.nilObj);
+            nextContext = thisContext.pointers[Squeak.Context_sender];
+            thisContext.pointers[Squeak.Context_sender] = this.nilObj;
+            thisContext.pointers[Squeak.Context_instructionPointer] = this.nilObj;
             if (this.reclaimableContextCount > 0) {
                 this.reclaimableContextCount--;
                 this.recycleIfPossible(thisContext);
@@ -1494,13 +1499,13 @@ Object.subclass('Squeak.Interpreter',
         this.push(returnValue);
         if (this.breakOnContextChanged) {
             this.breakOnContextChanged = false;
-            this.breakOutOfInterpreter = 'break';
+            this.breakNow();
         }
     },
     tryPrimitive: function(primIndex, argCount, newMethod) {
         if ((primIndex > 255) && (primIndex < 520)) {
             if (primIndex >= 264) {//return instvars
-                this.popNandPush(1, this.top().getPointer(primIndex - 264));
+                this.popNandPush(1, this.top().pointers[primIndex - 264]);
                 return true;
             }
             switch (primIndex) {
@@ -1524,10 +1529,10 @@ Object.subclass('Squeak.Interpreter',
         var message = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassMessage], 0);
         var argArray = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassArray], argCount);
         this.arrayCopy(this.activeContext.pointers, this.sp-argCount+1, argArray.pointers, 0, argCount); //copy args from stack
-        message.setPointer(Squeak.Message_selector, selector);
-        message.setPointer(Squeak.Message_arguments, argArray);
+        message.pointers[Squeak.Message_selector] = selector;
+        message.pointers[Squeak.Message_arguments] = argArray;
         if (message.pointers.length > Squeak.Message_lookupClass) //Early versions don't have lookupClass
-            message.setPointer(Squeak.Message_lookupClass, cls);
+            message.pointers[Squeak.Message_lookupClass] = cls;
         return message;
     },
     primitivePerform: function(argCount) {
@@ -1555,7 +1560,7 @@ Object.subclass('Squeak.Interpreter',
             var cls = this.getClass(rcvr);
             while (cls !== lookupClass) {
                 cls = cls.pointers[Squeak.Class_superclass];
-		        if (cls.isNil) return false;
+                if (cls.isNil) return false;
             }
         }
         var trueArgCount = args.pointersSize();
@@ -1629,27 +1634,27 @@ Object.subclass('Squeak.Interpreter',
         this.fetchContextRegisters(newContext);
     },
     fetchContextRegisters: function(ctxt) {
-        var meth = ctxt.getPointer(Squeak.Context_method);
+        var meth = ctxt.pointers[Squeak.Context_method];
         if (this.isSmallInt(meth)) { //if the Method field is an integer, activeCntx is a block context
-            this.homeContext = ctxt.getPointer(Squeak.BlockContext_home);
-            meth = this.homeContext.getPointer(Squeak.Context_method);
+            this.homeContext = ctxt.pointers[Squeak.BlockContext_home];
+            meth = this.homeContext.pointers[Squeak.Context_method];
         } else { //otherwise home==ctxt
             this.homeContext = ctxt;
         }
-        this.receiver = this.homeContext.getPointer(Squeak.Context_receiver);
+        this.receiver = this.homeContext.pointers[Squeak.Context_receiver];
         this.method = meth;
         this.methodBytes = meth.bytes;
-        this.pc = this.decodeSqueakPC(ctxt.getPointer(Squeak.Context_instructionPointer), meth);
+        this.pc = this.decodeSqueakPC(ctxt.pointers[Squeak.Context_instructionPointer], meth);
         if (this.pc < -1)
             throw Error("bad pc");
-        this.sp = this.decodeSqueakSP(ctxt.getPointer(Squeak.Context_stackPointer));
+        this.sp = this.decodeSqueakSP(ctxt.pointers[Squeak.Context_stackPointer]);
     },
     storeContextRegisters: function() {
         //Save pc, sp into activeContext object, prior to change of context
         //   see fetchContextRegisters for symmetry
         //   expects activeContext, pc, sp, and method state vars to still be valid
-        this.activeContext.setPointer(Squeak.Context_instructionPointer,this.encodeSqueakPC(this.pc, this.method));
-        this.activeContext.setPointer(Squeak.Context_stackPointer,this.encodeSqueakSP(this.sp));
+        this.activeContext.pointers[Squeak.Context_instructionPointer] = this.encodeSqueakPC(this.pc, this.method);
+        this.activeContext.pointers[Squeak.Context_stackPointer] = this.encodeSqueakSP(this.sp);
     },
     encodeSqueakPC: function(intPC, method) {
         // Squeak pc is offset by header and literals
@@ -1670,12 +1675,12 @@ Object.subclass('Squeak.Interpreter',
         if (!this.isMethodContext(ctxt)) return;
         if (ctxt.pointersSize() === (Squeak.Context_tempFrameStart+Squeak.Context_smallFrameSize)) {
             // Recycle small contexts
-            ctxt.setPointer(0, this.freeContexts);
+            ctxt.pointers[0] = this.freeContexts;
             this.freeContexts = ctxt;
         } else { // Recycle large contexts
             if (ctxt.pointersSize() !== (Squeak.Context_tempFrameStart+Squeak.Context_largeFrameSize))
                 return;
-            ctxt.setPointer(0, this.freeLargeContexts);
+            ctxt.pointers[0] = this.freeLargeContexts;
             this.freeLargeContexts = ctxt;
         }
     },
@@ -1685,7 +1690,7 @@ Object.subclass('Squeak.Interpreter',
         if (needsLarge) {
             if (!this.freeLargeContexts.isNil) {
                 freebie = this.freeLargeContexts;
-                this.freeLargeContexts = freebie.getPointer(0);
+                this.freeLargeContexts = freebie.pointers[0];
                 this.nRecycledContexts++;
                 return freebie;
             }
@@ -1694,7 +1699,7 @@ Object.subclass('Squeak.Interpreter',
         } else {
             if (!this.freeContexts.isNil) {
                 freebie = this.freeContexts;
-                this.freeContexts = freebie.getPointer(0);
+                this.freeContexts = freebie.pointers[0];
                 this.nRecycledContexts++;
                 return freebie;
             }
@@ -1865,7 +1870,7 @@ Object.subclass('Squeak.Interpreter',
         }
         return stack;
     },
-    breakOn: function(classAndMethodString) {
+    findMethod: function(classAndMethodString) {
         // classAndMethodString is 'Class>>method'
         var found,
             className = classAndMethodString.split('>>')[0],
@@ -1876,8 +1881,15 @@ Object.subclass('Squeak.Interpreter',
                 && className == classObj.className())
                     return found = methodObj;
         });
-        this.breakOnMethod = found;
         return found;
+    },
+    breakNow: function(msg) {
+        if (msg) console.log("Break: " + msg);
+        this.breakOutOfInterpreter = 'break';
+    },
+    breakOn: function(classAndMethodString) {
+        // classAndMethodString is 'Class>>method'
+        return this.breakOnMethod = classAndMethodString && this.findMethod(classAndMethodString);
     },
     breakOnReturn: function() {
         this.breakOnContextChanged = false;
@@ -1976,6 +1988,8 @@ Object.subclass('Squeak.Primitives',
         this.builtinModules = {
             MiscPrimitivePlugin: {
                     primitiveStringHash: this.primitiveStringHash.bind(this),
+                    primitiveCompareString: this.primitiveCompareString.bind(this),
+                    primitiveFindSubstring: this.primitiveFindSubstring.bind(this),
             },
             FilePlugin: {
                     primitiveDirectoryDelimitor: this.primitiveDirectoryDelimitor.bind(this),
@@ -1984,6 +1998,7 @@ Object.subclass('Squeak.Primitives',
                     primitiveDirectoryDelimitor: this.primitiveDirectoryDelimitor.bind(this),
                     primitiveDirectoryEntry: this.primitiveDirectoryEntry.bind(this),
                     primitiveDirectoryLookup: this.primitiveDirectoryLookup.bind(this),
+                    primitiveDirectorySetMacTypeAndCreator: this.primitiveDirectorySetMacTypeAndCreator.bind(this),
                     primitiveFileAtEnd: this.primitiveFileAtEnd.bind(this),
                     primitiveFileClose: this.primitiveFileClose.bind(this),
                     primitiveFileDelete: this.primitiveFileDelete.bind(this),
@@ -2248,6 +2263,7 @@ Object.subclass('Squeak.Primitives',
             case 165:
             case 166: return this.primitiveIntegerAtAndPut(argCount);
             case 167: return false; // Processor.yield
+            case 169: return this.primitiveDirectorySetMacTypeAndCreator(argCount);
             case 188: return this.primitiveExecuteMethodArgsArray(argCount);
             case 195: return false; // Context.findNextUnwindContextUpTo:
             case 196: return false; // Context.terminateTo:
@@ -2258,12 +2274,12 @@ Object.subclass('Squeak.Primitives',
             case 231: return this.primitiveForceDisplayUpdate(argCount);
             case 233: return this.primitiveSetFullScreen(argCount);
             case 234: return false; // primBitmapdecompressfromByteArrayat
-            case 235: return false; // primStringcomparewithcollated
+            case 235: return this.primitiveCompareString(argCount);
             case 236: return false; // primSampledSoundconvert8bitSignedFromto16Bit
             case 237: return false; // primBitmapcompresstoByteArray
             case 238: case 239: case 240: case 241: return false; // serial port primitives
             case 243: return false; // primStringtranslatefromtotable
-            case 244: return false; // primStringfindFirstInStringinSetstartingAt
+            case 244: return this.primitiveFindSubstring(argCount);
             case 245: return false; // primStringindexOfAsciiinStringstartingAt
             case 246: return false; // primStringfindSubstringinstartingAtmatchTable
             case 254: return this.primitiveVMParameter(argCount);
@@ -2477,7 +2493,7 @@ Object.subclass('Squeak.Primitives',
         var fmt = obj.format;
         if (fmt<2) return -1; //not indexable
         if (fmt===3 && this.vm.isContext(obj))
-            return obj.getPointer(Squeak.Context_stackPointer); // no access beyond top of stack?
+            return obj.pointers[Squeak.Context_stackPointer]; // no access beyond top of stack?
         if (fmt<6) return obj.pointersSize() - obj.instSize(); // pointers
         if (fmt<8) return obj.wordsSize(); // words
         if (fmt<12) return obj.bytesSize(); // bytes
@@ -2497,7 +2513,7 @@ Object.subclass('Squeak.Primitives',
     },
     charFromInt: function(ascii) {
         var charTable = this.vm.specialObjects[Squeak.splOb_CharacterTable];
-        return charTable.getPointer(ascii);
+        return charTable.pointers[ascii];
     },
     makeFloat: function(value) {
         var floatClass = this.vm.specialObjects[Squeak.splOb_ClassFloat];
@@ -2516,8 +2532,8 @@ Object.subclass('Squeak.Primitives',
     makePointWithXandY: function(x, y) {
         var pointClass = this.vm.specialObjects[Squeak.splOb_ClassPoint];
         var newPoint = this.vm.instantiateClass(pointClass, 0);
-        newPoint.setPointer(Squeak.Point_x, x);
-        newPoint.setPointer(Squeak.Point_y, y);
+        newPoint.pointers[Squeak.Point_x] = x;
+        newPoint.pointers[Squeak.Point_y] = y;
         return newPoint;
     },
     makeStArray: function(jsArray) {
@@ -2636,7 +2652,7 @@ Object.subclass('Squeak.Primitives',
             if (this.vm.isSmallInt(objToPut)) {this.success = false; return objToPut;}
             if (objToPut.sqClass !== this.vm.specialObjects[Squeak.splOb_ClassCharacter])
                 {this.success = false; return objToPut;}
-            intToPut = objToPut.getPointer(0);
+            intToPut = objToPut.pointers[0];
             if (!(this.vm.isSmallInt(intToPut))) {this.success = false; return objToPut;}
         } else { // put a byte...
             if(!(this.vm.isSmallInt(objToPut))) {this.success = false; return objToPut;}
@@ -2686,7 +2702,7 @@ Object.subclass('Squeak.Primitives',
         var info;
         var cacheable =
             (this.vm.verifyAtSelector === atOrPutSelector)         //is at or atPut
-		    && (this.vm.verifyAtClass === array.sqClass)           //not a super send
+            && (this.vm.verifyAtClass === array.sqClass)           //not a super send
             && !(array.format === 3 && this.vm.isContext(array));  //not a context (size can change)
         info = cacheable ? atOrPutCache[array.hash & this.atCacheMask] : this.nonCachedInfo;
         info.array = array;
@@ -2838,7 +2854,7 @@ Object.subclass('Squeak.Primitives',
         if (!this.success) return dst; //some integer not right
         var srcFmt = src.format;
         var dstFmt = dst.format;
-    	if (dstFmt < 8)
+        if (dstFmt < 8)
             if (dstFmt != srcFmt) {this.success = false; return dst;} //incompatible formats
         else
             if ((dstFmt&0xC) != (srcFmt&0xC)) {this.success = false; return dst;} //incompatible formats
@@ -2883,33 +2899,33 @@ Object.subclass('Squeak.Primitives',
         var homeCtxt = rcvr;
         if(!this.vm.isContext(homeCtxt)) this.success = false;
         if(!this.success) return rcvr;
-        if (this.vm.isSmallInt(homeCtxt.getPointer(Squeak.Context_method)))
+        if (this.vm.isSmallInt(homeCtxt.pointers[Squeak.Context_method]))
             // ctxt is itself a block; get the context for its enclosing method
-            homeCtxt = homeCtxt.getPointer(Squeak.BlockContext_home);
+            homeCtxt = homeCtxt.pointers[Squeak.BlockContext_home];
         var blockSize = homeCtxt.pointersSize() - homeCtxt.instSize(); // could use a const for instSize
         var newBlock = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassBlockContext], blockSize);
         var initialPC = this.vm.encodeSqueakPC(this.vm.pc + 2, this.vm.method); //*** check this...
-        newBlock.setPointer(Squeak.BlockContext_initialIP, initialPC);
-        newBlock.setPointer(Squeak.Context_instructionPointer, initialPC); // claim not needed; value will set it
-        newBlock.setPointer(Squeak.Context_stackPointer, 0);
-        newBlock.setPointer(Squeak.BlockContext_argumentCount, sqArgCount);
-        newBlock.setPointer(Squeak.BlockContext_home, homeCtxt);
-        newBlock.setPointer(Squeak.Context_sender, this.vm.nilObj); // claim not needed; just initialized
+        newBlock.pointers[Squeak.BlockContext_initialIP] = initialPC;
+        newBlock.pointers[Squeak.Context_instructionPointer] = initialPC; // claim not needed; value will set it
+        newBlock.pointers[Squeak.Context_stackPointer] = 0;
+        newBlock.pointers[Squeak.BlockContext_argumentCount] = sqArgCount;
+        newBlock.pointers[Squeak.BlockContext_home] = homeCtxt;
+        newBlock.pointers[Squeak.Context_sender] = this.vm.nilObj; // claim not needed; just initialized
         return newBlock;
     },
     primitiveBlockValue: function(argCount) {
         var rcvr = this.vm.stackValue(argCount);
         if (!this.isA(rcvr, Squeak.splOb_ClassBlockContext)) return false;
         var block = rcvr;
-        var blockArgCount = block.getPointer(Squeak.BlockContext_argumentCount);
+        var blockArgCount = block.pointers[Squeak.BlockContext_argumentCount];
         if (!this.vm.isSmallInt(blockArgCount)) return false;
         if (blockArgCount != argCount) return false;
-        if (!block.getPointer(Squeak.BlockContext_caller).isNil) return false;
+        if (!block.pointers[Squeak.BlockContext_caller].isNil) return false;
         this.vm.arrayCopy(this.vm.activeContext.pointers, this.vm.sp-argCount+1, block.pointers, Squeak.Context_tempFrameStart, argCount);
-        var initialIP = block.getPointer(Squeak.BlockContext_initialIP);
-        block.setPointer(Squeak.Context_instructionPointer, initialIP);
-        block.setPointer(Squeak.Context_stackPointer, argCount);
-        block.setPointer(Squeak.BlockContext_caller, this.vm.activeContext);
+        var initialIP = block.pointers[Squeak.BlockContext_initialIP];
+        block.pointers[Squeak.Context_instructionPointer] = initialIP;
+        block.pointers[Squeak.Context_stackPointer] = argCount;
+        block.pointers[Squeak.BlockContext_caller] = this.vm.activeContext;
         this.vm.popN(argCount+1);
         this.vm.newActiveContext(block);
         return true;
@@ -2919,15 +2935,15 @@ Object.subclass('Squeak.Primitives',
         var array = this.vm.stackValue(0);
         if (!this.isA(block, Squeak.splOb_ClassBlockContext)) return false;
         if (!this.isA(array, Squeak.splOb_ClassArray)) return false;
-        var blockArgCount = block.getPointer(Squeak.BlockContext_argumentCount);
+        var blockArgCount = block.pointers[Squeak.BlockContext_argumentCount];
         if (!this.vm.isSmallInt(blockArgCount)) return false;
         if (blockArgCount != array.pointersSize()) return false;
-        if (!block.getPointer(Squeak.BlockContext_caller).isNil) return false;
+        if (!block.pointers[Squeak.BlockContext_caller].isNil) return false;
         this.vm.arrayCopy(array.pointers, 0, block.pointers, Squeak.Context_tempFrameStart, blockArgCount);
-        var initialIP = block.getPointer(Squeak.BlockContext_initialIP);
-        block.setPointer(Squeak.Context_instructionPointer, initialIP);
-        block.setPointer(Squeak.Context_stackPointer, blockArgCount);
-        block.setPointer(Squeak.BlockContext_caller, this.vm.activeContext);
+        var initialIP = block.pointers[Squeak.BlockContext_initialIP];
+        block.pointers[Squeak.Context_instructionPointer] = initialIP;
+        block.pointers[Squeak.Context_stackPointer] = blockArgCount;
+        block.pointers[Squeak.BlockContext_caller] = this.vm.activeContext;
         this.vm.popN(argCount+1);
         this.vm.newActiveContext(block);
         return true;
@@ -2940,7 +2956,7 @@ Object.subclass('Squeak.Primitives',
         return true;
 	},
     primitiveSuspend: function() {
-        var activeProc = this.getScheduler().getPointer(Squeak.ProcSched_activeProcess);
+        var activeProc = this.getScheduler().pointers[Squeak.ProcSched_activeProcess];
         if (this.vm.top() !== activeProc) return false;
         this.vm.popNandPush(1, this.vm.nilObj);
         this.transferTo(this.pickTopProcess());
@@ -2948,12 +2964,12 @@ Object.subclass('Squeak.Primitives',
     },
     getScheduler: function() {
         var assn = this.vm.specialObjects[Squeak.splOb_SchedulerAssociation];
-        return assn.getPointer(Squeak.Assn_value);
+        return assn.pointers[Squeak.Assn_value];
     },
     resume: function(newProc) {
-        var activeProc = this.getScheduler().getPointer(Squeak.ProcSched_activeProcess);
-        var activePriority = activeProc.getPointer(Squeak.Proc_priority);
-        var newPriority = newProc.getPointer(Squeak.Proc_priority);
+        var activeProc = this.getScheduler().pointers[Squeak.ProcSched_activeProcess];
+        var activePriority = activeProc.pointers[Squeak.Proc_priority];
+        var newPriority = newProc.pointers[Squeak.Proc_priority];
         if (newPriority > activePriority) {
             this.putToSleep(activeProc);
             this.transferTo(newProc);
@@ -2963,19 +2979,19 @@ Object.subclass('Squeak.Primitives',
     },
     putToSleep: function(aProcess) {
         //Save the given process on the scheduler process list for its priority.
-        var priority = aProcess.getPointer(Squeak.Proc_priority);
-        var processLists = this.getScheduler().getPointer(Squeak.ProcSched_processLists);
-        var processList = processLists.getPointer(priority - 1);
+        var priority = aProcess.pointers[Squeak.Proc_priority];
+        var processLists = this.getScheduler().pointers[Squeak.ProcSched_processLists];
+        var processList = processLists.pointers[priority - 1];
         this.linkProcessToList(aProcess, processList);
     },
     transferTo: function(newProc) {
         //Record a process to be awakened on the next interpreter cycle.
         var sched = this.getScheduler();
-        var oldProc = sched.getPointer(Squeak.ProcSched_activeProcess);
-        sched.setPointer(Squeak.ProcSched_activeProcess, newProc);
-        oldProc.setPointer(Squeak.Proc_suspendedContext, this.vm.activeContext);
-        this.vm.newActiveContext(newProc.getPointer(Squeak.Proc_suspendedContext));
-        newProc.setPointer(Squeak.Proc_suspendedContext, this.vm.nilObj);
+        var oldProc = sched.pointers[Squeak.ProcSched_activeProcess];
+        sched.pointers[Squeak.ProcSched_activeProcess] = newProc;
+        oldProc.pointers[Squeak.Proc_suspendedContext] = this.vm.activeContext;
+        this.vm.newActiveContext(newProc.pointers[Squeak.Proc_suspendedContext]);
+        newProc.pointers[Squeak.Proc_suspendedContext] = this.vm.nilObj;
         this.vm.reclaimableContextCount = 0;
         if (this.vm.breakOnContextChanged) {
             this.vm.breakOnContextChanged = false;
@@ -2985,12 +3001,12 @@ Object.subclass('Squeak.Primitives',
     pickTopProcess: function() { // aka wakeHighestPriority
         //Return the highest priority process that is ready to run.
         //Note: It is a fatal VM error if there is no runnable process.
-        var schedLists = this.getScheduler().getPointer(Squeak.ProcSched_processLists);
+        var schedLists = this.getScheduler().pointers[Squeak.ProcSched_processLists];
         var p = schedLists.pointersSize() - 1;  // index of last indexable field
         var processList;
         do {
             if (p < 0) throw Error("scheduler could not find a runnable process");
-            processList = schedLists.getPointer(p--);
+            processList = schedLists.pointers[p--];
         } while (this.isEmptyList(processList));
         return this.removeFirstLinkOfList(processList);
 	},    
@@ -2998,29 +3014,29 @@ Object.subclass('Squeak.Primitives',
         // Add the given process to the given linked list and set the backpointer
         // of process to its new list.
         if (this.isEmptyList(aList))
-            aList.setPointer(Squeak.LinkedList_firstLink, proc);
+            aList.pointers[Squeak.LinkedList_firstLink] = proc;
         else {
-            var lastLink = aList.getPointer(Squeak.LinkedList_lastLink);
-            lastLink.setPointer(Squeak.Link_nextLink, proc);
+            var lastLink = aList.pointers[Squeak.LinkedList_lastLink];
+            lastLink.pointers[Squeak.Link_nextLink] = proc;
         }
-        aList.setPointer(Squeak.LinkedList_lastLink, proc);
-        proc.setPointer(Squeak.Proc_myList, aList);
+        aList.pointers[Squeak.LinkedList_lastLink] = proc;
+        proc.pointers[Squeak.Proc_myList] = aList;
     },
     isEmptyList: function(aLinkedList) {
-        return aLinkedList.getPointer(Squeak.LinkedList_firstLink).isNil;
+        return aLinkedList.pointers[Squeak.LinkedList_firstLink].isNil;
     },
     removeFirstLinkOfList: function(aList) {
         //Remove the first process from the given linked list.
-        var first = aList.getPointer(Squeak.LinkedList_firstLink);
-        var last = aList.getPointer(Squeak.LinkedList_lastLink);
+        var first = aList.pointers[Squeak.LinkedList_firstLink];
+        var last = aList.pointers[Squeak.LinkedList_lastLink];
         if (first === last) {
-            aList.setPointer(Squeak.LinkedList_firstLink, this.vm.nilObj);
-            aList.setPointer(Squeak.LinkedList_lastLink, this.vm.nilObj);
+            aList.pointers[Squeak.LinkedList_firstLink] = this.vm.nilObj;
+            aList.pointers[Squeak.LinkedList_lastLink] = this.vm.nilObj;
         } else {
-            var next = first.getPointer(Squeak.Link_nextLink);
-            aList.setPointer(Squeak.LinkedList_firstLink, next);
+            var next = first.pointers[Squeak.Link_nextLink];
+            aList.pointers[Squeak.LinkedList_firstLink] = next;
         }
-        first.setPointer(Squeak.Link_nextLink, this.vm.nilObj);
+        first.pointers[Squeak.Link_nextLink] = this.vm.nilObj;
         return first;
     },
     registerSemaphore: function(specialObjIndex) {
@@ -3034,11 +3050,11 @@ Object.subclass('Squeak.Primitives',
     primitiveWait: function() {
     	var sema = this.vm.top();
         if (!this.isA(sema, Squeak.splOb_ClassSemaphore)) return false;
-        var excessSignals = sema.getPointer(Squeak.Semaphore_excessSignals);
+        var excessSignals = sema.pointers[Squeak.Semaphore_excessSignals];
         if (excessSignals > 0)
-            sema.setPointer(Squeak.Semaphore_excessSignals, excessSignals - 1);
+            sema.pointers[Squeak.Semaphore_excessSignals] = excessSignals - 1;
         else {
-            var activeProc = this.getScheduler().getPointer(Squeak.ProcSched_activeProcess);
+            var activeProc = this.getScheduler().pointers[Squeak.ProcSched_activeProcess];
             this.linkProcessToList(activeProc, sema);
             this.transferTo(this.pickTopProcess());
         }
@@ -3105,14 +3121,14 @@ Object.subclass('Squeak.Primitives',
 		2 args:	set the VM indicated parameter. */
 		var paramsArraySize = 40;
 		switch (argCount) {
-		    case 0:
-		        var arrayObj = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassArray], paramsArraySize);
-		        arrayObj.pointers = this.vm.fillArray(paramsArraySize, 0);
-		        return this.popNandPushIfOK(1, arrayObj);
-		    case 1:
-		        return this.popNandPushIfOK(2, 0);
-		    case 2:
-		        return this.popNandPushIfOK(3, 0);
+            case 0:
+                var arrayObj = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassArray], paramsArraySize);
+                arrayObj.pointers = this.vm.fillArray(paramsArraySize, 0);
+                return this.popNandPushIfOK(1, arrayObj);
+            case 1:
+                return this.popNandPushIfOK(2, 0);
+            case 2:
+                return this.popNandPushIfOK(3, 0);
 		};
 		return false;
     },
@@ -3126,8 +3142,8 @@ Object.subclass('Squeak.Primitives',
     primitiveSnapshot: function(argCount) {
         this.vm.popNandPush(1, this.vm.trueObj);        // put true on stack for saved snapshot
         this.vm.storeContextRegisters();                // store current state for snapshot
-        var proc = this.getScheduler().getPointer(Squeak.ProcSched_activeProcess);
-        proc.setPointer(Squeak.Proc_suspendedContext, this.vm.activeContext); // store initial context
+        var proc = this.getScheduler().pointers[Squeak.ProcSched_activeProcess];
+        proc.pointers[Squeak.Proc_suspendedContext] = this.vm.activeContext; // store initial context
         this.vm.image.fullGC();                        // before cleanup so traversal works
         var buffer = this.vm.image.writeToBuffer();
         Squeak.flushAllFiles();                         // so there are no more writes pending
@@ -3341,15 +3357,56 @@ Object.subclass('Squeak.Primitives',
         if (!this.success) return false;
         var stringSize = stringObj.bytesSize();
         var string = stringObj.bytes;
-    	var hash = initialHash & 0x0FFFFFFF;
-    	for (var i = 0; i < stringSize; i++) {
-    		hash += string[i];
-    		var low = hash & 0x3FFF;
-    		hash = (0x260D * low + ((0x260D * (hash >>> 14) + (0x0065 * low) & 16383) * 16384)) & 0x0FFFFFFF;
-    	}
-    	this.vm.popNandPush(3, hash);
+        var hash = initialHash & 0x0FFFFFFF;
+        for (var i = 0; i < stringSize; i++) {
+            hash += string[i];
+            var low = hash & 0x3FFF;
+            hash = (0x260D * low + ((0x260D * (hash >>> 14) + (0x0065 * low) & 16383) * 16384)) & 0x0FFFFFFF;
+        }
+        this.vm.popNandPush(3, hash);
         return true;
-    }
+    },
+    primitiveCompareString: function(argCount) {
+        var string1 = this.stackNonInteger(2).bytes,
+            string2 = this.stackNonInteger(1).bytes,
+            order = this.stackNonInteger(0).bytes;
+        if (!string1 || !string2 || !order) return false;
+        if (string1 === string2) {
+            this.vm.popNandPush(4, 2);
+            return true;
+        }
+        var len1 = string1.length,
+            len2 = string2.length,
+            len = Math.min(len1, len2);
+        for (var i = 0; i < len; i++) {
+            var c1 = order[string1[i]],
+                c2 = order[string2[i]];
+            if (c1 !== c2) {
+                this.vm.popNandPush(4, c1 < c2 ? 1 : 3);
+                return true;
+            }
+        }
+        this.vm.popNandPush(4, len1 === len2 ? 2 : len1 < len2 ? 1 : 3); 
+        return true;
+    },
+    primitiveFindSubstring: function(argCount) {
+        var key = this.stackNonInteger(3).bytes,
+            body = this.stackNonInteger(2).bytes,
+            start = this.stackInteger(1) - 1, // make zero-based
+            matchTable = this.stackNonInteger(0).bytes;
+        if (!this.success || !key || !body || start < 0 || !matchTable) return false;
+        if (key.length > 0) {
+            var endIndex = body.length - key.length;
+            for (var startIndex = start; startIndex <= endIndex; startIndex++) {
+                var index = 0;
+                while (matchTable[body[startIndex+index]] == matchTable[key[index]]) {
+                    if (++index == key.length)
+                        return this.popNandPushIfOK(5, startIndex + 1); // make 1-based
+                }
+            }
+        }
+        return this.popNandPushIfOK(5, 0);
+    },
 },
 'FilePlugin', {
     primitiveDirectoryCreate: function(argCount) {
@@ -3372,9 +3429,16 @@ Object.subclass('Squeak.Primitives',
             dirNameObj = this.stackNonInteger(1);
         if (!this.success) return false;
         var entries = Squeak.dirList(dirNameObj.bytesAsString());
-        if (!entries) return false;
+        if (!entries) {
+            console.log("Directory not found: " + dirNameObj.bytesAsString());
+            return false;
+        }
         var keys = Object.keys(entries);
         this.popNandPushIfOK(argCount+1, this.makeStObject(entries[keys[index - 1]]));  // entry or nil
+        return true;
+    },
+    primitiveDirectorySetMacTypeAndCreator: function(argCount) {
+        this.vm.popN(argCount);
         return true;
     },
     primitiveFileAtEnd: function(argCount) {
@@ -3434,7 +3498,6 @@ Object.subclass('Squeak.Primitives',
         }
         if (startIndex < 0 || startIndex + count > arrayObj.bytes.length)
             return false;
-
         return this.fileContentsDo(handle.file, function(file) {
             if (!file.contents)
                 return this.popNandPushIfOK(argCount+1, 0);
@@ -3485,7 +3548,6 @@ Object.subclass('Squeak.Primitives',
         }
         if (startIndex < 0 || startIndex + count > arrayObj.bytes.length)
             return false;
-
         return this.fileContentsDo(handle.file, function(file) {
             var srcArray = arrayObj.bytes,
                 dstArray = file.contents || [];
@@ -3523,10 +3585,16 @@ Object.subclass('Squeak.Primitives',
         var entry = directory[path.basename],
             contents = null;
         if (!entry) {
-            if (!writeFlag) return null;
+            if (!writeFlag) {
+                console.log("File not found: " + path.fullname);
+                return null;
+            }
             contents = new Uint8Array();
             entry = Squeak.filePut(path.fullname, contents.buffer);
-            if (!entry) return null;
+            if (!entry) {
+                console.log("Cannot create file: " + path.fullname);
+                return null;
+            }
         }
         // make the file object
         file = {
@@ -3612,23 +3680,25 @@ Object.subclass('Squeak.Primitives',
 
         if (bitblt.combinationRule === 30 || bitblt.combinationRule === 31) {
             // fetch source alpha parameter for alpha blend
-        	if (argCount !== 1) return false;
+        if (argCount !== 1) return false;
             bitblt.sourceAlpha = this.stackInteger(0);
             if (!this.success || bitblt.sourceAlpha < 0 || bitblt.sourceAlpha > 255)
 				return false;
 			this.vm.pop();
-    	}
+        }
     	
-    	var timer = window.performance || Date,
-    	    start = timer.now(),
-    	    mode = [bitblt.combinationRule, bitblt.source ? bitblt.source.depth : 0, bitblt.dest.depth].join("|");
+        var timer = window.performance || Date,
+            start = timer.now(),
+            mode = [bitblt.combinationRule, bitblt.source ? bitblt.source.depth : 0, bitblt.dest.depth].join("|");
         bitblt.copyBits();
         bitblt.stats[mode] = (bitblt.stats[mode] || 0) + (timer.now() - start);
 
         if (bitblt.combinationRule === 22 || bitblt.combinationRule === 32)
             this.vm.popNandPush(1, bitblt.bitCount);
-        else if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay])
+        else if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay]) {
+            this.display.lastTick = this.vm.lastTick;
             this.showForm(this.display.ctx, bitblt.dest, bitblt.affectedRect());
+        }
         return true;
 	},
 	bitblt_primitiveWarpBits: function(argCount) {
@@ -3677,7 +3747,7 @@ Object.subclass('Squeak.Primitives',
         };
     },
     b2d_reset: function(bitbltObj) {
-        if (this.b2d_debug) console.log("-- b2d_reset");
+        if (this.b2d_debug) console.log("-- reset");
         var state = this.b2d_state;
         state.needsFlush = false;
         state.hasFill = false;
@@ -3689,6 +3759,10 @@ Object.subclass('Squeak.Primitives',
             state.bitblt.loadBitBlt(bitbltObj);
             this.b2d_setupCanvas();
         }
+        state.minX = 0;
+        state.minY = 0;
+        state.maxX = state.bitblt.dest.width;
+        state.maxY = state.bitblt.dest.height;
     },
     b2d_setupCanvas: function() {
         var state = this.b2d_state;
@@ -3698,10 +3772,8 @@ Object.subclass('Squeak.Primitives',
             if (!canvas) {
                 canvas = document.createElement("canvas");
                 canvas.id = "SqueakB2DCanvas";
-                if (this.b2d_debug) {
-                    canvas.setAttribute("style", "position:fixed;top:20px;left:950px;background:rgba(255,255,255,0.5)");
-                    document.body.appendChild(canvas);
-                }
+                canvas.setAttribute("style", "position:fixed;top:20px;left:950px;background:rgba(255,255,255,0.5)");
+                document.body.appendChild(canvas);
             }
             state.context = canvas.getContext("2d");
             if (!state.context) alert("B2D: cannot create context");
@@ -3711,9 +3783,10 @@ Object.subclass('Squeak.Primitives',
             canvas = state.context.canvas;
         canvas.width = form.width;
         canvas.height = form.height;
+        canvas.style.visibility = this.b2d_debug ? "visible" : "hidden";
     },
     b2d_render: function() {
-        if (this.b2d_debug) console.log("-- b2d_render");
+        if (this.b2d_debug) console.log("-- render");
         var state = this.b2d_state;
         if (state.flushNeeded) {
             // fill and stroke path
@@ -3729,23 +3802,125 @@ Object.subclass('Squeak.Primitives',
             state.context.beginPath();
             state.flushNeeded = false;
             this.b2d_readPixels();
+            // if (this.b2d_debug) this.vm.breakNow("b2d_debug");
         }
         return 0; // answer stop reason
     },
     b2d_readPixels: function() {
         var state = this.b2d_state,
-            form = state.bitblt.dest,
-            canvasBytes = state.context.getImageData(0, 0, form.width, form.height).data;
+            form = state.bitblt.dest;
+        if (this.b2d_debug) console.log("==> read into " + form.width + "x" + form.height + "@" + form.depth);
+        if (!form.msb) this.warnOnce("B2D: drawing to little-endian forms not implemented yet");
         if (form.depth == 32) {
-            var canvasWords = new Uint32Array(canvasBytes.buffer);
-            form.bits.set(canvasWords);
+            this.b2d_readPixels32();
+        } else if (form.depth == 16) {
+            this.b2d_readPixels16();
         } else {
-            this.warnOnce("B2D: drawing to non-32 bit forms not supported yet");
+            this.warnOnce("B2D: drawing to " + form.depth + " bit forms not supported yet");
         }
-        if (this.b2d_debug) this.vm.breakOutOfInterpreter = 'break';
     },
-    b2d_setClip: function(minx, miny, maxx, maxy) {
-        
+    b2d_readPixels16: function() {
+        // since we have two pixels per word, grab from even positions
+        var state = this.b2d_state,
+            form = state.bitblt.dest,
+            minX = state.minX & ~1,
+            minY = state.minY,
+            maxX = (state.maxX + 1) & ~1,
+            maxY = state.maxY,
+            width = maxX - minX,
+            height = maxY - minY,
+            canvasBytes = state.context.getImageData(minX, minY, width, height).data,
+            srcIndex = 0;
+        if (this.b2d_debug) console.log("==> clipped to " + width + "x" + height);
+        for (var y = minY; y < maxY; y++) {
+            var dstIndex = y * form.pitch + (minX / 2);
+            for (var x = minX; x < maxX; x += 2) {
+                if (!(canvasBytes[srcIndex+3] | canvasBytes[srcIndex+7])) {
+                    srcIndex += 8; dstIndex++; // skip pixels if fully transparent
+                    continue;
+                }
+                var dstPixels = form.bits[dstIndex],  // two 16-bit pixels
+                    dstShift = 16,
+                    result = 0;
+                for (var i = 0; i < 2; i++) {
+                    var alpha = canvasBytes[srcIndex+3] / 255,
+                        oneMinusAlpha = 1 - alpha,
+                        pix = dstPixels >> dstShift,
+                        r = alpha * canvasBytes[srcIndex  ] + oneMinusAlpha * ((pix >> 7) & 0xF8),
+                        g = alpha * canvasBytes[srcIndex+1] + oneMinusAlpha * ((pix >> 2) & 0xF8),
+                        b = alpha * canvasBytes[srcIndex+2] + oneMinusAlpha * ((pix << 3) & 0xF8),
+                        res = (r & 0xF8) << 7 | (g & 0xF8) << 2 | (b & 0xF8) >> 3;  
+                    result = result | (res << dstShift);
+                    dstShift -= 16;
+                    srcIndex += 4;
+                }
+                form.bits[dstIndex] = result;
+                dstIndex++;
+            }
+        }
+    },
+    b2d_readPixels32: function() {
+        var state = this.b2d_state,
+            minX = state.minX,
+            minY = state.minY,
+            maxX = state.maxX,
+            maxY = state.maxY,
+            width = maxX - minX,
+            height = maxY - minY,
+            canvasBytes = state.context.getImageData(minX, minY, width, height).data,
+            form = state.bitblt.dest,
+            srcIndex = 0;
+        if (this.b2d_debug) console.log("==> reading " + width + "x" + height + " pixels");
+        for (var y = minY; y < maxY; y++) {
+            var dstIndex = y * form.pitch + minX;
+            for (var x = minX; x < maxX; x++) {
+                var srcAlpha = canvasBytes[srcIndex+3];
+                if (srcAlpha !== 0) { // skip pixel if fully transparent
+                    var alpha = srcAlpha / 255,
+                        oneMinusAlpha = 1 - alpha,
+                        pix = form.bits[dstIndex],
+                        a =                        srcAlpha + oneMinusAlpha * ((pix >> 24) & 0xFF),
+                        r = alpha * canvasBytes[srcIndex  ] + oneMinusAlpha * ((pix >> 16) & 0xFF),
+                        g = alpha * canvasBytes[srcIndex+1] + oneMinusAlpha * ((pix >>  8) & 0xFF),
+                        b = alpha * canvasBytes[srcIndex+2] + oneMinusAlpha * ( pix        & 0xFF);
+                    form.bits[dstIndex] = (a << 24) | (r << 16) | (g << 8) | b;
+                }
+                srcIndex+= 4;
+                dstIndex++;
+            }
+        }
+    },
+    b2d_pointsFrom: function(arrayObj, nPoints) {
+        var words = arrayObj.words;
+        if (words) {
+            if (words.length == nPoints) return arrayObj.wordsAsInt16Array();       // ShortPointArray
+            if (words.length == nPoints * 2) return arrayObj.wordsAsInt32Array();   // PointArray
+            return null;
+        }
+        // Array of Points
+        var points = arrayObj.pointers;
+        if (!points || points.length != nPoints)
+            return null;
+        var array = [];
+        for (var i = 0; i < nPoints; i++) {
+            var p = points[i].pointers;         // Point
+            array.push(this.floatOrInt(p[0]));  // x
+            array.push(this.floatOrInt(p[1]));  // y
+        }
+        return array;
+    },
+    b2d_setClip: function(minX, minY, maxX, maxY) {
+        if (this.b2d_debug) console.log("==> clip " + minX + "," + minY + "," + maxX + "," + maxY);
+        var state = this.b2d_state;
+        if (state.minX < minX) state.minX = minX;
+        if (state.minY < minY) state.minY = minY;
+        if (state.maxX > maxX) state.maxX = maxX;
+        if (state.maxY > maxY) state.maxY = maxY;
+    },
+    b2d_setOffset: function(x, y) {
+        // TODO: make offset work together with transform
+        this.b2d_state.context.setTransform(1, 0, 0, 1, x, y);
+        if (this.b2d_debug) console.log("==> translate " + x +"," + y);
     },
     b2d_setTransform: function(t) {
         /* Transform is a matrix:
@@ -3760,8 +3935,8 @@ Object.subclass('Squeak.Primitives',
         if (this.b2d_debug) console.log("==> transform: " + [t[0], t[3], t[1], t[4], t[2], t[5]].join(','));
     },
     b2d_setStyle: function(fillIndex, borderIndex, borderWidth) {
-        var hasFill = !!fillIndex,
-            hasStroke = borderIndex && borderWidth > 0,
+        var hasFill = fillIndex !== 0,
+            hasStroke = borderIndex !== 0 && borderWidth > 0,
             state = this.b2d_state;
         state.hasFill = hasFill;
         state.hasStroke = hasStroke;
@@ -3776,16 +3951,18 @@ Object.subclass('Squeak.Primitives',
         }
         return hasFill || hasStroke;
     },
+    b2d_colorFrom: function(word) {
+        var b = word & 0xFF,
+            g = (word & 0xFF00) >>> 8,
+            r = (word & 0xFF0000) >>> 16,
+            a = ((word & 0xFF000000) >>> 24) / 255;
+        return "rgba(" + [r, g, b, a].join(",") + ")";
+    },
     b2d_styleFrom: function(index) {
-        if (index == 0) return null;
+        if (index === 0) return null;
         var fills = this.b2d_state.fills;
         if (index <= fills.length) return fills[index - 1];
-        var b = index & 0xFF,
-            g = (index & 0xFF00) >>> 8,
-            r = (index & 0xFF0000) >>> 16,
-            a = ( (index & 0xFF000000) >>> 24 ) / 255;
-        // swap blue and red to match Squeak component layout
-        return "rgba(" + [b, g, r, a].join(",") + ")";
+        return this.b2d_colorFrom(index);
     },
     b2d_primitiveSetEdgeTransform: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveSetEdgeTransform");
@@ -3824,10 +4001,10 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     b2d_primitiveNeedsFlushPut: function(argCount) {
-        var needsFlush = this.stackNonInteger(0).isTrue;
+        var needsFlush = !!this.stackNonInteger(0).isTrue;
         if (!this.success) return false;
-        this.b2d_state.needsFlush = !!needsFlush;
-        if (this.b2d_debug) console.log("b2d_primitiveNeedsFlushPut: " + !!needsFlush);
+        this.b2d_state.needsFlush = needsFlush;
+        if (this.b2d_debug) console.log("b2d_primitiveNeedsFlushPut: " + needsFlush);
         this.vm.popN(argCount);
         return true;
     },
@@ -3841,28 +4018,40 @@ Object.subclass('Squeak.Primitives',
     },
     b2d_primitiveAddOval: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveAddOval");
-        var borderIndex = this.stackPos32BitInt(0);
-        var borderWidth = this.stackInteger(1);
-        var fillIndex   = this.stackPos32BitInt(2);
-        var end         = this.stackNonInteger(3);
-        var start       = this.stackNonInteger(4);
+        var origin      = this.stackNonInteger(4).pointers,
+            corner      = this.stackNonInteger(3).pointers,
+            fillIndex   = this.stackPos32BitInt(2),
+            borderWidth = this.stackInteger(1),
+            borderIndex = this.stackPos32BitInt(0);
         if (!this.success) return false;
-        this.warnOnce("B2D: oval not implemented yet");
+        if (this.b2d_setStyle(fillIndex, borderIndex, borderWidth)) {
+            var ctx = this.b2d_state.context,
+                x = this.floatOrInt(origin[0]),
+                y = this.floatOrInt(origin[1]),
+                w = this.floatOrInt(corner[0]) - x,
+                h = this.floatOrInt(corner[1]) - y;
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(w, h);
+            ctx.arc(0.5, 0.5, 0.5, 0, Math.PI * 2);
+            ctx.restore();
+            if (this.b2d_debug) console.log("==> oval " + [x, y, w, h].join(','));
+            this.b2d_state.flushNeeded = true;
+        }
         this.vm.popN(argCount);
         return true;
     },
     b2d_primitiveAddBezierShape: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveAddBezierShape");
-        var borderIndex = this.stackPos32BitInt(0),
-            borderWidth = this.stackInteger(1),
-            fillIndex   = this.stackPos32BitInt(2),
+        var points      = this.stackNonInteger(4),
             nSegments   = this.stackInteger(3),
-            points      = this.stackNonInteger(4);
-        if (!this.success || !points.words) return false;
+            fillIndex   = this.stackPos32BitInt(2),
+            borderWidth = this.stackInteger(1),
+            borderIndex = this.stackPos32BitInt(0);
+        if (!this.success) return false;
         if (this.b2d_setStyle(fillIndex, borderIndex, borderWidth)) {
-            var p = points.words;
-            if (p.length == nSegments * 3) p = points.wordsAsInt16Array();  // ShortPointArray
-            else if (p.length != nSegments * 6) return false;
+            var p = this.b2d_pointsFrom(points, nSegments * 3);
+            if (!p) return false;
             var ctx = this.b2d_state.context;
             ctx.moveTo(p[0], p[1]);
             for (var i = 0; i < p.length; i += 6)
@@ -3875,29 +4064,37 @@ Object.subclass('Squeak.Primitives',
     },
     b2d_primitiveAddPolygon: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveAddPolygon");
-        var borderIndex = this.stackPos32BitInt(0);
-        var borderWidth = this.stackInteger(1);
-	    var fillIndex   = this.stackPos32BitInt(2);
-	    var nPoints     = this.stackInteger(3);
-	    var points      = this.stackNonInteger(4);
-	    if (!this.success) return false;
-        this.warnOnce("B2D: polygons not implemented yet");
-        this.vm.popNandPush(argCount);
+        var points      = this.stackNonInteger(4),
+            nPoints     = this.stackInteger(3),
+            fillIndex   = this.stackPos32BitInt(2),
+            borderWidth = this.stackInteger(1),
+            borderIndex = this.stackPos32BitInt(0);
+        if (!this.success) return false;
+        if (this.b2d_setStyle(fillIndex, borderIndex, borderWidth)) {
+            var p = this.b2d_pointsFrom(points, nPoints);
+            if (!p) return false;
+            var ctx = this.b2d_state.context;
+            ctx.moveTo(p[0], p[1]);
+            for (var i = 2; i < p.length; i += 2)
+                ctx.lineTo(p[i], p[i+1]);
+            if (this.b2d_debug) console.log("==> polygon");
+            this.b2d_state.flushNeeded = true;
+        }
         return true;
     },
     b2d_primitiveAddRect: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveAddRect");
-        var borderIndex = this.stackPos32BitInt(0);
-        var borderWidth = this.stackInteger(1);
-	    var fillIndex   = this.stackPos32BitInt(2);
-	    var corner      = this.stackNonInteger(3);
-	    var origin      = this.stackNonInteger(4);
-	    if (!this.success) return false;
+        var origin      = this.stackNonInteger(4).pointers,
+            corner      = this.stackNonInteger(3).pointers,
+            fillIndex   = this.stackPos32BitInt(2),
+            borderWidth = this.stackInteger(1),
+            borderIndex = this.stackPos32BitInt(0);
+        if (!this.success) return false;
         if (this.b2d_setStyle(fillIndex, borderIndex, borderWidth)) {
-            var x = this.floatOrInt(origin.pointers[0]),
-                y = this.floatOrInt(origin.pointers[1]),
-                w = this.floatOrInt(corner.pointers[0]) - x,
-                h = this.floatOrInt(corner.pointers[1]) - y; 
+            var x = this.floatOrInt(origin[0]),
+                y = this.floatOrInt(origin[1]),
+                w = this.floatOrInt(corner[0]) - x,
+                h = this.floatOrInt(corner[1]) - y; 
             this.b2d_state.context.rect(x, y, w, h);
             if (this.b2d_debug) console.log("==> rect " + [x, y, w, h].join(','));
             this.b2d_state.flushNeeded = true;
@@ -3933,10 +4130,29 @@ Object.subclass('Squeak.Primitives',
     },
     b2d_primitiveAddGradientFill: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveAddGradientFill");
-        this.warnOnce("B2D: gradient fills not implemented yet");
-        var fills = this.b2d_state.fills;
-        fills.push('green');
-        this.vm.popNandPush(argCount+1, fills.length);
+        var ramp = this.stackNonInteger(4).words,
+            origin = this.stackNonInteger(3).pointers,
+            direction = this.stackNonInteger(2).pointers,
+            //normal = this.stackNonInteger(1).pointers,
+            isRadial = this.stackNonInteger(0).isTrue;
+        if (!this.success) return false;
+        var x = this.floatOrInt(origin[0]),
+            y = this.floatOrInt(origin[1]),
+            dx = this.floatOrInt(direction[0]),
+            dy = this.floatOrInt(direction[1]),
+            state = this.b2d_state,
+            ctx = state.context,
+            gradient = isRadial
+                ? ctx.createRadialGradient(x, y, 0, x, y, Math.sqrt(dx*dx + dy*dy))
+                : ctx.createLinearGradient(x, y, x + dx, y + dy);
+        // we get a 512-step color ramp here. Going to assume it's made from only two colors.
+        gradient.addColorStop(0, this.b2d_colorFrom(ramp[0]));
+        gradient.addColorStop(1, this.b2d_colorFrom(ramp[ramp.length - 1]));
+        // TODO: use more than two stops
+        // IDEA: the original gradient is likely in a temp at this.vm.stackValue(7)
+        //       so we could get the original color stops from it
+        state.fills.push(gradient);
+        this.vm.popNandPush(argCount+1, state.fills.length);
         return true;
     },
     b2d_primitiveNeedsFlush: function(argCount) {
@@ -3946,6 +4162,9 @@ Object.subclass('Squeak.Primitives',
     },
     b2d_primitiveSetOffset: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveSetOffset");
+        var offset = this.stackNonInteger(0).pointers;
+        if (!offset) return false;
+        this.b2d_setOffset(this.floatOrInt(offset[0]), this.floatOrInt(offset[1]));
         this.vm.popN(argCount);
         return true;
     },
@@ -4068,7 +4287,7 @@ Object.subclass('Squeak.BitBlt',
                 colors, shifts, masks;
             if (oldStyle) {
                 // This is an old-style color map (indexed only, with implicit ARGB conversion)
-    		    colors = colorMapObj.words;
+                colors = colorMapObj.words;
             } else {
                 // A new-style color map (fully qualified)
                 if (colorMapObj.pointersSize() < 3) return false;
@@ -4165,17 +4384,17 @@ Object.subclass('Squeak.BitBlt',
                     this.dest.bits[this.destIndex++] = halftoneWord;
             else
                 for (var word = 2; word < this.nWords; word++) {
-                        destWord = this.dest.bits[this.destIndex];
-                        mergeWord = this.mergeFn(halftoneWord, destWord, 0xFFFFFFFF);
-                        this.dest.bits[this.destIndex++] = mergeWord;
+                    destWord = this.dest.bits[this.destIndex];
+                    mergeWord = this.mergeFn(halftoneWord, destWord, 0xFFFFFFFF);
+                    this.dest.bits[this.destIndex++] = mergeWord;
                 }
             //last word in row is masked
             if (this.nWords > 1) {
-                    destMask = this.mask2;
-                    destWord = this.dest.bits[this.destIndex];
-                    mergeWord = this.mergeFn(halftoneWord, destWord, destMask);
-                    destWord = (destMask & mergeWord) | (destWord & (~destMask));
-                    this.dest.bits[this.destIndex++] = destWord;
+                destMask = this.mask2;
+                destWord = this.dest.bits[this.destIndex];
+                mergeWord = this.mergeFn(halftoneWord, destWord, destMask);
+                destWord = (destMask & mergeWord) | (destWord & (~destMask));
+                this.dest.bits[this.destIndex++] = destWord;
             }
             this.destIndex += this.destDelta;
         }
@@ -4501,31 +4720,31 @@ Object.subclass('Squeak.BitBlt',
         this.dx = this.destX + leftOffset;
         this.bbW = this.width - leftOffset;
         var rightOffset = (this.dx + this.bbW) - (this.clipX + this.clipW);
-    	if (rightOffset > 0)
-    		this.bbW -= rightOffset;
+        if (rightOffset > 0)
+            this.bbW -= rightOffset;
         var topOffset = Math.max(this.clipY - this.destY, 0);
         this.sy = this.sourceY + topOffset;
         this.dy = this.destY + topOffset;
         this.bbH = this.height - topOffset;
         var bottomOffset = (this.dy + this.bbH) - (this.clipY + this.clipH);
-    	if (bottomOffset > 0)
-    		this.bbH -= bottomOffset;
+        if (bottomOffset > 0)
+        this.bbH -= bottomOffset;
         // intersect with sourceForm bounds
-    	if (!this.source) return;
-    	if (this.sx < 0) {
-    		this.dx -= this.sx;
-    		this.bbW += this.sx;
-    		this.sx = 0;
-    	}
-    	if ((this.sx + this.bbW) > this.source.width)
-    		this.bbW -= (this.sx + this.bbW) - this.source.width;
-    	if (this.sy < 0) {
-    		this.dy -= this.sy;
-    		this.bbH += this.sy;
-    		this.sy = 0;
-    	}
-    	if ((this.sy + this.bbH) > this.source.height)
-    		this.bbH -= (this.sy + this.bbH) - this.source.height;
+        if (!this.source) return;
+        if (this.sx < 0) {
+            this.dx -= this.sx;
+            this.bbW += this.sx;
+            this.sx = 0;
+        }
+        if ((this.sx + this.bbW) > this.source.width)
+            this.bbW -= (this.sx + this.bbW) - this.source.width;
+        if (this.sy < 0) {
+            this.dy -= this.sy;
+            this.bbH += this.sy;
+            this.sy = 0;
+        }
+        if ((this.sy + this.bbH) > this.source.height)
+            this.bbH -= (this.sy + this.bbH) - this.source.height;
 	},
     checkSourceOverlap: function() {
         if (this.sourceForm === this.destForm && this.dy >= this.sy) {
@@ -4657,7 +4876,7 @@ Object.subclass('Squeak.BitBlt',
 'mapping',
 {
     setupColorMasks: function(srcBits, targetBits) {
-	    // Setup color masks for converting an incoming RGB pixel value from srcBits to targetBits per pixel
+        // Setup color masks for converting an incoming RGB pixel value from srcBits to targetBits per pixel
         var deltaBits = targetBits - srcBits;
         if (deltaBits == 0) return;
         if (deltaBits < 0) { // e.g. from 8 to 5

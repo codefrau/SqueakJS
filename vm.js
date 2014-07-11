@@ -1998,6 +1998,7 @@ Object.subclass('Squeak.Primitives',
                     primitiveDirectoryDelimitor: this.primitiveDirectoryDelimitor.bind(this),
                     primitiveDirectoryEntry: this.primitiveDirectoryEntry.bind(this),
                     primitiveDirectoryLookup: this.primitiveDirectoryLookup.bind(this),
+                    primitiveDirectorySetMacTypeAndCreator: this.primitiveDirectorySetMacTypeAndCreator.bind(this),
                     primitiveFileAtEnd: this.primitiveFileAtEnd.bind(this),
                     primitiveFileClose: this.primitiveFileClose.bind(this),
                     primitiveFileDelete: this.primitiveFileDelete.bind(this),
@@ -2262,6 +2263,7 @@ Object.subclass('Squeak.Primitives',
             case 165:
             case 166: return this.primitiveIntegerAtAndPut(argCount);
             case 167: return false; // Processor.yield
+            case 169: return this.primitiveDirectorySetMacTypeAndCreator(argCount);
             case 188: return this.primitiveExecuteMethodArgsArray(argCount);
             case 195: return false; // Context.findNextUnwindContextUpTo:
             case 196: return false; // Context.terminateTo:
@@ -3433,6 +3435,10 @@ Object.subclass('Squeak.Primitives',
         }
         var keys = Object.keys(entries);
         this.popNandPushIfOK(argCount+1, this.makeStObject(entries[keys[index - 1]]));  // entry or nil
+        return true;
+    },
+    primitiveDirectorySetMacTypeAndCreator: function(argCount) {
+        this.vm.popN(argCount);
         return true;
     },
     primitiveFileAtEnd: function(argCount) {

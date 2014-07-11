@@ -3772,10 +3772,8 @@ Object.subclass('Squeak.Primitives',
             if (!canvas) {
                 canvas = document.createElement("canvas");
                 canvas.id = "SqueakB2DCanvas";
-                if (this.b2d_debug) {
-                    canvas.setAttribute("style", "position:fixed;top:20px;left:950px;background:rgba(255,255,255,0.5)");
-                    document.body.appendChild(canvas);
-                }
+                canvas.setAttribute("style", "position:fixed;top:20px;left:950px;background:rgba(255,255,255,0.5)");
+                document.body.appendChild(canvas);
             }
             state.context = canvas.getContext("2d");
             if (!state.context) alert("B2D: cannot create context");
@@ -3785,6 +3783,7 @@ Object.subclass('Squeak.Primitives',
             canvas = state.context.canvas;
         canvas.width = form.width;
         canvas.height = form.height;
+        canvas.style.visibility = this.b2d_debug ? "visible" : "hidden";
     },
     b2d_render: function() {
         if (this.b2d_debug) console.log("-- render");
@@ -3803,6 +3802,7 @@ Object.subclass('Squeak.Primitives',
             state.context.beginPath();
             state.flushNeeded = false;
             this.b2d_readPixels();
+            // if (this.b2d_debug) this.vm.breakNow("b2d_debug");
         }
         return 0; // answer stop reason
     },
@@ -3812,53 +3812,82 @@ Object.subclass('Squeak.Primitives',
         if (this.b2d_debug) console.log("==> read into " + form.width + "x" + form.height + "@" + form.depth);
         if (!form.msb) this.warnOnce("B2D: drawing to little-endian forms not implemented yet");
         if (form.depth == 32) {
-            // KLUDGE: this clobbers the original pixels instead of blending over them
-            // which works fine for TTF glyphs, but we should check that the form was
-            // never written to before.
-            var canvasWords = new Uint32Array(state.context.getImageData(0, 0, form.width, form.height).data.buffer);
-            form.bits.set(canvasWords); // set big-endian ARGB from little-endian RGBA
-            // TODO implement proper blending over old contents, as for 16 bits
+            this.b2d_readPixels32();
         } else if (form.depth == 16) {
-            // since we have two pixels per word, grab from even positions
-            var minX = state.minX & ~1,
-                minY = state.minY,
-                maxX = (state.maxX + 1) & ~1,
-                maxY = state.maxY,
-                width = maxX - minX,
-                height = maxY - minY,
-                canvasBytes = state.context.getImageData(minX, minY, width, height).data,
-                srcIndex = 0;
-            if (this.b2d_debug) console.log("==> clipped to " + width + "x" + height);
-            for (var y = minY; y < maxY; y++) {
-                var dstIndex = y * form.pitch + (minX / 2);
-                for (var x = minX; x < maxX; x += 2) {
-                    if (!(canvasBytes[srcIndex+3] | canvasBytes[srcIndex+7])) {
-                        srcIndex += 8; dstIndex++; // skip pixels if fully transparent
-                        continue;
-                    }
-                    var dstPixels = form.bits[dstIndex],  // two 16-bit pixels
-                        dstShift = 16,
-                        result = 0;
-                    for (var i = 0; i < 2; i++) {
-                        var alpha = canvasBytes[srcIndex+3] / 255,
-                            oneMinusAlpha = 1 - alpha,
-                            pix = dstPixels >> dstShift,
-                            r = alpha * canvasBytes[srcIndex+2] + oneMinusAlpha * ((pix >> 7) & 0xF8),
-                            g = alpha * canvasBytes[srcIndex+1] + oneMinusAlpha * ((pix >> 2) & 0xF8),
-                            b = alpha * canvasBytes[srcIndex  ] + oneMinusAlpha * ((pix << 3) & 0xF8),
-                            res = (r & 0xF8) << 7 | (g & 0xF8) << 2 | (b & 0xF8) >> 3;  
-                        result = result | (res << dstShift);
-                        dstShift -= 16;
-                        srcIndex += 4;
-                    }
-                    form.bits[dstIndex] = result;
-                    dstIndex++;
-                }
-            }
+            this.b2d_readPixels16();
         } else {
             this.warnOnce("B2D: drawing to " + form.depth + " bit forms not supported yet");
         }
-        // TODO: if drawing to display, refresh it
+    },
+    b2d_readPixels16: function() {
+        // since we have two pixels per word, grab from even positions
+        var state = this.b2d_state,
+            form = state.bitblt.dest,
+            minX = state.minX & ~1,
+            minY = state.minY,
+            maxX = (state.maxX + 1) & ~1,
+            maxY = state.maxY,
+            width = maxX - minX,
+            height = maxY - minY,
+            canvasBytes = state.context.getImageData(minX, minY, width, height).data,
+            srcIndex = 0;
+        if (this.b2d_debug) console.log("==> clipped to " + width + "x" + height);
+        for (var y = minY; y < maxY; y++) {
+            var dstIndex = y * form.pitch + (minX / 2);
+            for (var x = minX; x < maxX; x += 2) {
+                if (!(canvasBytes[srcIndex+3] | canvasBytes[srcIndex+7])) {
+                    srcIndex += 8; dstIndex++; // skip pixels if fully transparent
+                    continue;
+                }
+                var dstPixels = form.bits[dstIndex],  // two 16-bit pixels
+                    dstShift = 16,
+                    result = 0;
+                for (var i = 0; i < 2; i++) {
+                    var alpha = canvasBytes[srcIndex+3] / 255,
+                        oneMinusAlpha = 1 - alpha,
+                        pix = dstPixels >> dstShift,
+                        r = alpha * canvasBytes[srcIndex  ] + oneMinusAlpha * ((pix >> 7) & 0xF8),
+                        g = alpha * canvasBytes[srcIndex+1] + oneMinusAlpha * ((pix >> 2) & 0xF8),
+                        b = alpha * canvasBytes[srcIndex+2] + oneMinusAlpha * ((pix << 3) & 0xF8),
+                        res = (r & 0xF8) << 7 | (g & 0xF8) << 2 | (b & 0xF8) >> 3;  
+                    result = result | (res << dstShift);
+                    dstShift -= 16;
+                    srcIndex += 4;
+                }
+                form.bits[dstIndex] = result;
+                dstIndex++;
+            }
+        }
+    },
+    b2d_readPixels32: function() {
+        var state = this.b2d_state,
+            minX = state.minX,
+            minY = state.minY,
+            maxX = state.maxX,
+            maxY = state.maxY,
+            width = maxX - minX,
+            height = maxY - minY,
+            canvasBytes = state.context.getImageData(minX, minY, width, height).data,
+            form = state.bitblt.dest,
+            formBytes = new Uint8ClampedArray(form.bits.buffer),
+            srcIndex = 0;
+        if (this.b2d_debug) console.log("==> reading " + width + "x" + height + " pixels");
+        for (var y = minY; y < maxY; y++) {
+            var dstIndex = (y * form.pitch + minX) * 4;
+            for (var x = minX; x < maxX; x++) {
+                var srcAlpha = canvasBytes[srcIndex+3];
+                if (srcAlpha !== 0) { // skip pixel if fully transparent
+                    var alpha = srcAlpha / 255,
+                        oneMinusAlpha = 1 - alpha;
+                    formBytes[dstIndex+3] =                        srcAlpha + oneMinusAlpha * formBytes[dstIndex+3];
+                    formBytes[dstIndex+2] = alpha * canvasBytes[srcIndex  ] + oneMinusAlpha * formBytes[dstIndex+2];
+                    formBytes[dstIndex+1] = alpha * canvasBytes[srcIndex+1] + oneMinusAlpha * formBytes[dstIndex+1];
+                    formBytes[dstIndex  ] = alpha * canvasBytes[srcIndex+2] + oneMinusAlpha * formBytes[dstIndex  ];
+                }
+                srcIndex += 4;
+                dstIndex += 4;
+            }
+        }
     },
     b2d_pointsFrom: function(arrayObj, nPoints) {
         var words = arrayObj.words;
@@ -3926,8 +3955,7 @@ Object.subclass('Squeak.Primitives',
             g = (word & 0xFF00) >>> 8,
             r = (word & 0xFF0000) >>> 16,
             a = ((word & 0xFF000000) >>> 24) / 255;
-        // swap blue and red to fake Squeak component layout
-        return "rgba(" + [b, g, r, a].join(",") + ")";
+        return "rgba(" + [r, g, b, a].join(",") + ")";
     },
     b2d_styleFrom: function(index) {
         if (index === 0) return null;

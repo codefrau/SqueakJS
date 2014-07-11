@@ -990,9 +990,9 @@ Object.subclass('Squeak.Interpreter',
         this.initConstants();
         this.primHandler = new Squeak.Primitives(this, display);
         this.loadImageState();
+        this.hackImage();
         this.initVMState();
         this.loadInitialContext();
-        this.ignoreMethod = this.findMethod("String>>translatedInAllDomains");
         console.log('squeak: interpreter ready');
     },
     initConstants: function() {
@@ -1048,6 +1048,16 @@ Object.subclass('Squeak.Interpreter',
         this.activeContext = proc.getPointer(Squeak.Proc_suspendedContext);
         this.fetchContextRegisters(this.activeContext);
         this.reclaimableContextCount = 0;
+    },
+    hackImage: function() {
+        // Etoys fallback for missing translation files is hugely inefficient.
+        // This speeds up opening a viewer by 10x (!) Remove when we added translation files.
+        var primitiveReturnSelf = 256,
+            methods = ["String>>translated", "String>>translatedInAllDomains"];
+        methods.forEach(function(each) {
+            var method = this.findMethod(each);
+            if (method) method.pointers[0] |= primitiveReturnSelf;
+        }, this);
     },
 },
 'interpreting', {
@@ -1431,7 +1441,6 @@ Object.subclass('Squeak.Interpreter',
         if (primitiveIndex > 0)
             if (this.tryPrimitive(primitiveIndex, argumentCount, newMethod))
                 return;  //Primitive succeeded -- end of story
-        if (newMethod === this.ignoreMethod) return; // ignoring this method
         var newContext = this.allocateOrRecycleContext(newMethod.methodNeedsLargeFrame());
         var tempCount = newMethod.methodTempCount();
         var newPC = 0; // direct zero-based index into byte codes

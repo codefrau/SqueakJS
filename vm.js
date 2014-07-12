@@ -3272,10 +3272,7 @@ Object.subclass('Squeak.Primitives',
             default: throw Error("depth not implemented");
         };
         if (pixels.data !== pixelData) {
-            // TODO: implement a faster solution for mobile IE
-            for (var i = 0; i < pixelData.length; i++) {
-                pixels.data[i] = pixelData[i];
-            }
+	    pixels.data.set(pixelData);
         }
         ctx.putImageData(pixels, rect.x, rect.y);
     },

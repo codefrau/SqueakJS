@@ -3816,7 +3816,8 @@ Object.subclass('Squeak.Primitives',
         var state = this.b2d_state,
             form = state.bitblt.dest;
         if (this.b2d_debug) console.log("==> read into " + form.width + "x" + form.height + "@" + form.depth);
-        if (!form.msb) this.warnOnce("B2D: drawing to little-endian forms not implemented yet");
+        if (!form.width || !form.height) return;
+        if (!form.msb) return this.warnOnce("B2D: drawing to little-endian forms not implemented yet");
         if (form.depth == 32) {
             this.b2d_readPixels32();
         } else if (form.depth == 16) {
@@ -5076,7 +5077,7 @@ Object.subclass('Squeak.BitBlt',
             case 12: return function(src, dst) { return ~src };
             case 13: return function(src, dst) { return (~src) | dst };
             case 14: return function(src, dst) { return (~src) | (~dst) };
-            case 15: return function(src, dst) { return dst };
+            case 15: return function(src, dst) { return dst }; 
             case 16: return function(src, dst) { return dst };
             case 17: return function(src, dst) { return dst };
             case 18: return function(src, dst) { return src + dst };
@@ -5085,7 +5086,7 @@ Object.subclass('Squeak.BitBlt',
             case 21: return function(src, dst) { return src };
             case 22: return function(src, dst) { return src };
             case 23: return function(src, dst) { return src };
-            case 24: return function(src, dst) { return src };
+            case 24: return function(src, dst) { return self.alphaBlend(src, dst) };
             case 25: return function(src, dst) { return src === 0 ? dst
                 : src | self.partitionedAND(~src, dst, self.dest.depth, self.dest.pixPerWord) };
             case 26: return function(src, dst) {
@@ -5139,18 +5140,38 @@ Object.subclass('Squeak.BitBlt',
             mask = mask >>> nBits;
         }
     },
+    alphaBlend: function(src, dst) {
+        // Blend sourceWord with destinationWord, assuming both are 32-bit pixels.
+        // The source is assumed to have 255*alpha in the high 8 bits of each pixel,
+        // while the high 8 bits of the destinationWord will be ignored.
+        // The blend produced is alpha*source + (1-alpha)*dest, with
+        // the computation being performed independently on each color
+        // component. 
+        var alpha = src >>> 24;
+        if (alpha === 0) return dst;
+        if (alpha === 255) return src;
+        var unAlpha = 255 - alpha,
+            b = (alpha * ( src         & 255) + unAlpha * ( dst       & 255) + 254) / 255 & 255,
+            g = (alpha * ((src >>>  8) & 255) + unAlpha * ((dst>>> 8) & 255) + 254) / 255 & 255,
+            r = (alpha * ((src >>> 16) & 255) + unAlpha * ((dst>>>16) & 255) + 254) / 255 & 255,
+            a = (alpha * 255                  + unAlpha * ((dst>>>24) & 255) + 254) / 255 & 255;
+        return a << 24 | r << 16 | g << 8 | b;
+	},
     alphaBlendScaled: function(src, dst) {
         // 	Blend srcWord with dstWord using the alpha value from srcWord.
         // 	Alpha is encoded as 0 meaning 0.0, and 255 meaning 1.0.
         // 	In contrast to alphaBlend() the color produced is
         // 		srcColor + (1-srcAlpha) * dstColor
         // 	i.e., it is assumed that the source color is already scaled.
-        var unAlpha = (255 - (src >>> 24)) / 255,
+        var alpha = src >>> 24;
+        if (alpha === 0) return dst;
+        if (alpha === 255) return src;
+        var unAlpha = (255 - alpha) / 255,
             b = Math.min(255, unAlpha * (dst & 255) + (src & 255)),
             g = Math.min(255, unAlpha * ((dst>>>8) & 255) + ((src>>>8) & 255)),
             r = Math.min(255, unAlpha * ((dst>>>16) & 255) + ((src>>>16) & 255)),
             a = Math.min(255, unAlpha * (dst>>>24) + (src>>>24));
-        return ((((((a << 8) + r) << 8) + g) << 8) + b) | 0;
+        return a << 24 | r << 16 | g << 8 | b;
 	},
     alphaBlendConst: function(sourceWord, destWord, destMask, paintMode) {
         // Blend sourceWord with destWord using a constant alpha.

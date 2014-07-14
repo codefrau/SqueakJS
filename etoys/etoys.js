@@ -159,6 +159,14 @@ window.onload = function() {
         };
         return display;
     };
+    if (window.applicationCache) {
+        applicationCache.addEventListener('updateready', function() {
+            applicationCache.swapCache();
+            if (confirm('SqueakJS has been updated. Restart now?')) {
+                window.location.reload();
+            }
+        });
+    }
     function loadAndRunImage(url) {
         var imageName = Squeak.splitFilePath(url).basename;
         canvas.showBanner("Downloading " + imageName);

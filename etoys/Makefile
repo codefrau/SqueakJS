@@ -20,6 +20,7 @@ $(MANIFEST): Makefile $(ETOYSDIR) $(CACHED)
 $(ETOYSDIR): $(DEMODIR) $(CACHED)
 	@if [ ! -d $@ ] ; then mkdir -p $@ ; fi
 	@for f in $(CACHED); do install -pvm 444 $$f $@/$$f ; done
+	touch $(ETOYSDIR)
 
 $(DEMODIR): $(DEMO)
 	$(MAKE) -C ../demo

@@ -18,3 +18,5 @@ $(MANIFEST): Makefile $(PUB) $(CACHED)
 $(PUB): $(CACHED)
 	@if [ ! -d $@ ] ; then mkdir -p $@ ; fi
 	@for f in $^ ; do install -pvm 444 $$f $@/$$f ; done
+	touch $(PUB)
+

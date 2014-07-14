@@ -26,9 +26,9 @@ Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.2.2",
+    vmVersion: "SqueakJS 0.2.3",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
-    vmPath: "/users/bert/SqueakJS/",    // entirely made up
+    vmPath: "/SqueakJS/vm/",            // entirely made up
     osName: "Web",
     osVersion: navigator.userAgent,
     windowSystem: "HTML",
@@ -3274,7 +3274,7 @@ Object.subclass('Squeak.Primitives',
             default: throw Error("depth not implemented");
         };
         if (pixels.data !== pixelData) {
-	    pixels.data.set(pixelData);
+            pixels.data.set(pixelData);
         }
         ctx.putImageData(pixels, rect.x, rect.y);
     },

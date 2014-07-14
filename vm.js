@@ -652,14 +652,16 @@ Object.subclass('Squeak.Object',
         var nWords = this.bits.length;
         if (this.format < 5) {
             //Formats 0...4 -- Pointer fields
-            if (nWords > 0)
-                this.pointers = this.decodePointers(nWords, this.bits, oopMap);
+            if (nWords > 0) {
+                var oops = this.bits; // endian conversion was already done
+                this.pointers = this.decodePointers(nWords, oops, oopMap);
+            }
         } else if (this.format >= 12) {
             //Formats 12-15 -- CompiledMethods both pointers and bits
-            var words = this.decodeWords(nWords, this.bits, littleEndian),
-                methodHeader = words[0],
-                numLits = (methodHeader>>10) & 255;
-            this.pointers = this.decodePointers(numLits+1, words, oopMap); //header+lits
+            var methodHeader = this.decodeWords(1, this.bits, littleEndian)[0],
+                numLits = (methodHeader>>10) & 255,
+                oops = this.decodeWords(numLits+1, this.bits, littleEndian);
+            this.pointers = this.decodePointers(numLits+1, oops, oopMap); //header+lits
             this.bytes = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this.format & 3);
         } else if (this.format >= 8) {
             //Formats 8..11 -- ByteArrays (and ByteStrings)

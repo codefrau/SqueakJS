@@ -5595,6 +5595,7 @@ Object.subclass('Squeak.InstructionPrinter',
         this.indent = indent;           // prepend to every line except if highlighted
         this.highlight = highlight;     // prepend to highlighted line
         this.highlightPC = highlightPC; // PC of highlighted line
+        this.innerIndents = {};
         this.result = '';
         this.scanner = new Squeak.InstructionStream(this.method, this.vm);
         this.oldPC = this.scanner.pc;
@@ -5609,7 +5610,10 @@ Object.subclass('Squeak.InstructionPrinter',
         } else {
             if (this.indent) this.result += this.indent;
         }
-        this.result += this.oldPC + " <";
+        this.result += this.oldPC;
+        for (var i = 0; i < this.innerIndents[this.oldPC] || 0; i++)
+            this.result += "   ";
+        this.result += " <";
         for (var i = this.oldPC; i < this.scanner.pc; i++) {
             if (i > this.oldPC) this.result += " ";
             this.result += (this.method.bytes[i]+0x100).toString(16).substr(-2).toUpperCase(); // padded hex
@@ -5683,6 +5687,28 @@ Object.subclass('Squeak.InstructionPrinter',
 	storeIntoTemporaryVariable: function(offset) {
 	    this.print('storeIntoTemp: ' + offset);
     },
+    pushNewArray: function(size) {
+        this.print('push: (Array new: ' + size + ')');
+    },
+    pushConsArray: function(numElements) {
+        this.print('pop: ' + numElements + ' into: (Array new: ' + numElements + ')');
+    },
+    pushRemoteTemp: function(offset , arrayOffset) {
+        this.print('push: ' + offset + ' ofTemp: ' + arrayOffset);
+    },
+    storeIntoRemoteTemp: function(offset , arrayOffset) {
+        this.print('storeInto: ' + offset + ' ofTemp: ' + arrayOffset);
+    },
+    popIntoRemoteTemp: function(offset , arrayOffset) {
+        this.print('popInto: ' + offset + ' ofTemp: ' + arrayOffset);
+    },
+    pushClosureCopy: function(numCopied, numArgs, blockSize) {
+        var from = this.scanner.pc,
+            to = from + blockSize - 1;
+        this.print('closure(' + from + '-' + to + '): ' + numCopied + ' copied, ' + numArgs + ' args');
+        for (var i = from; i <= to; i++) 
+    		this.innerIndents[i] = (this.innerIndents[i] || 0) + 1;
+	},
 });
 
 Object.subclass('Squeak.InstructionStream',
@@ -5793,7 +5819,18 @@ Object.subclass('Squeak.InstructionStream',
     	if (offset === 7) return client.doPop();
     	if (offset === 8) return client.doDup();
     	if (offset === 9) return client.pushActiveContext();
-    	throw Error("unusedBytecode");
+        // closures
+        var byte2 = this.method.bytes[this.pc++];
+        if (offset === 10)
+            return byte2 < 128 ? client.pushNewArray(byte2) : client.pushConsArray(byte2 - 128);
+        if (offset === 11) throw Error("unusedBytecode");
+        var byte3 = this.method.bytes[this.pc++];
+        if (offset === 12) return client.pushRemoteTemp(byte2, byte3);
+        if (offset === 13) return client.storeIntoRemoteTemp(byte2, byte3);
+        if (offset === 14) return client.popIntoRemoteTemp(byte2, byte3);
+        // offset === 15
+        var byte4 = this.method.bytes[this.pc++];
+        return client.pushClosureCopy(byte2 >> 4, byte2 & 0xF, (byte3 * 256) + byte4);
     }
 });
 

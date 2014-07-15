@@ -76,6 +76,7 @@ Object.extend(Squeak, {
     splOb_FloatProto: 31,
     splOb_SelectorCannotInterpret: 34,
     splOb_MethodContextProto: 35,
+    splOb_ClassBlockClosure: 36,
     splOb_BlockContextProto: 37,
     splOb_ExternalObjectsArray: 38,
     splOb_ClassPseudoContext: 39,
@@ -108,6 +109,11 @@ Object.extend(Squeak, {
     BlockContext_argumentCount: 3,
     BlockContext_initialIP: 4,
     BlockContext_home: 5,
+    // Closure layout:
+    Closure_outerContext: 0,
+	Closure_startpc: 1,
+	Closure_numArgs: 2,
+	Closure_firstCopiedValue: 3,
     // Stream layout:
     Stream_array: 0,
     Stream_position: 1,
@@ -1145,9 +1151,20 @@ Object.subclass('Squeak.Interpreter',
             // thisContext
             case 137: this.push(this.activeContext); this.reclaimableContextCount = 0; break;
 
-            //Unused...
-            case 138: case 139: case 140: case 141: case 142: case 143: 
-                this.nono(); break;
+            // Closures
+            case 138: this.pushNewArray(this.nextByte());   // create new temp vector
+                break;
+            case 139: this.nono(); break;
+            case 140: b2 = this.nextByte(); // remote push from temp vector
+                this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2]);
+                break;
+            case 141: b2 = this.nextByte(); // remote store into temp vector
+                this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2] = this.top();
+                break;
+            case 142: b2 = this.nextByte(); // remote store and pop into temp vector
+                this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2] = this.pop();
+                break;
+            case 143: this.pushClosureCopy(); break;
 
             // Short jmp
             case 144: case 145: case 146: case 147: case 148: case 149: case 150: case 151: 
@@ -1371,6 +1388,48 @@ Object.subclass('Squeak.Interpreter',
             this.specialSelectors[(lobits*2)+1],
             false);  //specialSelectors is  {...sel,nArgs,sel,nArgs,...)
     },
+},
+'closures', {
+    pushNewArray: function(nextByte) {
+        var popValues = nextByte > 127,
+            count = nextByte & 127,
+            array = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassArray], count);
+        if (popValues) {
+            for (var i = 0; i < count; i++)
+                array.pointers[i] = this.stackValue(count - i - 1);
+            this.popN(count);
+        }
+        this.push(array);
+    },
+    pushClosureCopy: function() {
+        // The compiler has pushed the values to be copied, if any.  Find numArgs and numCopied in the byte following.
+        // Create a Closure with space for the copiedValues and pop numCopied values off the stack into the closure.
+        // Set numArgs as specified, and set startpc to the pc following the block size and jump over that code.
+        this.image.hasClosures = true;
+        this.breakNow("pushClosureCopy")
+        var numArgsNumCopied = this.nextByte(),
+            numArgs = numArgsNumCopied & 0xF,
+            numCopied = numArgsNumCopied >> 4,
+            blockSizeHigh = this.nextByte(),
+            blockSize = blockSizeHigh * 256 + this.nextByte(),
+            closure = this.newClosure(numArgs, this.pc, numCopied);
+        closure.pointers[Squeak.Closure_outerContext] = this.activeContext;
+        this.reclaimableContextCount = 0; // The closure refers to thisContext so it can't be reclaimed
+        if (numCopied > 0) {
+            for (var i = 0; i < numCopied; i++)
+                closure.pointers[Squeak.Closure_firstCopiedValue + i] = this.stackValue(numCopied - i - 1);
+            this.popN(numCopied);
+        }
+        this.pc += blockSize;
+        this.push(closure);
+	},
+	newClosure: function(numArgs, initialIP, numCopied) {
+        var size = Squeak.Closure_firstCopiedValue + numCopied,
+            closure = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassBlockClosure], size);
+        closure.pointers[Squeak.Closure_startpc] = initialIP;
+        closure.pointers[Squeak.Closure_numArgs] = numArgs;
+        return closure;
+	},
 },
 'sending', {
     send: function(selector, argCount, doSuper) {

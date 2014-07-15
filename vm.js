@@ -1847,7 +1847,9 @@ Object.subclass('Squeak.Interpreter',
     },
     allMethodsDo: function(callback) {
         // callback(classObj, methodObj, selectorObj) should return true to break out of iteration
-        var globals = this.specialObjects[Squeak.splOb_SmalltalkDictionary].pointers[1].pointers;
+        var smalltalk = this.specialObjects[Squeak.splOb_SmalltalkDictionary].pointers,
+            systemDict = smalltalk.length == 1 ? smalltalk[0].pointers[2].pointers : smalltalk,
+            globals = systemDict[1].pointers;
         for (var i = 0; i < globals.length; i++) {
             var assn = globals[i];
             if (!assn.isNil) {

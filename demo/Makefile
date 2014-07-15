@@ -3,20 +3,20 @@
 #
 # copy files to publishing directory and create an offline manifest
 
-PUB=../gh-pages/demo
-MANIFEST=$(PUB)/offline.appcache
-CACHED=../vm.js simple.html simple.css simple.js SimplePlugin.js mini.image icon.png \
-	lz-string.js addtohomescreen.css addtohomescreen.js gh-fork-ribbon.css
+TARGET=../gh-pages/demo
+MANIFEST=$(TARGET)/offline.appcache
+FILES=../vm.js simple.html simple.css simple.js SimplePlugin.js mini.image icon.png \
+	../lib/lz-string.js ../lib/addtohomescreen.css ../lib/addtohomescreen.js ../lib/gh-fork-ribbon.css
+EXTRA=
 
-$(MANIFEST): Makefile $(PUB) $(CACHED)
+$(MANIFEST): Makefile $(TARGET)
 	@rm -f $@
 	@echo "CACHE MANIFEST" > $@
-	@stat -f '# Version: %Sm' `ls -t $(CACHED) | head -n1` | tee -a $@
-	@echo "CACHE:" >> $@
-	@for f in $(CACHED) ; do echo $$f >> $@ ; done
+	@stat -f '# %Sm' `ls -t $(FILES) | head -n1` | tee -a $@
+	@for f in $(FILES) $(EXTRA); do echo $$f >> $@ ; done
 
-$(PUB): $(CACHED)
-	@if [ ! -d $@ ] ; then mkdir -p $@ ; fi
+$(TARGET): $(FILES)
+	@mkdir -pv $@ $@/../lib
 	@for f in $^ ; do install -pvm 444 $$f $@/$$f ; done
-	touch $(PUB)
+	@touch $@
 

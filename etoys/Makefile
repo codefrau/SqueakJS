@@ -3,24 +3,20 @@
 #
 # copy files to publishing directory and create an offline manifest
 
-ETOYSDIR=../gh-pages/etoys
-MANIFEST=$(ETOYSDIR)/offline.appcache
-DEMODIR=../gh-pages/demo
-DEMO=../demo/lz-string.js ../demo/addtohomescreen.css ../demo/addtohomescreen.js ../demo/gh-fork-ribbon.css
-CACHED=../vm.js index.html etoys.css etoys.js etoys.png $(DEMO)
+TARGET=../gh-pages/etoys
+MANIFEST=$(TARGET)/offline.appcache
+FILES=../vm.js index.html etoys.css etoys.js etoys.png \
+	../lib/lz-string.js ../lib/addtohomescreen.css ../lib/addtohomescreen.js ../lib/gh-fork-ribbon.css
 EXTRA=http://freudenbergs.de/bert/squeakjs/etoys.image
 
-$(MANIFEST): Makefile $(ETOYSDIR) $(CACHED)
+$(MANIFEST): Makefile $(TARGET)
 	@rm -f $@
 	@echo "CACHE MANIFEST" > $@
-	@stat -f '# Version: %Sm' `ls -t $(CACHED) | head -n1` | tee -a $@
-	@echo "CACHE:" >> $@
-	@for f in $(CACHED) $(EXTRA); do echo $$f >> $@ ; done
+	@stat -f '# %Sm' `ls -t $(FILES) | head -n1` | tee -a $@
+	@for f in $(FILES) $(EXTRA); do echo $$f >> $@ ; done
 
-$(ETOYSDIR): $(DEMODIR) $(CACHED)
-	@if [ ! -d $@ ] ; then mkdir -p $@ ; fi
-	@for f in $(CACHED); do install -pvm 444 $$f $@/$$f ; done
-	touch $(ETOYSDIR)
+$(TARGET): $(FILES)
+	@mkdir -pv $@ $@/../lib
+	@for f in $^ ; do install -pvm 444 $$f $@/$$f ; done
+	@touch $@
 
-$(DEMODIR): $(DEMO)
-	$(MAKE) -C ../demo

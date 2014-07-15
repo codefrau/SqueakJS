@@ -253,13 +253,20 @@ Object.subclass('Squeak.Image',
                 return bits;
             }
         };
-        // read version
-        var version = readWord();
-        if (version != 6502) {
+        // read version and determine endianness
+        var versions = [6502, 6504, 6505, 68000, 68002, 68003],
+            version = readWord();
+        if (versions.indexOf(version) < 0) {
             littleEndian = true; pos = 0;
             version = readWord();
-            if (version != 6502) throw Error("bad image version");
+            if (versions.indexOf(version) < 0) throw Error("bad image version");
         }
+        this.hasNativeFloats = (version & 1) != 0;
+        this.hasClosures = version == 6504 || version == 68002 || this.hasNativeFloats,
+        this.has64BitOops = version >= 68000;
+        if (this.has64BitOops) throw Error("64 bit images not supported yet");
+        if (this.hasNativeFloats) throw Error("native float word order not supported yet");
+
         // read header
         var headerSize = readWord();
         var endOfMemory = readWord(); //first unused location in heap

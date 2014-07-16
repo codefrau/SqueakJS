@@ -1127,11 +1127,11 @@ Object.subclass('Squeak.Interpreter',
             case 119: this.push(2); break;
 
             // Quick return
-            case 120: this.doReturn(this.receiver, this.homeContext.pointers[Squeak.Context_sender]); break;
-            case 121: this.doReturn(this.trueObj, this.homeContext.pointers[Squeak.Context_sender]); break;
-            case 122: this.doReturn(this.falseObj, this.homeContext.pointers[Squeak.Context_sender]); break;
-            case 123: this.doReturn(this.nilObj, this.homeContext.pointers[Squeak.Context_sender]); break;
-            case 124: this.doReturn(this.pop(), this.homeContext.pointers[Squeak.Context_sender]); break;
+            case 120: this.doReturn(this.receiver); break;
+            case 121: this.doReturn(this.trueObj); break;
+            case 122: this.doReturn(this.falseObj); break;
+            case 123: this.doReturn(this.nilObj); break;
+            case 124: this.doReturn(this.pop()); break;
             case 125: this.doReturn(this.pop(), this.activeContext.pointers[Squeak.BlockContext_caller]); break; // blockReturn
             case 126: this.nono(); break;
             case 127: this.nono(); break;
@@ -1543,6 +1543,14 @@ Object.subclass('Squeak.Interpreter',
         this.checkForInterrupts();
     },
     doReturn: function(returnValue, targetContext) {
+        // get sender from block home or closure's outerContext
+        if (!targetContext) {
+            var ctx = this.homeContext,
+                closure;
+            while (!(closure = ctx.pointers[Squeak.Context_closure]).isNil)
+                ctx = closure.pointers[Squeak.Closure_outerContext];
+            targetContext = ctx.pointers[Squeak.Context_sender];
+        }
         if (targetContext.isNil || targetContext.pointers[Squeak.Context_instructionPointer].isNil)
             this.cannotReturn();
         // search up stack for unwind

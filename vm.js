@@ -2394,8 +2394,7 @@ Object.subclass('Squeak.Primitives',
     },
     namedPrimitive: function(moduleName, functionName, argCount) {
         var module = this.loadedModules[moduleName];
-        if (!module) {
-            if (module !== undefined) return false; // earlier load failed
+        if (module === undefined) { // null if earlier load failed
             module = this.loadModule(moduleName);
             this.loadedModules[moduleName] = module;
         }

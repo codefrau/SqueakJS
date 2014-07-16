@@ -561,7 +561,7 @@ Object.subclass('Squeak.Image',
             data.setUint32(pos, word);
             pos += 4;
         };
-        writeWord(6502); // magic number
+        writeWord(this.formatVersion()); // magic number
         writeWord(headerSize);
         writeWord(this.oldSpaceBytes); // end of memory
         writeWord(this.firstOldObject.addr()); // base addr (0)
@@ -588,6 +588,9 @@ Object.subclass('Squeak.Image',
             return (obj * 2 + 0x100000001) & 0xFFFFFFFF; // add tag bit, make unsigned
         if (obj.oop < 0) throw Error("temporary oop");
         return obj.oop;
+    },
+    formatVersion: function() {
+        return this.hasClosures ? 6504 : 6502;
     },
 });
 

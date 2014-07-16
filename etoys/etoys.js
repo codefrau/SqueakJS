@@ -185,15 +185,19 @@ window.onload = function() {
                 var image = new Squeak.Image(rq.response, imageName);
                 var vm = new Squeak.Interpreter(image, createDisplay());
                 var run = function() {
-                    vm.interpret(20, function(ms) {
-                        if (typeof ms === 'number') { // continue running
-                            window.setTimeout(run, ms);
-                        } else { // quit
-                            canvas.style.webkitTransition = "-webkit-transform 0.5s";
-                            canvas.style.webkitTransform = "scale(0)";
-                            window.setTimeout(function(){canvas.style.display = 'none'}, 500);
-                        }
-                    });
+                    try {
+                        vm.interpret(20, function(ms) {
+                            if (typeof ms === 'number') { // continue running
+                                window.setTimeout(run, ms);
+                            } else { // quit
+                                canvas.style.webkitTransition = "-webkit-transform 0.5s";
+                                canvas.style.webkitTransform = "scale(0)";
+                                window.setTimeout(function(){canvas.style.display = 'none'}, 500);
+                            }
+                        });
+                    } catch(error) {
+                        alert("Aborting: " + error);
+                    }
                 };
                 run();
             }, 0);

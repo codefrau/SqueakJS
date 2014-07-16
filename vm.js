@@ -3579,7 +3579,8 @@ Object.subclass('Squeak.Primitives',
         if (!this.success) return false;
         var entries = Squeak.dirList(dirNameObj.bytesAsString());
         if (!entries) {
-            console.log("Directory not found: " + dirNameObj.bytesAsString());
+            var path = Squeak.splitFilePath(dirNameObj.bytesAsString());
+            console.log("Directory not found: " + path.fullname);
             return false;
         }
         var keys = Object.keys(entries);
@@ -5615,7 +5616,7 @@ Object.extend(Squeak, {
     },
     splitFilePath: function(filepath) {
         if (filepath[0] !== '/') filepath = '/' + filepath;
-        if (filepath[1] == '/') filepath = filepath.slice(1);      // make old images happy
+        filepath = filepath.replace(/\/\//ig, '/');      // replace double-slashes
         var matches = filepath.match(/(.*)\/(.*)/),
             dirname = matches[1] || '/',
             basename = matches[2];

@@ -1944,7 +1944,9 @@ Object.subclass('Squeak.Interpreter',
             if (typeof method === 'number') { // it's a block context, fetch home
                 method = ctx.pointers[Squeak.BlockContext_home].pointers[Squeak.Context_method];
                 block = '[] in ';
-            };
+            } else if (!ctx.pointers[Squeak.Context_closure].isNil) {
+                block = '[] in '; // it's a closure activation
+            }
             stack = block + this.printMethod(method) + '\n' + stack;
             ctx = ctx.pointers[Squeak.Context_sender];
         }
@@ -1983,8 +1985,12 @@ Object.subclass('Squeak.Interpreter',
         // temps and stack in current context
         var ctx = this.activeContext;
         var isBlock = typeof ctx.pointers[Squeak.BlockContext_argumentCount] === 'number';
+        var closure = ctx.pointers[Squeak.Context_closure];
+        var isClosure = !closure.isNil;
         var homeCtx = isBlock ? ctx.pointers[Squeak.BlockContext_home] : ctx;
-        var tempCount = homeCtx.pointers[Squeak.Context_method].methodTempCount();
+        var tempCount = isClosure
+            ? closure.pointers[Squeak.Closure_numArgs]
+            : homeCtx.pointers[Squeak.Context_method].methodTempCount();
         var stackBottom = this.decodeSqueakSP(0);
         var stackTop = isBlock
             ? this.decodeSqueakSP(homeCtx.pointers[Squeak.Context_stackPointer])

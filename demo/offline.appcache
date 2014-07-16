@@ -1,6 +1,5 @@
 CACHE MANIFEST
-# Version: Jul 14 19:06:51 2014
-CACHE:
+# Jul 16 15:50:25 2014
 ../vm.js
 simple.html
 simple.css
@@ -8,7 +7,7 @@ simple.js
 SimplePlugin.js
 mini.image
 icon.png
-lz-string.js
-addtohomescreen.css
-addtohomescreen.js
-gh-fork-ribbon.css
+../lib/lz-string.js
+../lib/addtohomescreen.css
+../lib/addtohomescreen.js
+../lib/gh-fork-ribbon.css

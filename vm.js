@@ -2228,8 +2228,8 @@ Object.subclass('Squeak.Primitives',
             case 35: return false; // primitiveBitOrLargeIntegers
             case 36: return false; // primitiveBitXorLargeIntegers
             case 37: return false; // primitiveBitShiftLargeIntegers
-            //case 38: return false; // TODO: primitiveFloatAt
-            //case 39: return false; // TODO: primitiveFloatAtPut
+            case 38: return this.popNandPushIfOK(2, this.objectAt(false,false,false)); // Float basicAt
+            case 39: return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); // Float basicAtPut
             case 40: return this.popNandPushFloatIfOK(1,this.stackInteger(0)); // primitiveAsFloat
             case 41: return this.popNandPushFloatIfOK(2,this.stackFloat(1)+this.stackFloat(0));  // Float +
             case 42: return this.popNandPushFloatIfOK(2,this.stackFloat(1)-this.stackFloat(0));  // Float -	
@@ -2370,9 +2370,9 @@ Object.subclass('Squeak.Primitives',
             case 204:
             case 205: return this.primitiveClosureValue(argCount);
             case 206: return this.primitiveClosureValueWithArgs(argCount);
-            case 210: return this.popNandPushIfOK(2, this.objectAt(false,false,false)); // basicAt:
-            case 211: return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); // basicAt:put:
-            case 212: return this.popNandPushIfOK(1, this.objectSize()); // basicSize
+            case 210: return this.popNandPushIfOK(2, this.objectAt(false,false,false)); // contextAt:
+            case 211: return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); // contextAt:put:
+            case 212: return this.popNandPushIfOK(1, this.objectSize()); // contextSize
             case 221:
             case 222: return this.primitiveClosureValueNoContextSwitch(argCount);
             case 230: return this.primitiveRelinquishProcessorForMicroseconds(argCount);

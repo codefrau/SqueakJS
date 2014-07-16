@@ -28,11 +28,12 @@ Object.extend(Squeak, {
     // system attributes
     vmVersion: "SqueakJS 0.2.3",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
-    vmPath: "/SqueakJS/vm/",            // entirely made up
-    osName: "Web",
-    osVersion: navigator.userAgent,
+    vmPath: "/SqueakJS/",               // entirely made up
+    vmFile: "vm.js",
+    platformName: "Web",
+    platformSubtype: "unknown",
+    osVersion: navigator.userAgent,     // might want to parse
     windowSystem: "HTML",
-    cpuType: "unknown",
 
     // object headers
     HeaderTypeMask: 3,
@@ -3247,11 +3248,11 @@ Object.subclass('Squeak.Primitives',
         if (!this.success) return false;
         var value;
         switch (attr) {
-            case 0: value = Squeak.vmPath + 'vm.js'; break;
+            case 0: value = Squeak.vmPath + Squeak.vmFile; break;
             case 1: value = this.vm.image.name; break;
-            case 1001: value = Squeak.osName; break;
+            case 1001: value = Squeak.platformName; break;
             case 1002: value = Squeak.osVersion; break;
-            case 1003: value = Squeak.cpuType; break;
+            case 1003: value = Squeak.platformSubtype; break;
             case 1004: value = Squeak.vmVersion; break;
             case 1005: value = Squeak.windowSystem; break;
             case 1006: value = Squeak.vmBuild; break;

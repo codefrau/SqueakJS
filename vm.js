@@ -3274,18 +3274,58 @@ Object.subclass('Squeak.Primitives',
 		0 args:	return an Array of VM parameter values;
 		1 arg:	return the indicated VM parameter;
 		2 args:	set the VM indicated parameter. */
-		var paramsArraySize = 40;
+		var paramsArraySize = 41;
 		switch (argCount) {
             case 0:
                 var arrayObj = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassArray], paramsArraySize);
-                arrayObj.pointers = this.vm.fillArray(paramsArraySize, 0);
+                for (var i = 0; i < paramsArraySize; i++)
+                    arrayObj.pointers[i] = this.makeStObject(this.vmParameterAt(i+1));
                 return this.popNandPushIfOK(1, arrayObj);
             case 1:
-                return this.popNandPushIfOK(2, 0);
+                var parm = this.stackInteger(0);
+                return this.popNandPushIfOK(2, this.makeStObject(this.vmParameterAt(parm)));
             case 2:
                 return this.popNandPushIfOK(3, 0);
 		};
 		return false;
+    },
+    vmParameterAt: function(index) {
+        switch (index) {
+            case 1: return this.vm.image.oldSpaceBytes;     // end of old-space (0-based, read-only)
+            case 2:	return this.vm.image.oldSpaceBytes;     // end of young-space (read-only)
+            case 3:	return this.vm.image.totalMemory;       // end of memory (read-only)
+            case 4: return this.vm.image.newSpaceCount;     // allocationCount (read-only; nil in Cog VMs)
+            case 5: return this.vm.image.newSpaceCount;     // allocations between GCs (read-write; nil in Cog VMs)
+            // 6	survivor count tenuring threshold (read-write)
+            case 7:	return this.vm.image.gcCount;           // full GCs since startup (read-only)
+            // 8	total milliseconds in full GCs since startup (read-only)
+            // 9	incremental GCs since startup (read-only)
+            // 10	total milliseconds in incremental GCs since startup (read-only)
+            // 11	tenures of surving objects since startup (read-only)
+            // 12-20 specific to the translating VM
+            // 21	root table size (read-only)
+            // 22	root table overflows since startup (read-only)
+            // 23	bytes of extra memory to reserve for VM buffers, plugins, etc.
+            // 24	memory threshold above whichto shrink object memory (read-write)
+            // 25	memory headroom when growing object memory (read-write)
+            // 26	interruptChecksEveryNms - force an ioProcessEvents every N milliseconds (read-write)
+            // 27	number of times mark loop iterated for current IGC/FGC (read-only) includes ALL marking
+            // 28	number of times sweep loop iterated for current IGC/FGC (read-only)
+            // 29	number of times make forward loop iterated for current IGC/FGC (read-only)
+            // 30	number of times compact move loop iterated for current IGC/FGC (read-only)
+            // 31	number of grow memory requests (read-only)
+            // 32	number of shrink memory requests (read-only)
+            // 33	number of root table entries used for current IGC/FGC (read-only)
+            // 34	number of allocations done before current IGC/FGC (read-only)
+            // 35	number of survivor objects after current IGC/FGC (read-only)
+            // 36	millisecond clock when current IGC/FGC completed (read-only)
+            // 37	number of marked objects for Roots of the world, not including Root Table entries for current IGC/FGC (read-only)
+            // 38	milliseconds taken by current IGC (read-only)
+            // 39	Number of finalization signals for Weak Objects pending when current IGC/FGC completed (read-only)
+            case 40: return 4; // BytesPerWord for this image
+            case 41: return this.vm.image.formatVersion();
+        }
+        return null;
     },
     primitiveImageName: function(argCount) {
         if (argCount == 0)

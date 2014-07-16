@@ -76,6 +76,7 @@ Object.extend(Squeak, {
     splOb_FloatProto: 31,
     splOb_SelectorCannotInterpret: 34,
     splOb_MethodContextProto: 35,
+    splOb_ClassBlockClosure: 36,
     splOb_BlockContextProto: 37,
     splOb_ExternalObjectsArray: 38,
     splOb_ClassPseudoContext: 39,
@@ -100,6 +101,7 @@ Object.extend(Squeak, {
     Context_instructionPointer: 1,
     Context_stackPointer: 2,
     Context_method: 3,
+    Context_closure: 4,
     Context_receiver: 5,
     Context_tempFrameStart: 6,
     Context_smallFrameSize: 17,
@@ -108,6 +110,11 @@ Object.extend(Squeak, {
     BlockContext_argumentCount: 3,
     BlockContext_initialIP: 4,
     BlockContext_home: 5,
+    // Closure layout:
+    Closure_outerContext: 0,
+	Closure_startpc: 1,
+	Closure_numArgs: 2,
+	Closure_firstCopiedValue: 3,
     // Stream layout:
     Stream_array: 0,
     Stream_position: 1,
@@ -253,13 +260,20 @@ Object.subclass('Squeak.Image',
                 return bits;
             }
         };
-        // read version
-        var version = readWord();
-        if (version != 6502) {
+        // read version and determine endianness
+        var versions = [6502, 6504, 6505, 68000, 68002, 68003],
+            version = readWord();
+        if (versions.indexOf(version) < 0) {
             littleEndian = true; pos = 0;
             version = readWord();
-            if (version != 6502) throw Error("bad image version");
+            if (versions.indexOf(version) < 0) throw Error("bad image version");
         }
+        this.hasNativeFloats = (version & 1) != 0;
+        this.hasClosures = version == 6504 || version == 68002 || this.hasNativeFloats,
+        this.has64BitOops = version >= 68000;
+        if (this.has64BitOops) throw Error("64 bit images not supported yet");
+        if (this.hasNativeFloats) throw Error("native float word order not supported yet");
+
         // read header
         var headerSize = readWord();
         var endOfMemory = readWord(); //first unused location in heap
@@ -1110,11 +1124,11 @@ Object.subclass('Squeak.Interpreter',
             case 119: this.push(2); break;
 
             // Quick return
-            case 120: this.doReturn(this.receiver, this.homeContext.pointers[Squeak.Context_sender]); break;
-            case 121: this.doReturn(this.trueObj, this.homeContext.pointers[Squeak.Context_sender]); break;
-            case 122: this.doReturn(this.falseObj, this.homeContext.pointers[Squeak.Context_sender]); break;
-            case 123: this.doReturn(this.nilObj, this.homeContext.pointers[Squeak.Context_sender]); break;
-            case 124: this.doReturn(this.pop(), this.homeContext.pointers[Squeak.Context_sender]); break;
+            case 120: this.doReturn(this.receiver); break;
+            case 121: this.doReturn(this.trueObj); break;
+            case 122: this.doReturn(this.falseObj); break;
+            case 123: this.doReturn(this.nilObj); break;
+            case 124: this.doReturn(this.pop()); break;
             case 125: this.doReturn(this.pop(), this.activeContext.pointers[Squeak.BlockContext_caller]); break; // blockReturn
             case 126: this.nono(); break;
             case 127: this.nono(); break;
@@ -1135,9 +1149,20 @@ Object.subclass('Squeak.Interpreter',
             // thisContext
             case 137: this.push(this.activeContext); this.reclaimableContextCount = 0; break;
 
-            //Unused...
-            case 138: case 139: case 140: case 141: case 142: case 143: 
-                this.nono(); break;
+            // Closures
+            case 138: this.pushNewArray(this.nextByte());   // create new temp vector
+                break;
+            case 139: this.nono(); break;
+            case 140: b2 = this.nextByte(); // remote push from temp vector
+                this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2]);
+                break;
+            case 141: b2 = this.nextByte(); // remote store into temp vector
+                this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2] = this.top();
+                break;
+            case 142: b2 = this.nextByte(); // remote store and pop into temp vector
+                this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2] = this.pop();
+                break;
+            case 143: this.pushClosureCopy(); break;
 
             // Short jmp
             case 144: case 145: case 146: case 147: case 148: case 149: case 150: case 151: 
@@ -1362,6 +1387,47 @@ Object.subclass('Squeak.Interpreter',
             false);  //specialSelectors is  {...sel,nArgs,sel,nArgs,...)
     },
 },
+'closures', {
+    pushNewArray: function(nextByte) {
+        var popValues = nextByte > 127,
+            count = nextByte & 127,
+            array = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassArray], count);
+        if (popValues) {
+            for (var i = 0; i < count; i++)
+                array.pointers[i] = this.stackValue(count - i - 1);
+            this.popN(count);
+        }
+        this.push(array);
+    },
+    pushClosureCopy: function() {
+        // The compiler has pushed the values to be copied, if any.  Find numArgs and numCopied in the byte following.
+        // Create a Closure with space for the copiedValues and pop numCopied values off the stack into the closure.
+        // Set numArgs as specified, and set startpc to the pc following the block size and jump over that code.
+        var numArgsNumCopied = this.nextByte(),
+            numArgs = numArgsNumCopied & 0xF,
+            numCopied = numArgsNumCopied >> 4,
+            blockSizeHigh = this.nextByte(),
+            blockSize = blockSizeHigh * 256 + this.nextByte(),
+            initialPC = this.encodeSqueakPC(this.pc, this.method),
+            closure = this.newClosure(numArgs, initialPC, numCopied);
+        closure.pointers[Squeak.Closure_outerContext] = this.activeContext;
+        this.reclaimableContextCount = 0; // The closure refers to thisContext so it can't be reclaimed
+        if (numCopied > 0) {
+            for (var i = 0; i < numCopied; i++)
+                closure.pointers[Squeak.Closure_firstCopiedValue + i] = this.stackValue(numCopied - i - 1);
+            this.popN(numCopied);
+        }
+        this.pc += blockSize;
+        this.push(closure);
+	},
+	newClosure: function(numArgs, initialPC, numCopied) {
+        var size = Squeak.Closure_firstCopiedValue + numCopied,
+            closure = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassBlockClosure], size);
+        closure.pointers[Squeak.Closure_startpc] = initialPC;
+        closure.pointers[Squeak.Closure_numArgs] = numArgs;
+        return closure;
+	},
+},
 'sending', {
     send: function(selector, argCount, doSuper) {
         var newRcvr = this.stackValue(argCount);
@@ -1474,6 +1540,14 @@ Object.subclass('Squeak.Interpreter',
         this.checkForInterrupts();
     },
     doReturn: function(returnValue, targetContext) {
+        // get sender from block home or closure's outerContext
+        if (!targetContext) {
+            var ctx = this.homeContext,
+                closure;
+            while (!(closure = ctx.pointers[Squeak.Context_closure]).isNil)
+                ctx = closure.pointers[Squeak.Closure_outerContext];
+            targetContext = ctx.pointers[Squeak.Context_sender];
+        }
         if (targetContext.isNil || targetContext.pointers[Squeak.Context_instructionPointer].isNil)
             this.cannotReturn();
         // search up stack for unwind
@@ -1837,7 +1911,9 @@ Object.subclass('Squeak.Interpreter',
     },
     allMethodsDo: function(callback) {
         // callback(classObj, methodObj, selectorObj) should return true to break out of iteration
-        var globals = this.specialObjects[Squeak.splOb_SmalltalkDictionary].pointers[1].pointers;
+        var smalltalk = this.specialObjects[Squeak.splOb_SmalltalkDictionary].pointers,
+            systemDict = smalltalk.length == 1 ? smalltalk[0].pointers[2].pointers : smalltalk,
+            globals = systemDict[1].pointers;
         for (var i = 0; i < globals.length; i++) {
             var assn = globals[i];
             if (!assn.isNil) {
@@ -1872,7 +1948,9 @@ Object.subclass('Squeak.Interpreter',
             if (typeof method === 'number') { // it's a block context, fetch home
                 method = ctx.pointers[Squeak.BlockContext_home].pointers[Squeak.Context_method];
                 block = '[] in ';
-            };
+            } else if (!ctx.pointers[Squeak.Context_closure].isNil) {
+                block = '[] in '; // it's a closure activation
+            }
             stack = block + this.printMethod(method) + '\n' + stack;
             ctx = ctx.pointers[Squeak.Context_sender];
         }
@@ -1911,8 +1989,12 @@ Object.subclass('Squeak.Interpreter',
         // temps and stack in current context
         var ctx = this.activeContext;
         var isBlock = typeof ctx.pointers[Squeak.BlockContext_argumentCount] === 'number';
+        var closure = ctx.pointers[Squeak.Context_closure];
+        var isClosure = !closure.isNil;
         var homeCtx = isBlock ? ctx.pointers[Squeak.BlockContext_home] : ctx;
-        var tempCount = homeCtx.pointers[Squeak.Context_method].methodTempCount();
+        var tempCount = isClosure
+            ? closure.pointers[Squeak.Closure_numArgs]
+            : homeCtx.pointers[Squeak.Context_method].methodTempCount();
         var stackBottom = this.decodeSqueakSP(0);
         var stackTop = isBlock
             ? this.decodeSqueakSP(homeCtx.pointers[Squeak.Context_stackPointer])
@@ -2143,8 +2225,8 @@ Object.subclass('Squeak.Primitives',
             case 35: return false; // primitiveBitOrLargeIntegers
             case 36: return false; // primitiveBitXorLargeIntegers
             case 37: return false; // primitiveBitShiftLargeIntegers
-            //case 38: return false; // TODO: primitiveFloatAt
-            //case 39: return false; // TODO: primitiveFloatAtPut
+            case 38: return this.popNandPushIfOK(2, this.objectAt(false,false,false)); // Float basicAt
+            case 39: return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); // Float basicAtPut
             case 40: return this.popNandPushFloatIfOK(1,this.stackInteger(0)); // primitiveAsFloat
             case 41: return this.popNandPushFloatIfOK(2,this.stackFloat(1)+this.stackFloat(0));  // Float +
             case 42: return this.popNandPushFloatIfOK(2,this.stackFloat(1)-this.stackFloat(0));  // Float -	
@@ -2187,7 +2269,7 @@ Object.subclass('Squeak.Primitives',
             case 79: return this.primitiveNewMethod(argCount); // Compiledmethod.new
             case 80: return this.popNandPushIfOK(2,this.doBlockCopy()); // blockCopy:
             case 81: return this.primitiveBlockValue(argCount); // BlockContext.value
-            case 82: return this.primitiveValueWithArgs(argCount); // BlockContext.valueWithArguments:
+            case 82: return this.primitiveBlockValueWithArgs(argCount); // BlockContext.valueWithArguments:
             case 83: return this.vm.primitivePerform(argCount); // Object.perform:(with:)*
             case 84: return this.vm.primitivePerformWithArgs(argCount, false); //  Object.perform:withArguments:
             case 85: return this.primitiveSignal(); // Semaphore.wait
@@ -2278,6 +2360,18 @@ Object.subclass('Squeak.Primitives',
             case 197: return false; // Context.findNextHandlerContextStarting
             case 198: return false; // MarkUnwindMethod (must fail)
             case 199: return false; // MarkHandlerMethod (must fail)
+            case 200: return this.primitiveClosureCopyWithCopiedValues(argCount);
+            case 201:
+            case 202:
+            case 203:
+            case 204:
+            case 205: return this.primitiveClosureValue(argCount);
+            case 206: return this.primitiveClosureValueWithArgs(argCount);
+            case 210: return this.popNandPushIfOK(2, this.objectAt(false,false,false)); // contextAt:
+            case 211: return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); // contextAt:put:
+            case 212: return this.popNandPushIfOK(1, this.objectSize()); // contextSize
+            case 221:
+            case 222: return this.primitiveClosureValueNoContextSwitch(argCount);
             case 230: return this.primitiveRelinquishProcessorForMicroseconds(argCount);
             case 231: return this.primitiveForceDisplayUpdate(argCount);
             case 233: return this.primitiveSetFullScreen(argCount);
@@ -2900,7 +2994,7 @@ Object.subclass('Squeak.Primitives',
         }
     },
 },
-'blocks', {
+'blocks/closures', {
     doBlockCopy: function() {
         var rcvr = this.vm.stackValue(1);
         var sqArgCount = this.stackInteger(0);
@@ -2938,7 +3032,7 @@ Object.subclass('Squeak.Primitives',
         this.vm.newActiveContext(block);
         return true;
     },
-    primitiveValueWithArgs: function(argCount) {
+    primitiveBlockValueWithArgs: function(argCount) {
         var block = this.vm.stackValue(1);
         var array = this.vm.stackValue(0);
         if (!this.isA(block, Squeak.splOb_ClassBlockContext)) return false;
@@ -2956,6 +3050,53 @@ Object.subclass('Squeak.Primitives',
         this.vm.newActiveContext(block);
         return true;
     },
+    primitiveClosureCopyWithCopiedValues: function(argCount) {
+        this.vm.breakNow("primitiveClosureCopyWithCopiedValues");
+        debugger;
+        return false;
+    },
+    primitiveClosureValue: function(argCount) {
+        var blockClosure = this.vm.stackValue(argCount),
+            blockArgCount = blockClosure.pointers[Squeak.Closure_numArgs];
+        if (argCount !== blockArgCount) return false;
+        return this.activateNewClosureMethod(blockClosure, argCount);
+	},
+    primitiveClosureValueWithArgs: function(argCount) {
+        var array = this.vm.top(),
+            arraySize = array.pointersSize(),
+            blockClosure = this.vm.stackValue(argCount),
+            blockArgCount = blockClosure.pointers[Squeak.Closure_numArgs];
+        if (arraySize !== blockArgCount) return false;
+        this.vm.pop();
+        for (var i = 0; i < arraySize; i++)
+            this.vm.push(array.pointers[i]);
+        return this.activateNewClosureMethod(blockClosure, argCount);
+	},
+    primitiveClosureValueNoContextSwitch: function(argCount) {
+        return this.primitiveClosureValue(argCount);
+    },
+    activateNewClosureMethod: function(blockClosure, argCount) {
+        var outerContext = blockClosure.pointers[Squeak.Closure_outerContext],
+            method = outerContext.pointers[Squeak.Context_method],
+            newContext = this.vm.allocateOrRecycleContext(method.methodNeedsLargeFrame()),
+            numCopied = blockClosure.pointers.length - Squeak.Closure_firstCopiedValue;
+        newContext.pointers[Squeak.Context_sender] = this.vm.activeContext;
+        newContext.pointers[Squeak.Context_instructionPointer] = blockClosure.pointers[Squeak.Closure_startpc];
+        newContext.pointers[Squeak.Context_stackPointer] = argCount + numCopied;
+        newContext.pointers[Squeak.Context_method] = outerContext.pointers[Squeak.Context_method];
+        newContext.pointers[Squeak.Context_closure] = blockClosure;
+        newContext.pointers[Squeak.Context_receiver] = outerContext.pointers[Squeak.Context_receiver];
+        // Copy the arguments and copied values ...
+        var where = Squeak.Context_tempFrameStart;
+        for (var i = 0; i < argCount; i++)
+            newContext.pointers[where++] = this.vm.stackValue(argCount - i - 1);
+        for (var i = 0; i < numCopied; i++)
+            newContext.pointers[where++] = blockClosure.pointers[Squeak.Closure_firstCopiedValue + i];
+        // The initial instructions in the block nil-out remaining temps.
+        this.vm.popN(argCount + 1);
+        this.vm.newActiveContext(newContext);
+        return true;
+	},
 },
 'scheduling',
 {
@@ -5523,6 +5664,7 @@ Object.subclass('Squeak.InstructionPrinter',
         this.indent = indent;           // prepend to every line except if highlighted
         this.highlight = highlight;     // prepend to highlighted line
         this.highlightPC = highlightPC; // PC of highlighted line
+        this.innerIndents = {};
         this.result = '';
         this.scanner = new Squeak.InstructionStream(this.method, this.vm);
         this.oldPC = this.scanner.pc;
@@ -5537,7 +5679,10 @@ Object.subclass('Squeak.InstructionPrinter',
         } else {
             if (this.indent) this.result += this.indent;
         }
-        this.result += this.oldPC + " <";
+        this.result += this.oldPC;
+        for (var i = 0; i < this.innerIndents[this.oldPC] || 0; i++)
+            this.result += "   ";
+        this.result += " <";
         for (var i = this.oldPC; i < this.scanner.pc; i++) {
             if (i > this.oldPC) this.result += " ";
             this.result += (this.method.bytes[i]+0x100).toString(16).substr(-2).toUpperCase(); // padded hex
@@ -5611,6 +5756,28 @@ Object.subclass('Squeak.InstructionPrinter',
 	storeIntoTemporaryVariable: function(offset) {
 	    this.print('storeIntoTemp: ' + offset);
     },
+    pushNewArray: function(size) {
+        this.print('push: (Array new: ' + size + ')');
+    },
+    pushConsArray: function(numElements) {
+        this.print('pop: ' + numElements + ' into: (Array new: ' + numElements + ')');
+    },
+    pushRemoteTemp: function(offset , arrayOffset) {
+        this.print('push: ' + offset + ' ofTemp: ' + arrayOffset);
+    },
+    storeIntoRemoteTemp: function(offset , arrayOffset) {
+        this.print('storeInto: ' + offset + ' ofTemp: ' + arrayOffset);
+    },
+    popIntoRemoteTemp: function(offset , arrayOffset) {
+        this.print('popInto: ' + offset + ' ofTemp: ' + arrayOffset);
+    },
+    pushClosureCopy: function(numCopied, numArgs, blockSize) {
+        var from = this.scanner.pc,
+            to = from + blockSize - 1;
+        this.print('closure(' + from + '-' + to + '): ' + numCopied + ' copied, ' + numArgs + ' args');
+        for (var i = from; i <= to; i++) 
+    		this.innerIndents[i] = (this.innerIndents[i] || 0) + 1;
+	},
 });
 
 Object.subclass('Squeak.InstructionStream',
@@ -5721,7 +5888,18 @@ Object.subclass('Squeak.InstructionStream',
     	if (offset === 7) return client.doPop();
     	if (offset === 8) return client.doDup();
     	if (offset === 9) return client.pushActiveContext();
-    	throw Error("unusedBytecode");
+        // closures
+        var byte2 = this.method.bytes[this.pc++];
+        if (offset === 10)
+            return byte2 < 128 ? client.pushNewArray(byte2) : client.pushConsArray(byte2 - 128);
+        if (offset === 11) throw Error("unusedBytecode");
+        var byte3 = this.method.bytes[this.pc++];
+        if (offset === 12) return client.pushRemoteTemp(byte2, byte3);
+        if (offset === 13) return client.storeIntoRemoteTemp(byte2, byte3);
+        if (offset === 14) return client.popIntoRemoteTemp(byte2, byte3);
+        // offset === 15
+        var byte4 = this.method.bytes[this.pc++];
+        return client.pushClosureCopy(byte2 >> 4, byte2 & 0xF, (byte3 * 256) + byte4);
     }
 });
 

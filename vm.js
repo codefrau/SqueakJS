@@ -5285,6 +5285,8 @@ Object.subclass('Squeak.BitBlt',
             case 33: return function(src, dst, mask) { return self.tallyIntoMap(src, dst, mask) };
             case 34: return function(src, dst) { return self.alphaBlendScaled(src, dst) };
             case 37: return function(src, dst) { return self.rgbMul(src, dst) };
+            case 40: return this.dest.depth < 32 ? function(src, dst) { return dst } // fixAlpha
+                : function(src, dst) { return dst == 0 ? 0 : (dst & 0xFF000000) == 0 ? dst : dst | (src & 0xFF000000)};
         }
         throw Error("bitblt rule " + rule + " not implemented yet");
     },

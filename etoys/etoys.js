@@ -196,7 +196,8 @@ window.onload = function() {
                             }
                         });
                     } catch(error) {
-                        alert("Aborting: " + error);
+                        console.error(error);
+                        alert(error);
                     }
                 };
                 run();

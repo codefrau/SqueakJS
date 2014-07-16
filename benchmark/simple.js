@@ -64,6 +64,7 @@ Object.extend = function(obj /* + more args */ ) {
 //////////////////////////////////////////////////////////////////////////////
 
 var fullscreen = navigator.standalone;
+window.stopVM = false;
 
 window.onload = function() {
     var canvas = document.getElementsByTagName("canvas")[0];
@@ -152,8 +153,8 @@ window.onload = function() {
         var image = new Squeak.Image(buffer, name);
         var vm = new Squeak.Interpreter(image, createDisplay());
         var run = function() {
-            vm.interpret(20, function(ms) {
-                if (typeof ms === 'number') { // continue running
+            vm.interpret(200, function(ms) {
+                if (!window.stopVM && (typeof ms === 'number')) { // continue running
                     loop = window.setTimeout(run, ms);
                 } else { // quit
                     canvas.style.webkitTransition = "-webkit-transform 0.5s";
@@ -162,7 +163,7 @@ window.onload = function() {
                 }
             });
         };
-        run();        
+        run();
     };
     if (window.applicationCache) {
         applicationCache.addEventListener('updateready', function() {
@@ -196,6 +197,19 @@ window.onload = function() {
         }
         return false;
     });
+
+    // Now wrap the file close primitive to stop after the benchmark
+    // output file has been written
+    var origFileClose = Squeak.Primitives.prototype.fileClose
+    Squeak.Primitives.prototype.fileClose = (function (file) {
+	var contents = Squeak.bytesAsString(new Uint8Array(file.contents.buffer));
+	var r = document.getElementById("results");
+	r.innerHTML = "Your machine: " + navigator.userAgent + "<br>" +
+	    "Your results:<br>" + contents.replace(/\r/g, "<br>") + "<br>"
+	window.stopVM = true;
+	return origFileClose.apply(this, arguments);
+    });
+
     function downloadImage(url) {
         var progress = document.getElementsByTagName("progress")[0];
         var rq = new XMLHttpRequest();
@@ -210,11 +224,5 @@ window.onload = function() {
         };
         rq.send();
     };
-    downloadImage('mini.image');
+    downloadImage('benchmark.image');
 };
-
-if (addToHomescreen.isStandalone)
-    fullscreen = true;
-else addToHomescreen({
-   appID: 'squeakjs.demo.add2home',
-});

@@ -3830,7 +3830,7 @@ Object.subclass('Squeak.Primitives',
 
         if (bitblt.combinationRule === 30 || bitblt.combinationRule === 31) {
             // fetch source alpha parameter for alpha blend
-        if (argCount !== 1) return false;
+            if (argCount !== 1) return false;
             bitblt.sourceAlpha = this.stackInteger(0);
             if (!this.success || bitblt.sourceAlpha < 0 || bitblt.sourceAlpha > 255)
 				return false;
@@ -3863,8 +3863,10 @@ Object.subclass('Squeak.Primitives',
             if (!sourceMap || sourceMap.length < (1 << bitblt.source.depth))
                 return false; 	// sourceMap must be long enough for source depth
         bitblt.warpBits();
-        if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay])
+        if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay]) {
+            this.display.lastTick = this.vm.lastTick;
             this.showForm(this.display.ctx, bitblt.dest, bitblt.affectedRect());
+        }
         this.vm.popN(argCount);
         return true;
 	},
@@ -5226,10 +5228,7 @@ Object.subclass('Squeak.BitBlt',
             case 17: return function(src, dst) { return dst };
             case 18: return function(src, dst) { return src + dst };
             case 19: return function(src, dst) { return src - dst };
-            case 20: return function(src, dst) { return src };
-            case 21: return function(src, dst) { return src };
-            case 22: return function(src, dst) { return src };
-            case 23: return function(src, dst) { return src };
+            case 20: return function(src, dst) { return self.rgbAdd(src, dst)  };
             case 24: return function(src, dst) { return self.alphaBlend(src, dst) };
             case 25: return function(src, dst) { return src === 0 ? dst
                 : src | self.partitionedAND(~src, dst, self.dest.depth, self.dest.pixPerWord) };
@@ -5257,6 +5256,20 @@ Object.subclass('Squeak.BitBlt',
             } else {
                 // Mul RGBA components of the pixel separately
                 return this.partitionedMul(src, dst, 8, 4);
+            }
+        }
+    },
+    rgbAdd: function(src, dst) {
+        if (this.dest.depth < 16 ) {
+            // Add each pixel separately
+            return this.partitionedAdd(src, dst, this.dest.depth, this.dest.pixPerWord);
+        } else {
+            if (this.dest.depth == 16) {
+                // Add RGB components of each pixel separately
+                return this.partitionedAdd(src, dst, 5, 3) | (this.partitionedAdd(src>>16, dst>>16, 5, 3) << 16);
+            } else {
+                // Add RGBA components of the pixel separately
+                return this.partitionedAdd(src, dst, 8, 4);
             }
         }
     },

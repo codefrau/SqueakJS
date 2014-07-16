@@ -164,6 +164,14 @@ window.onload = function() {
         };
         run();        
     };
+    if (window.applicationCache) {
+        applicationCache.addEventListener('updateready', function() {
+            applicationCache.swapCache();
+            if (confirm('SqueakJS has been updated. Restart now?')) {
+                window.location.reload();
+            }
+        });
+    }
     document.body.addEventListener('dragover', function(evt) {
         evt.stopPropagation();
         evt.preventDefault();

@@ -269,11 +269,9 @@ Object.subclass('Squeak.Image',
             version = readWord();
             if (versions.indexOf(version) < 0) throw Error("bad image version");
         }
-        this.hasNativeFloats = (version & 1) != 0;
-        this.hasClosures = version == 6504 || version == 68002 || this.hasNativeFloats,
-        this.has64BitOops = version >= 68000;
-        if (this.has64BitOops) throw Error("64 bit images not supported yet");
-        if (this.hasNativeFloats) throw Error("native float word order not supported yet");
+        var nativeFloats = (version & 1) != 0;
+        this.hasClosures = version == 6504 || version == 68002 || nativeFloats;
+        if (version >= 68000) throw Error("64 bit images not supported yet");
 
         // read header
         var headerSize = readWord();
@@ -339,7 +337,7 @@ Object.subclass('Squeak.Image',
         var floatClass     = oopMap[splObs.bits[Squeak.splOb_ClassFloat]];
         console.log('squeak: mapping oops');
         for (var oop in oopMap)
-            oopMap[oop].installFromImage(oopMap, compactClasses, floatClass, littleEndian);
+            oopMap[oop].installFromImage(oopMap, compactClasses, floatClass, littleEndian, nativeFloats);
         this.specialObjectsArray = splObs;
         this.decorateKnownObjects();
         this.firstOldObject = oopMap[oldBaseAddr+4];
@@ -656,7 +654,7 @@ Object.subclass('Squeak.Object',
         this.hash = hsh;
         this.bits = data;
     },
-    installFromImage: function(oopMap, ccArray, floatClass, littleEndian) {
+    installFromImage: function(oopMap, ccArray, floatClass, littleEndian, nativeFloats) {
         //Install this object by decoding format, and rectifying pointers
         var ccInt = this.sqClass;
         // map compact classes
@@ -683,9 +681,9 @@ Object.subclass('Squeak.Object',
             if (nWords > 0)
                 this.bytes = this.decodeBytes(nWords, this.bits, 0, this.format & 3);
         } else if (this.sqClass == floatClass) {
-            //Floats need two ints to be converted to double
+            //These words are actually a Float
             this.isFloat = true;
-            this.float = this.decodeFloat(this.bits, littleEndian);
+            this.float = this.decodeFloat(this.bits, littleEndian, nativeFloats);
         } else {
             if (nWords > 0)
                 this.words = this.decodeWords(nWords, this.bits, littleEndian);
@@ -720,10 +718,12 @@ Object.subclass('Squeak.Object',
         bytes.set(wordsAsBytes);
         return bytes;
     },
-    decodeFloat: function(theBits, littleEndian) {
+    decodeFloat: function(theBits, littleEndian, nativeFloats) {
         var data = new DataView(theBits.buffer, theBits.byteOffset);
         // it's either big endian ...
         if (!littleEndian) return data.getFloat64(0, false);
+        // or real little endian
+        if (nativeFloats) return data.getFloat64(0, true);
         // or little endian, but with swapped words
         var buffer = new ArrayBuffer(8),
             swapped = new DataView(buffer);

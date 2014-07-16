@@ -1406,14 +1406,13 @@ Object.subclass('Squeak.Interpreter',
         // The compiler has pushed the values to be copied, if any.  Find numArgs and numCopied in the byte following.
         // Create a Closure with space for the copiedValues and pop numCopied values off the stack into the closure.
         // Set numArgs as specified, and set startpc to the pc following the block size and jump over that code.
-        this.image.hasClosures = true;
-        this.breakNow("pushClosureCopy")
         var numArgsNumCopied = this.nextByte(),
             numArgs = numArgsNumCopied & 0xF,
             numCopied = numArgsNumCopied >> 4,
             blockSizeHigh = this.nextByte(),
             blockSize = blockSizeHigh * 256 + this.nextByte(),
-            closure = this.newClosure(numArgs, this.pc, numCopied);
+            initialPC = this.encodeSqueakPC(this.pc, this.method),
+            closure = this.newClosure(numArgs, initialPC, numCopied);
         closure.pointers[Squeak.Closure_outerContext] = this.activeContext;
         this.reclaimableContextCount = 0; // The closure refers to thisContext so it can't be reclaimed
         if (numCopied > 0) {
@@ -1424,10 +1423,10 @@ Object.subclass('Squeak.Interpreter',
         this.pc += blockSize;
         this.push(closure);
 	},
-	newClosure: function(numArgs, initialIP, numCopied) {
+	newClosure: function(numArgs, initialPC, numCopied) {
         var size = Squeak.Closure_firstCopiedValue + numCopied,
             closure = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassBlockClosure], size);
-        closure.pointers[Squeak.Closure_startpc] = initialIP;
+        closure.pointers[Squeak.Closure_startpc] = initialPC;
         closure.pointers[Squeak.Closure_numArgs] = numArgs;
         return closure;
 	},

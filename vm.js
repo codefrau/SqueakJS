@@ -2360,11 +2360,14 @@ Object.subclass('Squeak.Primitives',
             case 159: return this.primitiveFileRename(argCount);
             //case 160: return false; // TODO primitiveAdoptInstance
             case 161: return this.primitiveDirectoryDelimitor(argCount);
-            case 162: return this.primitiveDirectoryLookup(argCount);
+            case 162: return this.vm.image.hasClosures ? this.primitiveSetIdentityHash(argCount) : this.primitiveDirectoryLookup(argCount);
+            //case 163: ?
+            //case 164: ?
             case 165:
             case 166: return this.primitiveIntegerAtAndPut(argCount);
             case 167: return false; // Processor.yield
             case 169: return this.primitiveDirectorySetMacTypeAndCreator(argCount);
+            // 170-199: was Sound
             case 188: return this.primitiveExecuteMethodArgsArray(argCount);
             case 195: return false; // Context.findNextUnwindContextUpTo:
             case 196: return false; // Context.terminateTo:
@@ -2866,6 +2869,10 @@ Object.subclass('Squeak.Primitives',
         ctxt.pointers[Squeak.Context_stackPointer] = newStackp;
         this.vm.popN(argCount);
         return true;
+    },
+    primitiveSetIdentityHash: function(argCount) {
+        throw Error("primitiveSetIdentityHash not implemented yet");
+        return false;
     },
     primitiveShortAtAndPut:  function(argCount) {
         var rcvr = this.stackNonInteger(argCount),
@@ -3381,7 +3388,6 @@ Object.subclass('Squeak.Primitives',
         var displayObj = this.vm.specialObjects[Squeak.splOb_TheDisplay],
             display = (new Squeak.BitBlt()).loadForm(displayObj),
             bounds = {x: 0, y: 0, w: display.width, h: display.height};
-        this.showForm(this.display.ctx, display, bounds);
     },
     showForm: function(ctx, form, rect) {
         if (!rect) return;

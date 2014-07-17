@@ -3,10 +3,10 @@
 #
 # copy files to publishing directory and create an offline manifest
 
-TARGET=../gh-pages/demo
+TARGET=../gh-pages/benchmark
 MANIFEST=$(TARGET)/offline.appcache
-FILES=../vm.js simple.html simple.css simple.js SimplePlugin.js mini.image icon.png \
-	../lib/lz-string.js ../lib/addtohomescreen.css ../lib/addtohomescreen.js ../lib/gh-fork-ribbon.css
+FILES=../vm.js simple.html simple.css simple.js benchmark.image \
+	../lib/lz-string.js
 EXTRA=
 
 $(MANIFEST): Makefile $(TARGET)

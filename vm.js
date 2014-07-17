@@ -403,10 +403,8 @@ Object.subclass('Squeak.Image',
             var body = object.pointers;
             if (body) {                   // trace all unmarked pointers
                 var n = body.length;
-                if (this.vm.isContext(object)) {    // contexts have garbage beyond SP
-                    var sp = object.pointers[Squeak.Context_stackPointer];
-                    n = this.vm.decodeSqueakSP(typeof sp == "number" ? sp : 0) + 1;
-                }
+                if (this.vm.isContext(object))      // contexts have garbage beyond SP
+                    n = object.contextSizeWithStack();
                 for (var i = 0; i < n; i++)
                     if (typeof body[i] === "object" && !body[i].mark)      // except SmallInts
                         todo.push(body[i]);
@@ -989,6 +987,15 @@ Object.subclass('Squeak.Object',
     },
     contextSender: function() {
         return this.pointers[Squeak.Context_sender];
+    },
+    contextSizeWithStack: function(vm) {
+        // Actual context size is inst vars + stack size. Slots beyond that may contain garbage.
+        // If passing in a VM, and this is the activeContext, use the VM's current value.
+        if (vm && vm.activeContext === this)
+            return vm.sp + 1;
+        // following is same as decodeSqueakSP() but works without vm ref
+        var sp = this.pointers[Squeak.Context_stackPointer];
+        return Squeak.Context_tempFrameStart + (typeof sp === "number" ? sp : 0);
     },
 });
 
@@ -1731,8 +1738,6 @@ Object.subclass('Squeak.Interpreter',
         this.method = meth;
         this.methodBytes = meth.bytes;
         this.pc = this.decodeSqueakPC(ctxt.pointers[Squeak.Context_instructionPointer], meth);
-        if (this.pc < -1)
-            throw Error("bad pc");
         this.sp = this.decodeSqueakSP(ctxt.pointers[Squeak.Context_stackPointer]);
     },
     storeContextRegisters: function() {
@@ -2000,9 +2005,7 @@ Object.subclass('Squeak.Interpreter',
             ? closure.pointers[Squeak.Closure_numArgs]
             : homeCtx.pointers[Squeak.Context_method].methodTempCount();
         var stackBottom = this.decodeSqueakSP(0);
-        var stackTop = isBlock
-            ? this.decodeSqueakSP(homeCtx.pointers[Squeak.Context_stackPointer])
-            : this.sp;
+        var stackTop = homeCtx.contextSizeWithStack(this) - 1;
         var firstTemp = stackBottom + 1;
         var lastTemp = firstTemp + tempCount - 1;
         var stack = '';

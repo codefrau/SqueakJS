@@ -1986,7 +1986,7 @@ Object.subclass('Squeak.Interpreter',
         // classAndMethodString is 'Class>>method'
         return this.breakOnMethod = classAndMethodString && this.findMethod(classAndMethodString);
     },
-    breakOnReturn: function() {
+    breakOnReturnFromThisContext: function() {
         this.breakOnContextChanged = false;
         this.breakOnContextReturned = this.activeContext;
     },

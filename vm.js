@@ -2541,6 +2541,9 @@ Object.subclass('Squeak.Primitives',
     stackFloat: function(nDeep) {
         return this.checkFloat(this.vm.stackValue(nDeep));
     },
+    stackBoolean: function(nDeep) {
+        return this.checkBoolean(this.vm.stackValue(nDeep));
+    },
 },
 'numbers', {
     doBitAnd: function() {
@@ -2602,6 +2605,11 @@ Object.subclass('Squeak.Primitives',
             return obj;
         this.success = false;
         return this.vm.nilObj;
+    },
+    checkBoolean: function(obj) { // returns true/false and sets success
+        if (obj.isTrue) return true;
+        if (obj.isFalse) return false;
+        return this.success = false;
     },
     indexableSize: function(obj) {
         if (this.vm.isSmallInt(obj)) return -1; // -1 means not indexable
@@ -3680,7 +3688,7 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     primitiveFileOpen: function(argCount) {
-        var writeFlag = !!this.stackNonInteger(0).isTrue,
+        var writeFlag = this.stackBoolean(0),
             nameObj = this.stackNonInteger(1);
         if (!this.success) return false;
         var file = this.fileOpen(nameObj.bytesAsString(), writeFlag);
@@ -4211,7 +4219,7 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     b2d_primitiveNeedsFlushPut: function(argCount) {
-        var needsFlush = !!this.stackNonInteger(0).isTrue;
+        var needsFlush = this.stackBoolean(0);
         if (!this.success) return false;
         this.b2d_state.needsFlush = needsFlush;
         if (this.b2d_debug) console.log("b2d_primitiveNeedsFlushPut: " + needsFlush);
@@ -4344,7 +4352,7 @@ Object.subclass('Squeak.Primitives',
             origin = this.stackNonInteger(3).pointers,
             direction = this.stackNonInteger(2).pointers,
             //normal = this.stackNonInteger(1).pointers,
-            isRadial = this.stackNonInteger(0).isTrue;
+            isRadial = this.stackBoolean(0);
         if (!this.success) return false;
         var x = this.floatOrInt(origin[0]),
             y = this.floatOrInt(origin[1]),

@@ -756,7 +756,7 @@ header p {
   font-size: 14px;
   background-color: #FFE788;
 }
-#banner .demo {
+#banner .simple {
     position: fixed;
     right: 50%;
     margin-right: -20px;
@@ -776,11 +776,11 @@ header p {
     font-size: 14px;
     background-color: #FFE788;
 }
-#banner .downloads {
+#banner .demos {
   float: right;
   margin: 0 45px 0 0;
 }
-#banner .downloads span {
+#banner .demos span {
   float: left;
   line-height: 52px;
   font-size: 90%;
@@ -901,16 +901,6 @@ footer {
     -ms-text-overflow: ellipsis;
   }
 
-  #banner {
-    width: 100%;
-  }
-  #banner .downloads {
-    margin-right: 60px;
-  }
-  #banner #logo {
-    margin-right: 15px;
-  }
-
   section {
     border: 1px solid #e5e5e5;
     border-width: 1px 0;
@@ -951,6 +941,13 @@ footer {
 
   #banner {
     top: 80px;
+    width: 100%;
+  }
+  #banner .demos {
+    margin-right: 30px;
+  }
+  #banner #logo {
+    display: none;
   }
   #banner .fork {
     float: left;
@@ -970,6 +967,7 @@ footer {
     position: static;
   }
 }
+
 @media print, screen and (max-width: 480px) {
   header {
     position: relative;

@@ -1,0 +1,8 @@
+CACHE MANIFEST
+# Jul 18 00:24:24 2014
+../vm.js
+benchmark.html
+benchmark.css
+benchmark.js
+benchmark.image
+../lib/lz-string.js

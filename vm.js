@@ -2317,7 +2317,7 @@ Object.subclass('Squeak.Primitives',
             //case 123: return false; //TODO primitiveValueUninterruptably
             case 124: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore));
             case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
-            case 126: return false; //TODO primitiveDeferDisplayUpdates
+            case 126: return this.primitiveDeferDisplayUpdates(argCount);
     		case 127: return false; //TODO primitiveShowDisplayRect
             case 128: return this.popNandPushIfOK(2, this.doArrayBecome(true)); //arrayBecome
             case 129: return this.popNandPushIfOK(1, this.vm.image.specialObjectsArray); //specialObjectsOop
@@ -3458,6 +3458,10 @@ Object.subclass('Squeak.Primitives',
             pixels.data.set(pixelData);
         }
         ctx.putImageData(pixels, rect.x, rect.y);
+    },
+    primitiveDeferDisplayUpdates: function(argCount) {
+        // pretend to defer updates, otherwise Morphic might double-buffer itself
+        return true;
     },
     primitiveForceDisplayUpdate: function(argCount) {
         // not needed, we show everything immediately

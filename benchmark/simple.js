@@ -212,9 +212,13 @@ window.onload = function() {
     });
 
     function saveToLively(contents) {
+	var address = (google && 
+	               google.loader &&
+	               google.loader.ClientLocation &&
+	               google.loader.ClientLocation.address) || {city: "unknown city", country: "unknown country"};
         contents = navigator.userAgent + "\n" +
-            google.loader.ClientLocation.address.city + "\n" +
-            google.loader.ClientLocation.address.country + "\n" +
+            address.city + "\n" +
+            address.country + "\n" +
             contents;
         var oReq = new XMLHttpRequest();
         oReq.open(

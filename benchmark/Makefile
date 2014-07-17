@@ -5,7 +5,7 @@
 
 TARGET=../gh-pages/benchmark
 MANIFEST=$(TARGET)/offline.appcache
-FILES=../vm.js simple.html simple.css simple.js benchmark.image \
+FILES=../vm.js benchmark.html benchmark.css benchmark.js benchmark.image \
 	../lib/lz-string.js
 EXTRA=
 

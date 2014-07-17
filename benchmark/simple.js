@@ -202,13 +202,28 @@ window.onload = function() {
     // output file has been written
     var origFileClose = Squeak.Primitives.prototype.fileClose
     Squeak.Primitives.prototype.fileClose = (function (file) {
-	var contents = Squeak.bytesAsString(new Uint8Array(file.contents.buffer));
-	var r = document.getElementById("results");
-	r.innerHTML = "Your machine: " + navigator.userAgent + "<br>" +
-	    "Your results:<br>" + contents.replace(/\r/g, "<br>") + "<br>"
-	window.stopVM = true;
-	return origFileClose.apply(this, arguments);
+        var contents = Squeak.bytesAsString(new Uint8Array(file.contents.buffer));
+        var r = document.getElementById("results");
+        r.innerHTML = "Your machine: " + navigator.userAgent + "<br>" +
+            "Your results:<br>" + contents.replace(/\r/g, "<br>") + "<br>"
+        saveToLively(contents);
+        window.stopVM = true;
+        return origFileClose.apply(this, arguments);
     });
+
+    function saveToLively(contents) {
+        contents = navigator.userAgent + "\n" +
+            google.loader.ClientLocation.address.city + "\n" +
+            google.loader.ClientLocation.address.country + "\n" +
+            contents;
+        var oReq = new XMLHttpRequest();
+        oReq.open(
+            "get",
+            "http://www.lively-kernel.org/babelsberg/nodejs/SqueakJSServer/?benchmarkResults=" +
+                encodeURIComponent(contents),
+            true);
+        oReq.send();
+    };
 
     function downloadImage(url) {
         var progress = document.getElementsByTagName("progress")[0];

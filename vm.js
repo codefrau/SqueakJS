@@ -1069,14 +1069,18 @@ Object.subclass('Squeak.Interpreter',
     },
     hackImage: function() {
         // hack methods to make work for now
-        var returnSelf = 256,
-            returnNil = 259;
+        var returnSelf  = 256,
+            returnTrue  = 257,
+            returnFalse = 258,
+            returnNil   = 259;
         [
             // Etoys fallback for missing translation files is hugely inefficient.
             // This speeds up opening a viewer by 10x (!)
             // Remove when we added translation files.
             {method: "String>>translated", primitive: returnSelf},
             {method: "String>>translatedInAllDomains", primitive: returnSelf},
+            // BitBlt rule not available
+            //{method: "BitBlt class>>subPixelRenderColorFonts", primitive: returnFalse},
             // Scratch relies on event prims. We don't have those yet.
             //{method: "InputSensor>>fileDropPoint", primitive: returnNil},
             //{method: "InputSensor class>>startUp", primitive: returnNil},

@@ -746,10 +746,7 @@ Object.subclass('Squeak.Object',
     },
     bytesAsString: function() {
         if (!this.bytes) return '';
-        var chars = [];
-        for (var i = 0; i < this.bytes.length; i++)
-            chars.push(String.fromCharCode(this.bytes[i]));
-        return chars.join('');
+	return Squeak.bytesAsString(this.bytes);
     },
     assnKeyAsString: function() {
         return this.pointers[Squeak.Assn_key].bytesAsString();  
@@ -5584,11 +5581,7 @@ Object.extend(Squeak, {
                     return req;
                 },
                 put: function(buffer, filename) {
-                    var bytes = new Uint8Array(buffer),
-                        chars = [];
-                    for (var i = 0; i < bytes.length; i++)
-                        chars.push(String.fromCharCode(bytes[i]));
-                    var string = chars.join('');
+                    var string = Squeak.bytesAsString(new Uint8Array(buffer));
                     if (typeof LZString == "object") {
                         var compressed = LZString.compressToUTF16(string);
                         localStorage["squeak-file.lz:" + filename] = compressed;
@@ -5681,6 +5674,12 @@ Object.extend(Squeak, {
             basename = matches[2];
         return {fullname: filepath, dirname: dirname, basename: basename};
     },
+    bytesAsString: function(bytes) {
+	var chars = [];
+        for (var i = 0; i < bytes.length; i++)
+            chars.push(String.fromCharCode(bytes[i]));
+	return chars.join('');
+    },
     flushFile: function(file) {
         if (file.modified) {
             var buffer = file.contents.buffer;
@@ -5690,11 +5689,8 @@ Object.extend(Squeak, {
             }
             Squeak.filePut(file.name, buffer);
             if (/SqueakDebug.log/.test(file.name)) {
-                var bytes = new Uint8Array(buffer),
-                    chars = [];
-                for (var i = 0; i < bytes.length; i++)
-                    chars.push(String.fromCharCode(bytes[i]));
-                console.warn(chars.join('').replace(/\r/g, '\n'));
+                var chars = Squeak.bytesAsString(new Uint8Array(buffer));
+                console.warn(chars.replace(/\r/g, '\n'));
             }
             file.modified = false;
         }

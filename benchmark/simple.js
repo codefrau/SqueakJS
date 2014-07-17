@@ -75,9 +75,28 @@ window.onload = function() {
         var r = document.getElementById("results");
         r.innerHTML = "Your machine: " + navigator.userAgent + "<br>" +
             "Your results:<br>" + contents.replace(/\r/g, "<br>") + "<br>"
+        saveToLively(contents);
         window.stopVM = true;
         return origFileClose.apply(this, arguments);
     });
+
+    function saveToLively(contents) {
+        var address = (google && 
+            google.loader &&
+            google.loader.ClientLocation &&
+            google.loader.ClientLocation.address) || {city: "unknown city", country: "unknown country"};
+        contents = navigator.userAgent + "\n" +
+            address.city + "\n" +
+            address.country + "\n" +
+            contents;
+        var oReq = new XMLHttpRequest();
+        oReq.open(
+            "get",
+            "http://www.lively-kernel.org/babelsberg/nodejs/SqueakJSServer/?benchmarkResults=" +
+                encodeURIComponent(contents),
+            true);
+        oReq.send();
+    };
 
     var canvas = document.getElementsByTagName("canvas")[0];
     function createDisplay() {

@@ -26,7 +26,7 @@ Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.3.0",
+    vmVersion: "SqueakJS 0.3.1",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/SqueakJS/",               // entirely made up
     vmFile: "vm.js",
@@ -403,10 +403,8 @@ Object.subclass('Squeak.Image',
             var body = object.pointers;
             if (body) {                   // trace all unmarked pointers
                 var n = body.length;
-                if (this.vm.isContext(object)) {    // contexts have garbage beyond SP
-                    var sp = object.pointers[Squeak.Context_stackPointer];
-                    n = this.vm.decodeSqueakSP(typeof sp == "number" ? sp : 0) + 1;
-                }
+                if (this.vm.isContext(object))      // contexts have garbage beyond SP
+                    n = object.contextSizeWithStack();
                 for (var i = 0; i < n; i++)
                     if (typeof body[i] === "object" && !body[i].mark)      // except SmallInts
                         todo.push(body[i]);
@@ -990,6 +988,15 @@ Object.subclass('Squeak.Object',
     contextSender: function() {
         return this.pointers[Squeak.Context_sender];
     },
+    contextSizeWithStack: function(vm) {
+        // Actual context size is inst vars + stack size. Slots beyond that may contain garbage.
+        // If passing in a VM, and this is the activeContext, use the VM's current value.
+        if (vm && vm.activeContext === this)
+            return vm.sp + 1;
+        // following is same as decodeSqueakSP() but works without vm ref
+        var sp = this.pointers[Squeak.Context_stackPointer];
+        return Squeak.Context_tempFrameStart + (typeof sp === "number" ? sp : 0);
+    },
 });
 
 Object.subclass('Squeak.Interpreter',
@@ -1031,7 +1038,6 @@ Object.subclass('Squeak.Interpreter',
         this.interruptKeycode = 2094;  //"cmd-."
         this.interruptPending = false;
         //this.semaphoresToSignal = [];
-        //this.deferDisplayUpdates = false;
         //this.pendingFinalizationSignals = 0;
         this.freeContexts = this.nilObj;
         this.freeLargeContexts = this.nilObj;
@@ -1062,14 +1068,18 @@ Object.subclass('Squeak.Interpreter',
     },
     hackImage: function() {
         // hack methods to make work for now
-        var returnSelf = 256,
-            returnNil = 259;
+        var returnSelf  = 256,
+            returnTrue  = 257,
+            returnFalse = 258,
+            returnNil   = 259;
         [
             // Etoys fallback for missing translation files is hugely inefficient.
             // This speeds up opening a viewer by 10x (!)
             // Remove when we added translation files.
             {method: "String>>translated", primitive: returnSelf},
             {method: "String>>translatedInAllDomains", primitive: returnSelf},
+            // BitBlt rule not available
+            //{method: "BitBlt class>>subPixelRenderColorFonts", primitive: returnFalse},
             // Scratch relies on event prims. We don't have those yet.
             //{method: "InputSensor>>fileDropPoint", primitive: returnNil},
             //{method: "InputSensor class>>startUp", primitive: returnNil},
@@ -1731,8 +1741,6 @@ Object.subclass('Squeak.Interpreter',
         this.method = meth;
         this.methodBytes = meth.bytes;
         this.pc = this.decodeSqueakPC(ctxt.pointers[Squeak.Context_instructionPointer], meth);
-        if (this.pc < -1)
-            throw Error("bad pc");
         this.sp = this.decodeSqueakSP(ctxt.pointers[Squeak.Context_stackPointer]);
     },
     storeContextRegisters: function() {
@@ -1981,7 +1989,7 @@ Object.subclass('Squeak.Interpreter',
         // classAndMethodString is 'Class>>method'
         return this.breakOnMethod = classAndMethodString && this.findMethod(classAndMethodString);
     },
-    breakOnReturn: function() {
+    breakOnReturnFromThisContext: function() {
         this.breakOnContextChanged = false;
         this.breakOnContextReturned = this.activeContext;
     },
@@ -2000,9 +2008,7 @@ Object.subclass('Squeak.Interpreter',
             ? closure.pointers[Squeak.Closure_numArgs]
             : homeCtx.pointers[Squeak.Context_method].methodTempCount();
         var stackBottom = this.decodeSqueakSP(0);
-        var stackTop = isBlock
-            ? this.decodeSqueakSP(homeCtx.pointers[Squeak.Context_stackPointer])
-            : this.sp;
+        var stackTop = homeCtx.contextSizeWithStack(this) - 1;
         var firstTemp = stackBottom + 1;
         var lastTemp = firstTemp + tempCount - 1;
         var stack = '';
@@ -2073,6 +2079,8 @@ Object.subclass('Squeak.Primitives',
         this.vm = vm;
         this.display = display;
         this.display.vm = this.vm;
+        this.deferDisplayUpdates = false;
+        this.deferDisplayUpdatesDisabled = 3;   // show first frames with immediate feedback
         this.warnings = {};
         this.initAtCache();
         this.initModules();
@@ -2317,8 +2325,8 @@ Object.subclass('Squeak.Primitives',
             //case 123: return false; //TODO primitiveValueUninterruptably
             case 124: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore));
             case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
-            case 126: return false; //TODO primitiveDeferDisplayUpdates
-    		case 127: return false; //TODO primitiveShowDisplayRect
+            case 126: return this.primitiveDeferDisplayUpdates(argCount);
+    		case 127: return this.primitiveShowDisplayRect(argCount);
             case 128: return this.popNandPushIfOK(2, this.doArrayBecome(true)); //arrayBecome
             case 129: return this.popNandPushIfOK(1, this.vm.image.specialObjectsArray); //specialObjectsOop
             case 130: return this.popNandPushIfOK(1, this.vm.image.fullGC()); // GC
@@ -2353,11 +2361,14 @@ Object.subclass('Squeak.Primitives',
             case 159: return this.primitiveFileRename(argCount);
             //case 160: return false; // TODO primitiveAdoptInstance
             case 161: return this.primitiveDirectoryDelimitor(argCount);
-            case 162: return this.primitiveDirectoryLookup(argCount);
+            case 162: return this.vm.image.hasClosures ? this.primitiveSetIdentityHash(argCount) : this.primitiveDirectoryLookup(argCount);
+            //case 163: ?
+            //case 164: ?
             case 165:
             case 166: return this.primitiveIntegerAtAndPut(argCount);
             case 167: return false; // Processor.yield
             case 169: return this.primitiveDirectorySetMacTypeAndCreator(argCount);
+            // 170-199: was Sound
             case 188: return this.primitiveExecuteMethodArgsArray(argCount);
             case 195: return false; // Context.findNextUnwindContextUpTo:
             case 196: return false; // Context.terminateTo:
@@ -2531,6 +2542,9 @@ Object.subclass('Squeak.Primitives',
     stackFloat: function(nDeep) {
         return this.checkFloat(this.vm.stackValue(nDeep));
     },
+    stackBoolean: function(nDeep) {
+        return this.checkBoolean(this.vm.stackValue(nDeep));
+    },
 },
 'numbers', {
     doBitAnd: function() {
@@ -2592,6 +2606,11 @@ Object.subclass('Squeak.Primitives',
             return obj;
         this.success = false;
         return this.vm.nilObj;
+    },
+    checkBoolean: function(obj) { // returns true/false and sets success
+        if (obj.isTrue) return true;
+        if (obj.isFalse) return false;
+        return this.success = false;
     },
     indexableSize: function(obj) {
         if (this.vm.isSmallInt(obj)) return -1; // -1 means not indexable
@@ -2859,6 +2878,10 @@ Object.subclass('Squeak.Primitives',
         ctxt.pointers[Squeak.Context_stackPointer] = newStackp;
         this.vm.popN(argCount);
         return true;
+    },
+    primitiveSetIdentityHash: function(argCount) {
+        throw Error("primitiveSetIdentityHash not implemented yet");
+        return false;
     },
     primitiveShortAtAndPut:  function(argCount) {
         var rcvr = this.stackNonInteger(argCount),
@@ -3367,21 +3390,44 @@ Object.subclass('Squeak.Primitives',
 	},
     primitiveReverseDisplay: function(argCount) {
         this.reverseDisplay = !this.reverseDisplay;
-        this.redrawFullDisplay();
+        this.redrawDisplay();
         return true;
     },
-    redrawFullDisplay: function() {
-        var displayObj = this.vm.specialObjects[Squeak.splOb_TheDisplay],
-            display = (new Squeak.BitBlt()).loadForm(displayObj),
-            bounds = {x: 0, y: 0, w: display.width, h: display.height};
-        this.showForm(this.display.ctx, display, bounds);
+    primitiveShowDisplayRect: function(argCount) {
+        // Force the given rectangular section of the Display to be copied to the screen.
+        var rect = {
+            left: this.stackInteger(3),
+            right: this.stackInteger(2),
+            top: this.stackInteger(1),
+            bottom: this.stackInteger(0),
+        };
+        if (!this.success) return false;
+        this.redrawDisplay(rect);
+        this.vm.popN(argCount);
+        return true;
+    },
+    redrawDisplay: function(rect) {
+        var display = this.theDisplay(),
+            bounds = {left: 0, top: 0, right: display.width, bottom: display.height};
+        if (rect) {
+            if (rect.left > bounds.left) bounds.left = rect.left;
+            if (rect.right < bounds.right) bounds.right = rect.right;
+            if (rect.top > bounds.top) bounds.top = rect.top;
+            if (rect.bottom < bounds.bottom) bounds.bottom = rect.bottom;
+        }
+        if (bounds.left < bounds.right && bounds.top < bounds.bottom)
+            this.displayUpdate(display, bounds);
     },
     showForm: function(ctx, form, rect) {
         if (!rect) return;
-        var pixels = ctx.createImageData(rect.w, rect.h);
-        var pixelData = pixels.data;
+        var srcX = rect.left,
+            srcY = rect.top,
+            srcW = rect.right - srcX,
+            srcH = rect.bottom - srcY,
+            pixels = ctx.createImageData(srcW, srcH),
+            pixelData = pixels.data;
         if (!pixelData.buffer) { // mobile IE uses a different data-structure
-            pixelData = new Uint8Array(rect.w * rect.h * 4);
+            pixelData = new Uint8Array(srcW * srcH * 4);
         }
         var dest = new Uint32Array(pixelData.buffer);
         switch (form.depth) {
@@ -3396,14 +3442,13 @@ Object.subclass('Squeak.Primitives',
                     colors = this.reversedColors;
                 }
                 var mask = (1 << form.depth) - 1;
-                var leftSrcShift = 32 - (rect.x % form.pixPerWord + 1) * form.depth;
-                var srcY = rect.y;
-                for (var y = 0; y < rect.h; y++) {
-                    var srcIndex = form.pitch * srcY + (rect.x / form.pixPerWord | 0);
+                var leftSrcShift = 32 - (srcX % form.pixPerWord + 1) * form.depth;
+                for (var y = 0; y < srcH; y++) {
+                    var srcIndex = form.pitch * srcY + (srcX / form.pixPerWord | 0);
                     var srcShift = leftSrcShift;
                     var src = form.bits[srcIndex];
                     var dstIndex = pixels.width * y;
-                    for (var x = 0; x < rect.w; x++) {
+                    for (var x = 0; x < srcW; x++) {
                         dest[dstIndex++] = colors[(src >>> srcShift) & mask]; 
                         if ((srcShift -= form.depth) < 0) {
                             srcShift = 32 - form.depth;
@@ -3414,14 +3459,13 @@ Object.subclass('Squeak.Primitives',
                 };
                 break;
             case 16:
-                var leftSrcShift = rect.x % 2 ? 0 : 16;
-                var srcY = rect.y;
-                for (var y = 0; y < rect.h; y++) {
-                    var srcIndex = form.pitch * srcY + (rect.x / 2 | 0);
+                var leftSrcShift = srcX % 2 ? 0 : 16;
+                for (var y = 0; y < srcH; y++) {
+                    var srcIndex = form.pitch * srcY + (srcX / 2 | 0);
                     var srcShift = leftSrcShift;
                     var src = form.bits[srcIndex];
                     var dstIndex = pixels.width * y;
-                    for (var x = 0; x < rect.w; x++) {
+                    for (var x = 0; x < srcW; x++) {
                         var rgb = src >>> srcShift;
                         dest[dstIndex++] =
                             ((rgb & 0x7C00) >> 7)     // shift red   down 2*5, up 0*8 + 3
@@ -3437,11 +3481,10 @@ Object.subclass('Squeak.Primitives',
                 };
                 break;
             case 32:
-                var srcY = rect.y;
-                for (var y = 0; y < rect.h; y++) {
-                    var srcIndex = form.pitch * srcY + rect.x;
+                for (var y = 0; y < srcH; y++) {
+                    var srcIndex = form.pitch * srcY + srcX;
                     var dstIndex = pixels.width * y;
-                    for (var x = 0; x < rect.w; x++) {
+                    for (var x = 0; x < srcW; x++) {
                         var argb = form.bits[srcIndex++];  // convert ARGB -> ABGR
                         var abgr = (argb & 0x0000FF00)     // green is okay
                             + ((argb & 0x00FF0000) >> 16)  // shift red down
@@ -3457,25 +3500,76 @@ Object.subclass('Squeak.Primitives',
         if (pixels.data !== pixelData) {
             pixels.data.set(pixelData);
         }
-        ctx.putImageData(pixels, rect.x, rect.y);
+        ctx.putImageData(pixels, rect.left, rect.top);
+    },
+    primitiveDeferDisplayUpdates: function(argCount) {
+        var flag = this.stackBoolean(0);
+        if (!this.success) return false;
+        if (this.deferDisplayUpdatesDisabled) {
+            if (flag && typeof this.deferDisplayUpdatesDisabled == "number")
+                this.deferDisplayUpdatesDisabled--;
+        } else {
+            this.deferDisplayUpdates = flag;
+        }
+        this.vm.popN(argCount);
+        return true;
     },
     primitiveForceDisplayUpdate: function(argCount) {
-        // not needed, we show everything immediately
+        this.vm.breakOutOfInterpreter = this.vm.breakOutOfInterpreter || true;   // show on screen
+        this.vm.popN(argCount);
         return true;
     },
     primitiveScreenSize: function(argCount) {
         return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(this.display.width, this.display.height));
     },
     primitiveSetFullScreen: function(argCount) {
-        return false; // fail for now
+        this.fullscreen = this.stackBoolean(0);
+        if (!this.success) return false;
+        this.warnOnce("fullscreen support not yet implemented");
+        this.vm.popN(argCount);
+        return true;
     },
     primitiveTestDisplayDepth: function(argCount) {
         var supportedDepths =  [1, 2, 4, 8, 16, 32]; // match showOnDisplay()
         return this.pop2andPushBoolIfOK(supportedDepths.indexOf(this.stackInteger(0)) >= 0);
     },
-    displayFlush: function(){
-        // no-op for now
-        // TODO: copy damage rect code from Smalltalk-78 VM
+    theDisplay: function() {
+        return this.bitblt.loadForm(this.vm.specialObjects[Squeak.splOb_TheDisplay]);
+    },
+    displayDirty: function(bitblt) {
+        var rect;
+        if (!this.deferDisplayUpdates
+            && bitblt.destForm == this.vm.specialObjects[Squeak.splOb_TheDisplay]
+            && (rect = bitblt.affectedRect()) != null)
+                this.displayUpdate(bitblt.dest, rect);
+    },
+    displayFlush: function(rect) {
+        // not needed
+    },
+    displayUpdate: function(form, rect, noCursor) {
+        this.display.lastTick = this.vm.lastTick;
+        this.showForm(this.display.ctx, form, rect);
+        if (noCursor) return;
+        // show cursor if it was just overwritten
+        if (this.cursorX + this.cursorW > rect.left && this.cursorX < rect.right &&
+            this.cursorY + this.cursorH > rect.top && this.cursorY < rect.bottom) 
+                this.cursorDraw();
+    },
+    cursorUpdate: function() {
+        var x = this.display.mouseX - this.cursorOffsetX,
+            y = this.display.mouseY - this.cursorOffsetY;
+        if (x === this.cursorX && y === this.cursorY && !force) return;
+        var oldBounds = {left: this.cursorX, top: this.cursorY, right: this.cursorX + this.cursorW, bottom: this.cursorY + this.cursorH };
+        this.cursorX = x;
+        this.cursorY = y;
+        // restore display at old cursor pos
+        this.displayUpdate(this.theDisplay(), oldBounds, true);
+        // draw cursor at new pos
+        this.cursorDraw();
+    },
+    cursorDraw: function() {
+        // TODO: create cursorCanvas in setCursor primitive
+        // this.display.ctx.drawImage(this.cursorCanvas, this.cursorX, this.cursorY);
     },
 },
 'input', {
@@ -3663,7 +3757,7 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     primitiveFileOpen: function(argCount) {
-        var writeFlag = !!this.stackNonInteger(0).isTrue,
+        var writeFlag = this.stackBoolean(0),
             nameObj = this.stackNonInteger(1);
         if (!this.success) return false;
         var file = this.fileOpen(nameObj.bytesAsString(), writeFlag);
@@ -3885,10 +3979,7 @@ Object.subclass('Squeak.Primitives',
 
         if (bitblt.combinationRule === 22 || bitblt.combinationRule === 32)
             this.vm.popNandPush(1, bitblt.bitCount);
-        else if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay]) {
-            this.display.lastTick = this.vm.lastTick;
-            this.showForm(this.display.ctx, bitblt.dest, bitblt.affectedRect());
-        }
+        else this.displayDirty(bitblt);
         return true;
 	},
 	bitblt_primitiveWarpBits: function(argCount) {
@@ -3903,10 +3994,7 @@ Object.subclass('Squeak.Primitives',
             if (!sourceMap || sourceMap.length < (1 << bitblt.source.depth))
                 return false; 	// sourceMap must be long enough for source depth
         bitblt.warpBits();
-        if (bitblt.destForm === this.vm.specialObjects[Squeak.splOb_TheDisplay]) {
-            this.display.lastTick = this.vm.lastTick;
-            this.showForm(this.display.ctx, bitblt.dest, bitblt.affectedRect());
-        }
+        this.displayDirty(bitblt);
         this.vm.popN(argCount);
         return true;
 	},
@@ -4000,7 +4088,8 @@ Object.subclass('Squeak.Primitives',
     },
     b2d_readPixels: function() {
         var state = this.b2d_state,
-            form = state.bitblt.dest;
+            bitblt = state.bitblt,
+            form = bitblt.dest;
         if (this.b2d_debug) console.log("==> read into " + form.width + "x" + form.height + "@" + form.depth);
         if (!form.width || !form.height) return;
         if (!form.msb) return this.warnOnce("B2D: drawing to little-endian forms not implemented yet");
@@ -4011,6 +4100,12 @@ Object.subclass('Squeak.Primitives',
         } else {
             this.warnOnce("B2D: drawing to " + form.depth + " bit forms not supported yet");
         }
+        // set bitblt values for affectedRect()
+        bitblt.dx = state.minX;
+        bitblt.dy = state.minY;
+        bitblt.bbW = state.maxX - state.minX;
+        bitblt.bbH = state.maxY - state.minY;
+        this.displayDirty(bitblt);
     },
     b2d_readPixels16: function() {
         // since we have two pixels per word, grab from even positions
@@ -4194,7 +4289,7 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     b2d_primitiveNeedsFlushPut: function(argCount) {
-        var needsFlush = !!this.stackNonInteger(0).isTrue;
+        var needsFlush = this.stackBoolean(0);
         if (!this.success) return false;
         this.b2d_state.needsFlush = needsFlush;
         if (this.b2d_debug) console.log("b2d_primitiveNeedsFlushPut: " + needsFlush);
@@ -4327,7 +4422,7 @@ Object.subclass('Squeak.Primitives',
             origin = this.stackNonInteger(3).pointers,
             direction = this.stackNonInteger(2).pointers,
             //normal = this.stackNonInteger(1).pointers,
-            isRadial = this.stackNonInteger(0).isTrue;
+            isRadial = this.stackBoolean(0);
         if (!this.success) return false;
         var x = this.floatOrInt(origin[0]),
             y = this.floatOrInt(origin[1]),
@@ -5282,6 +5377,9 @@ Object.subclass('Squeak.BitBlt',
             case 33: return function(src, dst, mask) { return self.tallyIntoMap(src, dst, mask) };
             case 34: return function(src, dst) { return self.alphaBlendScaled(src, dst) };
             case 37: return function(src, dst) { return self.rgbMul(src, dst) };
+            case 40: return this.dest.depth < 32 ? function(src, dst) { return dst } // fixAlpha
+                : function(src, dst) { return dst == 0 ? 0 : (dst & 0xFF000000) == 0 ? dst : dst | (src & 0xFF000000)};
+            case 41: return this.success = false;  // Freetype subpixel rendering
         }
         throw Error("bitblt rule " + rule + " not implemented yet");
     },
@@ -5488,21 +5586,22 @@ Object.subclass('Squeak.BitBlt',
 'accessing', {
     affectedRect: function() {
         if (this.bbW <= 0 || this.bbH <= 0) return null;
-        var affectedL, affectedR, affectedT, affectedB;
-        if (this.hDir > 0) {
-            affectedL = this.dx;
-            affectedR = this.dx + this.bbW;
+        var affected = {};
+        if (this.hDir < 0) {
+            affected.left = (this.dx - this.bbW) + 1;
+            affected.right = this.dx + 1;
         } else {
-            affectedL = (this.dx - this.bbW) + 1;
-            affectedR = this.dx + 1;
+            affected.left = this.dx;
+            affected.right = this.dx + this.bbW;
         }
-        if (this.vDir > 0) {
-            affectedT = this.dy;
-            affectedB = this.dy + this.bbH;
+        if (this.vDir < 0) {
+            affected.top = (this.dy - this.bbH) + 1;
+            affected.bottom = this.dy + 1;
         } else {
-            affectedT = (this.dy - this.bbH) + 1;
-            affectedB = this.dy + 1; }
-        return {x: affectedL, y: affectedT, w: affectedR-affectedL, h: affectedB-affectedT};
+            affected.top = this.dy;
+            affected.bottom = this.dy + this.bbH;
+        }
+        return affected;
     },
 });
 

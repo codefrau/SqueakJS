@@ -583,7 +583,7 @@ Object.subclass('Squeak.Image',
     objectToOop: function(obj) {
         // unsigned word for use in snapshot
         if (typeof obj ===  "number")
-            return (obj * 2 + 0x100000001) & 0xFFFFFFFF; // add tag bit, make unsigned
+            return obj << 1 | 1; // add tag bit
         if (obj.oop < 0) throw Error("temporary oop");
         return obj.oop;
     },
@@ -832,8 +832,9 @@ Object.subclass('Squeak.Object',
             this.isFloat ? 2 :
             this.words ? this.words.length :
             this.pointers ? this.pointers.length : 0;
+        // methods have both pointers and bytes
         if (this.bytes) nWords += (this.bytes.length + 3) >> 2;
-        nWords++; // include one header word
+        nWords++; // one header word always present
         var extraHeader = nWords > 63 ? 2 : this.sqClass.isCompact ? 0 : 1;
         return {header: extraHeader, body: nWords};
     },
@@ -1810,11 +1811,11 @@ Object.subclass('Squeak.Interpreter',
     popN: function(nToPop) {
         this.sp -= nToPop;
     },
-    push: function(oop) {
-        this.activeContext.pointers[++this.sp] = oop;
+    push: function(object) {
+        this.activeContext.pointers[++this.sp] = object;
     },
-    popNandPush: function(nToPop, oop) {
-        this.activeContext.pointers[this.sp -= nToPop - 1] = oop;
+    popNandPush: function(nToPop, object) {
+        this.activeContext.pointers[this.sp -= nToPop - 1] = object;
     },
     top: function() {
         return this.activeContext.pointers[this.sp];
@@ -2617,7 +2618,7 @@ Object.subclass('Squeak.Primitives',
         var fmt = obj.format;
         if (fmt<2) return -1; //not indexable
         if (fmt===3 && this.vm.isContext(obj))
-            return obj.pointers[Squeak.Context_stackPointer]; // no access beyond top of stack?
+            return obj.pointers[Squeak.Context_stackPointer]; // no access beyond top of stack
         if (fmt<6) return obj.pointersSize() - obj.instSize(); // pointers
         if (fmt<8) return obj.wordsSize(); // words
         if (fmt<12) return obj.bytesSize(); // bytes
@@ -2936,15 +2937,15 @@ Object.subclass('Squeak.Primitives',
     },
     primitiveNewMethod: function(argCount) {
         var header = this.stackInteger(0);
-        var byteCount = this.stackInteger(1);
+        var bytecodeCount = this.stackInteger(1);
         if (!this.success) return 0;
         var litCount = (header>>9) & 0xFF;
-        var method = this.vm.instantiateClass(this.vm.stackValue(2), byteCount);
+        var method = this.vm.instantiateClass(this.vm.stackValue(2), bytecodeCount);
         method.pointers = [header];
-        while (method.pointers.length < litCount+1)
+        for (var i = 0; i < litCount; i++)
             method.pointers.push(this.vm.nilObj);
         this.vm.popNandPush(1+argCount, method);
-        if (this.vm.breakOnNewMethod)
+        if (this.vm.breakOnNewMethod)               // break on doit
             this.vm.breakOnMethod = method;
         return true;
     },

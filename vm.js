@@ -613,8 +613,10 @@ Object.subclass('Squeak.Object',
                     } else
                         this.words = new Uint32Array(indexableSize); 
         } else // Bytes
-            if (indexableSize > 0)
+            if (indexableSize > 0) {
+                // this.format |= -indexableSize & 3;       //deferred to writeTo()
                 this.bytes = new Uint8Array(indexableSize); //Methods require further init of pointers
+            }
 
 //      Definition of Squeak's format code...
 //
@@ -848,6 +850,7 @@ Object.subclass('Squeak.Object',
     },
     writeTo: function(data, pos, image) {
         // Write 1 to 3 header words encoding type, class, and size, then instance data
+        if (this.bytes) this.format |= -this.bytes.length & 3;
         var beforePos = pos,
             size = this.snapshotSize(),
             formatAndHash = ((this.format & 15) << 8) | ((this.hash & 4095) << 17);

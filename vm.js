@@ -4091,7 +4091,7 @@ Object.subclass('Squeak.Primitives',
             bitblt = state.bitblt,
             form = bitblt.dest;
         if (this.b2d_debug) console.log("==> read into " + form.width + "x" + form.height + "@" + form.depth);
-        if (!form.width || !form.height) return;
+        if (!form.width || !form.height || state.maxX <= state.minX || state.maxY <= state.minY) return;
         if (!form.msb) return this.warnOnce("B2D: drawing to little-endian forms not implemented yet");
         if (form.depth == 32) {
             this.b2d_readPixels32();

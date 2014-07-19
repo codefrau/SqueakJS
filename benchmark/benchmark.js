@@ -81,7 +81,7 @@ window.onload = function() {
     });
 
     function saveToLively(contents) {
-        var address = (google && 
+        var address = (window.google && 
             google.loader &&
             google.loader.ClientLocation &&
             google.loader.ClientLocation.address) || {city: "unknown city", country: "unknown country"};

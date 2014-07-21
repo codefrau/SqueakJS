@@ -1,0 +1,6 @@
+[Activity]
+name = Etoys
+activity_version = 1
+bundle_id = org.vpri.EtoysActivity
+exec = sugar-activity-web
+icon = activity-etoys

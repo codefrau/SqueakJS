@@ -1,0 +1,18 @@
+body {
+    background-color: #000000;
+    font-family: sans-serif;
+	margin: 0px !important;
+}
+progress {
+    vertical-align: top;
+}
+canvas {
+    display: block;
+    margin-left: 0px;
+    cursor: default;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    -o-user-select: none;
+    user-select: none;
+}

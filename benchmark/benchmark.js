@@ -37,6 +37,12 @@ window.onload = function() {
         return origFileClose.apply(this, arguments);
     });
 
+    if (!Date.now) {
+        Date.now = function now() {
+            return new Date().getTime();
+        };
+    }
+
     function saveToLively(contents) {
         var address = (window.google && 
             google.loader &&
@@ -45,6 +51,8 @@ window.onload = function() {
         contents = navigator.userAgent + "\n" +
             address.city + "\n" +
             address.country + "\n" +
+            Date.now() + "\n" +
+            Squeak.vmVersion + "\n" +
             contents;
         var oReq = new XMLHttpRequest();
         oReq.open(

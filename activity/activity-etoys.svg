@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [
+	<!ENTITY stroke_color "#010101">
+	<!ENTITY fill_color "#FFFFFF">
+]>
+<svg enable-background="new 0 0 55 55" height="55px" version="1.1" viewBox="0 0 55 55" width="55px" x="0px" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" y="0px"><g display="block" id="activity-etoys">
+	<g display="inline">
+		<path d="    M38.395,40.393c-0.614,0.214-9.218-9.666-9.849-9.828c-0.632-0.163-13.004,3.906-13.416,3.423    c-0.412-0.484,6.202-11.419,6.177-12.038c-0.024-0.619-8.007-10.704-7.643-11.22c0.363-0.517,13.466,2.533,14.08,2.317    c0.613-0.216,8.677-10.799,9.305-10.634c0.627,0.165,1.631,12.98,2.036,13.472c0.402,0.49,12.795,4.16,12.813,4.783    c0.021,0.621-12.244,5.76-12.601,6.282C38.941,27.473,39.009,40.179,38.395,40.393z" fill="#FFFFFF" id="path4637" stroke="#010101" stroke-linecap="round" stroke-linejoin="bevel" stroke-width="3.5"/>
+		<path d="M12.729,38.05L3.156,52.411l0,0" fill="none" id="path5528" stroke="#010101" stroke-linecap="round" stroke-width="3.5"/>
+		<path d="M21.283,38.05l-9.574,14.361" fill="none" id="path5530" stroke="#010101" stroke-linecap="round" stroke-width="3.5"/>
+		<path d="M29.834,38.05l-9.572,14.361" fill="none" id="path5532" stroke="#010101" stroke-linecap="round" stroke-width="3.5"/>
+	</g>
+</g></svg>

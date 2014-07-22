@@ -61,7 +61,17 @@ window.onload = function() {
                             } else { // quit
                                 canvas.style.webkitTransition = "-webkit-transform 0.5s";
                                 canvas.style.webkitTransform = "scale(0)";
-                                window.setTimeout(function(){canvas.style.display = 'none'}, 500);
+                                window.setTimeout(function(){
+									canvas.style.display = 'none';
+									// When come from Sugarizer, go back home
+									if (typeof(Storage)!=="undefined" && typeof(window.localStorage)!=="undefined") {
+										try {
+											if (window.localStorage.getItem('sugar_settings') !== null)
+												window.location = "../../index.html";
+										} catch(err) {
+										}
+									}									
+								}, 500);
                             }
                         });
                     } catch(error) {

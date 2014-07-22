@@ -238,6 +238,12 @@ Object.subclass('Squeak.Image',
     initialize: function(arraybuffer, name) {
         this.totalMemory = 100000000; 
         this.name = name;
+        this.gcCount = 0;
+        this.gcTenures = 0;
+        this.gcMilliseconds = 0;
+        this.allocationCount = 0;
+        this.oldSpaceCount = 0;
+        this.newSpaceCount = 0;
         this.readFromBuffer(arraybuffer);
     },
     readFromBuffer: function(arraybuffer) {
@@ -284,9 +290,6 @@ Object.subclass('Squeak.Image',
         var extraVMMemory = readWord();
         pos += headerSize - (9 * 4); //skip to end of header
         // read objects
-        this.gcCount = 0;
-        this.oldSpaceCount = 0;
-        this.newSpaceCount = 0;
         var prevObj;
         var oopMap = {};
         console.log('squeak: reading objects');
@@ -376,12 +379,16 @@ Object.subclass('Squeak.Image',
         // Note: after an old object is released, its "nextObject" ref must still allow traversal
         // of all remaining objects. This is so enumeration works despite GC.
 
+        var start = Date.now();
         var newObjects = this.markReachableObjects();
         var removedObjects = this.removeUnmarkedOldObjects();
         this.appendToOldObjects(newObjects);
         this.oldSpaceCount += newObjects.length - removedObjects.length;
+        this.allocationCount += this.newSpaceCount;
         this.newSpaceCount = 0;
         this.gcCount++;
+        this.gcTenures += newObjects.length;
+        this.gcMilliseconds += Date.now() - start;
         return this.totalMemory - this.oldSpaceBytes;
     },
     markReachableObjects: function() {
@@ -3316,21 +3323,21 @@ Object.subclass('Squeak.Primitives',
     vmParameterAt: function(index) {
         switch (index) {
             case 1: return this.vm.image.oldSpaceBytes;     // end of old-space (0-based, read-only)
-            case 2:	return this.vm.image.oldSpaceBytes;     // end of young-space (read-only)
-            case 3:	return this.vm.image.totalMemory;       // end of memory (read-only)
-            case 4: return this.vm.image.newSpaceCount;     // allocationCount (read-only; nil in Cog VMs)
-            case 5: return this.vm.image.newSpaceCount;     // allocations between GCs (read-write; nil in Cog VMs)
-            // 6	survivor count tenuring threshold (read-write)
-            case 7:	return this.vm.image.gcCount;           // full GCs since startup (read-only)
-            // 8	total milliseconds in full GCs since startup (read-only)
-            // 9	incremental GCs since startup (read-only)
-            // 10	total milliseconds in incremental GCs since startup (read-only)
-            // 11	tenures of surving objects since startup (read-only)
+            case 2: return this.vm.image.oldSpaceBytes;     // end of young-space (read-only)
+            case 3: return this.vm.image.totalMemory;       // end of memory (read-only)
+            case 4: return this.vm.image.allocationCount + this.vm.image.newSpaceCount; // allocationCount (read-only; nil in Cog VMs)
+            // 5    allocations between GCs (read-write; nil in Cog VMs)
+            // 6    survivor count tenuring threshold (read-write)
+            case 7: return this.vm.image.gcCount;           // full GCs since startup (read-only)
+            case 8: return this.vm.image.gcMilliseconds;    // total milliseconds in full GCs since startup (read-only)
+            case 9: return 1;   /* image expects > 0 */     // incremental GCs since startup (read-only)
+            case 10: return 0;                              // total milliseconds in incremental GCs since startup (read-only)
+            case 11: return this.vm.image.gcTenures;        // tenures of surving objects since startup (read-only)
             // 12-20 specific to the translating VM
             // 21	root table size (read-only)
             // 22	root table overflows since startup (read-only)
             // 23	bytes of extra memory to reserve for VM buffers, plugins, etc.
-            // 24	memory threshold above whichto shrink object memory (read-write)
+            // 24	memory threshold above which to shrink object memory (read-write)
             // 25	memory headroom when growing object memory (read-write)
             // 26	interruptChecksEveryNms - force an ioProcessEvents every N milliseconds (read-write)
             // 27	number of times mark loop iterated for current IGC/FGC (read-only) includes ALL marking

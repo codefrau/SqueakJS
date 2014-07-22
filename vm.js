@@ -3528,9 +3528,9 @@ Object.subclass('Squeak.Primitives',
         return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(canvas.width, canvas.height));
     },
     primitiveSetFullScreen: function(argCount) {
-        this.fullscreen = this.stackBoolean(0);
+        var flag = this.stackBoolean(0);
         if (!this.success) return false;
-        this.warnOnce("fullscreen support not yet implemented");
+        this.display.fullscreen = flag;
         this.vm.popN(argCount);
         return true;
     },

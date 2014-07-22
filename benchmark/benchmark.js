@@ -55,21 +55,8 @@ window.onload = function() {
         oReq.send();
     };
 
-    var canvas = document.getElementsByTagName("canvas")[0];
-    function createDisplay() {
-        var display = {
-            ctx: canvas.getContext("2d"),
-            width: canvas.width,
-            height: canvas.height,
-            mouseX: 0,
-            mouseY: 0,
-            buttons: 0,
-            keys: [],
-            clipboardString: '',
-            clipboardStringChanged: false,
-        };
-        return display;
-    };
+    var canvas = document.getElementsByTagName("canvas")[0],
+        display = createSqueakDisplay(canvas);
 
     function loadAndRunImage(url) {
         var rq = new XMLHttpRequest();
@@ -77,7 +64,7 @@ window.onload = function() {
         rq.responseType = 'arraybuffer';
         rq.onload = function(e) {
             var image = new Squeak.Image(rq.response, url);
-            var vm = new Squeak.Interpreter(image, createDisplay());
+            var vm = new Squeak.Interpreter(image, display);
             var run = function() {
                 try {
                     vm.interpret(200, function(ms) {

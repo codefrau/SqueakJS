@@ -3524,7 +3524,8 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     primitiveScreenSize: function(argCount) {
-        return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(this.display.width, this.display.height));
+        var canvas = this.display.context.canvas;
+        return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(canvas.width, canvas.height));
     },
     primitiveSetFullScreen: function(argCount) {
         this.fullscreen = this.stackBoolean(0);
@@ -3552,7 +3553,7 @@ Object.subclass('Squeak.Primitives',
     },
     displayUpdate: function(form, rect, noCursor) {
         this.display.lastTick = this.vm.lastTick;
-        this.showForm(this.display.ctx, form, rect);
+        this.showForm(this.display.context, form, rect);
         if (noCursor) return;
         // show cursor if it was just overwritten
         if (this.cursorX + this.cursorW > rect.left && this.cursorX < rect.right &&
@@ -3573,7 +3574,7 @@ Object.subclass('Squeak.Primitives',
     },
     cursorDraw: function() {
         // TODO: create cursorCanvas in setCursor primitive
-        // this.display.ctx.drawImage(this.cursorCanvas, this.cursorX, this.cursorY);
+        // this.display.context.drawImage(this.cursorCanvas, this.cursorX, this.cursorY);
     },
 },
 'input', {

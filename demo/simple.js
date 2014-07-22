@@ -21,48 +21,6 @@
  */
 
 
-//////////////////////////////////////////////////////////////////////////////
-// these functions fake the Lively module and class system
-// just enough so the loading of vm.js succeeds
-//////////////////////////////////////////////////////////////////////////////
-
-module = function(dottedPath) {
-    if (dottedPath == "") return window;
-    var path = dottedPath.split("."),
-        name = path.pop(),
-        parent = module(path.join("."));
-    if (!parent[name]) parent[name] = {
-        requires: function(ignored) { return this; },
-        toRun: function(code) { code(); }
-    };
-    return parent[name];
-};
-
-Object.subclass = function(classPath /* + more args */ ) {
-    var path = classPath.split("."),
-        className = path.pop();
-    var newClass = function() {
-        if (this.initialize) this.initialize.apply(this, arguments);
-        return this;
-    };
-    // skip arg 0, copy properties of other args to class proto
-    for (var i = 1; i < arguments.length; i++)
-        for (name in arguments[i])
-            newClass.prototype[name] = arguments[i][name];
-    module(path.join('.'))[className] = newClass;
-};
-
-Object.extend = function(obj /* + more args */ ) {
-    // skip arg 0, copy properties of other args to obj
-    for (var i = 1; i < arguments.length; i++)
-        for (name in arguments[i])
-            obj[name] = arguments[i][name];
-};
-
-//////////////////////////////////////////////////////////////////////////////
-// now for the good stuff
-//////////////////////////////////////////////////////////////////////////////
-
 var fullscreen = navigator.standalone;
 
 window.onload = function() {
@@ -169,14 +127,6 @@ window.onload = function() {
         };
         run();        
     };
-    if (window.applicationCache) {
-        applicationCache.addEventListener('updateready', function() {
-            applicationCache.swapCache();
-            if (confirm('SqueakJS has been updated. Restart now?')) {
-                window.location.reload();
-            }
-        });
-    }
     document.body.addEventListener('dragover', function(evt) {
         evt.stopPropagation();
         evt.preventDefault();

@@ -1067,6 +1067,7 @@ Object.subclass('Squeak.Interpreter',
         this.breakOnNewMethod = false;
         this.breakOnContextChanged = false;
         this.breakOnContextReturned = null; // context to break on
+        this.messages = {};
         this.startupTime = Date.now(); // base for millisecond clock
     },
     loadInitialContext: function() {
@@ -1921,6 +1922,13 @@ Object.subclass('Squeak.Interpreter',
     },
 },
 'debugging', {
+    addMessage: function(message) {
+        return this.messages[message] ? ++this.messages[message] : this.messages[message] = 1;
+    },
+    warnOnce: function(message) {
+        if (this.addMessage(message) == 1)
+            console.warn(message);
+    },
     printMethod: function(aMethod) {
         // return a 'class>>selector' description for the method
         // in old images this is expensive, we have to search all classes
@@ -2092,7 +2100,6 @@ Object.subclass('Squeak.Primitives',
         this.display.vm = this.vm;
         this.deferDisplayUpdates = false;
         this.deferDisplayUpdatesDisabled = 3;   // show first frames with immediate feedback
-        this.warnings = {};
         this.initAtCache();
         this.initModules();
     },
@@ -2428,7 +2435,7 @@ Object.subclass('Squeak.Primitives',
             if (primitive)
                 return primitive(argCount);
         }
-        this.warnOnce("missing primitive: " + moduleName + "." + functionName);
+        this.vm.warnOnce("missing primitive: " + moduleName + "." + functionName);
         return false;
     },
     doNamedPrimitive: function(primMethod, argCount) {
@@ -2439,19 +2446,11 @@ Object.subclass('Squeak.Primitives',
         var functionName = firstLiteral.pointers[1].bytesAsString();
         return this.namedPrimitive(moduleName, functionName, argCount);
     },
-    warnOnce: function(message) {
-        if (this.warnings[message]) {
-            this.warnings[message]++;
-        } else {
-            this.warnings[message] = 1;
-            console.warn(message);
-        }
-    },
     fakePrimitive: function(prim, retVal, argCount) {
         // fake a named primitive
         // prim and retVal need to be curried when used:
         //  this.fakePrimitive.bind(this, "Module.primitive", 42)
-        this.warnOnce("missing primitive: " + prim);
+        this.vm.warnOnce("missing primitive: " + prim);
         if (retVal === undefined) this.vm.popN(argCount);
         else this.vm.popNandPush(argCount+1, this.makeStObject(retVal));
         return true;
@@ -4104,13 +4103,13 @@ Object.subclass('Squeak.Primitives',
             form = bitblt.dest;
         if (this.b2d_debug) console.log("==> read into " + form.width + "x" + form.height + "@" + form.depth);
         if (!form.width || !form.height || state.maxX <= state.minX || state.maxY <= state.minY) return;
-        if (!form.msb) return this.warnOnce("B2D: drawing to little-endian forms not implemented yet");
+        if (!form.msb) return this.vm.warnOnce("B2D: drawing to little-endian forms not implemented yet");
         if (form.depth == 32) {
             this.b2d_readPixels32();
         } else if (form.depth == 16) {
             this.b2d_readPixels16();
         } else {
-            this.warnOnce("B2D: drawing to " + form.depth + " bit forms not supported yet");
+            this.vm.warnOnce("B2D: drawing to " + form.depth + " bit forms not supported yet");
         }
         // set bitblt values for affectedRect()
         bitblt.dx = state.minX;
@@ -4404,25 +4403,25 @@ Object.subclass('Squeak.Primitives',
     },
     b2d_primitiveAddBezier: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveAddBezier");
-        this.warnOnce("B2D: beziers not implemented yet");
+        this.vm.warnOnce("B2D: beziers not implemented yet");
         this.vm.popN(argCount);
         return true;
     },
     b2d_primitiveAddCompressedShape: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveAddCompressedShape");
-        this.warnOnce("B2D: compressed shapes not implemented yet");
+        this.vm.warnOnce("B2D: compressed shapes not implemented yet");
         this.vm.popN(argCount);
         return true;
     },
     b2d_primitiveAddLine: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveAddLine");
-        this.warnOnce("B2D: lines not implemented yet");
+        this.vm.warnOnce("B2D: lines not implemented yet");
         this.vm.popN(argCount);
         return true;
     },
     b2d_primitiveAddBitmapFill: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveAddBitmapFill");
-        this.warnOnce("B2D: bitmap fills not implemented yet");
+        this.vm.warnOnce("B2D: bitmap fills not implemented yet");
         var fills = this.b2d_state.fills;
         fills.push('red');
         this.vm.popNandPush(argCount+1, fills.length);

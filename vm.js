@@ -371,7 +371,7 @@ Object.subclass('Squeak.Image',
         // no partial GC needed since new space uses the Javascript GC
         return this.totalMemory - this.oldSpaceBytes;
     },
-    fullGC: function() {
+    fullGC: function(reason) {
         // Old space is a linked list of objects - each object has an "nextObject" reference.
         // New space objects do not have that pointer, they are garbage-collected by JavaScript.
         // But they have an allocation id so the survivors can be ordered on tenure.
@@ -380,6 +380,7 @@ Object.subclass('Squeak.Image',
         // Note: after an old object is released, its "nextObject" ref must still allow traversal
         // of all remaining objects. This is so enumeration works despite GC.
 
+        this.vm.addMessage("fullGC: " + reason);
         var start = Date.now();
         var newObjects = this.markReachableObjects();
         var removedObjects = this.removeUnmarkedOldObjects();
@@ -508,7 +509,7 @@ Object.subclass('Squeak.Image',
         }
         // ensure new objects have nextObject pointers
         if (this.newSpaceCount > 0)
-            this.fullGC();
+            this.fullGC("become");
         // Now, for every object...
         var obj = this.firstOldObject;
         while (obj) {
@@ -533,7 +534,7 @@ Object.subclass('Squeak.Image',
                 return obj;
             if (!obj.nextObject) {
                 // this was the last old object, tenure new objects and try again
-                if (this.newSpaceCount > 0) this.fullGC();
+                if (this.newSpaceCount > 0) this.fullGC("someInstance of " + clsObj.className());
                 // if this really was the last object, we're done
                 if (!obj.nextObject) return null;
             }
@@ -543,7 +544,7 @@ Object.subclass('Squeak.Image',
     objectAfter: function(obj) {
         // if this was the last old object, tenure new objects and try again
         if (!obj.nextObject && this.newSpaceCount > 0)
-            this.fullGC();
+            this.fullGC("nextObject");
         return obj.nextObject;
     },
     nextInstanceAfter: function(obj) {
@@ -551,7 +552,7 @@ Object.subclass('Squeak.Image',
         while (true) {
             if (!obj.nextObject) {
                 // this was the last old object, tenure new objects and try again
-                if (this.newSpaceCount > 0) this.fullGC();
+                if (this.newSpaceCount > 0) this.fullGC("nextInstance of " + clsObj.className());
                 // if this really was the last object, we're done
                 if (!obj.nextObject) return null;
             }
@@ -2349,7 +2350,7 @@ Object.subclass('Squeak.Primitives',
     		case 127: return this.primitiveShowDisplayRect(argCount);
             case 128: return this.popNandPushIfOK(2, this.doArrayBecome(true)); //arrayBecome
             case 129: return this.popNandPushIfOK(1, this.vm.image.specialObjectsArray); //specialObjectsOop
-            case 130: return this.popNandPushIfOK(1, this.vm.image.fullGC()); // GC
+            case 130: return this.popNandPushIfOK(1, this.vm.image.fullGC("forced")); // GC
             case 131: return this.popNandPushIfOK(1, this.vm.image.partialGC()); // GCmost
             case 132: return this.pop2andPushBoolIfOK(this.pointsTo(this.stackNonInteger(1), this.vm.top())); //Object.pointsTo
             case 133: return true; //TODO primitiveSetInterruptKey
@@ -3371,7 +3372,7 @@ Object.subclass('Squeak.Primitives',
         this.vm.storeContextRegisters();                // store current state for snapshot
         var proc = this.getScheduler().pointers[Squeak.ProcSched_activeProcess];
         proc.pointers[Squeak.Proc_suspendedContext] = this.vm.activeContext; // store initial context
-        this.vm.image.fullGC();                        // before cleanup so traversal works
+        this.vm.image.fullGC("snapshot");               // before cleanup so traversal works
         var buffer = this.vm.image.writeToBuffer();
         Squeak.flushAllFiles();                         // so there are no more writes pending
         Squeak.filePut(this.vm.image.name, buffer);

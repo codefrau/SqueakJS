@@ -239,7 +239,8 @@ Object.subclass('Squeak.Image',
         this.totalMemory = 100000000; 
         this.name = name;
         this.gcCount = 0;
-        this.gcTenures = 0;
+        this.gcTenured = 0;
+        this.gcCompacted = 0;
         this.gcMilliseconds = 0;
         this.allocationCount = 0;
         this.oldSpaceCount = 0;
@@ -387,7 +388,8 @@ Object.subclass('Squeak.Image',
         this.allocationCount += this.newSpaceCount;
         this.newSpaceCount = 0;
         this.gcCount++;
-        this.gcTenures += newObjects.length;
+        this.gcTenured += newObjects.length;
+        this.gcCompacted += removedObjects.length;
         this.gcMilliseconds += Date.now() - start;
         return this.totalMemory - this.oldSpaceBytes;
     },
@@ -3331,7 +3333,7 @@ Object.subclass('Squeak.Primitives',
             case 8: return this.vm.image.gcMilliseconds;    // total milliseconds in full GCs since startup (read-only)
             case 9: return 1;   /* image expects > 0 */     // incremental GCs since startup (read-only)
             case 10: return 0;                              // total milliseconds in incremental GCs since startup (read-only)
-            case 11: return this.vm.image.gcTenures;        // tenures of surving objects since startup (read-only)
+            case 11: return this.vm.image.gcTenured;        // tenures of surving objects since startup (read-only)
             // 12-20 specific to the translating VM
             // 21	root table size (read-only)
             // 22	root table overflows since startup (read-only)

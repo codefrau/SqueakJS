@@ -1991,20 +1991,36 @@ Object.subclass('Squeak.Interpreter',
         if (typeof ctx == "number") {limit = ctx; ctx = null;}
         if (!ctx) ctx = this.activeContext;
         if (!limit) limit = 100;
-        var stack = '';
-        while (!ctx.isNil && limit-- > 0) {
-            var block = '';
-            var method = ctx.pointers[Squeak.Context_method];
-            if (typeof method === 'number') { // it's a block context, fetch home
-                method = ctx.pointers[Squeak.BlockContext_home].pointers[Squeak.Context_method];
-                block = '[] in ';
-            } else if (!ctx.pointers[Squeak.Context_closure].isNil) {
-                block = '[] in '; // it's a closure activation
-            }
-            stack = block + this.printMethod(method) + '\n' + stack;
+        var contexts = [],
+            hardLimit = Math.max(limit, 1000000);
+        while (!ctx.isNil && hardLimit-- > 0) {
+            contexts.push(ctx);
             ctx = ctx.pointers[Squeak.Context_sender];
         }
-        return stack;
+        var extra = 200;
+        if (contexts.length > limit + extra) {
+            if (!ctx.isNil) contexts.push('...'); // over hard limit
+            contexts = contexts.slice(0, limit).concat(['...']).concat(contexts.slice(-extra));
+        }
+        var stack = [],
+            i = contexts.length;
+        while (i-- > 0) {
+            var ctx = contexts[i];
+            if (!ctx.pointers) {
+                stack.push('...\n');
+            } else {
+                var block = '';
+                var method = ctx.pointers[Squeak.Context_method];
+                if (typeof method === 'number') { // it's a block context, fetch home
+                    method = ctx.pointers[Squeak.BlockContext_home].pointers[Squeak.Context_method];
+                    block = '[] in ';
+                } else if (!ctx.pointers[Squeak.Context_closure].isNil) {
+                    block = '[] in '; // it's a closure activation
+                }
+                stack.push(block + this.printMethod(method) + '\n');
+            }
+        }
+        return stack.join('');
     },
     findMethod: function(classAndMethodString) {
         // classAndMethodString is 'Class>>method'

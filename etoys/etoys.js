@@ -35,7 +35,7 @@ window.onload = function() {
     } else {
         canvas.style.width = "80%";
     }
-    var display = this.createSqueakDisplay(canvas);
+    var display = createSqueakDisplay(canvas, {fixedWidth: 1200, fixedHeight: 900});
     function loadAndRunImage(url) {
         var imageName = Squeak.splitFilePath(url).basename;
         display.showBanner("Downloading " + imageName);

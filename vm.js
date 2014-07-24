@@ -756,7 +756,21 @@ Object.subclass('Squeak.Object',
     },
     bytesAsString: function() {
         if (!this.bytes) return '';
-	return Squeak.bytesAsString(this.bytes);
+    	return Squeak.bytesAsString(this.bytes);
+    },
+    bytesAsNumberString: function(negative) {
+        if (!this.bytes) return '';
+        var hex = '0123456789ABCDEF',
+            digits = [],
+            value = 0;
+        for (var i = this.bytes.length - 1; i >= 0; i--) {
+            digits.push(hex[this.bytes[i] >> 4]);
+            digits.push(hex[this.bytes[i] & 15]);
+            value = value * 256 + this.bytes[i];
+        }
+        var sign = negative ? '-' : '',
+            approx = value >= 9007199254740992 ? '~ ' : '';
+        return sign + '16r' + digits.join('') + ' (' + approx + sign + value + 'L)';
     },
     assnKeyAsString: function() {
         return this.pointers[Squeak.Assn_key].bytesAsString();  
@@ -786,6 +800,8 @@ Object.subclass('Squeak.Object',
             case 'Rectangle': return this.pointers.join(" corner: ");
             case 'Association':
             case 'ReadOnlyVariableBinding': return this.pointers.join("->");
+            case 'LargePositiveInteger': return this.bytesAsNumberString(false);
+            case 'LargeNegativeInteger': return this.bytesAsNumberString(true);
         }
         return  /^[aeiou]/i.test(className) ? 'an ' + className : 'a ' + className;
     },

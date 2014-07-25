@@ -20,49 +20,6 @@
  * THE SOFTWARE.
  */
 
-
-//////////////////////////////////////////////////////////////////////////////
-// these functions fake the Lively module and class system
-// just enough so the loading of vm.js succeeds
-//////////////////////////////////////////////////////////////////////////////
-
-module = function(dottedPath) {
-    if (dottedPath == "") return window;
-    var path = dottedPath.split("."),
-        name = path.pop(),
-        parent = module(path.join("."));
-    if (!parent[name]) parent[name] = {
-        requires: function(ignored) { return this; },
-        toRun: function(code) { code(); }
-    };
-    return parent[name];
-};
-
-Object.subclass = function(classPath /* + more args */ ) {
-    var path = classPath.split("."),
-        className = path.pop();
-    var newClass = function() {
-        if (this.initialize) this.initialize.apply(this, arguments);
-        return this;
-    };
-    // skip arg 0, copy properties of other args to class proto
-    for (var i = 1; i < arguments.length; i++)
-        for (name in arguments[i])
-            newClass.prototype[name] = arguments[i][name];
-    module(path.join('.'))[className] = newClass;
-};
-
-Object.extend = function(obj /* + more args */ ) {
-    // skip arg 0, copy properties of other args to obj
-    for (var i = 1; i < arguments.length; i++)
-        for (name in arguments[i])
-            obj[name] = arguments[i][name];
-};
-
-//////////////////////////////////////////////////////////////////////////////
-// now for the good stuff
-//////////////////////////////////////////////////////////////////////////////
-
 window.stopVM = false;
 
 window.onload = function() {
@@ -80,6 +37,12 @@ window.onload = function() {
         return origFileClose.apply(this, arguments);
     });
 
+    if (!Date.now) {
+        Date.now = function now() {
+            return new Date().getTime();
+        };
+    }
+
     function saveToLively(contents) {
         var address = (window.google && 
             google.loader &&
@@ -88,6 +51,8 @@ window.onload = function() {
         contents = navigator.userAgent + "\n" +
             address.city + "\n" +
             address.country + "\n" +
+            Date.now() + "\n" +
+            Squeak.vmVersion + "\n" +
             contents;
         var oReq = new XMLHttpRequest();
         oReq.open(
@@ -98,21 +63,8 @@ window.onload = function() {
         oReq.send();
     };
 
-    var canvas = document.getElementsByTagName("canvas")[0];
-    function createDisplay() {
-        var display = {
-            ctx: canvas.getContext("2d"),
-            width: canvas.width,
-            height: canvas.height,
-            mouseX: 0,
-            mouseY: 0,
-            buttons: 0,
-            keys: [],
-            clipboardString: '',
-            clipboardStringChanged: false,
-        };
-        return display;
-    };
+    var canvas = document.getElementsByTagName("canvas")[0],
+        display = createSqueakDisplay(canvas);
 
     function loadAndRunImage(url) {
         var rq = new XMLHttpRequest();
@@ -120,7 +72,7 @@ window.onload = function() {
         rq.responseType = 'arraybuffer';
         rq.onload = function(e) {
             var image = new Squeak.Image(rq.response, url);
-            var vm = new Squeak.Interpreter(image, createDisplay());
+            var vm = new Squeak.Interpreter(image, display);
             var run = function() {
                 try {
                     vm.interpret(200, function(ms) {
@@ -141,12 +93,3 @@ window.onload = function() {
     };
     loadAndRunImage('benchmark.image');
 };
-
-if (window.applicationCache) {
-    applicationCache.addEventListener('updateready', function() {
-        applicationCache.swapCache();
-        if (confirm('SqueakJS has been updated. Restart now?')) {
-            window.location.reload();
-        }
-    });
-}

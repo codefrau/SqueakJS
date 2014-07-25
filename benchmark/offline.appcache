@@ -1,5 +1,6 @@
 CACHE MANIFEST
-# Jul 18 14:15:02 2014
+# Jul 25 01:52:03 2014
+../lib/squeak.js
 ../vm.js
 benchmark.html
 benchmark.css

@@ -26,7 +26,7 @@ Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.3.2",
+    vmVersion: "SqueakJS 0.3.3",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/SqueakJS/",               // entirely made up
     vmFile: "vm.js",
@@ -238,6 +238,13 @@ Object.subclass('Squeak.Image',
     initialize: function(arraybuffer, name) {
         this.totalMemory = 100000000; 
         this.name = name;
+        this.gcCount = 0;
+        this.gcTenured = 0;
+        this.gcCompacted = 0;
+        this.gcMilliseconds = 0;
+        this.allocationCount = 0;
+        this.oldSpaceCount = 0;
+        this.newSpaceCount = 0;
         this.readFromBuffer(arraybuffer);
     },
     readFromBuffer: function(arraybuffer) {
@@ -284,9 +291,6 @@ Object.subclass('Squeak.Image',
         var extraVMMemory = readWord();
         pos += headerSize - (9 * 4); //skip to end of header
         // read objects
-        this.gcCount = 0;
-        this.oldSpaceCount = 0;
-        this.newSpaceCount = 0;
         var prevObj;
         var oopMap = {};
         console.log('squeak: reading objects');
@@ -367,7 +371,7 @@ Object.subclass('Squeak.Image',
         // no partial GC needed since new space uses the Javascript GC
         return this.totalMemory - this.oldSpaceBytes;
     },
-    fullGC: function() {
+    fullGC: function(reason) {
         // Old space is a linked list of objects - each object has an "nextObject" reference.
         // New space objects do not have that pointer, they are garbage-collected by JavaScript.
         // But they have an allocation id so the survivors can be ordered on tenure.
@@ -376,12 +380,18 @@ Object.subclass('Squeak.Image',
         // Note: after an old object is released, its "nextObject" ref must still allow traversal
         // of all remaining objects. This is so enumeration works despite GC.
 
+        this.vm.addMessage("fullGC: " + reason);
+        var start = Date.now();
         var newObjects = this.markReachableObjects();
         var removedObjects = this.removeUnmarkedOldObjects();
         this.appendToOldObjects(newObjects);
         this.oldSpaceCount += newObjects.length - removedObjects.length;
+        this.allocationCount += this.newSpaceCount;
         this.newSpaceCount = 0;
         this.gcCount++;
+        this.gcTenured += newObjects.length;
+        this.gcCompacted += removedObjects.length;
+        this.gcMilliseconds += Date.now() - start;
         return this.totalMemory - this.oldSpaceBytes;
     },
     markReachableObjects: function() {
@@ -499,7 +509,7 @@ Object.subclass('Squeak.Image',
         }
         // ensure new objects have nextObject pointers
         if (this.newSpaceCount > 0)
-            this.fullGC();
+            this.fullGC("become");
         // Now, for every object...
         var obj = this.firstOldObject;
         while (obj) {
@@ -524,7 +534,7 @@ Object.subclass('Squeak.Image',
                 return obj;
             if (!obj.nextObject) {
                 // this was the last old object, tenure new objects and try again
-                if (this.newSpaceCount > 0) this.fullGC();
+                if (this.newSpaceCount > 0) this.fullGC("someInstance of " + clsObj.className());
                 // if this really was the last object, we're done
                 if (!obj.nextObject) return null;
             }
@@ -534,7 +544,7 @@ Object.subclass('Squeak.Image',
     objectAfter: function(obj) {
         // if this was the last old object, tenure new objects and try again
         if (!obj.nextObject && this.newSpaceCount > 0)
-            this.fullGC();
+            this.fullGC("nextObject");
         return obj.nextObject;
     },
     nextInstanceAfter: function(obj) {
@@ -542,7 +552,7 @@ Object.subclass('Squeak.Image',
         while (true) {
             if (!obj.nextObject) {
                 // this was the last old object, tenure new objects and try again
-                if (this.newSpaceCount > 0) this.fullGC();
+                if (this.newSpaceCount > 0) this.fullGC("nextInstance of " + clsObj.className());
                 // if this really was the last object, we're done
                 if (!obj.nextObject) return null;
             }
@@ -746,7 +756,21 @@ Object.subclass('Squeak.Object',
     },
     bytesAsString: function() {
         if (!this.bytes) return '';
-	return Squeak.bytesAsString(this.bytes);
+    	return Squeak.bytesAsString(this.bytes);
+    },
+    bytesAsNumberString: function(negative) {
+        if (!this.bytes) return '';
+        var hex = '0123456789ABCDEF',
+            digits = [],
+            value = 0;
+        for (var i = this.bytes.length - 1; i >= 0; i--) {
+            digits.push(hex[this.bytes[i] >> 4]);
+            digits.push(hex[this.bytes[i] & 15]);
+            value = value * 256 + this.bytes[i];
+        }
+        var sign = negative ? '-' : '',
+            approx = value >= 9007199254740992 ? '~ ' : '';
+        return sign + '16r' + digits.join('') + ' (' + approx + sign + value + 'L)';
     },
     assnKeyAsString: function() {
         return this.pointers[Squeak.Assn_key].bytesAsString();  
@@ -776,6 +800,8 @@ Object.subclass('Squeak.Object',
             case 'Rectangle': return this.pointers.join(" corner: ");
             case 'Association':
             case 'ReadOnlyVariableBinding': return this.pointers.join("->");
+            case 'LargePositiveInteger': return this.bytesAsNumberString(false);
+            case 'LargeNegativeInteger': return this.bytesAsNumberString(true);
         }
         return  /^[aeiou]/i.test(className) ? 'an ' + className : 'a ' + className;
     },
@@ -1060,6 +1086,7 @@ Object.subclass('Squeak.Interpreter',
         this.breakOnNewMethod = false;
         this.breakOnContextChanged = false;
         this.breakOnContextReturned = null; // context to break on
+        this.messages = {};
         this.startupTime = Date.now(); // base for millisecond clock
     },
     loadInitialContext: function() {
@@ -1914,6 +1941,13 @@ Object.subclass('Squeak.Interpreter',
     },
 },
 'debugging', {
+    addMessage: function(message) {
+        return this.messages[message] ? ++this.messages[message] : this.messages[message] = 1;
+    },
+    warnOnce: function(message) {
+        if (this.addMessage(message) == 1)
+            console.warn(message);
+    },
     printMethod: function(aMethod) {
         // return a 'class>>selector' description for the method
         // in old images this is expensive, we have to search all classes
@@ -1957,20 +1991,36 @@ Object.subclass('Squeak.Interpreter',
         if (typeof ctx == "number") {limit = ctx; ctx = null;}
         if (!ctx) ctx = this.activeContext;
         if (!limit) limit = 100;
-        var stack = '';
-        while (!ctx.isNil && limit-- > 0) {
-            var block = '';
-            var method = ctx.pointers[Squeak.Context_method];
-            if (typeof method === 'number') { // it's a block context, fetch home
-                method = ctx.pointers[Squeak.BlockContext_home].pointers[Squeak.Context_method];
-                block = '[] in ';
-            } else if (!ctx.pointers[Squeak.Context_closure].isNil) {
-                block = '[] in '; // it's a closure activation
-            }
-            stack = block + this.printMethod(method) + '\n' + stack;
+        var contexts = [],
+            hardLimit = Math.max(limit, 1000000);
+        while (!ctx.isNil && hardLimit-- > 0) {
+            contexts.push(ctx);
             ctx = ctx.pointers[Squeak.Context_sender];
         }
-        return stack;
+        var extra = 200;
+        if (contexts.length > limit + extra) {
+            if (!ctx.isNil) contexts.push('...'); // over hard limit
+            contexts = contexts.slice(0, limit).concat(['...']).concat(contexts.slice(-extra));
+        }
+        var stack = [],
+            i = contexts.length;
+        while (i-- > 0) {
+            var ctx = contexts[i];
+            if (!ctx.pointers) {
+                stack.push('...\n');
+            } else {
+                var block = '';
+                var method = ctx.pointers[Squeak.Context_method];
+                if (typeof method === 'number') { // it's a block context, fetch home
+                    method = ctx.pointers[Squeak.BlockContext_home].pointers[Squeak.Context_method];
+                    block = '[] in ';
+                } else if (!ctx.pointers[Squeak.Context_closure].isNil) {
+                    block = '[] in '; // it's a closure activation
+                }
+                stack.push(block + this.printMethod(method) + '\n');
+            }
+        }
+        return stack.join('');
     },
     findMethod: function(classAndMethodString) {
         // classAndMethodString is 'Class>>method'
@@ -2085,7 +2135,6 @@ Object.subclass('Squeak.Primitives',
         this.display.vm = this.vm;
         this.deferDisplayUpdates = false;
         this.deferDisplayUpdatesDisabled = 3;   // show first frames with immediate feedback
-        this.warnings = {};
         this.initAtCache();
         this.initModules();
     },
@@ -2333,7 +2382,7 @@ Object.subclass('Squeak.Primitives',
     		case 127: return this.primitiveShowDisplayRect(argCount);
             case 128: return this.popNandPushIfOK(2, this.doArrayBecome(true)); //arrayBecome
             case 129: return this.popNandPushIfOK(1, this.vm.image.specialObjectsArray); //specialObjectsOop
-            case 130: return this.popNandPushIfOK(1, this.vm.image.fullGC()); // GC
+            case 130: return this.popNandPushIfOK(1, this.vm.image.fullGC("forced")); // GC
             case 131: return this.popNandPushIfOK(1, this.vm.image.partialGC()); // GCmost
             case 132: return this.pop2andPushBoolIfOK(this.pointsTo(this.stackNonInteger(1), this.vm.top())); //Object.pointsTo
             case 133: return true; //TODO primitiveSetInterruptKey
@@ -2421,7 +2470,7 @@ Object.subclass('Squeak.Primitives',
             if (primitive)
                 return primitive(argCount);
         }
-        this.warnOnce("missing primitive: " + moduleName + "." + functionName);
+        this.vm.warnOnce("missing primitive: " + moduleName + "." + functionName);
         return false;
     },
     doNamedPrimitive: function(primMethod, argCount) {
@@ -2432,19 +2481,11 @@ Object.subclass('Squeak.Primitives',
         var functionName = firstLiteral.pointers[1].bytesAsString();
         return this.namedPrimitive(moduleName, functionName, argCount);
     },
-    warnOnce: function(message) {
-        if (this.warnings[message]) {
-            this.warnings[message]++;
-        } else {
-            this.warnings[message] = 1;
-            console.warn(message);
-        }
-    },
     fakePrimitive: function(prim, retVal, argCount) {
         // fake a named primitive
         // prim and retVal need to be curried when used:
         //  this.fakePrimitive.bind(this, "Module.primitive", 42)
-        this.warnOnce("missing primitive: " + prim);
+        this.vm.warnOnce("missing primitive: " + prim);
         if (retVal === undefined) this.vm.popN(argCount);
         else this.vm.popNandPush(argCount+1, this.makeStObject(retVal));
         return true;
@@ -3316,21 +3357,21 @@ Object.subclass('Squeak.Primitives',
     vmParameterAt: function(index) {
         switch (index) {
             case 1: return this.vm.image.oldSpaceBytes;     // end of old-space (0-based, read-only)
-            case 2:	return this.vm.image.oldSpaceBytes;     // end of young-space (read-only)
-            case 3:	return this.vm.image.totalMemory;       // end of memory (read-only)
-            case 4: return this.vm.image.newSpaceCount;     // allocationCount (read-only; nil in Cog VMs)
-            case 5: return this.vm.image.newSpaceCount;     // allocations between GCs (read-write; nil in Cog VMs)
-            // 6	survivor count tenuring threshold (read-write)
-            case 7:	return this.vm.image.gcCount;           // full GCs since startup (read-only)
-            // 8	total milliseconds in full GCs since startup (read-only)
-            // 9	incremental GCs since startup (read-only)
-            // 10	total milliseconds in incremental GCs since startup (read-only)
-            // 11	tenures of surving objects since startup (read-only)
+            case 2: return this.vm.image.oldSpaceBytes;     // end of young-space (read-only)
+            case 3: return this.vm.image.totalMemory;       // end of memory (read-only)
+            case 4: return this.vm.image.allocationCount + this.vm.image.newSpaceCount; // allocationCount (read-only; nil in Cog VMs)
+            // 5    allocations between GCs (read-write; nil in Cog VMs)
+            // 6    survivor count tenuring threshold (read-write)
+            case 7: return this.vm.image.gcCount;           // full GCs since startup (read-only)
+            case 8: return this.vm.image.gcMilliseconds;    // total milliseconds in full GCs since startup (read-only)
+            case 9: return 1;   /* image expects > 0 */     // incremental GCs since startup (read-only)
+            case 10: return 0;                              // total milliseconds in incremental GCs since startup (read-only)
+            case 11: return this.vm.image.gcTenured;        // tenures of surving objects since startup (read-only)
             // 12-20 specific to the translating VM
             // 21	root table size (read-only)
             // 22	root table overflows since startup (read-only)
             // 23	bytes of extra memory to reserve for VM buffers, plugins, etc.
-            // 24	memory threshold above whichto shrink object memory (read-write)
+            // 24	memory threshold above which to shrink object memory (read-write)
             // 25	memory headroom when growing object memory (read-write)
             // 26	interruptChecksEveryNms - force an ioProcessEvents every N milliseconds (read-write)
             // 27	number of times mark loop iterated for current IGC/FGC (read-only) includes ALL marking
@@ -3363,7 +3404,7 @@ Object.subclass('Squeak.Primitives',
         this.vm.storeContextRegisters();                // store current state for snapshot
         var proc = this.getScheduler().pointers[Squeak.ProcSched_activeProcess];
         proc.pointers[Squeak.Proc_suspendedContext] = this.vm.activeContext; // store initial context
-        this.vm.image.fullGC();                        // before cleanup so traversal works
+        this.vm.image.fullGC("snapshot");               // before cleanup so traversal works
         var buffer = this.vm.image.writeToBuffer();
         Squeak.flushAllFiles();                         // so there are no more writes pending
         Squeak.filePut(this.vm.image.name, buffer);
@@ -3524,12 +3565,13 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     primitiveScreenSize: function(argCount) {
-        return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(this.display.width, this.display.height));
+        var canvas = this.display.context.canvas;
+        return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(canvas.width, canvas.height));
     },
     primitiveSetFullScreen: function(argCount) {
-        this.fullscreen = this.stackBoolean(0);
+        var flag = this.stackBoolean(0);
         if (!this.success) return false;
-        this.warnOnce("fullscreen support not yet implemented");
+        this.display.fullscreen = flag;
         this.vm.popN(argCount);
         return true;
     },
@@ -3552,7 +3594,7 @@ Object.subclass('Squeak.Primitives',
     },
     displayUpdate: function(form, rect, noCursor) {
         this.display.lastTick = this.vm.lastTick;
-        this.showForm(this.display.ctx, form, rect);
+        this.showForm(this.display.context, form, rect);
         if (noCursor) return;
         // show cursor if it was just overwritten
         if (this.cursorX + this.cursorW > rect.left && this.cursorX < rect.right &&
@@ -3573,7 +3615,7 @@ Object.subclass('Squeak.Primitives',
     },
     cursorDraw: function() {
         // TODO: create cursorCanvas in setCursor primitive
-        // this.display.ctx.drawImage(this.cursorCanvas, this.cursorX, this.cursorY);
+        // this.display.context.drawImage(this.cursorCanvas, this.cursorX, this.cursorY);
     },
 },
 'input', {
@@ -4096,13 +4138,13 @@ Object.subclass('Squeak.Primitives',
             form = bitblt.dest;
         if (this.b2d_debug) console.log("==> read into " + form.width + "x" + form.height + "@" + form.depth);
         if (!form.width || !form.height || state.maxX <= state.minX || state.maxY <= state.minY) return;
-        if (!form.msb) return this.warnOnce("B2D: drawing to little-endian forms not implemented yet");
+        if (!form.msb) return this.vm.warnOnce("B2D: drawing to little-endian forms not implemented yet");
         if (form.depth == 32) {
             this.b2d_readPixels32();
         } else if (form.depth == 16) {
             this.b2d_readPixels16();
         } else {
-            this.warnOnce("B2D: drawing to " + form.depth + " bit forms not supported yet");
+            this.vm.warnOnce("B2D: drawing to " + form.depth + " bit forms not supported yet");
         }
         // set bitblt values for affectedRect()
         bitblt.dx = state.minX;
@@ -4396,25 +4438,25 @@ Object.subclass('Squeak.Primitives',
     },
     b2d_primitiveAddBezier: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveAddBezier");
-        this.warnOnce("B2D: beziers not implemented yet");
+        this.vm.warnOnce("B2D: beziers not implemented yet");
         this.vm.popN(argCount);
         return true;
     },
     b2d_primitiveAddCompressedShape: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveAddCompressedShape");
-        this.warnOnce("B2D: compressed shapes not implemented yet");
+        this.vm.warnOnce("B2D: compressed shapes not implemented yet");
         this.vm.popN(argCount);
         return true;
     },
     b2d_primitiveAddLine: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveAddLine");
-        this.warnOnce("B2D: lines not implemented yet");
+        this.vm.warnOnce("B2D: lines not implemented yet");
         this.vm.popN(argCount);
         return true;
     },
     b2d_primitiveAddBitmapFill: function(argCount) {
         if (this.b2d_debug) console.log("b2d_primitiveAddBitmapFill");
-        this.warnOnce("B2D: bitmap fills not implemented yet");
+        this.vm.warnOnce("B2D: bitmap fills not implemented yet");
         var fills = this.b2d_state.fills;
         fills.push('red');
         this.vm.popNandPush(argCount+1, fills.length);

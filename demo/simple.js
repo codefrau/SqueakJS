@@ -21,48 +21,6 @@
  */
 
 
-//////////////////////////////////////////////////////////////////////////////
-// these functions fake the Lively module and class system
-// just enough so the loading of vm.js succeeds
-//////////////////////////////////////////////////////////////////////////////
-
-module = function(dottedPath) {
-    if (dottedPath == "") return window;
-    var path = dottedPath.split("."),
-        name = path.pop(),
-        parent = module(path.join("."));
-    if (!parent[name]) parent[name] = {
-        requires: function(ignored) { return this; },
-        toRun: function(code) { code(); }
-    };
-    return parent[name];
-};
-
-Object.subclass = function(classPath /* + more args */ ) {
-    var path = classPath.split("."),
-        className = path.pop();
-    var newClass = function() {
-        if (this.initialize) this.initialize.apply(this, arguments);
-        return this;
-    };
-    // skip arg 0, copy properties of other args to class proto
-    for (var i = 1; i < arguments.length; i++)
-        for (name in arguments[i])
-            newClass.prototype[name] = arguments[i][name];
-    module(path.join('.'))[className] = newClass;
-};
-
-Object.extend = function(obj /* + more args */ ) {
-    // skip arg 0, copy properties of other args to obj
-    for (var i = 1; i < arguments.length; i++)
-        for (name in arguments[i])
-            obj[name] = arguments[i][name];
-};
-
-//////////////////////////////////////////////////////////////////////////////
-// now for the good stuff
-//////////////////////////////////////////////////////////////////////////////
-
 var fullscreen = navigator.standalone;
 
 window.onload = function() {
@@ -75,108 +33,35 @@ window.onload = function() {
         var head = document.getElementsByTagName("head")[0];
         head.innerHTML += '<meta name="viewport" content="initial-scale=' + scale + '">';
     }
-    function createDisplay() {
-        var display = {
-            ctx: canvas.getContext("2d"),
-            width: canvas.width,
-            height: canvas.height,
-            mouseX: 0,
-            mouseY: 0,
-            buttons: 0,
-            keys: [],
-            clipboardString: '',
-            clipboardStringChanged: false,
-        };
-        canvas.onmousedown = function(evt) {
-            canvas.focus();
-            display.buttons = display.buttons & ~7 | (4 >> evt.button);
-        };
-        canvas.onmouseup = function(evt) {
-            display.buttons = display.buttons & ~7;
-        };
-        canvas.onmousemove = function(evt) {
-            display.mouseX = evt.pageX - this.offsetLeft;
-            display.mouseY = evt.pageY - this.offsetTop;
-        };
-        canvas.oncontextmenu = function() {
-            return false;
-        };
-        canvas.ontouchstart = function(evt) {
-            canvas.focus();
-            display.buttons = 4;
-            canvas.ontouchmove(evt);
-        };
-        canvas.ontouchmove = function(evt) {
-            canvas.onmousemove(evt.touches[0]);
-        };
-        canvas.ontouchend = function(evt) {
-            display.buttons = 0;
-            canvas.ontouchmove(evt);
-        };
-        canvas.ontouchcancel = function(evt) {
-            display.buttons = 0;
-        };
-        canvas.onkeypress = function(evt) {
-            display.keys.push(evt.charCode);
-        };
-        canvas.onkeydown = function(evt) {
-            var code = ({46:127, 8:8, 45:5, 9:9, 13:13, 27:27, 36:1, 35:4,
-                33:11, 34:12, 37:28, 39:29, 38:30, 40:31})[evt.keyCode];
-            if (code) {display.keys.push(code); return evt.preventDefault()};
-            var modifier = ({16:8, 17:16, 91:64, 18:64})[evt.keyCode];
-            if (modifier) {
-                display.buttons |= modifier;
-                if (modifier > 8) display.keys = [];
-                return evt.preventDefault();
-            }
-            if ((evt.metaKey || evt.altKey) && evt.which) {
-                code = evt.which;
-                if (code >= 65 && code <= 90) if (!evt.shiftKey) code += 32;
-                else if (evt.keyIdentifier && evt.keyIdentifier.slice(0,2) == 'U+')
-                    code = parseInt(evt.keyIdentifier.slice(2), 16);
-                display.keys.push(code)
-                return evt.preventDefault();
-            }
-        };
-        canvas.onkeyup = function(evt) {
-            var modifier = ({16:8, 17:16, 91:64, 18:64})[evt.keyCode];
-            if (modifier) { display.buttons &= ~modifier; return evt.preventDefault(); }
-        };
-        return display;
-    };
+    var display = createSqueakDisplay(canvas, {swapButtons: true});
     var loop;
     function runImage(buffer, name) {
         window.clearTimeout(loop);
-        canvas.width = canvas.width;
-        canvas.focus();
-        var image = new Squeak.Image(buffer, name);
-        var vm = new Squeak.Interpreter(image, createDisplay());
-        var run = function() {
-            try {
-                vm.interpret(20, function(ms) {
-                    if (typeof ms === 'number') { // continue running
-                        loop = window.setTimeout(run, ms);
-                    } else { // quit
-                        canvas.style.webkitTransition = "-webkit-transform 0.5s";
-                        canvas.style.webkitTransform = "scale(0)";
-                        window.setTimeout(function(){canvas.style.display = 'none'}, 500);
-                    }
-                });
-            } catch(error) {
-                console.error(error);
-                alert(error);
-            }
-        };
-        run();        
+        display.clear();
+        display.showBanner("Initializing, please wait");
+        window.setTimeout(function() {
+            var image = new Squeak.Image(buffer, name);
+            var vm = new Squeak.Interpreter(image, display);
+            display.clear();
+            function run() {
+                try {
+                    vm.interpret(20, function(ms) {
+                        if (typeof ms === 'number') { // continue running
+                            loop = window.setTimeout(run, ms);
+                        } else { // quit
+                            canvas.style.webkitTransition = "-webkit-transform 0.5s";
+                            canvas.style.webkitTransform = "scale(0)";
+                            window.setTimeout(function(){canvas.style.display = 'none'}, 500);
+                        }
+                    });
+                } catch(error) {
+                    console.error(error);
+                    alert(error);
+                }
+            };
+            run();
+        }, 0);
     };
-    if (window.applicationCache) {
-        applicationCache.addEventListener('updateready', function() {
-            applicationCache.swapCache();
-            if (confirm('SqueakJS has been updated. Restart now?')) {
-                window.location.reload();
-            }
-        });
-    }
     document.body.addEventListener('dragover', function(evt) {
         evt.stopPropagation();
         evt.preventDefault();
@@ -186,7 +71,11 @@ window.onload = function() {
     document.body.addEventListener('drop', function(evt) {
         evt.stopPropagation();
         evt.preventDefault();
-        var files = evt.dataTransfer.files;
+        var files = evt.dataTransfer.files,
+            names = [];
+        for (var i = 0, f; f = files[i]; i++)
+            names.push(f.name);
+        display.showBanner("Loading " + names.join(', '));
         for (var i = 0, f; f = files[i]; i++) {
             var reader = new FileReader();
             reader.onload = (function closure(f) {return function onload() {
@@ -202,6 +91,7 @@ window.onload = function() {
         return false;
     });
     function downloadImage(url) {
+        display.showBanner("Downloading " + url);
         var progress = document.getElementsByTagName("progress")[0];
         var rq = new XMLHttpRequest();
         rq.open('GET', url);

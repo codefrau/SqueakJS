@@ -1219,7 +1219,8 @@ Object.subclass('Squeak.Interpreter',
             case 160: case 161: case 162: case 163: case 164: case 165: case 166: case 167: 
                 b2 = this.nextByte();
                 this.pc += (((b&7)-4)*256 + b2);
-                if ((b&7)<4) this.checkForInterrupts();  //check on backward jumps (loops)
+                if ((b&7)<4)        // check for process switch on backward jumps (loops)
+                    if (this.interruptCheckCounter-- <= 0) this.checkForInterrupts();
                 break;
             // Long conditional jump on true
             case 168: case 169: case 170: case 171:
@@ -1327,7 +1328,6 @@ Object.subclass('Squeak.Interpreter',
     },
     checkForInterrupts: function() {
         //Check for interrupts at sends and backward jumps
-        if (this.interruptCheckCounter-- > 0) return; //only really check every 100 times or so
         var now = this.primHandler.millisecondClockValue();
         if (now < this.lastTick) { // millisecond clock wrapped
             this.nextPollTick = now + (this.nextPollTick - this.lastTick);
@@ -1582,7 +1582,8 @@ Object.subclass('Squeak.Interpreter',
         this.receiver = newContext.pointers[Squeak.Context_receiver];
         if (this.receiver !== newRcvr)
             throw Error("receivers don't match");
-        this.checkForInterrupts();
+        // check for process switch on full method activation
+        if (this.interruptCheckCounter-- <= 0) this.checkForInterrupts();
     },
     doReturn: function(returnValue, targetContext) {
         // get sender from block home or closure's outerContext

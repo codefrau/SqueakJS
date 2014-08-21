@@ -1597,12 +1597,12 @@ Object.subclass('Squeak.Interpreter',
         if (targetContext.isNil || targetContext.pointers[Squeak.Context_instructionPointer].isNil)
             return this.cannotReturn(returnValue);
         // search up stack for unwind
-        var thisContext = this.activeContext;
+        var thisContext = this.activeContext.pointers[Squeak.Context_sender];
         while (thisContext !== targetContext) {
             if (thisContext.isNil)
                 return this.cannotReturn(returnValue);
             if (this.isUnwindMarked(thisContext))
-                this.aboutToReturn(returnValue,thisContext);
+                return this.aboutToReturnThrough(returnValue, thisContext);
             thisContext = thisContext.pointers[Squeak.Context_sender];
         }
         // no unwind to worry about, just peel back the stack (usually just to sender)
@@ -1629,6 +1629,13 @@ Object.subclass('Squeak.Interpreter',
             this.breakOnContextChanged = false;
             this.breakNow();
         }
+    },
+    aboutToReturnThrough: function(resultObj, aContext) {
+    	this.push(this.activeContext);
+    	this.push(resultObj);
+    	this.push(aContext);
+    	var aboutToReturnSel = this.specialObjects[Squeak.splOb_SelectorAboutToReturn];
+    	this.send(aboutToReturnSel, 2);
     },
     cannotReturn: function(resultObj) {
     	this.push(this.activeContext);
@@ -1759,7 +1766,9 @@ Object.subclass('Squeak.Interpreter',
 },
 'contexts', {
     isUnwindMarked: function(ctx) {
-        return false;
+        if (!this.isMethodContext(ctx)) return false;
+        var method = ctx.pointers[Squeak.Context_method];
+        return method.methodPrimitiveIndex() == 198;
     },
     newActiveContext: function(newContext) {
         // Note: this is inlined in executeNewMethod() and doReturn()

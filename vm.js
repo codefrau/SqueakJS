@@ -2090,6 +2090,29 @@ Object.subclass('Squeak.Interpreter',
         }
         return stack;
     },
+    printProcesses: function() {
+        var schedAssn = this.specialObjects[Squeak.splOb_SchedulerAssociation],
+            sched = schedAssn.pointers[Squeak.Assn_value],
+            activeProc = sched.pointers[Squeak.ProcSched_activeProcess],
+            semaClass = this.specialObjects[Squeak.splOb_ClassSemaphore],
+            sema = this.image.someInstanceOf(semaClass),
+            result = this.printProcess(activeProc, true);
+        while (sema) {
+            var process = sema.pointers[Squeak.LinkedList_firstLink];
+            while (!process.isNil) {
+                result += "\n" + this.printProcess(process);
+                process = process.pointers[Squeak.Link_nextLink];
+            }
+            sema = this.image.nextInstanceAfter(sema);
+        }
+        return result;
+    },
+    printProcess: function(process, active) {
+        var context = process.pointers[Squeak.Proc_suspendedContext],
+            priority = process.pointers[Squeak.Proc_priority],
+            stack = this.printStack(active ? null : context);
+        return process.toString() +" at priority " + priority + "\n" + stack;
+    },
     printByteCodes: function(aMethod, optionalIndent, optionalHighlight, optionalPC) {
         if (!aMethod) aMethod = this.method;
         var printer = new Squeak.InstructionPrinter(aMethod, this);

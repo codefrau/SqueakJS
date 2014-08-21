@@ -2057,7 +2057,7 @@ Object.subclass('Squeak.Interpreter',
         var ctx = this.activeContext;
         var isBlock = typeof ctx.pointers[Squeak.BlockContext_argumentCount] === 'number';
         var closure = ctx.pointers[Squeak.Context_closure];
-        var isClosure = !closure.isNil;
+        var isClosure = !isBlock && !closure.isNil;
         var homeCtx = isBlock ? ctx.pointers[Squeak.BlockContext_home] : ctx;
         var tempCount = isClosure
             ? closure.pointers[Squeak.Closure_numArgs]

@@ -1595,12 +1595,12 @@ Object.subclass('Squeak.Interpreter',
             targetContext = ctx.pointers[Squeak.Context_sender];
         }
         if (targetContext.isNil || targetContext.pointers[Squeak.Context_instructionPointer].isNil)
-            this.cannotReturn();
+            return this.cannotReturn(returnValue);
         // search up stack for unwind
         var thisContext = this.activeContext;
         while (thisContext !== targetContext) {
             if (thisContext.isNil)
-                this.cannotReturn();
+                return this.cannotReturn(returnValue);
             if (this.isUnwindMarked(thisContext))
                 this.aboutToReturn(returnValue,thisContext);
             thisContext = thisContext.pointers[Squeak.Context_sender];
@@ -1629,6 +1629,12 @@ Object.subclass('Squeak.Interpreter',
             this.breakOnContextChanged = false;
             this.breakNow();
         }
+    },
+    cannotReturn: function(resultObj) {
+    	this.push(this.activeContext);
+    	this.push(resultObj);
+    	var cannotReturnSel = this.specialObjects[Squeak.splOb_SelectorCannotReturn];
+    	this.send(cannotReturnSel, 1);
     },
     tryPrimitive: function(primIndex, argCount, newMethod) {
         if ((primIndex > 255) && (primIndex < 520)) {

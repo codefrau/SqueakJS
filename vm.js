@@ -2719,6 +2719,12 @@ Object.subclass('Squeak.Primitives',
         }
         return false;
     },
+    ensureSmallInt: function(number) {
+        if (number === (number|0) && this.vm.canBeSmallInt(number))
+            return number;
+        this.success = false;
+        return 0;
+    },
     charFromInt: function(ascii) {
         var charTable = this.vm.specialObjects[Squeak.splOb_CharacterTable];
         return charTable.pointers[ascii];
@@ -3672,17 +3678,17 @@ Object.subclass('Squeak.Primitives',
         return true;
 	},
     primitiveKeyboardNext: function(argCount) {
-        return this.popNandPushIfOK(argCount+1, this.checkSmallInt(this.display.keys.shift()));
+        return this.popNandPushIfOK(argCount+1, this.ensureSmallInt(this.display.keys.shift()));
     },
     primitiveKeyboardPeek: function(argCount) {
         var length = this.display.keys.length;
-        return this.popNandPushIfOK(argCount+1, length ? this.checkSmallInt(this.display.keys[0] || 0) : this.vm.nilObj);
+        return this.popNandPushIfOK(argCount+1, length ? this.ensureSmallInt(this.display.keys[0] || 0) : this.vm.nilObj);
     },
     primitiveMouseButtons: function(argCount) {
-        return this.popNandPushIfOK(argCount+1, this.checkSmallInt(this.display.buttons));
+        return this.popNandPushIfOK(argCount+1, this.ensureSmallInt(this.display.buttons));
     },
     primitiveMousePoint: function(argCount) {
-        return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(this.checkSmallInt(this.display.mouseX), this.checkSmallInt(this.display.mouseY)));
+        return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(this.ensureSmallInt(this.display.mouseX), this.ensureSmallInt(this.display.mouseY)));
     },
 },
 'time', {

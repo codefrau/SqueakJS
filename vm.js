@@ -2342,7 +2342,7 @@ Object.subclass('Squeak.Primitives',
             case 48: return this.pop2andPushBoolIfOK(this.stackFloat(1)!==this.stackFloat(0));  // Float !=
             case 49: return this.popNandPushFloatIfOK(2,this.stackFloat(1)*this.stackFloat(0));  // Float.mul
             case 50: return this.popNandPushFloatIfOK(2,this.safeFDiv(this.stackFloat(1),this.stackFloat(0)));  // Float.div
-            case 51: return this.popNandPushIfOK(1, this.checkSmallInt(this.stackFloat(0)|0));  // Float.asInteger
+            case 51: return this.popNandPushIfOK(1,this.floatAsSmallInt(this.stackFloat(0)));  // Float.asInteger
             case 52: return false;  // Float.fractionPart
             case 53: return this.popNandPushIfOK(1, Math.log(this.stackFloat(0)) / Math.log(2) | 0); // Exponent
             case 54: return this.popNandPushFloatIfOK(2, this.stackFloat(1) * Math.pow(2, this.stackFloat(0))); // TimesTwoPower
@@ -2665,6 +2665,10 @@ Object.subclass('Squeak.Primitives',
             return 1.0;
         }
         return dividend / divisor;
+    },
+    floatAsSmallInt: function(float) {
+        var truncated = float >= 0 ? Math.floor(float) : Math.ceil(float);
+        return this.ensureSmallInt(truncated);
     },
 },
 'utils', {

@@ -2451,9 +2451,9 @@ Object.subclass('Squeak.Primitives',
             case 157: return this.primitiveFileSize(argCount);
             case 158: return this.primitiveFileWrite(argCount);
             case 159: return this.primitiveFileRename(argCount);
-            //case 160: return false; // TODO primitiveAdoptInstance
             case 161: return this.primitiveDirectoryDelimitor(argCount);
             case 162: return this.vm.image.hasClosures ? this.primitiveSetIdentityHash(argCount) : this.primitiveDirectoryLookup(argCount);
+            case 160: return this.vm.image.hasClosures ? this.primitiveAdoptInstance(argCount) : this.primitiveDirectoryCreate(argCount);
             //case 163: ?
             //case 164: ?
             case 165:
@@ -3788,11 +3788,20 @@ Object.subclass('Squeak.Primitives',
 },
 'FilePlugin', {
     primitiveDirectoryCreate: function(argCount) {
-        console.log("Not yet implemented: primitiveDirectoryCreate");
-        return false;
+        debugger;
+        var dirNameObj = this.stackNonInteger(0);
+        if (!this.success) return false;
+        var created = Squeak.dirCreate(dirNameObj.bytesAsString());
+        if (!created) {
+            var path = Squeak.splitFilePath(dirNameObj.bytesAsString());
+            console.log("Directory not created: " + path.fullname);
+            return false;
+        }
+        this.vm.popN(argCount);
+        return true;
     },
     primitiveDirectoryDelete: function(argCount) {
-        console.log("Not yet implemented: primitiveDirectoryDelete");
+        console.warn("Not yet implemented: primitiveDirectoryDelete");
         return false;
     },
     primitiveDirectoryDelimitor: function(argCount) {
@@ -5849,6 +5858,18 @@ Object.extend(Squeak, {
         });
         return true;
     },
+    dirCreate: function(dirpath) {
+        var path = this.splitFilePath(dirpath); if (!path.basename) return false;
+        var directory = this.dirList(path.dirname); if (!directory) return false;
+        if (directory[path.basename]) return false;
+        var now = this.totalSeconds(),
+            entry = [/*name*/ path.basename, /*ctime*/ now, /*mtime*/ now, /*dir*/ true, /*size*/ 0];
+        directory[path.basename] = entry;
+        localStorage["squeak:" + path.fullname] = JSON.stringify({});
+        localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
+        return true;
+    },
+
     dirList: function(dirpath) {
         // return directory entries or null
         var path = this.splitFilePath(dirpath),
@@ -5861,8 +5882,8 @@ Object.extend(Squeak, {
         if (filepath[0] !== '/') filepath = '/' + filepath;
         filepath = filepath.replace(/\/\//ig, '/');      // replace double-slashes
         var matches = filepath.match(/(.*)\/(.*)/),
-            dirname = matches[1] || '/',
-            basename = matches[2];
+            dirname = matches[1].length ? matches[1] : '/',
+            basename = matches[2].length ? matches[2] : null;
         return {fullname: filepath, dirname: dirname, basename: basename};
     },
     bytesAsString: function(bytes) {

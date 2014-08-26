@@ -2451,15 +2451,16 @@ Object.subclass('Squeak.Primitives',
             case 157: return this.primitiveFileSize(argCount);
             case 158: return this.primitiveFileWrite(argCount);
             case 159: return this.primitiveFileRename(argCount);
-            case 161: return this.primitiveDirectoryDelimitor(argCount);
-            case 162: return this.vm.image.hasClosures ? this.primitiveSetIdentityHash(argCount) : this.primitiveDirectoryLookup(argCount);
             case 160: return this.vm.image.hasClosures ? this.primitiveAdoptInstance(argCount) : this.primitiveDirectoryCreate(argCount);
+            case 161: return this.vm.image.hasClosures ? this.primitiveSetIdentityHash(argCount) : this.primitiveDirectoryDelimitor(argCount);
+            case 162: return this.vm.image.hasClosures ? false : this.primitiveDirectoryLookup(argCount);
             //case 163: ?
             //case 164: ?
             case 165:
-            case 166: return this.primitiveIntegerAtAndPut(argCount);
+            case 166: if (this.vm.image.hasClosures) return this.primitiveIntegerAtAndPut(argCount);
             case 167: return false; // Processor.yield
-            case 169: return this.primitiveDirectorySetMacTypeAndCreator(argCount);
+            case 168: if (this.vm.image.hasClosures) return this.primitiveCopyObject(argCount); 
+            case 169: return this.vm.image.hasClosures ? this.primitiveNotIdentical(argCount) : this.primitiveDirectorySetMacTypeAndCreator(argCount);
             // 170-199: was Sound
             case 188: return this.primitiveExecuteMethodArgsArray(argCount);
             case 195: return false; // Context.findNextUnwindContextUpTo:

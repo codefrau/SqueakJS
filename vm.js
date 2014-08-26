@@ -2463,6 +2463,7 @@ Object.subclass('Squeak.Primitives',
             case 169: return this.vm.image.hasClosures ? this.primitiveNotIdentical(argCount) : this.primitiveDirectorySetMacTypeAndCreator(argCount);
             // 170-199: was Sound
             case 188: return this.primitiveExecuteMethodArgsArray(argCount);
+            case 191: return this.fakePrimitive('SoundPlugin>>primitiveSoundStopRecording', undefined, argCount);
             case 195: return false; // Context.findNextUnwindContextUpTo:
             case 196: return false; // Context.terminateTo:
             case 197: return false; // Context.findNextHandlerContextStarting
@@ -2493,6 +2494,7 @@ Object.subclass('Squeak.Primitives',
             case 245: return false; // primStringindexOfAsciiinStringstartingAt
             case 246: return false; // primStringfindSubstringinstartingAtmatchTable
             case 254: return this.primitiveVMParameter(argCount);
+            case 523: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIGetPortCount', argCount);
         }
         throw Error("primitive " + index + " not implemented yet");
         return false;

@@ -185,6 +185,10 @@ Object.extend(Squeak, {
     Keyboard_All: 8 + 16 + 32 + 64,
 
     // other constants
+    MinSmallInt: -0x40000000,
+    MaxSmallInt:  0x3FFFFFFF,
+    NonSmallInt: -0x50000000,           // non-small and neg (so non pos32 too)
+    MillisecondClockMask: 0x1FFFFFFF,
     Epoch: Date.UTC(1901,0,1)/1000 + (new Date()).getTimezoneOffset()*60,         // local timezone
 });
 
@@ -1035,19 +1039,12 @@ Object.subclass('Squeak.Interpreter',
         console.log('squeak: initializing interpreter');
         this.image = image;
         this.image.vm = this;
-        this.initConstants();
         this.primHandler = new Squeak.Primitives(this, display);
         this.loadImageState();
         this.hackImage();
         this.initVMState();
         this.loadInitialContext();
         console.log('squeak: interpreter ready');
-    },
-    initConstants: function() {
-        this.minSmallInt = -0x40000000;
-        this.maxSmallInt =  0x3FFFFFFF;
-        this.nonSmallInt = -0x50000000; //non-small and neg (so non pos32 too)
-        this.millisecondClockMask = this.maxSmallInt >> 1; //keeps ms logic in small int range
     },
     loadImageState: function() {
         this.specialObjects = this.image.specialObjectsArray.pointers;
@@ -1892,7 +1889,7 @@ Object.subclass('Squeak.Interpreter',
         return obj.sqClass;
     },
     canBeSmallInt: function(anInt) {
-        return (anInt >= this.minSmallInt) && (anInt <= this.maxSmallInt);
+        return (anInt >= Squeak.MinSmallInt) && (anInt <= Squeak.MaxSmallInt);
     },
     isSmallInt: function(object) {
         return typeof object === "number";
@@ -1904,17 +1901,17 @@ Object.subclass('Squeak.Interpreter',
         return 1;
     },
     quickDivide: function(rcvr, arg) { // must only handle exact case
-        if (arg === 0) return this.nonSmallInt;  // fail if divide by zero
+        if (arg === 0) return Squeak.NonSmallInt;  // fail if divide by zero
         var result = rcvr / arg | 0;
         if (result * arg === rcvr) return result;
-        return this.nonSmallInt;     // fail if result is not exact
+        return Squeak.NonSmallInt;     // fail if result is not exact
     },
     div: function(rcvr, arg) {
-        if (arg === 0) return this.nonSmallInt;  // fail if divide by zero
+        if (arg === 0) return Squeak.NonSmallInt;  // fail if divide by zero
         return Math.floor(rcvr/arg);
     },
     mod: function(rcvr, arg) {
-        if (arg === 0) return this.nonSmallInt;  // fail if divide by zero
+        if (arg === 0) return Squeak.NonSmallInt;  // fail if divide by zero
         return rcvr - Math.floor(rcvr/arg) * arg;
     },
     safeShift: function(bitsToShift, shiftCount) {
@@ -1922,7 +1919,7 @@ Object.subclass('Squeak.Interpreter',
         //check for lost bits by seeing if computation is reversible
         var shifted = bitsToShift<<shiftCount;
         if  ((shifted>>shiftCount) === bitsToShift) return shifted;
-        return this.nonSmallInt;  //non-small result will cause failure
+        return Squeak.NonSmallInt;  //non-small result will cause failure
     },
 },
 'utils',
@@ -3719,7 +3716,7 @@ Object.subclass('Squeak.Primitives',
         //Note that the millisecond clock wraps around periodically.
         //The range is limited to SmallInteger maxVal / 2 to allow
         //delays of up to that length without overflowing a SmallInteger.
-        return (Date.now() - this.vm.startupTime) & this.vm.millisecondClockMask;
+        return (Date.now() - this.vm.startupTime) & Squeak.MillisecondClockMask;
 	},
 	millisecondClockValueSet: function(clock) {
         // set millisecondClock to the (previously saved) clock value 

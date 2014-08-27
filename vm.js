@@ -2503,17 +2503,20 @@ Object.subclass('Squeak.Primitives',
         return false;
     },
     namedPrimitive: function(moduleName, functionName, argCount) {
-        var module = this.loadedModules[moduleName];
+        var module = moduleName === "" ? this : this.loadedModules[moduleName];
         if (module === undefined) { // null if earlier load failed
             module = this.loadModule(moduleName);
             this.loadedModules[moduleName] = module;
         }
         if (module) {
             var primitive = module[functionName];
-            if (typeof primitive == 'string')
-                primitive = this[primitive].bind(this); // allow late binding
+            if (typeof primitive == "string") { // allow late binding
+                module = this;
+                functionName = primitive;
+                primitive = module[functionName];
+            }
             if (primitive)
-                return primitive(argCount);
+                return module[functionName](argCount);
         }
         this.vm.warnOnce("missing primitive: " + moduleName + "." + functionName);
         return false;

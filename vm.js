@@ -1064,7 +1064,6 @@ Object.subclass('Squeak.Interpreter',
         this.lastTick = 0;
         this.interruptKeycode = 2094;  //"cmd-."
         this.interruptPending = false;
-        //this.semaphoresToSignal = [];
         //this.pendingFinalizationSignals = 0;
         this.freeContexts = this.nilObj;
         this.freeLargeContexts = this.nilObj;
@@ -1364,8 +1363,8 @@ Object.subclass('Squeak.Interpreter',
         //            sema= getSpecialObject(Squeak.splOb_ThefinalizationSemaphore);
         //            pendingFinalizationSignals= 0;
         //            if(sema != nilObj) primHandler.synchronousSignal(sema); }
-        //if (this.semaphoresToSignal.length)
-        //    this.signalExternalSemaphores();  //signal all semaphores in semaphoresToSignal
+        if (this.primHandler.semaphoresToSignal.length > 0)
+            this.primHandler.signalExternalSemaphores();  // signal pending semaphores, if any
         if (now >= this.breakOutTick) // have to return to web browser once in a while
             this.breakOutOfInterpreter = this.breakOutOfInterpreter || true; // do not overwrite break string
     },
@@ -2171,6 +2170,7 @@ Object.subclass('Squeak.Primitives',
         this.display.vm = this.vm;
         this.deferDisplayUpdates = false;
         this.deferDisplayUpdatesDisabled = 3;   // show first frames with immediate feedback
+        this.semaphoresToSignal = [];
         this.initAtCache();
         this.initModules();
     },
@@ -3358,6 +3358,21 @@ Object.subclass('Squeak.Primitives',
         this.vm.popN(argCount); // return self
         return true;
 	},
+	signalSemaphoreWithIndex: function(semaIndex) {
+	    // asynch signal: will actually be signaled in checkForInterrupts()
+    	this.semaphoresToSignal.push(semaIndex);
+	},
+    signalExternalSemaphores: function() {
+        debugger;
+        var semaphores = this.vm.specialObjects[Squeak.splOb_ExternalObjectsArray].pointers,
+            semaClass = this.vm.specialObjects[Squeak.splOb_ClassSemaphore];
+        while (this.semaphoresToSignal.length) {
+            var semaIndex = this.semaphoresToSignal.shift(),
+                sema = semaphores[semaIndex - 1];
+            if (sema.sqClass == semaClass)
+                this.synchronousSignal(sema);
+        }
+    },
 },
 'vm functions', {
     primitiveGetAttribute: function(argCount) {

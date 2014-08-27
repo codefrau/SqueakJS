@@ -183,6 +183,12 @@ Object.extend(Squeak, {
     Keyboard_Cmd: 64,
     Mouse_All: 1 + 2 + 4,
     Keyboard_All: 8 + 16 + 32 + 64,
+    EventTypeNone: 0,
+    EventTypeMouse: 1,
+    EventTypeKeyboard: 2,
+    EventKeyChar: 0,
+    EventKeyDown: 1,
+    EventKeyUp: 2,
 
     // other constants
     MinSmallInt: -0x40000000,
@@ -2381,9 +2387,9 @@ Object.subclass('Squeak.Primitives',
             case 90: return this.primitiveMousePoint(argCount); // mousePoint
             case 91: return this.primitiveTestDisplayDepth(argCount); // cursorLocPut in old images
             case 92: return false; // primitiveSetDisplayMode				"Blue Book: primitiveCursorLink"
-            case 93: return false; // primitiveInputSemaphore
-            case 94: return false; // primitiveGetNextEvent				"Blue Book: primitiveSampleInterval"
-            case 95: return false; // primitiveInputWord
+            case 93: return this.primitiveInputSemaphore(argCount); 
+            case 94: return this.primitiveGetNextEvent(argCount);
+            case 95: return this.primitiveInputWord(argCount);
             case 96: return this.namedPrimitive('BitBltPlugin', 'primitiveCopyBits', argCount);
             case 97: return this.primitiveSnapshot(argCount);
             //case 98: return false; // primitiveStoreImageSegment
@@ -3708,6 +3714,25 @@ Object.subclass('Squeak.Primitives',
     },
     primitiveMousePoint: function(argCount) {
         return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(this.ensureSmallInt(this.display.mouseX), this.ensureSmallInt(this.display.mouseY)));
+    },
+    primitiveInputSemaphore: function(argCount) {
+        var semaIndex = this.stackInteger(0);
+        if (!this.success) return false;
+        this.inputEventSemaIndex = semaIndex;
+        this.display.signalInputEvent = function() {
+            this.signalSemaphoreWithIndex(this.inputEventSemaIndex);
+        }.bind(this);
+        return true;
+    },
+    primitiveInputWord: function(argCount) {
+        // Return an integer indicating the reason for the most recent input interrupt
+        return this.popNandPushIfOK(1, 0);      // noop for now
+    },
+    primitiveGetNextEvent: function(argCount) {
+        var evtBuf = this.stackNonInteger(0);
+        if (!this.display.getNextEvent) return false;
+        this.display.getNextEvent(evtBuf.pointers, this.vm.startupTime);
+        return true;
     },
 },
 'time', {

@@ -4147,6 +4147,12 @@ Object.subclass('Squeak.Primitives',
 	},
 },
 'FloatArrayPlugin', {
+    primitiveFloatArrayAt: function(argCount) {
+        return this.primitiveFloatArrayAtAndPut(argCount);
+    },
+    primitiveFloatArrayAtPut: function(argCount) {
+        return this.primitiveFloatArrayAtAndPut(argCount);
+    },
     primitiveFloatArrayAtAndPut: function(argCount) {
         var rcvr = this.stackNonInteger(argCount),
             index = this.stackPos32BitInt(argCount-1) - 1,

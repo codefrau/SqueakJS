@@ -3252,7 +3252,7 @@ Object.subclass('Squeak.Primitives',
         this.vm.pop();
         for (var i = 0; i < arraySize; i++)
             this.vm.push(array.pointers[i]);
-        return this.activateNewClosureMethod(blockClosure, argCount);
+        return this.activateNewClosureMethod(blockClosure, arraySize);
 	},
     primitiveClosureValueNoContextSwitch: function(argCount) {
         return this.primitiveClosureValue(argCount);

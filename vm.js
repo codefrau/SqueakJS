@@ -2548,6 +2548,11 @@ Object.subclass('Squeak.Primitives',
     },
 },
 'stack access', {
+    popNIfOK: function(nToPop) {
+        if (!this.success) return false;
+        this.vm.popN(nToPop);
+        return true;
+    },
     pop2andPushBoolIfOK: function(bool) {
         this.vm.success = this.success;
         return this.vm.pop2AndPushBoolResult(bool);
@@ -3372,7 +3377,6 @@ Object.subclass('Squeak.Primitives',
     	this.semaphoresToSignal.push(semaIndex);
 	},
     signalExternalSemaphores: function() {
-        debugger;
         var semaphores = this.vm.specialObjects[Squeak.splOb_ExternalObjectsArray].pointers,
             semaClass = this.vm.specialObjects[Squeak.splOb_ClassSemaphore];
         while (this.semaphoresToSignal.length) {
@@ -3831,17 +3835,14 @@ Object.subclass('Squeak.Primitives',
 },
 'FilePlugin', {
     primitiveDirectoryCreate: function(argCount) {
-        debugger;
         var dirNameObj = this.stackNonInteger(0);
         if (!this.success) return false;
-        var created = Squeak.dirCreate(dirNameObj.bytesAsString());
-        if (!created) {
+        this.success = Squeak.dirCreate(dirNameObj.bytesAsString());
+        if (!this.success) {
             var path = Squeak.splitFilePath(dirNameObj.bytesAsString());
             console.log("Directory not created: " + path.fullname);
-            return false;
         }
-        this.vm.popN(argCount);
-        return true;
+        return this.popNIfOK(argCount);
     },
     primitiveDirectoryDelete: function(argCount) {
         console.warn("Not yet implemented: primitiveDirectoryDelete");
@@ -3869,8 +3870,7 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     primitiveDirectorySetMacTypeAndCreator: function(argCount) {
-        this.vm.popN(argCount);
-        return true;
+        return this.popNIfOK(argCount);
     },
     primitiveFileAtEnd: function(argCount) {
         var handle = this.stackNonInteger(0);
@@ -3883,19 +3883,19 @@ Object.subclass('Squeak.Primitives',
         if (!this.success || !handle.file) return false;
         this.fileClose(handle.file);
         handle.file = null;
-        return true;
+        return this.popNIfOK(argCount);
     },
     primitiveFileDelete: function(argCount) {
         var fileNameObj = this.stackNonInteger(0);
         if (!this.success) return false;
-        var success = Squeak.fileDelete(fileNameObj.bytesAsString());
-        return success;
+        this.success = Squeak.fileDelete(fileNameObj.bytesAsString());
+        return this.popNIfOK(argCount);
     },
     primitiveFileFlush: function(argCount) {
         var handle = this.stackNonInteger(0);
         if (!this.success || !handle.file) return false;
         Squeak.flushFile(handle.file);
-        return true;
+        return this.popNIfOK(argCount);
     },
     primitiveFileGetPosition: function(argCount) {
         var handle = this.stackNonInteger(0);
@@ -3949,8 +3949,7 @@ Object.subclass('Squeak.Primitives',
             handle = this.stackNonInteger(1);
         if (!this.success || !handle.file) return false;
         handle.filePos = pos;
-        this.vm.popN(argCount);
-        return true;
+        return this.popNIfOK(argCount);
     },
     primitiveFileSize: function(argCount) {
         var handle = this.stackNonInteger(0);

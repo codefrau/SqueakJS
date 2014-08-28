@@ -6065,9 +6065,9 @@ Object.subclass('Squeak.InstructionPrinter',
         this.result = '';
         this.scanner = new Squeak.InstructionStream(this.method, this.vm);
         this.oldPC = this.scanner.pc;
-        this.maxJumpTarget = 0;     // for detecting final method return
+        this.endPC = 0;                 // adjusted while scanning
         this.done = false;
-        while (this.scanner.pc < this.method.bytes.length && !this.done)
+        while (!this.done)
         	this.scanner.interpretNextInstructionFor(this);
         return this.result;
     },
@@ -6101,23 +6101,23 @@ Object.subclass('Squeak.InstructionPrinter',
     },
 	jump: function(offset) {
         this.print('jumpTo: ' + (this.scanner.pc + offset));
-        if (this.scanner.pc + offset > this.maxJumpTarget) this.maxJumpTarget = this.scanner.pc + offset;
+        if (this.scanner.pc + offset > this.endPC) this.endPC = this.scanner.pc + offset;
     },
     jumpIf: function(condition, offset) {
         this.print((condition ? 'jumpIfTrue: ' : 'jumpIfFalse: ') + (this.scanner.pc + offset));
-        if (this.scanner.pc + offset > this.maxJumpTarget) this.maxJumpTarget = this.scanner.pc + offset;
+        if (this.scanner.pc + offset > this.endPC) this.endPC = this.scanner.pc + offset;
     },
     methodReturnReceiver: function() {
         this.print('return: receiver');
-        this.done = this.scanner.pc > this.maxJumpTarget;
+        this.done = this.scanner.pc > this.endPC;
     },
     methodReturnTop: function() {
         this.print('return: topOfStack');
-        this.done = this.scanner.pc > this.maxJumpTarget;
+        this.done = this.scanner.pc > this.endPC;
     },
     methodReturnConstant: function(obj) {
         this.print('returnConst: ' + obj.toString());
-        this.done = this.scanner.pc > this.maxJumpTarget;
+        this.done = this.scanner.pc > this.endPC;
     },
     popIntoLiteralVariable: function(anAssociation) { 
     	this.print('popIntoBinding: ' + anAssociation.assnKeyAsString());
@@ -6176,10 +6176,11 @@ Object.subclass('Squeak.InstructionPrinter',
     },
     pushClosureCopy: function(numCopied, numArgs, blockSize) {
         var from = this.scanner.pc,
-            to = from + blockSize - 1;
-        this.print('closure(' + from + '-' + to + '): ' + numCopied + ' copied, ' + numArgs + ' args');
-        for (var i = from; i <= to; i++) 
+            to = from + blockSize;
+        this.print('closure(' + from + '-' + (to-1) + '): ' + numCopied + ' copied, ' + numArgs + ' args');
+        for (var i = from; i < to; i++)
     		this.innerIndents[i] = (this.innerIndents[i] || 0) + 1;
+    	if (to > this.endPC) this.endPC = to;
 	},
 });
 

@@ -2585,7 +2585,7 @@ Object.subclass('Squeak.Primitives',
     },
     stackPos32BitInt: function(nDeep) {
         var stackVal = this.vm.stackValue(nDeep);
-        if (this.vm.isSmallInt(stackVal)) {
+        if (typeof stackVal === "number") { // SmallInteger
             if (stackVal >= 0)
                 return stackVal;
             this.success = false;
@@ -2614,7 +2614,7 @@ Object.subclass('Squeak.Primitives',
     },
     stackSigned32BitInt: function(nDeep) {
         var stackVal = this.vm.stackValue(nDeep);
-        if (this.vm.isSmallInt(stackVal)) {
+        if (typeof stackVal === "number") {   // SmallInteger
             return stackVal;
         }
         if (stackVal.bytesSize() !== 4) {
@@ -2695,25 +2695,25 @@ Object.subclass('Squeak.Primitives',
 'utils', {
     floatOrInt: function(obj) {
         if (obj.isFloat) return obj.float;
-        if (this.vm.isSmallInt(obj)) return obj;
+        if (typeof obj === "number") return obj;  // SmallInteger
         return 0;
     },
     checkFloat: function(maybeFloat) { // returns a number and sets success
         if (maybeFloat.isFloat)
             return maybeFloat.float;
-        if (typeof maybeFloat === "number") // small int
+        if (typeof maybeFloat === "number")  // SmallInteger
             return maybeFloat;
         this.success = false;
         return 0.0;
     },
     checkSmallInt: function(maybeSmall) { // returns an int and sets success
-        if (this.vm.isSmallInt(maybeSmall))
+        if (typeof maybeSmall === "number")
             return maybeSmall;
         this.success = false;
         return 0;
     },
     checkNonInteger: function(obj) { // returns a SqObj and sets success
-        if (!this.vm.isSmallInt(obj))
+        if (typeof obj !== "number")
             return obj;
         this.success = false;
         return this.vm.nilObj;
@@ -2724,7 +2724,7 @@ Object.subclass('Squeak.Primitives',
         return this.success = false;
     },
     indexableSize: function(obj) {
-        if (this.vm.isSmallInt(obj)) return -1; // -1 means not indexable
+        if (typeof obj === "number") return -1; // -1 means not indexable
         var fmt = obj.format;
         if (fmt<2) return -1; //not indexable
         if (fmt===3 && this.vm.isContext(obj))
@@ -2890,13 +2890,12 @@ Object.subclass('Squeak.Primitives',
         // bytes...
         if (convertChars) {
             // put a character...
-            if (this.vm.isSmallInt(objToPut)) {this.success = false; return objToPut;}
             if (objToPut.sqClass !== this.vm.specialObjects[Squeak.splOb_ClassCharacter])
                 {this.success = false; return objToPut;}
             intToPut = objToPut.pointers[0];
-            if (!(this.vm.isSmallInt(intToPut))) {this.success = false; return objToPut;}
+            if (typeof intToPut !== "number") {this.success = false; return objToPut;}
         } else { // put a byte...
-            if(!(this.vm.isSmallInt(objToPut))) {this.success = false; return objToPut;}
+            if (typeof objToPut !== "number") {this.success = false; return objToPut;}
             intToPut = objToPut;
         }
         if (intToPut<0 || intToPut>255) {this.success = false; return objToPut;}
@@ -3144,7 +3143,7 @@ Object.subclass('Squeak.Primitives',
         var homeCtxt = rcvr;
         if(!this.vm.isContext(homeCtxt)) this.success = false;
         if(!this.success) return rcvr;
-        if (this.vm.isSmallInt(homeCtxt.pointers[Squeak.Context_method]))
+        if (typeof homeCtxt.pointers[Squeak.Context_method] === "number")
             // ctxt is itself a block; get the context for its enclosing method
             homeCtxt = homeCtxt.pointers[Squeak.BlockContext_home];
         var blockSize = homeCtxt.pointersSize() - homeCtxt.instSize(); // could use a const for instSize
@@ -3163,7 +3162,7 @@ Object.subclass('Squeak.Primitives',
         if (!this.isA(rcvr, Squeak.splOb_ClassBlockContext)) return false;
         var block = rcvr;
         var blockArgCount = block.pointers[Squeak.BlockContext_argumentCount];
-        if (!this.vm.isSmallInt(blockArgCount)) return false;
+        if (typeof blockArgCount !== "number") return false;
         if (blockArgCount != argCount) return false;
         if (!block.pointers[Squeak.BlockContext_caller].isNil) return false;
         this.vm.arrayCopy(this.vm.activeContext.pointers, this.vm.sp-argCount+1, block.pointers, Squeak.Context_tempFrameStart, argCount);
@@ -3181,7 +3180,7 @@ Object.subclass('Squeak.Primitives',
         if (!this.isA(block, Squeak.splOb_ClassBlockContext)) return false;
         if (!this.isA(array, Squeak.splOb_ClassArray)) return false;
         var blockArgCount = block.pointers[Squeak.BlockContext_argumentCount];
-        if (!this.vm.isSmallInt(blockArgCount)) return false;
+        if (typeof blockArgCount !== "number") return false;
         if (blockArgCount != array.pointersSize()) return false;
         if (!block.pointers[Squeak.BlockContext_caller].isNil) return false;
         this.vm.arrayCopy(array.pointers, 0, block.pointers, Squeak.Context_tempFrameStart, blockArgCount);

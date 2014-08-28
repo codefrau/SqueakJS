@@ -1223,24 +1223,24 @@ Object.subclass('Squeak.Interpreter',
                 this.jumpIfFalse((b&3)*256 + this.nextByte()); break;
 
             // Arithmetic Ops... + - < > <= >= = ~=    * / \ @ lshift: lxor: land: lor:
-            case 176: this.success = true;
-                if(!this.pop2AndPushIntResult(this.stackInteger(1) + this.stackInteger(0))) this.sendSpecial(b&0xF); break;	// PLUS +
-            case 177: this.success = true;
-                if(!this.pop2AndPushIntResult(this.stackInteger(1) - this.stackInteger(0))) this.sendSpecial(b&0xF); break;	// PLUS +
+            case 176: this.success = true; this.resultIsFloat = false;
+                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) + this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); break;	// PLUS +
+            case 177: this.success = true; this.resultIsFloat = false;
+                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) - this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); break;	// MINUS -
             case 178: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackInteger(1) < this.stackInteger(0))) this.sendSpecial(b&0xF); break;  // LESS <
+                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) < this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); break;  // LESS <
             case 179: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackInteger(1) > this.stackInteger(0))) this.sendSpecial(b&0xF); break;  // GRTR >
+                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) > this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); break;  // GRTR >
             case 180: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackInteger(1) <= this.stackInteger(0))) this.sendSpecial(b&0xF); break;  // LEQ <=
+                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) <= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); break;  // LEQ <=
             case 181: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackInteger(1) >= this.stackInteger(0))) this.sendSpecial(b&0xF); break;  // GEQ >=
+                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) >= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); break;  // GEQ >=
             case 182: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackInteger(1) === this.stackInteger(0))) this.sendSpecial(b&0xF); break;  // EQU =
+                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) === this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); break;  // EQU =
             case 183: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackInteger(1) !== this.stackInteger(0))) this.sendSpecial(b&0xF); break;  // NEQ ~=
-            case 184: this.success = true;
-                if(!this.pop2AndPushIntResult(this.stackInteger(1) * this.stackInteger(0))) this.sendSpecial(b&0xF); break;  // TIMES *
+                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) !== this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); break;  // NEQ ~=
+            case 184: this.success = true; this.resultIsFloat = false;
+                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) * this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); break;  // TIMES *
             case 185: this.success = true;
                 if(!this.pop2AndPushIntResult(this.quickDivide(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); break;  // Divide /
             case 186: this.success = true;
@@ -1868,10 +1868,60 @@ Object.subclass('Squeak.Interpreter',
     stackInteger: function(depthIntoStack) {
         return this.checkSmallInt(this.stackValue(depthIntoStack));
     },
+    stackIntOrFloat: function(depthIntoStack) {
+        var num = this.stackValue(depthIntoStack);
+        // is it a SmallInt?
+        if (typeof num === "number") return num;
+        // is it a Float?
+        if (num.isFloat) {
+            this.resultIsFloat = true;   // need to return result as Float
+            return num.float;
+        }
+        // maybe a 32-bit LargeInt?
+        var bytes = num.bytes;
+        if (bytes && bytes.length == 4) {
+            var value = 0;
+            for (var i = 3; i >= 0; i--)
+                value = value * 256 + bytes[i];
+            if (num.sqClass === this.specialObjects[Squeak.splOb_ClassLargePositiveInteger]) 
+                return value;
+            if (num.sqClass === this.specialObjects[Squeak.splOb_ClassLargeNegativeInteger]) 
+                return -value;
+        }
+        // none of the above
+        this.success = false;
+        return 0;
+    },
     pop2AndPushIntResult: function(intResult) {// returns success boolean
         if (this.success && this.canBeSmallInt(intResult)) {
             this.popNandPush(2, intResult);
             return true;
+        }
+        return false;
+    },
+    pop2AndPushNumResult: function(numResult) {// returns success boolean
+        if (this.success) {
+            if (this.resultIsFloat) {
+                this.popNandPush(2, this.primHandler.makeFloat(numResult));
+                return true;
+            }
+            if (numResult >= Squeak.MinSmallInt && numResult <= Squeak.MaxSmallInt) {
+                this.popNandPush(2, numResult);
+                return true;
+            }
+            if (numResult >= -0xFFFFFFFF && numResult <= 0xFFFFFFFF) {
+                var negative = numResult < 0,
+                    unsigned = negative ? -numResult : numResult,
+                    lgIntClass = negative ? Squeak.splOb_ClassLargeNegativeInteger : Squeak.splOb_ClassLargePositiveInteger,
+                    lgIntObj = this.instantiateClass(this.specialObjects[lgIntClass], 4),
+                    bytes = lgIntObj.bytes;
+                bytes[0] = unsigned     & 255;
+                bytes[1] = unsigned>>8  & 255;
+                bytes[2] = unsigned>>16 & 255;
+                bytes[3] = unsigned>>24 & 255;
+                this.popNandPush(2, lgIntObj);
+                return true;
+            }
         }
         return false;
     },
@@ -1893,9 +1943,9 @@ Object.subclass('Squeak.Interpreter',
     isSmallInt: function(object) {
         return typeof object === "number";
     },
-    checkSmallInt: function(maybeSmall) { // returns an int and sets success
-        if (this.isSmallInt(maybeSmall))
-            return maybeSmall;
+    checkSmallInt: function(maybeSmallInt) { // returns an int and sets success
+        if (typeof maybeSmallInt === "number")
+            return maybeSmallInt;
         this.success = false;
         return 1;
     },
@@ -2592,15 +2642,14 @@ Object.subclass('Squeak.Primitives',
             value += (bytes[i]&255) * (1 << 8*i);
         return value;
     },
-    pos32BitIntFor: function(pos32Val) {
-        // Return the 32-bit quantity as a positive 32-bit integer
-        if (pos32Val >= 0)
-            if (this.vm.canBeSmallInt(pos32Val)) return pos32Val;
-        var lgIntClass = this.vm.specialObjects[Squeak.splOb_ClassLargePositiveInteger];
-        var lgIntObj = this.vm.instantiateClass(lgIntClass, 4);
-        var bytes = lgIntObj.bytes;
+    pos32BitIntFor: function(signed32) {
+        // Return the 32-bit quantity as an unsigned 32-bit integer
+        if (signed32 >= 0 && signed32 <= Squeak.MaxSmallInt) return signed32;
+        var lgIntClass = this.vm.specialObjects[Squeak.splOb_ClassLargePositiveInteger],
+            lgIntObj = this.vm.instantiateClass(lgIntClass, 4),
+            bytes = lgIntObj.bytes;
         for (var i=0; i<4; i++)
-            bytes[i] = (pos32Val>>>(8*i))&255;
+            bytes[i] = (signed32>>>(8*i)) & 255;
         return lgIntObj;
     },
     stackSigned32BitInt: function(nDeep) {
@@ -2623,16 +2672,16 @@ Object.subclass('Squeak.Primitives',
         this.success = false;
         return 0;
     },
-    signed32BitIntegerFor: function(signed32Val) {
+    signed32BitIntegerFor: function(signed32) {
         // Return the 32-bit quantity as a signed 32-bit integer
-        if (this.vm.canBeSmallInt(signed32Val)) return signed32Val;
-        var negative = signed32Val < 0,
+        if (signed32 >= Squeak.MinSmallInt && signed32 <= Squeak.MaxSmallInt) return signed32;
+        var negative = signed32 < 0,
+            unsigned = negative ? -signed32 : signed32,
             lgIntClass = negative ? Squeak.splOb_ClassLargeNegativeInteger : Squeak.splOb_ClassLargePositiveInteger,
             lgIntObj = this.vm.instantiateClass(this.vm.specialObjects[lgIntClass], 4),
-            bytes = lgIntObj.bytes,
-            pos = -signed32Val;
+            bytes = lgIntObj.bytes;
         for (var i=0; i<4; i++)
-            bytes[i] = (pos>>>(8*i))&255;
+            bytes[i] = (unsigned>>>(8*i)) & 255;
         return lgIntObj;
     },
     stackFloat: function(nDeep) {

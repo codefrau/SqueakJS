@@ -1913,11 +1913,15 @@ Object.subclass('Squeak.Interpreter',
         if (arg === 0) return Squeak.NonSmallInt;  // fail if divide by zero
         return rcvr - Math.floor(rcvr/arg) * arg;
     },
-    safeShift: function(bitsToShift, shiftCount) {
-        if (shiftCount<0) return bitsToShift>>-shiftCount; //OK to lose bits shifting right
-        //check for lost bits by seeing if computation is reversible
-        var shifted = bitsToShift<<shiftCount;
-        if  ((shifted>>shiftCount) === bitsToShift) return shifted;
+    safeShift: function(smallInt, shiftCount) {
+        if (shiftCount < 0) {
+            if (shiftCount < -31) return 0; // JS shifts only up to 31 bits
+            return smallInt >> -shiftCount; // OK to lose bits shifting right
+        }
+        if (shiftCount > 31) return smallInt == 0 ? 0 : Squeak.NonSmallInt;
+        // check for lost bits by seeing if computation is reversible
+        var shifted = smallInt << shiftCount;
+        if  ((shifted>>shiftCount) === smallInt) return shifted;
         return Squeak.NonSmallInt;  //non-small result will cause failure
     },
 },

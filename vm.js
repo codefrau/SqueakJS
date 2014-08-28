@@ -3941,8 +3941,11 @@ Object.subclass('Squeak.Primitives',
         }.bind(this));
     },
     primitiveFileRename: function(argCount) {
-        console.log("Not yet implemented: primitiveFileRename");
-        return false;
+        var oldNameObj = this.stackNonInteger(1),
+            newNameObj = this.stackNonInteger(0);
+        if (!this.success) return false;
+        this.success = Squeak.fileRename(oldNameObj.bytesAsString(), newNameObj.bytesAsString());
+        return this.popNIfOK(argCount);
     },
     primitiveFileSetPosition: function(argCount) {
         var pos = this.stackPos32BitInt(0),
@@ -5904,6 +5907,31 @@ Object.extend(Squeak, {
         this.dbTransaction("readwrite", function(fileStore) {
             fileStore['delete'](path.fullname);    // workaround for ometa parser
         });
+        return true;
+    },
+    fileRename: function(from, to) {
+        var oldpath = this.splitFilePath(from); if (!oldpath.basename) return false;
+        var newpath = this.splitFilePath(to); if (!newpath.basename) return false;
+        var olddir = this.dirList(oldpath.dirname); if (!olddir) return false;
+        var entry = olddir[oldpath.basename]; if (!entry || entry[3]) return false; // not found or is a directory
+        var samedir = oldpath.dirname == newpath.dirname;
+        var newdir = samedir ? olddir : this.dirList(newpath.dirname); if (!newdir) return false;
+        if (newdir[newpath.basename]) return false; // exists already
+        delete olddir[oldpath.basename];            // delete old entry
+        entry[0] = newpath.basename;                // rename entry
+        newdir[newpath.basename] = entry;           // add new entry
+        localStorage["squeak:" + newpath.dirname] = JSON.stringify(newdir);
+        if (!samedir) localStorage["squeak:" + oldpath.dirname] = JSON.stringify(olddir);
+        // move file contents (async)
+        this.fileGet(oldpath.fullname,
+            function success(contents) {
+                this.dbTransaction("readwrite", function(fileStore) {
+                    fileStore.put(contents, newpath.fullname);
+                });
+            }.bind(this),
+            function error(msg) {
+                console.log("File rename failed: " + msg);
+            }.bind(this));
         return true;
     },
     dirCreate: function(dirpath) {

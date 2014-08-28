@@ -2512,7 +2512,8 @@ Object.subclass('Squeak.Primitives',
             case 167: return false; // Processor.yield
             case 168: if (this.vm.image.hasClosures) return this.primitiveCopyObject(argCount); 
             case 169: return this.vm.image.hasClosures ? this.primitiveNotIdentical(argCount) : this.primitiveDirectorySetMacTypeAndCreator(argCount);
-            // 170-199: was Sound
+            // 170-197: was Sound
+            case 172: return this.fakePrimitive('SoundPlugin>>primitiveSoundStop', undefined, argCount);
             case 188: return this.primitiveExecuteMethodArgsArray(argCount);
             case 191: return this.fakePrimitive('SoundPlugin>>primitiveSoundStopRecording', undefined, argCount);
             case 195: return false; // Context.findNextUnwindContextUpTo:
@@ -2546,6 +2547,10 @@ Object.subclass('Squeak.Primitives',
             case 246: return false; // primStringfindSubstringinstartingAtmatchTable
             case 254: return this.primitiveVMParameter(argCount);
             case 523: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIGetPortCount', argCount);
+            case 550: return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveDecodeMono', argCount);
+            case 551: return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveDecodeStereo', argCount);
+            case 552: return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveEncodeMono', argCount);
+            case 553: return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveEncodeStereo', argCount);
         }
         throw Error("primitive " + index + " not implemented yet");
         return false;

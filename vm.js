@@ -855,6 +855,10 @@ Object.subclass('Squeak.Object',
         return this.int16Array
             || (this.words && (this.int16Array = new Int16Array(this.words.buffer)));
     },
+    wordsAsUint8Array: function() {
+        return this.uint8Array
+            || (this.words && (this.uint8Array = new Uint8Array(this.words.buffer)));
+    },
     setAddr: function(addr) {
         // Move this object to addr by setting its oop. Answer address after this object.
         // Used to assign an oop for the first time when tenuring this object during GC.
@@ -3981,14 +3985,12 @@ Object.subclass('Squeak.Primitives',
             handle = this.stackNonInteger(3);
         if (!this.success || !handle.file || !handle.fileWrite) return false;
         if (!count) return this.popNandPushIfOK(argCount+1, 0);
-        if (!arrayObj.bytes) {
-            console.log("File writing from non-bytes object not implemented yet");
-            return false;
-        }
-        if (startIndex < 0 || startIndex + count > arrayObj.bytes.length)
+        var array = arrayObj.bytes || arrayObj.wordsAsUint8Array();
+        if (!array) return false;
+        if (startIndex < 0 || startIndex + count > array.length)
             return false;
         return this.fileContentsDo(handle.file, function(file) {
-            var srcArray = arrayObj.bytes,
+            var srcArray = array,
                 dstArray = file.contents || [];
             if (handle.filePos + count > dstArray.length) {
                 var newSize = dstArray.length === 0 ? handle.filePos + count :

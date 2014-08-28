@@ -2259,13 +2259,13 @@ Object.subclass('Squeak.Primitives',
                     primitiveFileWrite: this.primitiveFileWrite.bind(this),
             },
             BitBltPlugin: {
-                    initializeModule: "bitblt_initializeModule",
+                    initialiseModule: "bitblt_initialiseModule",
                     primitiveCopyBits: "bitblt_primitiveCopyBits",
                     primitiveWarpBits: "bitblt_primitiveWarpBits",
             },
             B2DPlugin: {
                     // late-bound for nicer debugging
-                    initializeModule: "b2d_initializeModule",
+                    initialiseModule: "b2d_initialiseModule",
                     primitiveAddActiveEdgeEntry: "b2d_primitiveAddActiveEdgeEntry",
                     primitiveAddBezier: "b2d_primitiveAddBezier",
                     primitiveAddBezierShape: "b2d_primitiveAddBezierShape",
@@ -2594,7 +2594,7 @@ Object.subclass('Squeak.Primitives',
     loadModule: function(moduleName) {
         var module = Squeak.externalModules[moduleName] || this.builtinModules[moduleName];
         if (!module) return null;
-        var initFunc = module.initializeModule;
+        var initFunc = module.initialiseModule;
         if (typeof initFunc == 'string') initFunc = this[initFunc].bind(this); // allow late binding
         if (initFunc) initFunc(this);
         return module;
@@ -4123,7 +4123,7 @@ Object.subclass('Squeak.Primitives',
     },
 },
 'BitBltPlugin', {
-    bitblt_initializeModule: function(interpreterProxy) {
+    bitblt_initialiseModule: function(interpreterProxy) {
         this.bitblt = new Squeak.BitBlt();
         this.bitblt.stats = {};
         this.indexedColors = [
@@ -4228,7 +4228,7 @@ Object.subclass('Squeak.Primitives',
     },
 },
 'B2DPlugin', {
-    b2d_initializeModule: function() {
+    b2d_initialiseModule: function(interpreterProxy) {
         this.b2d_debug = false;
         this.b2d_state = {
             bitblt: new Squeak.BitBlt(),

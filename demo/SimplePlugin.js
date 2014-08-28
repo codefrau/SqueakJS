@@ -9,7 +9,7 @@
 var SimplePlugin = function() {
     var proxy;
 
-    function initializeModule(interpreterProxy) {
+    function initialiseModule(interpreterProxy) {
         // interpreterProxy is vm.primHandler - might change to a real proxy later?
         proxy = interpreterProxy;
     };
@@ -34,7 +34,7 @@ var SimplePlugin = function() {
 
     // hide private functions
     return {
-        initializeModule: initializeModule,
+        initialiseModule: initialiseModule,
         primitiveNavigatorInfo: primitiveNavigatorInfo,
     }
 };

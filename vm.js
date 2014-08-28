@@ -1322,6 +1322,9 @@ Object.subclass('Squeak.Interpreter',
             continueFunc(0);    //continue without timeout
         }.bind(this);
     },
+    breakOut: function() {
+        this.breakOutOfInterpreter = this.breakOutOfInterpreter || true; // do not overwrite break string
+    },
     nextByte: function() {
         return this.methodBytes[this.pc++] & 0xFF;
     },
@@ -1372,7 +1375,7 @@ Object.subclass('Squeak.Interpreter',
         if (this.primHandler.semaphoresToSignal.length > 0)
             this.primHandler.signalExternalSemaphores();  // signal pending semaphores, if any
         if (now >= this.breakOutTick) // have to return to web browser once in a while
-            this.breakOutOfInterpreter = this.breakOutOfInterpreter || true; // do not overwrite break string
+            this.breakOut();
     },
     extendedPush: function(nextByte) {
         var lobits = nextByte & 63;
@@ -3882,6 +3885,7 @@ Object.subclass('Squeak.Primitives',
         var handle = this.stackNonInteger(0);
         if (!this.success || !handle.file) return false;
         this.fileClose(handle.file);
+        this.vm.breakOut();     // return to JS asap so async file handler can run
         handle.file = null;
         return this.popNIfOK(argCount);
     },
@@ -3895,6 +3899,7 @@ Object.subclass('Squeak.Primitives',
         var handle = this.stackNonInteger(0);
         if (!this.success || !handle.file) return false;
         Squeak.flushFile(handle.file);
+        this.vm.breakOut();     // return to JS asap so async file handler can run
         return this.popNIfOK(argCount);
     },
     primitiveFileGetPosition: function(argCount) {
@@ -3945,6 +3950,7 @@ Object.subclass('Squeak.Primitives',
             newNameObj = this.stackNonInteger(0);
         if (!this.success) return false;
         this.success = Squeak.fileRename(oldNameObj.bytesAsString(), newNameObj.bytesAsString());
+        this.vm.breakOut();     // return to JS asap so async file handler can run
         return this.popNIfOK(argCount);
     },
     primitiveFileSetPosition: function(argCount) {

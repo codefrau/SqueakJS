@@ -2698,9 +2698,11 @@ Object.subclass('Squeak.Primitives',
         if (this.vm.isSmallInt(obj)) return obj;
         return 0;
     },
-    checkFloat: function(maybeFloat) { // returns a float and sets success
+    checkFloat: function(maybeFloat) { // returns a number and sets success
         if (maybeFloat.isFloat)
             return maybeFloat.float;
+        if (typeof maybeFloat === "number") // small int
+            return maybeFloat;
         this.success = false;
         return 0.0;
     },

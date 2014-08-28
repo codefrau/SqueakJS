@@ -779,7 +779,7 @@ Object.subclass('Squeak.Object',
             value = value * 256 + this.bytes[i];
         }
         var sign = negative ? '-' : '',
-            approx = value >= 9007199254740992 ? '~ ' : '';
+            approx = value >= 9007199254740992 ? '≈' : '';
         return sign + '16r' + digits.join('') + ' (' + approx + sign + value + 'L)';
     },
     assnKeyAsString: function() {

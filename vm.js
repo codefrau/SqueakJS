@@ -1004,19 +1004,6 @@ Object.subclass('Squeak.Object',
     methodSetLiteral: function(zeroBasedIndex, value) {
         this.pointers[1+zeroBasedIndex] = value; // step over header
     },
-    methodEndPC: function() {
-        // index after the last bytecode
-        var length = this.bytes.length;
-        var flagByte = this.bytes[length - 1];
-        if (flagByte === 0) // If last byte == 0, may be either 0, 0, 0, 0 or just 0
-        for (var i = 2; i <= 5 ; i++) 
-            if (this.bytes[length - i] !== 0)
-                return length - i + 1;
-        if (flagByte < 252) // Magic sources (tempnames encoded in last few bytes)
-            return length - flagByte - 1;
-        // Normal 4-byte source pointer
-        return length - 4;
-    },
 },
 'as context',
 {
@@ -6025,8 +6012,9 @@ Object.subclass('Squeak.InstructionPrinter',
         this.result = '';
         this.scanner = new Squeak.InstructionStream(this.method, this.vm);
         this.oldPC = this.scanner.pc;
-        var end = this.method.methodEndPC();
-    	while (this.scanner.pc < end)
+        this.maxJumpTarget = 0;     // for detecting final method return
+        this.done = false;
+        while (this.scanner.pc < this.method.bytes.length && !this.done)
         	this.scanner.interpretNextInstructionFor(this);
         return this.result;
     },
@@ -6060,18 +6048,23 @@ Object.subclass('Squeak.InstructionPrinter',
     },
 	jump: function(offset) {
         this.print('jumpTo: ' + (this.scanner.pc + offset));
+        if (this.scanner.pc + offset > this.maxJumpTarget) this.maxJumpTarget = this.scanner.pc + offset;
     },
     jumpIf: function(condition, offset) {
         this.print((condition ? 'jumpIfTrue: ' : 'jumpIfFalse: ') + (this.scanner.pc + offset));
+        if (this.scanner.pc + offset > this.maxJumpTarget) this.maxJumpTarget = this.scanner.pc + offset;
     },
     methodReturnReceiver: function() {
-	    this.print('return: receiver');
+        this.print('return: receiver');
+        this.done = this.scanner.pc > this.maxJumpTarget;
     },
     methodReturnTop: function() {
-	    this.print('return: topOfStack');
+        this.print('return: topOfStack');
+        this.done = this.scanner.pc > this.maxJumpTarget;
     },
     methodReturnConstant: function(obj) {
-    	this.print('returnConst: ' + obj.toString());
+        this.print('returnConst: ' + obj.toString());
+        this.done = this.scanner.pc > this.maxJumpTarget;
     },
     popIntoLiteralVariable: function(anAssociation) { 
     	this.print('popIntoBinding: ' + anAssociation.assnKeyAsString());

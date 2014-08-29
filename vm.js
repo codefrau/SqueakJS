@@ -2395,8 +2395,8 @@ Object.subclass('Squeak.Primitives',
             case 50: return this.popNandPushFloatIfOK(2,this.safeFDiv(this.stackFloat(1),this.stackFloat(0)));  // Float.div
             case 51: return this.popNandPushIfOK(1,this.floatAsSmallInt(this.stackFloat(0)));  // Float.asInteger
             case 52: return false; // Float.fractionPart (modf)
-            case 53: return false; // Float.exponent (frexp)
-            case 54: return false; // Float.timesTwoPower (ldexp)
+            case 53: return this.popNandPushIntIfOK(1, this.frexp_exponent(this.stackFloat(0)) - 1); // Float.exponent
+            case 54: return this.popNandPushFloatIfOK(2, this.ldexp(this.stackFloat(1), this.stackFloat(0))); // Float.timesTwoPower
             case 55: return this.popNandPushFloatIfOK(1, Math.sqrt(this.stackFloat(0))); // SquareRoot
             case 56: return this.popNandPushFloatIfOK(1, Math.sin(this.stackFloat(0))); // Sine
             case 57: return this.popNandPushFloatIfOK(1, Math.atan(this.stackFloat(0))); // Arctan
@@ -2735,6 +2735,29 @@ Object.subclass('Squeak.Primitives',
     floatAsSmallInt: function(float) {
         var truncated = float >= 0 ? Math.floor(float) : Math.ceil(float);
         return this.ensureSmallInt(truncated);
+    },
+    frexp_exponent: function(value) {
+        // frexp separates a float into its mantissa and exponent
+        if (value == 0.0) return 0;     // zero is special
+        var data = new DataView(new ArrayBuffer(8));
+        data.setFloat64(0, value);      // for accessing IEEE-754 exponent bits
+        var bits = (data.getUint32(0) >>> 20) & 0x7FF;
+        if (bits === 0) { // we have a subnormal float (actual zero was handled above)
+            // make it normal by multiplying a large number
+            data.setFloat64(0, value * Math.pow(2, 64));
+            // access its exponent bits, and subtract the large number's exponent
+            bits = ((data.getUint32(0) >>> 20) & 0x7FF) - 64;
+        }
+        var exponent = bits - 1022;                 // apply bias
+        // mantissa = this.ldexp(value, -exponent)  // not needed for Squeak
+        return exponent;
+    },
+    ldexp: function(mantissa, exponent) {
+        // construct a float from mantissa and exponent
+        return exponent <= 1023 // avoid multiplying by infinity
+            ? mantissa * Math.pow(2, exponent)
+            : mantissa * Math.pow(2, 1023) * Math.pow(2, exponent - 1023);
+        // the smallest positive float is Math.pow(2, -1074)
     },
 },
 'utils', {

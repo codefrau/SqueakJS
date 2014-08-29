@@ -2552,7 +2552,7 @@ Object.subclass('Squeak.Primitives',
             case 552: return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveEncodeMono', argCount);
             case 553: return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveEncodeStereo', argCount);
         }
-        throw Error("primitive " + index + " not implemented yet");
+        console.error("primitive " + index + " not implemented yet");
         return false;
     },
     namedPrimitive: function(moduleName, functionName, argCount) {

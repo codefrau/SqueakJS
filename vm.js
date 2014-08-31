@@ -500,7 +500,7 @@ Object.subclass('Squeak.Image',
     },
 },
 'operations', {
-    bulkBecome: function(fromArray, toArray, twoWay) {
+    bulkBecome: function(fromArray, toArray, twoWay, copyHash) {
         var n = fromArray.length;
         if (n !== toArray.length)
             return false;
@@ -524,6 +524,12 @@ Object.subclass('Squeak.Image',
             if (!obj.sqClass) return false;  //non-objects in to array
             if (mutations[obj.oop]) return false; //repeated oops in to array
             else mutations[obj.oop] = fromArray[i];
+        }
+        // unless copyHash is false, make hash stay with the reference, not with the object
+        if (copyHash) for (var i = 0; i < n; i++) {
+            var fromHash = fromArray[i].hash;
+            fromArray[i].hash = toArray[i].hash;
+            toArray[i].hash = fromHash;
         }
         // Now, for every object...
         var obj = this.firstOldObject;
@@ -2419,7 +2425,7 @@ Object.subclass('Squeak.Primitives',
             case 69: return this.popNandPushIfOK(3, this.objectAtPut(false,false,true)); // Method.objectAt:put:
             case 70: return this.popNandPushIfOK(1, this.vm.instantiateClass(this.stackNonInteger(0), 0)); // Class.new
             case 71: return this.popNandPushIfOK(2, this.vm.instantiateClass(this.stackNonInteger(1), this.stackPos32BitInt(0))); // Class.new:
-            case 72: return this.popNandPushIfOK(2, this.doArrayBecome(false)); //arrayBecomeOneWay
+            case 72: return this.primitiveArrayBecome(argCount, false); // one way
             case 73: return this.popNandPushIfOK(2, this.objectAt(false,false,true)); // instVarAt:
             case 74: return this.popNandPushIfOK(3, this.objectAtPut(false,false,true)); // instVarAt:put:
             case 75: return this.popNandPushIfOK(1, this.stackNonInteger(0).hash); // Object.identityHash
@@ -2475,7 +2481,7 @@ Object.subclass('Squeak.Primitives',
             case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
             case 126: return this.primitiveDeferDisplayUpdates(argCount);
     		case 127: return this.primitiveShowDisplayRect(argCount);
-            case 128: return this.popNandPushIfOK(2, this.doArrayBecome(true)); //arrayBecome
+            case 128: return this.primitiveArrayBecome(argCount, true); // both ways
             case 129: return this.popNandPushIfOK(1, this.vm.image.specialObjectsArray); //specialObjectsOop
             case 130: return this.popNandPushIfOK(1, this.vm.image.fullGC("forced")); // GC
             case 131: return this.popNandPushIfOK(1, this.vm.image.partialGC()); // GCmost
@@ -2550,6 +2556,7 @@ Object.subclass('Squeak.Primitives',
             case 244: return this.primitiveFindSubstring(argCount);
             case 245: return false; // primStringindexOfAsciiinStringstartingAt
             case 246: return false; // primStringfindSubstringinstartingAtmatchTable
+            case 249: return this.primitiveArrayBecome(argCount, false); // one way, opt. copy hash
             case 254: return this.primitiveVMParameter(argCount);
             case 523: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIGetPortCount', argCount);
             case 550: return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveDecodeMono', argCount);
@@ -3154,12 +3161,13 @@ Object.subclass('Squeak.Primitives',
         this.vm.executeNewMethod(receiver, methodObj, numArgs, methodObj.methodPrimitiveIndex());
         return true;
     },
-    doArrayBecome: function(doBothWays) {
-	    var rcvr = this.stackNonInteger(1);
-        var arg = this.stackNonInteger(0);
-    	if (!this.success) return rcvr;
-        this.success = this.vm.image.bulkBecome(rcvr.pointers, arg.pointers, doBothWays);
-        return rcvr;
+    primitiveArrayBecome: function(argCount, doBothWays) {
+        var rcvr = this.stackNonInteger(argCount),
+            arg = this.stackNonInteger(argCount-1),
+            copyHash = argCount > 1 ? this.stackBoolean(argCount-2) : true;
+        if (!this.success) return rcvr;
+        this.success = this.vm.image.bulkBecome(rcvr.pointers, arg.pointers, doBothWays, copyHash);
+        return this.popNIfOK(argCount);
     },
     doStringReplace: function() {
         var dst = this.stackNonInteger(4);

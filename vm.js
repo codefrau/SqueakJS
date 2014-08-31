@@ -2327,6 +2327,7 @@ Object.subclass('Squeak.Primitives',
                     primitiveAt: this.primitiveFloatArrayAtAndPut.bind(this),
                     primitiveAtPut: this.primitiveFloatArrayAtAndPut.bind(this),
             },
+            ScratchPlugin: this.ScratchPlugin,
         };
     },
 },
@@ -4731,6 +4732,37 @@ Object.subclass('Squeak.Primitives',
     b2d_primitiveMergeFillFrom: function(argCount) { return false; },
     b2d_primitiveRegisterExternalEdge: function(argCount) { return false; },
     b2d_primitiveRegisterExternalFill: function(argCount) { return false; },
+},
+'ScratchPlugin', {
+    ScratchPlugin: {
+        initialiseModule: "scratch_initialiseModule",
+        primitiveOpenURL: "scratch_primitiveOpenURL",
+        primitiveGetFolderPath: "scratch_primitiveGetFolderPath",
+    },
+    scratch_initialiseModule: function(interpreterProxy) {
+        Squeak.dirCreate("/ScratchJS");
+    },
+    scratch_primitiveOpenURL: function(argCount) {
+        var url = this.stackNonInteger(0).bytesAsString();
+        if (url == "") return false;
+        window.open(url, "_blank"); // likely blocked as pop-up, but what can we do?
+        return this.popNIfOK(argCount);
+    },
+    scratch_primitiveGetFolderPath: function(argCount) {
+        var index = this.stackInteger(0);
+        if (!this.success) return false;
+        var path;
+        switch (index) {
+            case 1: path = '/ScratchJS'; break;     // home dir
+            // case 2: path = '/desktop'; break;    // desktop
+            case 3: path = '/ScratchJS'; break;     // documents
+            // case 4: path = '/pictures'; break;   // my pictures
+            // case 5: path = '/music'; break;      // my music
+        }
+        if (!path) return false;
+        this.vm.popNandPush(argCount + 1, this.makeStString(path));
+        return true;
+    },
 });
 
 Object.subclass('Squeak.BitBlt',

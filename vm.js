@@ -2472,7 +2472,7 @@ Object.subclass('Squeak.Primitives',
             case 112: return this.popNandPushIfOK(1, 1000000); //primitiveBytesLeft
             case 113: return this.primitiveQuit(argCount);
             case 114: return this.primitiveExitToDebugger(argCount);
-            //case 115: return false; //TODO primitiveChangeClass					"Blue Book: primitiveOopsLeft"
+            case 115: return this.primitiveChangeClass(argCount);
             case 116: return this.vm.flushMethodCacheForMethod(this.vm.top());
             case 117: return this.doNamedPrimitive(primMethod, argCount); // named prims
             //case 118: return false; //TODO primitiveDoPrimitiveWithArgs
@@ -3079,9 +3079,17 @@ Object.subclass('Squeak.Primitives',
         this.vm.popN(argCount);
         return true;
     },
-    primitiveSetIdentityHash: function(argCount) {
-        throw Error("primitiveSetIdentityHash not implemented yet");
-        return false;
+    primitiveChangeClass: function(argCount) {
+        if (argCount !== 1) return false;
+        var rcvr = this.stackNonInteger(1),
+            arg = this.stackNonInteger(0);
+        if (!this.success) return false;
+        if (rcvr.format !== arg.format ||
+            rcvr.sqClass.isCompact !== arg.sqClass.isCompact ||
+            rcvr.sqClass.classInstSize() !== arg.sqClass.classInstSize())
+                return false;
+        rcvr.sqClass = arg.sqClass;
+        return this.popNIfOK(1);
     },
     primitiveShortAtAndPut:  function(argCount) {
         var rcvr = this.stackNonInteger(argCount),

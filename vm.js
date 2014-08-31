@@ -2518,7 +2518,7 @@ Object.subclass('Squeak.Primitives',
             case 160: return this.vm.image.hasClosures ? this.primitiveAdoptInstance(argCount) : this.primitiveDirectoryCreate(argCount);
             case 161: return this.vm.image.hasClosures ? this.primitiveSetIdentityHash(argCount) : this.primitiveDirectoryDelimitor(argCount);
             case 162: return this.vm.image.hasClosures ? false : this.primitiveDirectoryLookup(argCount);
-            //case 163: ?
+            case 163: if (!this.vm.image.hasClosures) return this.primitiveDirectoryDelete(argCount);
             //case 164: ?
             case 165:
             case 166: if (this.vm.image.hasClosures) return this.primitiveIntegerAtAndPut(argCount);
@@ -3936,8 +3936,10 @@ Object.subclass('Squeak.Primitives',
         return this.popNIfOK(argCount);
     },
     primitiveDirectoryDelete: function(argCount) {
-        console.warn("Not yet implemented: primitiveDirectoryDelete");
-        return false;
+        var dirNameObj = this.stackNonInteger(0);
+        if (!this.success) return false;
+        this.success = Squeak.dirDelete(dirNameObj.bytesAsString());
+        return this.popNIfOK(argCount);
     },
     primitiveDirectoryDelimitor: function(argCount) {
         var delimitor = '/';
@@ -6037,7 +6039,20 @@ Object.extend(Squeak, {
         localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
         return true;
     },
-
+    dirDelete: function(dirpath) {
+        var path = this.splitFilePath(dirpath); if (!path.basename) return false;
+        var directory = this.dirList(path.dirname); if (!directory) return false;
+        if (!directory[path.basename]) return false;
+        var children = this.dirList(path.fullname);
+        if (!children) return false;
+        for (var child in children) return false; // not empty
+        // delete from parent
+        delete directory[path.basename];
+        localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
+        // delete itself
+        delete localStorage["squeak:" + path.fullname];
+        return true;
+    },
     dirList: function(dirpath) {
         // return directory entries or null
         var path = this.splitFilePath(dirpath),

@@ -2235,6 +2235,7 @@ Object.subclass('Squeak.Primitives',
         this.vm = vm;
         this.display = display;
         this.display.vm = this.vm;
+        this.oldPrims = !this.vm.image.hasClosures;
         this.deferDisplayUpdates = false;
         this.deferDisplayUpdatesDisabled = 3;   // show first frames with immediate feedback
         this.semaphoresToSignal = [];
@@ -2505,30 +2506,30 @@ Object.subclass('Squeak.Primitives',
             case 147: return this.namedPrimitive('BitBltPlugin', 'primitiveWarpBits', argCount);
             case 148: return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); //shallowCopy
             case 149: return this.primitiveGetAttribute(argCount);
-            case 150: return this.primitiveFileAtEnd(argCount);
-            case 151: return this.primitiveFileClose(argCount);
-            case 152: return this.primitiveFileGetPosition(argCount);
-            case 153: return this.primitiveFileOpen(argCount);
-            case 154: return this.primitiveFileRead(argCount);
-            case 155: return this.primitiveFileSetPosition(argCount);
-            case 156: return this.primitiveFileDelete(argCount);
-            case 157: return this.primitiveFileSize(argCount);
-            case 158: return this.primitiveFileWrite(argCount);
-            case 159: return this.primitiveFileRename(argCount);
-            case 160: return this.vm.image.hasClosures ? this.primitiveAdoptInstance(argCount) : this.primitiveDirectoryCreate(argCount);
-            case 161: return this.vm.image.hasClosures ? this.primitiveSetIdentityHash(argCount) : this.primitiveDirectoryDelimitor(argCount);
-            case 162: return this.vm.image.hasClosures ? false : this.primitiveDirectoryLookup(argCount);
-            case 163: if (!this.vm.image.hasClosures) return this.primitiveDirectoryDelete(argCount);
+            case 150: if (this.oldPrims) return this.primitiveFileAtEnd(argCount);
+            case 151: if (this.oldPrims) return this.primitiveFileClose(argCount);
+            case 152: if (this.oldPrims) return this.primitiveFileGetPosition(argCount);
+            case 153: if (this.oldPrims) return this.primitiveFileOpen(argCount);
+            case 154: if (this.oldPrims) return this.primitiveFileRead(argCount);
+            case 155: if (this.oldPrims) return this.primitiveFileSetPosition(argCount);
+            case 156: if (this.oldPrims) return this.primitiveFileDelete(argCount);
+            case 157: if (this.oldPrims) return this.primitiveFileSize(argCount);
+            case 158: if (this.oldPrims) return this.primitiveFileWrite(argCount);
+            case 159: if (this.oldPrims) return this.primitiveFileRename(argCount);
+            case 160: return this.oldPrims ? this.primitiveDirectoryCreate(argCount) : this.primitiveAdoptInstance(argCount);
+            case 161: return this.oldPrims ? this.primitiveDirectoryDelimitor(argCount) : this.primitiveSetIdentityHash(argCount);
+            case 162: if (this.oldPrims) return this.primitiveDirectoryLookup(argCount);
+            case 163: if (this.oldPrims) return this.primitiveDirectoryDelete(argCount);
             //case 164: ?
             case 165:
-            case 166: if (this.vm.image.hasClosures) return this.primitiveIntegerAtAndPut(argCount);
+            case 166: if (!this.oldPrims) return this.primitiveIntegerAtAndPut(argCount);
             case 167: return false; // Processor.yield
-            case 168: if (this.vm.image.hasClosures) return this.primitiveCopyObject(argCount); 
-            case 169: return this.vm.image.hasClosures ? this.primitiveNotIdentical(argCount) : this.primitiveDirectorySetMacTypeAndCreator(argCount);
+            case 168: if (!this.oldPrims) return this.primitiveCopyObject(argCount); 
+            case 169: return this.oldPrims ? this.primitiveDirectorySetMacTypeAndCreator(argCount) : this.primitiveNotIdentical(argCount);
             // 170-197: was Sound
-            case 172: return this.fakePrimitive('SoundPlugin>>primitiveSoundStop', undefined, argCount);
-            case 188: return this.primitiveExecuteMethodArgsArray(argCount);
-            case 191: return this.fakePrimitive('SoundPlugin>>primitiveSoundStopRecording', undefined, argCount);
+            case 172: if (this.oldPrims) return this.fakePrimitive('SoundPlugin>>primitiveSoundStop', undefined, argCount);
+            case 188: if (!this.oldPrims) return this.primitiveExecuteMethodArgsArray(argCount);
+            case 191: if (this.oldPrims) return this.fakePrimitive('SoundPlugin>>primitiveSoundStopRecording', undefined, argCount);
             case 195: return false; // Context.findNextUnwindContextUpTo:
             case 196: return false; // Context.terminateTo:
             case 197: return false; // Context.findNextHandlerContextStarting
@@ -3946,6 +3947,7 @@ Object.subclass('Squeak.Primitives',
         return this.popNandPushIfOK(1, this.charFromInt(delimitor.charCodeAt(0)));
     },
     primitiveDirectoryEntry: function(argCount) {
+        this.vm.warnOnce("Not yet implemented: primitiveDirectoryEntry");
         return false; // image falls back on primitiveDirectoryLookup
     },
     primitiveDirectoryLookup: function(argCount) {
@@ -4057,11 +4059,11 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     primitiveFileStdioHandles: function(argCount) {
-        console.log("Not yet implemented: primitiveFileStdioHandles");
+        this.vm.warnOnce("Not yet implemented: primitiveFileStdioHandles");
         return false;
     },
     primitiveFileTruncate: function(argCount) {
-        console.log("Not yet implemented: primitiveFileTruncate");
+        console.warn("Not yet implemented: primitiveFileTruncate");
         return false;
     },
     primitiveFileWrite: function(argCount) {

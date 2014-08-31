@@ -504,6 +504,14 @@ Object.subclass('Squeak.Image',
         var n = fromArray.length;
         if (n !== toArray.length)
             return false;
+        // need to visit all objects, so ensure new objects have
+        // nextObject pointers and permanent oops
+        if (this.newSpaceCount > 0)
+            this.fullGC("become");              // does update context
+        else
+            this.vm.storeContextRegisters();    // still need to update active context
+        // obj.oop used as dict key here is why we store them
+        // rather than just calculating at image snapshot time
         var mutations = {};
         for (var i = 0; i < n; i++) {
             var obj = fromArray[i];
@@ -517,9 +525,6 @@ Object.subclass('Squeak.Image',
             if (mutations[obj.oop]) return false; //repeated oops in to array
             else mutations[obj.oop] = fromArray[i];
         }
-        // ensure new objects have nextObject pointers
-        if (this.newSpaceCount > 0)
-            this.fullGC("become");
         // Now, for every object...
         var obj = this.firstOldObject;
         while (obj) {

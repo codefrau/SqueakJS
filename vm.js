@@ -2487,13 +2487,13 @@ Object.subclass('Squeak.Primitives',
             case 137: return this.popNandPushIfOK(1, this.secondClock()); // seconds since Jan 1, 1901
             case 138: return this.popNandPushIfOK(1, this.someObject()); // Object.someObject
             case 139: return this.popNandPushIfOK(1, this.nextObject(this.vm.top())); // Object.nextObject
-            case 140: return true; // TODO primitiveBeep
+            case 140: return this.fakePrimitive('140 (primitiveBeep)', true, argCount); // TODO
             case 141: return this.primitiveClipboardText(argCount);
             case 142: return this.popNandPushIfOK(1, this.makeStString(Squeak.vmPath));
             case 143: // short at and shortAtPut
             case 144: return this.primitiveShortAtAndPut(argCount);
             case 145: return this.primitiveConstantFill(argCount);
-            case 146: return false; // TODO primitiveReadJoystick
+            case 146: return this.namedPrimitive('JoystickTabletPlugin', 'primitiveReadJoystick', argCount);
             case 147: return this.namedPrimitive('BitBltPlugin', 'primitiveWarpBits', argCount);
             case 148: return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); //shallowCopy
             case 149: return this.primitiveGetAttribute(argCount);
@@ -2507,8 +2507,8 @@ Object.subclass('Squeak.Primitives',
             case 157: if (this.oldPrims) return this.primitiveFileSize(argCount);
             case 158: if (this.oldPrims) return this.primitiveFileWrite(argCount);
             case 159: if (this.oldPrims) return this.primitiveFileRename(argCount);
-            case 160: return this.oldPrims ? this.primitiveDirectoryCreate(argCount) : this.primitiveAdoptInstance(argCount);
-            case 161: return this.oldPrims ? this.primitiveDirectoryDelimitor(argCount) : this.primitiveSetIdentityHash(argCount);
+            case 160: if (this.oldPrims) return this.primitiveDirectoryCreate(argCount); // new: primitiveAdoptInstance
+            case 161: if (this.oldPrims) return this.primitiveDirectoryDelimitor(argCount); // new: primitiveSetIdentityHash
             case 162: if (this.oldPrims) return this.primitiveDirectoryLookup(argCount);
             case 163: if (this.oldPrims) return this.primitiveDirectoryDelete(argCount);
             //case 164: ?
@@ -6271,7 +6271,7 @@ Object.subclass('Squeak.InstructionPrinter',
     pushClosureCopy: function(numCopied, numArgs, blockSize) {
         var from = this.scanner.pc,
             to = from + blockSize;
-        this.print('closure(' + from + '-' + (to-1) + '): ' + numCopied + ' copied, ' + numArgs + ' args');
+        this.print('closure(' + from + '-' + (to-1) + '): ' + numCopied + ' captured, ' + numArgs + ' args');
         for (var i = from; i < to; i++)
     		this.innerIndents[i] = (this.innerIndents[i] || 0) + 1;
     	if (to > this.endPC) this.endPC = to;

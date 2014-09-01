@@ -3171,7 +3171,7 @@ Object.subclass('Squeak.Primitives',
         var rcvr = this.stackNonInteger(argCount),
             arg = this.stackNonInteger(argCount-1),
             copyHash = argCount > 1 ? this.stackBoolean(argCount-2) : true;
-        if (!this.success) return rcvr;
+        if (!this.success) return false;
         this.success = this.vm.image.bulkBecome(rcvr.pointers, arg.pointers, doBothWays, copyHash);
         return this.popNIfOK(argCount);
     },

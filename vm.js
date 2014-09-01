@@ -382,13 +382,12 @@ Object.subclass('Squeak.Image',
         return this.totalMemory - this.oldSpaceBytes;
     },
     fullGC: function(reason) {
+        // Collect garbage and return first tenured object (to support object enumeration)
         // Old space is a linked list of objects - each object has an "nextObject" reference.
         // New space objects do not have that pointer, they are garbage-collected by JavaScript.
         // But they have an allocation id so the survivors can be ordered on tenure.
         // The "nextObject" references are created by collecting all new objects, 
         // sorting them by id, and then linking them into old space.
-        // Note: after an old object is released, its "nextObject" ref must still allow traversal
-        // of all remaining objects. This is so enumeration works despite GC.
 
         this.vm.addMessage("fullGC: " + reason);
         var start = Date.now();
@@ -402,7 +401,7 @@ Object.subclass('Squeak.Image',
         this.gcTenured += newObjects.length;
         this.gcCompacted += removedObjects.length;
         this.gcMilliseconds += Date.now() - start;
-        return this.totalMemory - this.oldSpaceBytes;
+        return newObjects.length > 0 ? newObjects[0] : null;
     },
     markReachableObjects: function() {
         // Visit all reachable objects and mark them.
@@ -553,31 +552,19 @@ Object.subclass('Squeak.Image',
         while (true) {
             if (obj.sqClass === clsObj)
                 return obj;
-            if (!obj.nextObject) {
-                // this was the last old object, tenure new objects and try again
-                if (this.newSpaceCount > 0) this.fullGC("someInstance of " + clsObj.className());
-                // if this really was the last object, we're done
-                if (!obj.nextObject) return null;
-            }
-            obj = obj.nextObject;
+            obj = obj.nextObject || (this.newSpaceCount > 0 && this.fullGC("someInstance of " + clsObj.className()));
+            if (!obj) return null;
         }
     },
     objectAfter: function(obj) {
         // if this was the last old object, tenure new objects and try again
-        if (!obj.nextObject && this.newSpaceCount > 0)
-            this.fullGC("nextObject");
-        return obj.nextObject;
+        return obj.nextObject || (this.newSpaceCount > 0 && this.fullGC("nextObject"));
     },
     nextInstanceAfter: function(obj) {
         var clsObj = obj.sqClass;
         while (true) {
-            if (!obj.nextObject) {
-                // this was the last old object, tenure new objects and try again
-                if (this.newSpaceCount > 0) this.fullGC("nextInstance of " + clsObj.className());
-                // if this really was the last object, we're done
-                if (!obj.nextObject) return null;
-            }
-            obj = obj.nextObject;
+            obj = obj.nextObject || (this.newSpaceCount > 0 && this.fullGC("nextInstance of " + clsObj.className()));
+            if (!obj) return null;
             if (obj.sqClass === clsObj)
                 return obj;
         }
@@ -617,6 +604,9 @@ Object.subclass('Squeak.Image',
             return obj << 1 | 1; // add tag bit
         if (obj.oop < 0) throw Error("temporary oop");
         return obj.oop;
+    },
+    freeSpace: function() {
+        return this.totalMemory - this.oldSpaceBytes;
     },
     formatVersion: function() {
         return this.hasClosures ? 6504 : 6502;
@@ -2487,7 +2477,7 @@ Object.subclass('Squeak.Primitives',
     		case 127: return this.primitiveShowDisplayRect(argCount);
             case 128: return this.primitiveArrayBecome(argCount, true); // both ways
             case 129: return this.popNandPushIfOK(1, this.vm.image.specialObjectsArray); //specialObjectsOop
-            case 130: return this.popNandPushIfOK(1, this.vm.image.fullGC("forced")); // GC
+            case 130: return this.primitiveFullGC(argCount);
             case 131: return this.popNandPushIfOK(1, this.vm.image.partialGC()); // GCmost
             case 132: return this.pop2andPushBoolIfOK(this.pointsTo(this.stackNonInteger(1), this.vm.top())); //Object.pointsTo
             case 133: return true; //TODO primitiveSetInterruptKey
@@ -3046,8 +3036,7 @@ Object.subclass('Squeak.Primitives',
         return this.vm.image.firstOldObject;
     },
     nextObject: function(obj) {
-        var nextObj = this.vm.image.objectAfter(obj);
-        return nextObj ? nextObj : 0;
+        return this.vm.image.objectAfter(obj) || 0;
     },
     someInstanceOf: function(clsObj) {
         var someInstance = this.vm.image.someInstanceOf(clsObj);
@@ -3060,6 +3049,11 @@ Object.subclass('Squeak.Primitives',
         if (nextInstance) return nextInstance;
         this.success = false;
         return 0;
+    },
+    primitiveFullGC: function(argCount) {
+        this.vm.image.fullGC("primitive");
+        var bytes = this.vm.image.freeSpace();
+        return this.popNandPushIfOK(1, this.makeLargeIfNeeded(bytes));
     },
     primitiveMakePoint: function(argCount) {
         var x = this.vm.stackValue(1);

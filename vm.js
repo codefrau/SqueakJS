@@ -2906,7 +2906,6 @@ Object.subclass('Squeak.Primitives',
         if (this.emulateMac) 
             filepath = ("Macintosh HD" + filepath)                          // add Mac volume
                 .replace(/\//g, "€").replace(/:/g, "/").replace(/€/g, ":"); // substitute : for /
-        console.log("to Squeak: '" + unixpath + "' ==> '" + filepath + "'");
         return filepath;
     },
     filenameFromSqueak: function(filepath) {
@@ -2914,7 +2913,6 @@ Object.subclass('Squeak.Primitives',
             filepath.replace(/^[^:]*:/, ":")                            // remove volume
             .replace(/\//g, "€").replace(/:/g, "/").replace(/€/g, ":"); // substitute : for /
         unixpath = unixpath.replace(/^\/?SqueakJS\/?/, "/");            // strip SqueakJS
-        console.log("from Squeak: '" + filepath + "' ==> '" + unixpath + "'");
         return unixpath;
     },
 },

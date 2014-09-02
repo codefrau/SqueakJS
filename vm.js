@@ -1050,6 +1050,7 @@ Object.subclass('Squeak.Interpreter',
         this.nilObj = this.specialObjects[Squeak.splOb_NilObject];
         this.falseObj = this.specialObjects[Squeak.splOb_FalseObject];
         this.trueObj = this.specialObjects[Squeak.splOb_TrueObject];
+        this.hasClosures = this.image.hasClosures; 
         // hack for old image that does not support Unix files
         if (!this.findMethod("UnixFileDirectory class>>pathNameDelimiter"))
             this.primHandler.emulateMac = true;
@@ -1590,10 +1591,12 @@ Object.subclass('Squeak.Interpreter',
     doReturn: function(returnValue, targetContext) {
         // get sender from block home or closure's outerContext
         if (!targetContext) {
-            var ctx = this.homeContext,
-                closure;
-            while (!(closure = ctx.pointers[Squeak.Context_closure]).isNil)
-                ctx = closure.pointers[Squeak.Closure_outerContext];
+            var ctx = this.homeContext;
+            if (this.hasClosures) {
+                var closure;
+                while (!(closure = ctx.pointers[Squeak.Context_closure]).isNil)
+                    ctx = closure.pointers[Squeak.Closure_outerContext];
+            }
             targetContext = ctx.pointers[Squeak.Context_sender];
         }
         if (targetContext.isNil || targetContext.pointers[Squeak.Context_instructionPointer].isNil)
@@ -2230,7 +2233,7 @@ Object.subclass('Squeak.Primitives',
         this.vm = vm;
         this.display = display;
         this.display.vm = this.vm;
-        this.oldPrims = !this.vm.image.hasClosures;
+        this.oldPrims = !this.vm.hasClosures;
         this.deferDisplayUpdates = false;
         this.deferDisplayUpdatesDisabled = 3;   // show first frames with immediate feedback
         this.semaphoresToSignal = [];

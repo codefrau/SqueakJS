@@ -3678,7 +3678,18 @@ Object.subclass('Squeak.Primitives',
             case 2:
             case 4:
             case 8:
-                var colors = this.indexedColors;
+                var colors = this.swappedColors;
+                if (!colors) {
+                    colors = [];
+                    for (var i = 0; i < 256; i++) {
+                        var argb = this.indexedColors[i],
+                            abgr = (argb & 0xFF00FF00)     // green and alpha
+                            + ((argb & 0x00FF0000) >> 16)  // shift red down
+                            + ((argb & 0x000000FF) << 16); // shift blue up
+                        colors[i] = abgr;
+                    }
+                    this.swappedColors = colors;
+                }
                 if (this.reverseDisplay) {
                     if (!this.reversedColors)
                         this.reversedColors = colors.map(function(c){return c ^ 0x00FFFFFF});

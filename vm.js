@@ -3513,8 +3513,9 @@ Object.subclass('Squeak.Primitives',
         if (!this.success) return false;
         var value;
         switch (attr) {
-            case 1: value = this.vm.image.name; break;
             case 0: value = this.filenameToSqueak(Squeak.vmPath + Squeak.vmFile); break;
+            case 1: value = null; break; // 1.x images want document here
+            case 2: value = null; break; // later images want document here
             case 1001: value = Squeak.platformName; break;
             case 1002: value = Squeak.osVersion; break;
             case 1003: value = Squeak.platformSubtype; break;
@@ -3523,7 +3524,7 @@ Object.subclass('Squeak.Primitives',
             case 1006: value = Squeak.vmBuild; break;
             default: return false;
         }
-        this.vm.popNandPush(argCount+1, this.makeStString(value));
+        this.vm.popNandPush(argCount+1, this.makeStObject(value));
         return true;
 	},
     setLowSpaceThreshold: function() {

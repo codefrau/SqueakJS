@@ -2275,52 +2275,6 @@ Object.subclass('Squeak.Primitives',
                     primitiveCopyBits: "bitblt_primitiveCopyBits",
                     primitiveWarpBits: "bitblt_primitiveWarpBits",
             },
-            B2DPlugin: {
-                    // late-bound for nicer debugging
-                    initialiseModule: "b2d_initialiseModule",
-                    primitiveAddActiveEdgeEntry: "b2d_primitiveAddActiveEdgeEntry",
-                    primitiveAddBezier: "b2d_primitiveAddBezier",
-                    primitiveAddBezierShape: "b2d_primitiveAddBezierShape",
-                    primitiveAddBitmapFill: "b2d_primitiveAddBitmapFill",
-                    primitiveAddCompressedShape: "b2d_primitiveAddCompressedShape",
-                    primitiveAddGradientFill: "b2d_primitiveAddGradientFill",
-                    primitiveAddLine: "b2d_primitiveAddLine",
-                    primitiveAddOval: "b2d_primitiveAddOval",
-                    primitiveAddPolygon: "b2d_primitiveAddPolygon",
-                    primitiveAddRect: "b2d_primitiveAddRect",
-                    primitiveChangedActiveEdgeEntry: "b2d_primitiveChangedActiveEdgeEntry",
-                    primitiveCopyBuffer: "b2d_primitiveCopyBuffer",
-                    primitiveDisplaySpanBuffer: "b2d_primitiveDisplaySpanBuffer",
-                    primitiveDoProfileStats: "b2d_primitiveDoProfileStats",
-                    primitiveFinishedProcessing: "b2d_primitiveFinishedProcessing",
-                    primitiveGetAALevel: "b2d_primitiveGetAALevel",
-                    primitiveGetBezierStats: "b2d_primitiveGetBezierStats",
-                    primitiveGetClipRect: "b2d_primitiveGetClipRect",
-                    primitiveGetCounts: "b2d_primitiveGetCounts",
-                    primitiveGetDepth: "b2d_primitiveGetDepth",
-                    primitiveGetFailureReason: "b2d_primitiveGetFailureReason",
-                    primitiveGetOffset: "b2d_primitiveGetOffset",
-                    primitiveGetTimes: "b2d_primitiveGetTimes",
-                    primitiveInitializeBuffer: "b2d_primitiveInitializeBuffer",
-                    primitiveInitializeProcessing: "b2d_primitiveInitializeProcessing",
-                    primitiveMergeFillFrom: "b2d_primitiveMergeFillFrom",
-                    primitiveNeedsFlush: "b2d_primitiveNeedsFlush",
-                    primitiveNeedsFlushPut: "b2d_primitiveNeedsFlushPut",
-                    primitiveNextActiveEdgeEntry: "b2d_primitiveNextActiveEdgeEntry",
-                    primitiveNextFillEntry: "b2d_primitiveNextFillEntry",
-                    primitiveNextGlobalEdgeEntry: "b2d_primitiveNextGlobalEdgeEntry",
-                    primitiveRegisterExternalEdge: "b2d_primitiveRegisterExternalEdge",
-                    primitiveRegisterExternalFill: "b2d_primitiveRegisterExternalFill",
-                    primitiveRenderImage: "b2d_primitiveRenderImage",
-                    primitiveRenderScanline: "b2d_primitiveRenderScanline",
-                    primitiveSetAALevel: "b2d_primitiveSetAALevel",
-                    primitiveSetBitBltPlugin: "b2d_primitiveSetBitBltPlugin",
-                    primitiveSetClipRect: "b2d_primitiveSetClipRect",
-                    primitiveSetColorTransform: "b2d_primitiveSetColorTransform",
-                    primitiveSetDepth: "b2d_primitiveSetDepth",
-                    primitiveSetEdgeTransform: "b2d_primitiveSetEdgeTransform",
-                    primitiveSetOffset: "b2d_primitiveSetOffset",
-            },
             FloatArrayPlugin: {
                     primitiveAt: this.primitiveFloatArrayAtAndPut.bind(this),
                     primitiveAtPut: this.primitiveFloatArrayAtAndPut.bind(this),
@@ -2330,6 +2284,7 @@ Object.subclass('Squeak.Primitives',
                 primitiveSoundStopRecording: this.fakePrimitive.bind(this, 'SoundPlugin.primitiveSoundStopRecording', undefined),
             },
             ScratchPlugin: this.ScratchPlugin,
+            B2DPlugin: this.B2DPlugin(),
         };
     },
 },
@@ -4411,14 +4366,25 @@ Object.subclass('Squeak.Primitives',
     },
 },
 'B2DPlugin', {
-    b2d_initialiseModule: function(interpreterProxy) {
+    B2DPlugin: function() {
+        // find all ge* functions and declare as primitive
+        // (because old images use the gePrimitives without a modulename)
+        var plugin = {};
+        for (var funcName in this)
+            if (/^ge(Initialise|Shutdown|Primitive)/.test(funcName) && typeof this[funcName] == "function") {
+                var primName = funcName[2].toLowerCase() + funcName.slice(3);
+                plugin[primName] = funcName;
+            }
+        return plugin;
+    },
+    geInitialiseModule: function(interpreterProxy) {
         this.b2d_debug = false;
         this.b2d_state = {
             bitblt: new Squeak.BitBlt(),
             bitbltObj: null,
         };
     },
-    b2d_reset: function(bitbltObj) {
+    geReset: function(bitbltObj) {
         if (this.b2d_debug) console.log("-- reset");
         var state = this.b2d_state;
         state.needsFlush = false;
@@ -4429,14 +4395,14 @@ Object.subclass('Squeak.Primitives',
         if (state.bitbltObj != bitbltObj) {
             state.bitbltObj = bitbltObj;
             state.bitblt.loadBitBlt(bitbltObj);
-            this.b2d_setupCanvas();
+            this.geSetupCanvas();
         }
         state.minX = 0;
         state.minY = 0;
         state.maxX = state.bitblt.dest.width;
         state.maxY = state.bitblt.dest.height;
     },
-    b2d_setupCanvas: function() {
+    geSetupCanvas: function() {
         var state = this.b2d_state;
         // create canvas and drawing context
         if (!state.context) {
@@ -4457,7 +4423,7 @@ Object.subclass('Squeak.Primitives',
         canvas.height = form.height;
         canvas.style.visibility = this.b2d_debug ? "visible" : "hidden";
     },
-    b2d_render: function() {
+    geRender: function() {
         if (this.b2d_debug) console.log("-- render");
         var state = this.b2d_state;
         if (state.flushNeeded) {
@@ -4473,12 +4439,12 @@ Object.subclass('Squeak.Primitives',
             }
             state.context.beginPath();
             state.flushNeeded = false;
-            this.b2d_readPixels();
+            this.geReadPixels();
             // if (this.b2d_debug) this.vm.breakNow("b2d_debug");
         }
         return 0; // answer stop reason
     },
-    b2d_readPixels: function() {
+    geReadPixels: function() {
         var state = this.b2d_state,
             bitblt = state.bitblt,
             form = bitblt.dest;
@@ -4486,9 +4452,9 @@ Object.subclass('Squeak.Primitives',
         if (!form.width || !form.height || state.maxX <= state.minX || state.maxY <= state.minY) return;
         if (!form.msb) return this.vm.warnOnce("B2D: drawing to little-endian forms not implemented yet");
         if (form.depth == 32) {
-            this.b2d_readPixels32();
+            this.geReadPixels32();
         } else if (form.depth == 16) {
-            this.b2d_readPixels16();
+            this.geReadPixels16();
         } else {
             this.vm.warnOnce("B2D: drawing to " + form.depth + " bit forms not supported yet");
         }
@@ -4499,7 +4465,7 @@ Object.subclass('Squeak.Primitives',
         bitblt.bbH = state.maxY - state.minY;
         this.displayDirty(bitblt);
     },
-    b2d_readPixels16: function() {
+    geReadPixels16: function() {
         // since we have two pixels per word, grab from even positions
         var state = this.b2d_state,
             form = state.bitblt.dest,
@@ -4539,7 +4505,7 @@ Object.subclass('Squeak.Primitives',
             }
         }
     },
-    b2d_readPixels32: function() {
+    geReadPixels32: function() {
         var state = this.b2d_state,
             minX = state.minX,
             minY = state.minY,
@@ -4570,7 +4536,7 @@ Object.subclass('Squeak.Primitives',
             }
         }
     },
-    b2d_pointsFrom: function(arrayObj, nPoints) {
+    gePointsFrom: function(arrayObj, nPoints) {
         var words = arrayObj.words;
         if (words) {
             if (words.length == nPoints) return arrayObj.wordsAsInt16Array();       // ShortPointArray
@@ -4589,7 +4555,7 @@ Object.subclass('Squeak.Primitives',
         }
         return array;
     },
-    b2d_setClip: function(minX, minY, maxX, maxY) {
+    geSetClip: function(minX, minY, maxX, maxY) {
         if (this.b2d_debug) console.log("==> clip " + minX + "," + minY + "," + maxX + "," + maxY);
         var state = this.b2d_state;
         if (state.minX < minX) state.minX = minX;
@@ -4597,12 +4563,12 @@ Object.subclass('Squeak.Primitives',
         if (state.maxX > maxX) state.maxX = maxX;
         if (state.maxY > maxY) state.maxY = maxY;
     },
-    b2d_setOffset: function(x, y) {
+    geSetOffset: function(x, y) {
         // TODO: make offset work together with transform
         this.b2d_state.context.setTransform(1, 0, 0, 1, x, y);
         if (this.b2d_debug) console.log("==> translate " + x +"," + y);
     },
-    b2d_setTransform: function(t) {
+    geSetTransform: function(t) {
         /* Transform is a matrix:
                 ⎛a₁₁ a₁₂ a₁₃⎞
                 ⎝a₂₁ a₂₂ a₂₃⎠
@@ -4614,97 +4580,97 @@ Object.subclass('Squeak.Primitives',
         this.b2d_state.context.setTransform(t[0], t[3], t[1], t[4], t[2], t[5]);
         if (this.b2d_debug) console.log("==> transform: " + [t[0], t[3], t[1], t[4], t[2], t[5]].join(','));
     },
-    b2d_setStyle: function(fillIndex, borderIndex, borderWidth) {
+    geSetStyle: function(fillIndex, borderIndex, borderWidth) {
         var hasFill = fillIndex !== 0,
             hasStroke = borderIndex !== 0 && borderWidth > 0,
             state = this.b2d_state;
         state.hasFill = hasFill;
         state.hasStroke = hasStroke;
         if (hasFill) {
-            state.context.fillStyle = this.b2d_styleFrom(fillIndex);
+            state.context.fillStyle = this.geStyleFrom(fillIndex);
             if (this.b2d_debug) console.log("==> fill style: " + state.context.fillStyle);
         }
         if (hasStroke) {
-            state.context.strokeStyle = this.b2d_styleFrom(borderIndex);
+            state.context.strokeStyle = this.geStyleFrom(borderIndex);
             state.context.lineWidth = borderWidth;
             if (this.b2d_debug) console.log("==> stroke style: " + state.context.strokeStyle + '@' + borderWidth);
         }
         return hasFill || hasStroke;
     },
-    b2d_colorFrom: function(word) {
+    geColorFrom: function(word) {
         var b = word & 0xFF,
             g = (word & 0xFF00) >>> 8,
             r = (word & 0xFF0000) >>> 16,
             a = ((word & 0xFF000000) >>> 24) / 255;
         return "rgba(" + [r, g, b, a].join(",") + ")";
     },
-    b2d_styleFrom: function(index) {
+    geStyleFrom: function(index) {
         if (index === 0) return null;
         var fills = this.b2d_state.fills;
         if (index <= fills.length) return fills[index - 1];
-        return this.b2d_colorFrom(index);
+        return this.geColorFrom(index);
     },
-    b2d_primitiveSetEdgeTransform: function(argCount) {
-        if (this.b2d_debug) console.log("b2d_primitiveSetEdgeTransform");
+    gePrimitiveSetEdgeTransform: function(argCount) {
+        if (this.b2d_debug) console.log("b2d: gePrimitiveSetEdgeTransform");
         var transform = this.stackNonInteger(0);
         if (!this.success) return false;
-        if (transform.words) this.b2d_setTransform(transform.wordsAsFloat32Array());
+        if (transform.words) this.geSetTransform(transform.wordsAsFloat32Array());
         this.vm.popN(argCount);
         return true;
     },
-    b2d_primitiveSetClipRect: function(argCount) {
-        if (this.b2d_debug) console.log("b2d_primitiveSetClipRect");
+    gePrimitiveSetClipRect: function(argCount) {
+        if (this.b2d_debug) console.log("b2d: gePrimitiveSetClipRect");
         var rect = this.stackNonInteger(0);
         if (!this.success) return false;
         var origin = rect.pointers[0].pointers,
             corner = rect.pointers[1].pointers;
-        this.b2d_setClip(origin[0], origin[1], corner[0], corner[1]);
+        this.geSetClip(origin[0], origin[1], corner[0], corner[1]);
         this.vm.popN(argCount);
         return true;
     },
-    b2d_primitiveRenderImage: function(argCount) {
-        if (this.b2d_debug) console.log("b2d_primitiveRenderImage");
-        var stopReason = this.b2d_render();
+    gePrimitiveRenderImage: function(argCount) {
+        if (this.b2d_debug) console.log("b2d: gePrimitiveRenderImage");
+        var stopReason = this.geRender();
         this.vm.popNandPush(argCount + 1, stopReason);
         return true;
     },
-    b2d_primitiveRenderScanline: function(argCount) {
-        if (this.b2d_debug) console.log("b2d_primitiveRenderScanline");
-        var stopReason = this.b2d_render();
+    gePrimitiveRenderScanline: function(argCount) {
+        if (this.b2d_debug) console.log("b2d: gePrimitiveRenderScanline");
+        var stopReason = this.geRender();
         this.vm.popNandPush(argCount + 1, stopReason);
         return true;
     },
-    b2d_primitiveFinishedProcessing: function(argCount) {
+    gePrimitiveFinishedProcessing: function(argCount) {
         var finished = !this.b2d_state.flushNeeded;
-        if (this.b2d_debug) console.log("b2d_primitiveFinishedProcessing => " + finished);
+        if (this.b2d_debug) console.log("b2d: gePrimitiveFinishedProcessing => " + finished);
         this.vm.popNandPush(argCount+1, this.makeStObject(finished));
         return true;
     },
-    b2d_primitiveNeedsFlushPut: function(argCount) {
+    gePrimitiveNeedsFlushPut: function(argCount) {
         var needsFlush = this.stackBoolean(0);
         if (!this.success) return false;
         this.b2d_state.needsFlush = needsFlush;
-        if (this.b2d_debug) console.log("b2d_primitiveNeedsFlushPut: " + needsFlush);
+        if (this.b2d_debug) console.log("b2d: gePrimitiveNeedsFlushPut: " + needsFlush);
         this.vm.popN(argCount);
         return true;
     },
-    b2d_primitiveInitializeBuffer: function(argCount) {
-        if (this.b2d_debug) console.log("b2d_primitiveInitializeBuffer");
+    gePrimitiveInitializeBuffer: function(argCount) {
+        if (this.b2d_debug) console.log("b2d: gePrimitiveInitializeBuffer");
         var engine = this.stackNonInteger(argCount),
             bitblt = engine.pointers[2]; // BEBitBltIndex
-        this.b2d_reset(bitblt);
+        this.geReset(bitblt);
         this.vm.popN(argCount);
         return true;
     },
-    b2d_primitiveAddOval: function(argCount) {
-        if (this.b2d_debug) console.log("b2d_primitiveAddOval");
+    gePrimitiveAddOval: function(argCount) {
+        if (this.b2d_debug) console.log("b2d: gePrimitiveAddOval");
         var origin      = this.stackNonInteger(4).pointers,
             corner      = this.stackNonInteger(3).pointers,
             fillIndex   = this.stackPos32BitInt(2),
             borderWidth = this.stackInteger(1),
             borderIndex = this.stackPos32BitInt(0);
         if (!this.success) return false;
-        if (this.b2d_setStyle(fillIndex, borderIndex, borderWidth)) {
+        if (this.geSetStyle(fillIndex, borderIndex, borderWidth)) {
             var ctx = this.b2d_state.context,
                 x = this.floatOrInt(origin[0]),
                 y = this.floatOrInt(origin[1]),
@@ -4721,16 +4687,16 @@ Object.subclass('Squeak.Primitives',
         this.vm.popN(argCount);
         return true;
     },
-    b2d_primitiveAddBezierShape: function(argCount) {
-        if (this.b2d_debug) console.log("b2d_primitiveAddBezierShape");
+    gePrimitiveAddBezierShape: function(argCount) {
+        if (this.b2d_debug) console.log("b2d: gePrimitiveAddBezierShape");
         var points      = this.stackNonInteger(4),
             nSegments   = this.stackInteger(3),
             fillIndex   = this.stackPos32BitInt(2),
             borderWidth = this.stackInteger(1),
             borderIndex = this.stackPos32BitInt(0);
         if (!this.success) return false;
-        if (this.b2d_setStyle(fillIndex, borderIndex, borderWidth)) {
-            var p = this.b2d_pointsFrom(points, nSegments * 3);
+        if (this.geSetStyle(fillIndex, borderIndex, borderWidth)) {
+            var p = this.gePointsFrom(points, nSegments * 3);
             if (!p) return false;
             var ctx = this.b2d_state.context;
             ctx.moveTo(p[0], p[1]);
@@ -4742,16 +4708,16 @@ Object.subclass('Squeak.Primitives',
         this.vm.popN(argCount);
         return true;
     },
-    b2d_primitiveAddPolygon: function(argCount) {
-        if (this.b2d_debug) console.log("b2d_primitiveAddPolygon");
+    gePrimitiveAddPolygon: function(argCount) {
+        if (this.b2d_debug) console.log("b2d: gePrimitiveAddPolygon");
         var points      = this.stackNonInteger(4),
             nPoints     = this.stackInteger(3),
             fillIndex   = this.stackPos32BitInt(2),
             borderWidth = this.stackInteger(1),
             borderIndex = this.stackPos32BitInt(0);
         if (!this.success) return false;
-        if (this.b2d_setStyle(fillIndex, borderIndex, borderWidth)) {
-            var p = this.b2d_pointsFrom(points, nPoints);
+        if (this.geSetStyle(fillIndex, borderIndex, borderWidth)) {
+            var p = this.gePointsFrom(points, nPoints);
             if (!p) return false;
             var ctx = this.b2d_state.context;
             ctx.moveTo(p[0], p[1]);
@@ -4762,15 +4728,15 @@ Object.subclass('Squeak.Primitives',
         }
         return true;
     },
-    b2d_primitiveAddRect: function(argCount) {
-        if (this.b2d_debug) console.log("b2d_primitiveAddRect");
+    gePrimitiveAddRect: function(argCount) {
+        if (this.b2d_debug) console.log("b2d: gePrimitiveAddRect");
         var origin      = this.stackNonInteger(4).pointers,
             corner      = this.stackNonInteger(3).pointers,
             fillIndex   = this.stackPos32BitInt(2),
             borderWidth = this.stackInteger(1),
             borderIndex = this.stackPos32BitInt(0);
         if (!this.success) return false;
-        if (this.b2d_setStyle(fillIndex, borderIndex, borderWidth)) {
+        if (this.geSetStyle(fillIndex, borderIndex, borderWidth)) {
             var x = this.floatOrInt(origin[0]),
                 y = this.floatOrInt(origin[1]),
                 w = this.floatOrInt(corner[0]) - x,
@@ -4782,34 +4748,34 @@ Object.subclass('Squeak.Primitives',
         this.vm.popNandPush(argCount+1, 0);
         return true;
     },
-    b2d_primitiveAddBezier: function(argCount) {
-        if (this.b2d_debug) console.log("b2d_primitiveAddBezier");
+    gePrimitiveAddBezier: function(argCount) {
+        if (this.b2d_debug) console.log("b2d: gePrimitiveAddBezier");
         this.vm.warnOnce("B2D: beziers not implemented yet");
         this.vm.popN(argCount);
         return true;
     },
-    b2d_primitiveAddCompressedShape: function(argCount) {
-        if (this.b2d_debug) console.log("b2d_primitiveAddCompressedShape");
+    gePrimitiveAddCompressedShape: function(argCount) {
+        if (this.b2d_debug) console.log("b2d: gePrimitiveAddCompressedShape");
         this.vm.warnOnce("B2D: compressed shapes not implemented yet");
         this.vm.popN(argCount);
         return true;
     },
-    b2d_primitiveAddLine: function(argCount) {
-        if (this.b2d_debug) console.log("b2d_primitiveAddLine");
+    gePrimitiveAddLine: function(argCount) {
+        if (this.b2d_debug) console.log("b2d: gePrimitiveAddLine");
         this.vm.warnOnce("B2D: lines not implemented yet");
         this.vm.popN(argCount);
         return true;
     },
-    b2d_primitiveAddBitmapFill: function(argCount) {
-        if (this.b2d_debug) console.log("b2d_primitiveAddBitmapFill");
+    gePrimitiveAddBitmapFill: function(argCount) {
+        if (this.b2d_debug) console.log("b2d: gePrimitiveAddBitmapFill");
         this.vm.warnOnce("B2D: bitmap fills not implemented yet");
         var fills = this.b2d_state.fills;
         fills.push('red');
         this.vm.popNandPush(argCount+1, fills.length);
         return true;
     },
-    b2d_primitiveAddGradientFill: function(argCount) {
-        if (this.b2d_debug) console.log("b2d_primitiveAddGradientFill");
+    gePrimitiveAddGradientFill: function(argCount) {
+        if (this.b2d_debug) console.log("b2d: gePrimitiveAddGradientFill");
         var ramp = this.stackNonInteger(4).words,
             origin = this.stackNonInteger(3).pointers,
             direction = this.stackNonInteger(2).pointers,
@@ -4826,8 +4792,8 @@ Object.subclass('Squeak.Primitives',
                 ? ctx.createRadialGradient(x, y, 0, x, y, Math.sqrt(dx*dx + dy*dy))
                 : ctx.createLinearGradient(x, y, x + dx, y + dy);
         // we get a 512-step color ramp here. Going to assume it's made from only two colors.
-        gradient.addColorStop(0, this.b2d_colorFrom(ramp[0]));
-        gradient.addColorStop(1, this.b2d_colorFrom(ramp[ramp.length - 1]));
+        gradient.addColorStop(0, this.geColorFrom(ramp[0]));
+        gradient.addColorStop(1, this.geColorFrom(ramp[ramp.length - 1]));
         // TODO: use more than two stops
         // IDEA: the original gradient is likely in a temp at this.vm.stackValue(7)
         //       so we could get the original color stops from it
@@ -4835,43 +4801,43 @@ Object.subclass('Squeak.Primitives',
         this.vm.popNandPush(argCount+1, state.fills.length);
         return true;
     },
-    b2d_primitiveNeedsFlush: function(argCount) {
-        if (this.b2d_debug) console.log("b2d_primitiveNeedsFlush => " + this.b2d_state.needsFlush);
+    gePrimitiveNeedsFlush: function(argCount) {
+        if (this.b2d_debug) console.log("b2d: gePrimitiveNeedsFlush => " + this.b2d_state.needsFlush);
         this.vm.popNandPush(argCount, this.makeStObject(this.b2d_state.needsFlush));
         return true;
     },
-    b2d_primitiveSetOffset: function(argCount) {
-        if (this.b2d_debug) console.log("b2d_primitiveSetOffset");
+    gePrimitiveSetOffset: function(argCount) {
+        if (this.b2d_debug) console.log("b2d: gePrimitiveSetOffset");
         var offset = this.stackNonInteger(0).pointers;
         if (!offset) return false;
-        this.b2d_setOffset(this.floatOrInt(offset[0]), this.floatOrInt(offset[1]));
+        this.geSetOffset(this.floatOrInt(offset[0]), this.floatOrInt(offset[1]));
         this.vm.popN(argCount);
         return true;
     },
-    b2d_primitiveGetFailureReason: function(argCount) { this.vm.popN(argCount+1, 0); return true; },
-    b2d_primitiveSetColorTransform: function(argCount) {this.vm.popN(argCount); return true;},
-    b2d_primitiveSetAALevel: function(argCount) { this.vm.popN(argCount); return true; },
-    b2d_primitiveGetAALevel: function(argCount) { return false; },
-    b2d_primitiveSetDepth: function(argCount) {this.vm.popN(argCount); return true; },
-    b2d_primitiveGetDepth: function(argCount) {this.vm.popNandPush(argCount+1, 0); return true; },
-    b2d_primitiveGetClipRect: function(argCount) { return false; },
-    b2d_primitiveGetOffset: function(argCount) { return false; },
-    b2d_primitiveSetBitBltPlugin: function(argCount) { this.vm.popN(argCount); return true; },
-    b2d_primitiveDoProfileStats: function(argCount) { this.vm.popN(argCount); return true; },
-    b2d_primitiveGetBezierStats: function(argCount) { this.vm.popN(argCount); return true; },
-    b2d_primitiveGetCounts: function(argCount) { this.vm.popN(argCount); return true; },
-    b2d_primitiveGetTimes: function(argCount) { this.vm.popN(argCount); return true; },
-    b2d_primitiveInitializeProcessing: function(argCount) { return false; },
-    b2d_primitiveAddActiveEdgeEntry: function(argCount) { return false; },
-    b2d_primitiveChangedActiveEdgeEntry: function(argCount) { return false; },
-    b2d_primitiveNextActiveEdgeEntry: function(argCount) { return false; },
-    b2d_primitiveNextGlobalEdgeEntry: function(argCount) { return false; },
-    b2d_primitiveDisplaySpanBuffer: function(argCount) { return false; },
-    b2d_primitiveCopyBuffer: function(argCount) { return false; },
-    b2d_primitiveNextFillEntry: function(argCount) { return false; },
-    b2d_primitiveMergeFillFrom: function(argCount) { return false; },
-    b2d_primitiveRegisterExternalEdge: function(argCount) { return false; },
-    b2d_primitiveRegisterExternalFill: function(argCount) { return false; },
+    gePrimitiveGetFailureReason: function(argCount) { this.vm.popN(argCount+1, 0); return true; },
+    gePrimitiveSetColorTransform: function(argCount) {this.vm.popN(argCount); return true;},
+    gePrimitiveSetAALevel: function(argCount) { this.vm.popN(argCount); return true; },
+    gePrimitiveGetAALevel: function(argCount) { return false; },
+    gePrimitiveSetDepth: function(argCount) {this.vm.popN(argCount); return true; },
+    gePrimitiveGetDepth: function(argCount) {this.vm.popNandPush(argCount+1, 0); return true; },
+    gePrimitiveGetClipRect: function(argCount) { return false; },
+    gePrimitiveGetOffset: function(argCount) { return false; },
+    gePrimitiveSetBitBltPlugin: function(argCount) { this.vm.popN(argCount); return true; },
+    gePrimitiveDoProfileStats: function(argCount) { this.vm.popN(argCount); return true; },
+    gePrimitiveGetBezierStats: function(argCount) { this.vm.popN(argCount); return true; },
+    gePrimitiveGetCounts: function(argCount) { this.vm.popN(argCount); return true; },
+    gePrimitiveGetTimes: function(argCount) { this.vm.popN(argCount); return true; },
+    gePrimitiveInitializeProcessing: function(argCount) { return false; },
+    gePrimitiveAddActiveEdgeEntry: function(argCount) { return false; },
+    gePrimitiveChangedActiveEdgeEntry: function(argCount) { return false; },
+    gePrimitiveNextActiveEdgeEntry: function(argCount) { return false; },
+    gePrimitiveNextGlobalEdgeEntry: function(argCount) { return false; },
+    gePrimitiveDisplaySpanBuffer: function(argCount) { return false; },
+    gePrimitiveCopyBuffer: function(argCount) { return false; },
+    gePrimitiveNextFillEntry: function(argCount) { return false; },
+    gePrimitiveMergeFillFrom: function(argCount) { return false; },
+    gePrimitiveRegisterExternalEdge: function(argCount) { return false; },
+    gePrimitiveRegisterExternalFill: function(argCount) { return false; },
 },
 'ScratchPlugin', {
     ScratchPlugin: {

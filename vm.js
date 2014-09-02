@@ -2233,7 +2233,7 @@ Object.subclass('Squeak.Primitives',
         this.vm = vm;
         this.display = display;
         this.display.vm = this.vm;
-        this.oldPrims = !this.vm.hasClosures;
+        this.oldPrims = !this.vm.image.hasClosures;
         this.deferDisplayUpdates = false;
         this.deferDisplayUpdatesDisabled = 3;   // show first frames with immediate feedback
         this.semaphoresToSignal = [];
@@ -2325,6 +2325,10 @@ Object.subclass('Squeak.Primitives',
                     primitiveAt: this.primitiveFloatArrayAtAndPut.bind(this),
                     primitiveAtPut: this.primitiveFloatArrayAtAndPut.bind(this),
             },
+            SoundPlugin: {
+                primitiveSoundStop: this.fakePrimitive.bind(this, 'SoundPlugin.primitiveSoundStop', undefined),
+                primitiveSoundStopRecording: this.fakePrimitive.bind(this, 'SoundPlugin.primitiveSoundStopRecording', undefined),
+            },
             ScratchPlugin: this.ScratchPlugin,
         };
     },
@@ -2356,6 +2360,7 @@ Object.subclass('Squeak.Primitives',
     doPrimitive: function(index, argCount, primMethod) {
         this.success = true;
         switch (index) {
+            // Integer Primitives (0-19)
             case 1: return this.popNandPushIntIfOK(2,this.stackInteger(1) + this.stackInteger(0));  // Integer.add
             case 2: return this.popNandPushIntIfOK(2,this.stackInteger(1) - this.stackInteger(0));  // Integer.subtract
             case 3: return this.pop2andPushBoolIfOK(this.stackInteger(1) < this.stackInteger(0));   // Integer.less
@@ -2375,7 +2380,8 @@ Object.subclass('Squeak.Primitives',
             case 17: return this.popNandPushIfOK(2,this.doBitShift());  // SmallInt.bitShift
             case 18: return this.primitiveMakePoint(argCount);
             case 19: return false;                                 // Guard primitive for simulation -- *must* fail
-            case 20: return false;
+            // LargeInteger Primitives (20-39)
+            // 32-bit logic is aliased to Integer prims above
             case 21: return false; // primitiveAddLargeIntegers
             case 22: return false; // primitiveSubtractLargeIntegers
             case 23: return false; // primitiveLessThanLargeIntegers
@@ -2395,6 +2401,7 @@ Object.subclass('Squeak.Primitives',
             case 37: return false; // primitiveBitShiftLargeIntegers
             case 38: return this.popNandPushIfOK(2, this.objectAt(false,false,false)); // Float basicAt
             case 39: return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); // Float basicAtPut
+            // Float Primitives (40-59)
             case 40: return this.popNandPushFloatIfOK(1,this.stackInteger(0)); // primitiveAsFloat
             case 41: return this.popNandPushFloatIfOK(2,this.stackFloat(1)+this.stackFloat(0));  // Float +
             case 42: return this.popNandPushFloatIfOK(2,this.stackFloat(1)-this.stackFloat(0));  // Float -	
@@ -2415,6 +2422,7 @@ Object.subclass('Squeak.Primitives',
             case 57: return this.popNandPushFloatIfOK(1, Math.atan(this.stackFloat(0))); // Arctan
             case 58: return this.popNandPushFloatIfOK(1, Math.log(this.stackFloat(0))); // LogN
             case 59: return this.popNandPushFloatIfOK(1, Math.exp(this.stackFloat(0))); // Exp
+            // Subscript and Stream Primitives (60-67)
             case 60: return this.popNandPushIfOK(2, this.objectAt(false,false,false)); // basicAt:
             case 61: return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); // basicAt:put:
             case 62: return this.popNandPushIfOK(1, this.objectSize()); // size
@@ -2423,6 +2431,7 @@ Object.subclass('Squeak.Primitives',
             case 65: return false; // primitiveNext
             case 66: return false; // primitiveNextPut
             case 67: return false; // primitiveAtEnd
+            // StorageManagement Primitives (68-79)
             case 68: return this.popNandPushIfOK(2, this.objectAt(false,false,true)); // Method.objectAt:
             case 69: return this.popNandPushIfOK(3, this.objectAtPut(false,false,true)); // Method.objectAt:put:
             case 70: return this.popNandPushIfOK(1, this.vm.instantiateClass(this.stackNonInteger(0), 0)); // Class.new
@@ -2435,6 +2444,7 @@ Object.subclass('Squeak.Primitives',
             case 77: return this.popNandPushIfOK(1, this.someInstanceOf(this.stackNonInteger(0))); // Class.someInstance
             case 78: return this.popNandPushIfOK(1, this.nextInstanceAfter(this.stackNonInteger(0))); // Object.nextInstance
             case 79: return this.primitiveNewMethod(argCount); // Compiledmethod.new
+            // Control Primitives (80-89)
             case 80: return this.popNandPushIfOK(2,this.doBlockCopy()); // blockCopy:
             case 81: return this.primitiveBlockValue(argCount); // BlockContext.value
             case 82: return this.primitiveBlockValueWithArgs(argCount); // BlockContext.valueWithArguments:
@@ -2445,9 +2455,10 @@ Object.subclass('Squeak.Primitives',
             case 87: return this.primitiveResume(); // Process.resume
             case 88: return this.primitiveSuspend(); // Process.suspend
             case 89: return this.vm.flushMethodCache(); //primitiveFlushCache
+            // Input/Output Primitives (90-109)
             case 90: return this.primitiveMousePoint(argCount); // mousePoint
             case 91: return this.primitiveTestDisplayDepth(argCount); // cursorLocPut in old images
-            case 92: return false; // primitiveSetDisplayMode				"Blue Book: primitiveCursorLink"
+            // case 92: return false; // primitiveSetDisplayMode
             case 93: return this.primitiveInputSemaphore(argCount); 
             case 94: return this.primitiveGetNextEvent(argCount);
             case 95: return this.primitiveInputWord(argCount);
@@ -2465,16 +2476,18 @@ Object.subclass('Squeak.Primitives',
             case 107: return this.primitiveMouseButtons(argCount); // Sensor mouseButtons
             case 108: return this.primitiveKeyboardNext(argCount); // Sensor kbdNext
             case 109: return this.primitiveKeyboardPeek(argCount); // Sensor kbdPeek
+            // System Primitives (110-119)
             case 110: return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
             case 111: return this.popNandPushIfOK(1, this.vm.getClass(this.vm.top())); // Object.class
             case 112: return this.popNandPushIfOK(1, this.vm.image.bytesLeft()); //primitiveBytesLeft
             case 113: return this.primitiveQuit(argCount);
             case 114: return this.primitiveExitToDebugger(argCount);
             case 115: return this.primitiveChangeClass(argCount);
-            case 116: return this.vm.flushMethodCacheForMethod(this.vm.top());
+            case 116: return this.vm.flushMethodCacheForMethod(this.vm.top());  // after Squeak 2.2 uses 119
             case 117: return this.doNamedPrimitive(primMethod, argCount); // named prims
             //case 118: return false; //TODO primitiveDoPrimitiveWithArgs
-            case 119: return this.vm.flushMethodCacheForSelector(this.vm.top());
+            case 119: return this.vm.flushMethodCacheForSelector(this.vm.top()); // before Squeak 2.3 uses 116
+            // Miscellaneous Primitives (120-149)
             case 120: return false; //primitiveCalloutToFFI
             case 121: return this.primitiveImageName(argCount); //get+set imageName
             case 122: return this.primitiveReverseDisplay(argCount); // Blue Book: primitiveImageVolume
@@ -2505,6 +2518,7 @@ Object.subclass('Squeak.Primitives',
             case 147: return this.namedPrimitive('BitBltPlugin', 'primitiveWarpBits', argCount);
             case 148: return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); //shallowCopy
             case 149: return this.primitiveGetAttribute(argCount);
+            // File Primitives (150-169)
             case 150: if (this.oldPrims) return this.primitiveFileAtEnd(argCount);
             case 151: if (this.oldPrims) return this.primitiveFileClose(argCount);
             case 152: if (this.oldPrims) return this.primitiveFileGetPosition(argCount);
@@ -2519,52 +2533,125 @@ Object.subclass('Squeak.Primitives',
             case 161: if (this.oldPrims) return this.primitiveDirectoryDelimitor(argCount); // new: primitiveSetIdentityHash
             case 162: if (this.oldPrims) return this.primitiveDirectoryLookup(argCount);
             case 163: if (this.oldPrims) return this.primitiveDirectoryDelete(argCount);
-            //case 164: ?
+            // 164: unused
             case 165:
-            case 166: if (!this.oldPrims) return this.primitiveIntegerAtAndPut(argCount);
+            case 166: return this.primitiveIntegerAtAndPut(argCount);
             case 167: return false; // Processor.yield
-            case 168: if (!this.oldPrims) return this.primitiveCopyObject(argCount); 
-            case 169: return this.oldPrims ? this.primitiveDirectorySetMacTypeAndCreator(argCount) : this.primitiveNotIdentical(argCount);
-            // 170-197: was Sound
-            case 172: if (this.oldPrims) return this.fakePrimitive('SoundPlugin>>primitiveSoundStop', undefined, argCount);
+            case 168: return this.primitiveCopyObject(argCount); 
+            case 169: if (this.oldPrims) return this.primitiveDirectorySetMacTypeAndCreator(argCount);
+                else return this.primitiveNotIdentical(argCount);
+            // Sound Primitives (170-199)
+            case 170: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStart', argCount);
+            // 171: unused?
+            case 172: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStop', argCount);
+            case 173: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundAvailableSpace', argCount);
+            case 174: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySamples', argCount);
+            case 175: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySilence', argCount);
+            case 176: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primWaveTableSoundmixSampleCountintostartingAtpan', argCount);
+            case 177: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primFMSoundmixSampleCountintostartingAtpan', argCount);
+            case 178: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primPluckedSoundmixSampleCountintostartingAtpan', argCount);
+            case 179: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primSampledSoundmixSampleCountintostartingAtpan', argCount);
+            case 180: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixFMSound', argCount);
+            case 181: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixPluckedSound', argCount);
+            case 182: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'oldprimSampledSoundmixSampleCountintostartingAtleftVolrightVol', argCount);
+            case 183: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveApplyReverb', argCount);
+            case 184: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixLoopedSampledSound', argCount);
+            case 185: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixSampledSound', argCount);
+            // 186-188: was unused
             case 188: if (!this.oldPrims) return this.primitiveExecuteMethodArgsArray(argCount);
-            case 191: if (this.oldPrims) return this.fakePrimitive('SoundPlugin>>primitiveSoundStopRecording', undefined, argCount);
+            case 189: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundInsertSamples', argCount);
+            case 190: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStartRecording', argCount);
+            case 191: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStopRecording', argCount);
+            case 192: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundGetRecordingSampleRate', argCount);
+            case 193: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundRecordSamples', argCount);
+            case 194: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundSetRecordLevel', argCount);
             case 195: return false; // Context.findNextUnwindContextUpTo:
             case 196: return false; // Context.terminateTo:
             case 197: return false; // Context.findNextHandlerContextStarting
             case 198: return false; // MarkUnwindMethod (must fail)
             case 199: return false; // MarkHandlerMethod (must fail)
-            case 200: return this.primitiveClosureCopyWithCopiedValues(argCount);
-            case 201:
-            case 202:
-            case 203:
-            case 204:
-            case 205: return this.primitiveClosureValue(argCount);
-            case 206: return this.primitiveClosureValueWithArgs(argCount);
-            case 210: return this.popNandPushIfOK(2, this.objectAt(false,false,false)); // contextAt:
-            case 211: return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); // contextAt:put:
-            case 212: return this.popNandPushIfOK(1, this.objectSize()); // contextSize
-            case 221:
-            case 222: return this.primitiveClosureValueNoContextSwitch(argCount);
+            // Networking Primitives (200-229)
+            case 200: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveInitializeNetwork', argCount);
+                else return this.primitiveClosureCopyWithCopiedValues(argCount);
+            case 201: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverStartNameLookup', argCount);
+                else return this.primitiveClosureValue(argCount);
+            case 202: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverNameLookupResult', argCount);
+                else return this.primitiveClosureValue(argCount);
+            case 203: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverStartAddressLookup', argCount);
+                else return this.primitiveClosureValue(argCount);
+            case 204: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverAddressLookupResult', argCount);
+                else return this.primitiveClosureValue(argCount);
+            case 205: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverAbortLookup', argCount);
+                else return this.primitiveClosureValue(argCount);
+            case 206: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverLocalAddress', argCount);
+                else return  this.primitiveClosureValueWithArgs(argCount);
+            case 207: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverStatus', argCount);
+            case 208: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverError', argCount);
+            case 209: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketCreate', argCount);
+            case 210: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketDestroy', argCount);
+                else return this.popNandPushIfOK(2, this.objectAt(false,false,false)); // contextAt:
+            case 211: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectionStatus', argCount);
+                else return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); // contextAt:put:
+            case 212: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketError', argCount);
+            case 213: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketLocalAddress', argCount);
+            case 214: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketLocalPort', argCount);
+            case 215: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketRemoteAddress', argCount);
+            case 216: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketRemotePort', argCount);
+            case 217: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectToPort', argCount);
+            case 218: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketListenOnPort', argCount);
+            case 219: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketCloseConnection', argCount);
+            case 220: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketAbortConnection', argCount);
+            case 221: debugger;
+                if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketReceiveDataBufCount', argCount);
+                else return this.primitiveClosureValueNoContextSwitch(argCount);
+            case 222: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketReceiveDataAvailable', argCount);
+                else return this.primitiveClosureValueNoContextSwitch(argCount);
+            case 223: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketSendDataBufCount', argCount);
+            case 224: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketSendDone', argCount);
+            // 225-229: unused
+            // Other Primitives (230-249)
             case 230: return this.primitiveRelinquishProcessorForMicroseconds(argCount);
             case 231: return this.primitiveForceDisplayUpdate(argCount);
+            // case 232:  return this.primitiveFormPrint(argCount);
             case 233: return this.primitiveSetFullScreen(argCount);
             case 234: return false; // primBitmapdecompressfromByteArrayat
             case 235: return this.primitiveCompareString(argCount);
             case 236: return false; // primSampledSoundconvert8bitSignedFromto16Bit
             case 237: return false; // primBitmapcompresstoByteArray
-            case 238: case 239: case 240: case 241: return false; // serial port primitives
+            // 238-241: serial port primitives
+            case 238: return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortOpen', argCount);
+            case 239: return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortClose', argCount);
+            case 240: return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortWrite', argCount);
+            case 241: return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortRead', argCount);
+            // 242: unused
             case 243: return false; // primStringtranslatefromtotable
             case 244: return this.primitiveFindSubstring(argCount);
             case 245: return false; // primStringindexOfAsciiinStringstartingAt
             case 246: return false; // primStringfindSubstringinstartingAtmatchTable
+            // 247, 248: unused
             case 249: return this.primitiveArrayBecome(argCount, false); // one way, opt. copy hash
             case 254: return this.primitiveVMParameter(argCount);
+            //MIDI Primitives (520-539)
+            case 521: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIClosePort', argCount);
+            case 522: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIGetClock', argCount);
             case 523: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIGetPortCount', argCount);
+            case 524: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIGetPortDirectionality', argCount);
+            case 525: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIGetPortName', argCount);
+            case 526: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIOpenPort', argCount);
+            case 527: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIParameterGetOrSet', argCount);
+            case 528: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIRead', argCount);
+            case 529: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIWrite', argCount);
+            // 530-539: reserved for extended MIDI primitives     
+            // Sound Codec Primitives
             case 550: return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveDecodeMono', argCount);
             case 551: return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveDecodeStereo', argCount);
             case 552: return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveEncodeMono', argCount);
             case 553: return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveEncodeStereo', argCount);
+            // External primitive support primitives (570-574)
+            // case 570: return this.primitiveFlushExternalPrimitives(argCount);
+            // case 571: return this.primitiveUnloadModule(argCount);
+            // case 572: return this.primitiveListBuiltinModule(argCount);
+            // case 573: return this.primitiveListExternalModule(argCount);
         }
         console.error("primitive " + index + " not implemented yet");
         return false;

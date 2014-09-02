@@ -605,7 +605,7 @@ Object.subclass('Squeak.Image',
         if (obj.oop < 0) throw Error("temporary oop");
         return obj.oop;
     },
-    freeSpace: function() {
+    bytesLeft: function() {
         return this.totalMemory - this.oldSpaceBytes;
     },
     formatVersion: function() {
@@ -2467,7 +2467,7 @@ Object.subclass('Squeak.Primitives',
             case 109: return this.primitiveKeyboardPeek(argCount); // Sensor kbdPeek
             case 110: return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
             case 111: return this.popNandPushIfOK(1, this.vm.getClass(this.vm.top())); // Object.class
-            case 112: return this.popNandPushIfOK(1, 1000000); //primitiveBytesLeft
+            case 112: return this.popNandPushIfOK(1, this.vm.image.bytesLeft()); //primitiveBytesLeft
             case 113: return this.primitiveQuit(argCount);
             case 114: return this.primitiveExitToDebugger(argCount);
             case 115: return this.primitiveChangeClass(argCount);
@@ -3077,7 +3077,7 @@ Object.subclass('Squeak.Primitives',
     },
     primitiveFullGC: function(argCount) {
         this.vm.image.fullGC("primitive");
-        var bytes = this.vm.image.freeSpace();
+        var bytes = this.vm.image.bytesLeft();
         return this.popNandPushIfOK(1, this.makeLargeIfNeeded(bytes));
     },
     primitiveMakePoint: function(argCount) {

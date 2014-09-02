@@ -28,7 +28,7 @@ Object.extend(Squeak, {
     // system attributes
     vmVersion: "SqueakJS 0.3.3",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
-    vmPath: "/SqueakJS/",               // entirely made up
+    vmPath: "/",
     vmFile: "vm.js",
     platformName: "Web",
     platformSubtype: "unknown",
@@ -1050,6 +1050,9 @@ Object.subclass('Squeak.Interpreter',
         this.nilObj = this.specialObjects[Squeak.splOb_NilObject];
         this.falseObj = this.specialObjects[Squeak.splOb_FalseObject];
         this.trueObj = this.specialObjects[Squeak.splOb_TrueObject];
+        // hack for old image that does not support Unix files
+        if (!this.findMethod("UnixFileDirectory class>>pathNameDelimiter"))
+            this.primHandler.emulateMac = true;
     },
     initVMState: function() {
         this.byteCodeCount = 0;
@@ -2491,7 +2494,7 @@ Object.subclass('Squeak.Primitives',
             case 139: return this.popNandPushIfOK(1, this.nextObject(this.vm.top())); // Object.nextObject
             case 140: return this.fakePrimitive('140 (primitiveBeep)', true, argCount); // TODO
             case 141: return this.primitiveClipboardText(argCount);
-            case 142: return this.popNandPushIfOK(1, this.makeStString(Squeak.vmPath));
+            case 142: return this.popNandPushIfOK(1, this.makeStString(this.filenameToSqueak(Squeak.vmPath)));
             case 143: // short at and shortAtPut
             case 144: return this.primitiveShortAtAndPut(argCount);
             case 145: return this.primitiveConstantFill(argCount);
@@ -2893,6 +2896,23 @@ Object.subclass('Squeak.Primitives',
             return array;
         }
         throw Error("unknown buffer type");
+    },
+    filenameToSqueak: function(unixpath) {
+        var slash = unixpath[0] !== "/" ? "/" : "",
+            filepath = "/SqueakJS" + slash + unixpath;                      // add SqueakJS
+        if (this.emulateMac) 
+            filepath = ("Macintosh HD" + filepath)                          // add Mac volume
+                .replace(/\//g, "€").replace(/:/g, "/").replace(/€/g, ":"); // substitute : for /
+        console.log("to Squeak: '" + unixpath + "' ==> '" + filepath + "'");
+        return filepath;
+    },
+    filenameFromSqueak: function(filepath) {
+        var unixpath = !this.emulateMac ? filepath :
+            filepath.replace(/^[^:]*:/, ":")                            // remove volume
+            .replace(/\//g, "€").replace(/:/g, "/").replace(/€/g, ":"); // substitute : for /
+        unixpath = unixpath.replace(/^\/?SqueakJS\/?/, "/");            // strip SqueakJS
+        console.log("from Squeak: '" + filepath + "' ==> '" + unixpath + "'");
+        return unixpath;
     },
 },
 'indexing', {
@@ -3490,8 +3510,8 @@ Object.subclass('Squeak.Primitives',
         if (!this.success) return false;
         var value;
         switch (attr) {
-            case 0: value = Squeak.vmPath + Squeak.vmFile; break;
             case 1: value = this.vm.image.name; break;
+            case 0: value = this.filenameToSqueak(Squeak.vmPath + Squeak.vmFile); break;
             case 1001: value = Squeak.platformName; break;
             case 1002: value = Squeak.osVersion; break;
             case 1003: value = Squeak.platformSubtype; break;
@@ -3568,8 +3588,8 @@ Object.subclass('Squeak.Primitives',
     },
     primitiveImageName: function(argCount) {
         if (argCount == 0)
-            return this.popNandPushIfOK(1, this.makeStString(this.vm.image.name));
-        this.vm.image.name = this.vm.top().bytesAsString();
+            return this.popNandPushIfOK(1, this.makeStString(this.filenameToSqueak(this.vm.image.name)));
+        this.vm.image.name = this.filenameFromSqueak(this.vm.top().bytesAsString());
         window.localStorage['squeakImageName'] = this.vm.image.name;
         return true;
     },
@@ -3934,9 +3954,10 @@ Object.subclass('Squeak.Primitives',
     primitiveDirectoryCreate: function(argCount) {
         var dirNameObj = this.stackNonInteger(0);
         if (!this.success) return false;
-        this.success = Squeak.dirCreate(dirNameObj.bytesAsString());
+        var dirName = this.filenameFromSqueak(dirNameObj.bytesAsString());
+        this.success = Squeak.dirCreate(dirName);
         if (!this.success) {
-            var path = Squeak.splitFilePath(dirNameObj.bytesAsString());
+            var path = Squeak.splitFilePath(dirName);
             console.log("Directory not created: " + path.fullname);
         }
         return this.popNIfOK(argCount);
@@ -3944,11 +3965,12 @@ Object.subclass('Squeak.Primitives',
     primitiveDirectoryDelete: function(argCount) {
         var dirNameObj = this.stackNonInteger(0);
         if (!this.success) return false;
-        this.success = Squeak.dirDelete(dirNameObj.bytesAsString());
+        var dirName = this.filenameFromSqueak(dirNameObj.bytesAsString());
+        this.success = Squeak.dirDelete(dirName);
         return this.popNIfOK(argCount);
     },
     primitiveDirectoryDelimitor: function(argCount) {
-        var delimitor = '/';
+        var delimitor = this.emulateMac ? ':' : '/';
         return this.popNandPushIfOK(1, this.charFromInt(delimitor.charCodeAt(0)));
     },
     primitiveDirectoryEntry: function(argCount) {
@@ -3959,14 +3981,24 @@ Object.subclass('Squeak.Primitives',
         var index = this.stackInteger(0),
             dirNameObj = this.stackNonInteger(1);
         if (!this.success) return false;
-        var entries = Squeak.dirList(dirNameObj.bytesAsString());
+        var sqDirName = dirNameObj.bytesAsString();
+        var dirName = this.filenameFromSqueak(sqDirName);
+        var entries = Squeak.dirList(dirName);
         if (!entries) {
-            var path = Squeak.splitFilePath(dirNameObj.bytesAsString());
+            var path = Squeak.splitFilePath(dirName);
             console.log("Directory not found: " + path.fullname);
             return false;
         }
-        var keys = Object.keys(entries);
-        this.popNandPushIfOK(argCount+1, this.makeStObject(entries[keys[index - 1]]));  // entry or nil
+        var keys = Object.keys(entries).sort(),
+            entry = entries[keys[index - 1]];
+        if (sqDirName === "/") { // fake top-level dir
+            if (index === 1) {
+                entry[0] = "SqueakJS";
+                entry[3] = true;
+            }
+            else entry = null;
+        }
+        this.popNandPushIfOK(argCount+1, this.makeStObject(entry));  // entry or nil
         return true;
     },
     primitiveDirectorySetMacTypeAndCreator: function(argCount) {
@@ -3989,7 +4021,8 @@ Object.subclass('Squeak.Primitives',
     primitiveFileDelete: function(argCount) {
         var fileNameObj = this.stackNonInteger(0);
         if (!this.success) return false;
-        this.success = Squeak.fileDelete(fileNameObj.bytesAsString());
+        var fileName = this.filenameFromSqueak(fileNameObj.bytesAsString());
+        this.success = Squeak.fileDelete(fileName);
         return this.popNIfOK(argCount);
     },
     primitiveFileFlush: function(argCount) {
@@ -4007,9 +4040,10 @@ Object.subclass('Squeak.Primitives',
     },
     primitiveFileOpen: function(argCount) {
         var writeFlag = this.stackBoolean(0),
-            nameObj = this.stackNonInteger(1);
+            fileNameObj = this.stackNonInteger(1);
         if (!this.success) return false;
-        var file = this.fileOpen(nameObj.bytesAsString(), writeFlag);
+        var fileName = this.filenameFromSqueak(fileNameObj.bytesAsString()),
+            file = this.fileOpen(fileName, writeFlag);
         if (!file) return false;
         var handle = this.makeStArray([file.name]); // array contents irrelevant
         handle.file = file;             // shared between handles
@@ -4046,7 +4080,9 @@ Object.subclass('Squeak.Primitives',
         var oldNameObj = this.stackNonInteger(1),
             newNameObj = this.stackNonInteger(0);
         if (!this.success) return false;
-        this.success = Squeak.fileRename(oldNameObj.bytesAsString(), newNameObj.bytesAsString());
+        var oldName = this.filenameFromSqueak(oldNameObj.bytesAsString()),
+            newName = this.filenameFromSqueak(newNameObj.bytesAsString());
+        this.success = Squeak.fileRename(oldName, newName);
         this.vm.breakOut();     // return to JS asap so async file handler can run
         return this.popNIfOK(argCount);
     },
@@ -4744,7 +4780,6 @@ Object.subclass('Squeak.Primitives',
         primitiveGetFolderPath: "scratch_primitiveGetFolderPath",
     },
     scratch_initialiseModule: function(interpreterProxy) {
-        Squeak.dirCreate("/ScratchJS");
     },
     scratch_primitiveOpenURL: function(argCount) {
         var url = this.stackNonInteger(0).bytesAsString();
@@ -4757,14 +4792,14 @@ Object.subclass('Squeak.Primitives',
         if (!this.success) return false;
         var path;
         switch (index) {
-            case 1: path = '/ScratchJS'; break;     // home dir
+            case 1: path = '/'; break;              // home dir
             // case 2: path = '/desktop'; break;    // desktop
-            case 3: path = '/ScratchJS'; break;     // documents
+            // case 3: path = '/documents'; break;  // documents
             // case 4: path = '/pictures'; break;   // my pictures
             // case 5: path = '/music'; break;      // my music
         }
         if (!path) return false;
-        this.vm.popNandPush(argCount + 1, this.makeStString(path));
+        this.vm.popNandPush(argCount + 1, this.makeStString(this.filenameToSqueak(path)));
         return true;
     },
 });

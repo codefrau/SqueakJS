@@ -3008,7 +3008,6 @@ Object.subclass('Squeak.Primitives',
                     var floatData = array.floatData();
                     floatData.setUint32(index == 1 ? 0 : 4, wordToPut, false);
                     array.float = floatData.getFloat64(0);
-                    debugger;
                 } else this.success = false;
                 return this.vm.stackValue(0);
             }

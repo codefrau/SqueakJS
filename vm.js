@@ -3437,7 +3437,7 @@ Object.subclass('Squeak.Primitives',
         this.vm.reclaimableContextCount = 0;
         if (this.vm.breakOnContextChanged) {
             this.vm.breakOnContextChanged = false;
-            this.vm.breakOutOfInterpreter = 'break';
+            this.vm.breakNow();
         }
     },
     pickTopProcess: function() { // aka wakeHighestPriority
@@ -3650,11 +3650,11 @@ Object.subclass('Squeak.Primitives',
     },
     primitiveQuit: function(argCount) {
         Squeak.flushAllFiles();
-        this.vm.breakOutOfInterpreter = 'break'; 
+        this.vm.breakNow("quit"); 
         return true;
     },
     primitiveExitToDebugger: function(argCount) {
-        this.vm.breakOutOfInterpreter = 'break';
+        this.vm.breakNow("debugger primitive");
         debugger;
         return true;
     },
@@ -3808,7 +3808,7 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     primitiveForceDisplayUpdate: function(argCount) {
-        this.vm.breakOutOfInterpreter = this.vm.breakOutOfInterpreter || true;   // show on screen
+        this.vm.breakOut();   // show on screen
         this.vm.popN(argCount);
         return true;
     },
@@ -3926,7 +3926,7 @@ Object.subclass('Squeak.Primitives',
         // make sure we tend to pending delays
         this.vm.interruptCheckCounter = 0;
         this.vm.isIdle = true;
-        this.vm.breakOutOfInterpreter = true;
+        this.vm.breakOut();
         return true;
     },
 	millisecondClockValue: function() {

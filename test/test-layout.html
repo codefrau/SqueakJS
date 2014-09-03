@@ -1,0 +1,206 @@
+<html>
+<head>
+    <title>Layout Test</title>
+    <style>
+    body {
+        background: #eae6d1;
+        font-family: sans-serif;
+    }
+    canvas {
+        position: absolute;
+        background: #000;
+        // positioned and sized by script
+    }
+    div#header {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        padding: 10px;
+        border-bottom: 6px double gray;
+    }
+    div#footer {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: 10px;
+        border-top: 6px double gray;
+    }
+    </style>
+<script>
+
+function setupFullscreen(display, canvas) {
+    function fullscreenChange(fullscreenElement) {
+        display.fullscreen = canvas == fullscreenElement;
+        window.onresize();
+    };
+
+    // Fullscreen support is very browser-dependent
+    if (canvas.requestFullscreen) {
+        document.addEventListener("fullscreenchange", function(){fullscreenChange(document.fullscreenElement)});
+        return function checkFullscreen() {
+            if (document.fullscreenEnabled && !document.fullscreenElement == display.fullscreen) {
+                if (display.fullscreen) canvas.requestFullscreen();
+                else document.exitFullscreen();
+            }
+        }
+    } else if (canvas.webkitRequestFullscreen) {
+        document.addEventListener("webkitfullscreenchange", function(){fullscreenChange(document.webkitFullscreenElement)});
+        return function checkFullscreen() {
+            if (document.webkitFullscreenEnabled && !document.webkitFullscreenElement == display.fullscreen) {
+                if (display.fullscreen) canvas.webkitRequestFullscreen();
+                else document.webkitExitFullscreen();
+            }
+        }
+    } else if (canvas.mozRequestFullScreen) {
+        document.addEventListener("mozfullscreenchange", function(){fullscreenChange(document.mozFullScreenElement)});
+        return function checkFullscreen() {
+            if (document.mozFullScreenEnabled && !document.mozFullScreenElement == display.fullscreen) {
+                if (display.fullscreen) canvas.mozRequestFullScreen();
+                else document.mozCancelFullScreen();
+            }
+        }
+    } else if (canvas.msRequestFullscreen) {
+        document.addEventListener("MSFullscreenChange", function(){fullscreenChange(document.msFullscreenElement)});
+        return function checkFullscreen() {
+            if (document.msFullscreenEnabled && !document.msFullscreenElement == display.fullscreen) {
+                if (display.fullscreen) canvas.msRequestFullscreen();
+                else document.msExitFullscreen();
+            }
+        }
+    } else {
+        return function checkFullscreen() {}
+    }
+}
+
+window.onload = function() {
+    var options = {};
+    var display = {
+        fullscreen: false,
+        offsetX: 0,
+        offsetY: 0,
+        width: 10,
+        height: 10,
+        mouseX: 0,
+        mouseY: 0,
+    };
+    var checkFullscreen = setupFullscreen(display, canvas);
+    toggleFull.onclick = function() {
+        display.fullscreen = !display.fullscreen;
+        checkFullscreen();
+    };
+    toggleFixed.onclick = function() {
+        if (options.fixedWidth) {
+            delete options.fixedWidth;
+            delete options.fixedHeight;
+        } else {
+            options.fixedWidth = 640;
+            options.fixedHeight = 480;
+        }
+        window.onresize();
+    };
+    var ctx = canvas.getContext("2d");
+    function draw(x, y) {
+        var w = display.width,
+            h = display.height;
+        ctx.save();
+        if (display.offsetX || display.offsetY)
+            ctx.translate(display.offsetX, display.offsetY);
+        ctx.fillStyle = "white";
+        ctx.fillRect(0, 0, w, h);
+        ctx.beginPath(); ctx.arc(  20,   20, 19, 0, 2*Math.PI); ctx.stroke();
+        ctx.beginPath(); ctx.arc(w-20,   20, 19, 0, 2*Math.PI); ctx.stroke();
+        ctx.beginPath(); ctx.arc(w-20, h-20, 19, 0, 2*Math.PI); ctx.stroke();
+        ctx.beginPath(); ctx.arc(  20, h-20, 19, 0, 2*Math.PI); ctx.stroke();
+        ctx.beginPath(); ctx.arc( w/2,  h/2, Math.min(w,h)/2-2, 0, 2*Math.PI); ctx.stroke();
+        if (x !== undefined) {
+            ctx.lineWidth = 10;
+            ctx.strokeStyle = "rgba(0, 0, 0, 0.5)";
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+        }
+        ctx.restore();
+    }
+    canvas.onmousemove = function(evt) {
+        // scale events to actual canvas extent
+        var x = (evt.pageX - this.offsetLeft) * (this.width / this.offsetWidth);
+            y = (evt.pageY - this.offsetTop) * (this.height / this.offsetHeight);
+        // subtract display offset and clamp to display size
+        display.mouseX = Math.max(0, Math.min(display.width, x - display.offsetX));
+        display.mouseY = Math.max(0, Math.min(display.height, y - display.offsetY));
+        draw(display.mouseX, display.mouseY);
+    };
+    canvas.ontouchmove = function(evt) {
+        canvas.onmousemove(evt.touches[0]);
+    };
+    window.onresize = function() {
+        // CSS won't let us do what we want so we will layout the canvas ourselves.
+        // Also, we need to paper over browser differences in fullscreen mode where
+        // Firefox scales the canvas but Webkit does not, which makes a difference
+        // if we do not use actual pixels but are scaling a fixed-resolution canvas.
+        var x = 0,
+            y = display.fullscreen ? 0 : header.offsetTop + header.offsetHeight,
+            w = window.innerWidth,
+            h = display.fullscreen ? window.innerHeight : Math.max(100, footer.offsetTop - y),
+            innerPadX = 0, // padding inside canvas
+            innerPadY = 0,
+            outerPadX = 0, // padding outside canvas
+            outerPadY = 0;
+        // above are the default values for laying out the canvas
+        if (!options.fixedWidth) { // set canvas resolution
+            display.width = w;
+            display.height = h;
+        } else { // fixed resolution and aspect ratio
+            display.width = options.fixedWidth;
+            display.height = options.fixedHeight;
+            var wantRatio = display.width / display.height,
+                haveRatio = w / h;
+            if (display.fullscreen) { // need to use inner padding
+                if (haveRatio > wantRatio) {
+                    innerPadX = Math.floor(display.height * haveRatio) - display.width;
+                } else {
+                    innerPadY = Math.floor(display.width / haveRatio) - display.height;
+                }
+            } else { // can control outer padding
+                if (haveRatio > wantRatio) {
+                    outerPadX = w - Math.floor(h * wantRatio);
+                } else {
+                    outerPadY = h - Math.floor(w / wantRatio);
+                }
+            }
+        }
+        // set size and position
+        canvas.style.left = x + Math.floor(outerPadX / 2);
+        canvas.style.top = y + Math.floor(outerPadY / 2);;
+        canvas.style.width = w - outerPadX;
+        canvas.style.height = h - outerPadY;
+        // set resolution
+        display.offsetX = Math.floor(innerPadX / 2);
+        display.offsetY = Math.floor(innerPadY / 2);
+        var canvasWidth = display.width + innerPadX;
+            canvasHeight = display.height + innerPadY;
+        if (canvas.width != canvasWidth || canvas.height != canvasHeight) {
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            draw();
+        }
+    }
+    window.onresize();
+}
+</script>
+</head>
+<body>
+    <div id="header">
+        <h1>Layout Test</h1>
+    </div>
+    <canvas id="canvas" width="10" height="10"></canvas>
+    <div id="footer">
+        <p>
+            <button id="toggleFull" type="button">Toggle Fullscreen</button>
+            <button id="toggleFixed" type="button">Toggle Fixed Resolution</button>
+            Test canvas layout and event handling.
+        </p>
+    </div>
+</body>
+</html>

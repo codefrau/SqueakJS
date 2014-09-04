@@ -24,30 +24,23 @@
 var fullscreen = navigator.standalone;
 
 window.onload = function() {
-    var canvas = document.getElementsByTagName("canvas")[0];
     if (fullscreen) {
         document.body.style.margin = 0;
         document.body.style.backgroundColor = 'black';
-        ['h1','p','div'].forEach(function(n){document.getElementsByTagName(n)[0].style.display="none"});
-        var scale = screen.width / canvas.width;
-        var head = document.getElementsByTagName("head")[0];
-        head.innerHTML += '<meta name="viewport" content="initial-scale=' + scale + '">';
-    } else {
-        canvas.style.width = "80%";
+        sqHeader.style.display = 'none';
+        sqFooter.style.display = 'none';
     }
-    var display = createSqueakDisplay(canvas, {fixedWidth: 1200, fixedHeight: 900});
+    var display = createSqueakDisplay(sqCanvas, {fixedWidth: 1200, fixedHeight: 900, fullscreen: fullscreen, header: sqHeader, footer: sqFooter});
     function loadAndRunImage(url) {
         var imageName = Squeak.splitFilePath(url).basename;
         display.showBanner("Downloading " + imageName);
-        var progress = document.getElementsByTagName("progress")[0];
         var rq = new XMLHttpRequest();
         rq.open('GET', url);
         rq.responseType = 'arraybuffer';
         rq.onprogress = function(e) {
-            if (e.lengthComputable) progress.value = 100 * e.loaded / e.total;
+            if (e.lengthComputable) display.showProgress(e.loaded / e.total);
         }
         rq.onload = function(e) {
-            progress.style.display = "none";
             display.showBanner("Initializing, please wait");
             window.setTimeout(function(){
                 var image = new Squeak.Image(rq.response, imageName);
@@ -59,9 +52,9 @@ window.onload = function() {
                             if (typeof ms === 'number') { // continue running
                                 window.setTimeout(run, ms);
                             } else { // quit
-                                canvas.style.webkitTransition = "-webkit-transform 0.5s";
-                                canvas.style.webkitTransform = "scale(0)";
-                                window.setTimeout(function(){canvas.style.display = 'none'}, 500);
+                                sqCanvas.style.webkitTransition = "-webkit-transform 0.5s";
+                                sqCanvas.style.webkitTransform = "scale(0)";
+                                window.setTimeout(function(){sqCanvas.style.display = 'none'}, 500);
                             }
                         });
                     } catch(error) {
@@ -80,5 +73,5 @@ window.onload = function() {
 if (addToHomescreen.isStandalone)
     fullscreen = true;
 else addToHomescreen({
-   appID: 'squeakjs.etoys.add2home',
+    appID: 'squeakjs.etoys.add2home',
 });

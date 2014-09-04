@@ -24,16 +24,13 @@
 var fullscreen = navigator.standalone;
 
 window.onload = function() {
-    var canvas = document.getElementsByTagName("canvas")[0];
     if (fullscreen) {
         document.body.style.margin = 0;
         document.body.style.backgroundColor = 'black';
-        ['h1','p','div'].forEach(function(n){document.getElementsByTagName(n)[0].style.display="none"});
-        var scale = screen.width / canvas.width;
-        var head = document.getElementsByTagName("head")[0];
-        head.innerHTML += '<meta name="viewport" content="initial-scale=' + scale + '">';
+        sqHeader.style.display = 'none';
+        sqFooter.style.display = 'none';
     }
-    var display = createSqueakDisplay(canvas, {swapButtons: true});
+    var display = createSqueakDisplay(sqCanvas, {fullscreen: fullscreen, header: sqHeader, footer: sqFooter, swapButtons: true});
     var loop;
     function runImage(buffer, name) {
         window.clearTimeout(loop);
@@ -49,9 +46,9 @@ window.onload = function() {
                         if (typeof ms === 'number') { // continue running
                             loop = window.setTimeout(run, ms);
                         } else { // quit
-                            canvas.style.webkitTransition = "-webkit-transform 0.5s";
-                            canvas.style.webkitTransform = "scale(0)";
-                            window.setTimeout(function(){canvas.style.display = 'none'}, 500);
+                            sqCanvas.style.webkitTransition = "-webkit-transform 0.5s";
+                            sqCanvas.style.webkitTransform = "scale(0)";
+                            window.setTimeout(function(){sqCanvas.style.display = 'none'}, 500);
                         }
                     });
                 } catch(error) {
@@ -92,15 +89,13 @@ window.onload = function() {
     });
     function downloadImage(url) {
         display.showBanner("Downloading " + url);
-        var progress = document.getElementsByTagName("progress")[0];
         var rq = new XMLHttpRequest();
         rq.open('GET', url);
         rq.responseType = 'arraybuffer';
         rq.onprogress = function(e) {
-            if (e.lengthComputable) progress.value = 100 * e.loaded / e.total;
+            if (e.lengthComputable) display.showProgress(e.loaded / e.total);
         }
         rq.onload = function(e) {
-            progress.style.display = "none";
             runImage(rq.response, url);
         };
         rq.send();

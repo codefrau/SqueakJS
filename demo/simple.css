@@ -2,17 +2,29 @@ body {
     background-color: #eae6d1;
     font-family: sans-serif;
 }
-progress {
-    vertical-align: top;
-}
 canvas {
-    display: block;
-    margin-left: auto;
-    margin-right: auto;
+    position: absolute;
+    background: #000;
     cursor: default;
     -webkit-user-select: none;
     -moz-user-select: none;
     -ms-user-select: none;
     -o-user-select: none;
     user-select: none;
+}
+div#sqHeader {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 10px;
+    border-bottom: 6px double gray;
+}
+div#sqFooter {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 10px;
+    border-top: 6px double gray;
 }

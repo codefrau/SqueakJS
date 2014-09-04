@@ -5768,7 +5768,8 @@ Object.subclass('Squeak.BitBlt',
                 : function(src, dst) { return dst == 0 ? 0 : (dst & 0xFF000000) == 0 ? dst : dst | (src & 0xFF000000)};
             case 41: return this.success = false;  // Freetype subpixel rendering
         }
-        throw Error("bitblt rule " + rule + " not implemented yet");
+        console.error("bitblt rule " + rule + " not implemented yet");
+        return function(src, dst) { return dst }; 
     },
     rgbMul: function(src, dst) {
         if (this.dest.depth < 16 ) {

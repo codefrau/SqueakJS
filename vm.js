@@ -2954,7 +2954,7 @@ Object.subclass('Squeak.Primitives',
         var unixpath = !this.emulateMac ? filepath :
             filepath.replace(/^[^:]*:/, ":")                            // remove volume
             .replace(/\//g, "€").replace(/:/g, "/").replace(/€/g, ":"); // substitute : for /
-        unixpath = unixpath.replace(/^\/?SqueakJS\/?/, "/");            // strip SqueakJS
+        unixpath = unixpath.replace(/^\/*SqueakJS\/?/, "/");            // strip SqueakJS
         return unixpath;
     },
 },

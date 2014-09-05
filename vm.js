@@ -4843,6 +4843,7 @@ Object.subclass('Squeak.Primitives',
         initialiseModule: "scratch_initialiseModule",
         primitiveOpenURL: "scratch_primitiveOpenURL",
         primitiveGetFolderPath: "scratch_primitiveGetFolderPath",
+        primitiveHueShift: "scratch_primitiveHueShift",
     },
     scratch_initialiseModule: function(interpreterProxy) {
     },
@@ -4866,6 +4867,9 @@ Object.subclass('Squeak.Primitives',
         if (!path) return false;
         this.vm.popNandPush(argCount + 1, this.makeStString(this.filenameToSqueak(path)));
         return true;
+    },
+    scratch_primitiveHueShift: function(argCount) {
+        return this.fakePrimitive("ScratchPlugin.primitiveHueShift", 42);
     },
 });
 

@@ -26,7 +26,7 @@ Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.4.0",
+    vmVersion: "SqueakJS 0.4.1",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -2954,7 +2954,7 @@ Object.subclass('Squeak.Primitives',
         var unixpath = !this.emulateMac ? filepath :
             filepath.replace(/^[^:]*:/, ":")                            // remove volume
             .replace(/\//g, "€").replace(/:/g, "/").replace(/€/g, ":"); // substitute : for /
-        unixpath = unixpath.replace(/^\/?SqueakJS\/?/, "/");            // strip SqueakJS
+        unixpath = unixpath.replace(/^\/*SqueakJS\/?/, "/");            // strip SqueakJS
         return unixpath;
     },
 },
@@ -4843,6 +4843,7 @@ Object.subclass('Squeak.Primitives',
         initialiseModule: "scratch_initialiseModule",
         primitiveOpenURL: "scratch_primitiveOpenURL",
         primitiveGetFolderPath: "scratch_primitiveGetFolderPath",
+        primitiveHueShift: "scratch_primitiveHueShift",
     },
     scratch_initialiseModule: function(interpreterProxy) {
     },
@@ -4866,6 +4867,9 @@ Object.subclass('Squeak.Primitives',
         if (!path) return false;
         this.vm.popNandPush(argCount + 1, this.makeStString(this.filenameToSqueak(path)));
         return true;
+    },
+    scratch_primitiveHueShift: function(argCount) {
+        return this.fakePrimitive("ScratchPlugin.primitiveHueShift", 42);
     },
 });
 
@@ -4929,6 +4933,8 @@ Object.subclass('Squeak.BitBlt',
         return this.success;
     },
     loadHalftone: function(halftoneObj) {
+        if (halftoneObj.pointers) // a Pattern
+            halftoneObj = halftoneObj.pointers[Squeak.Form_bits];
         return halftoneObj.words;
     },
     loadForm: function(formObj) {

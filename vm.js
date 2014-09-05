@@ -4929,6 +4929,8 @@ Object.subclass('Squeak.BitBlt',
         return this.success;
     },
     loadHalftone: function(halftoneObj) {
+        if (halftoneObj.pointers) // a Pattern
+            halftoneObj = halftoneObj.pointers[Squeak.Form_bits];
         return halftoneObj.words;
     },
     loadForm: function(formObj) {

@@ -33,6 +33,7 @@ window.onload = function() {
     var display = createSqueakDisplay(sqCanvas, {fixedWidth: 1200, fixedHeight: 900, fullscreen: fullscreen, header: sqHeader, footer: sqFooter});
     function loadAndRunImage(url) {
         var imageName = Squeak.splitFilePath(url).basename;
+        if (document.location.hostname == "localhost") url = imageName;         // load from local folder while debugging
         display.showBanner("Downloading " + imageName);
         var rq = new XMLHttpRequest();
         rq.open('GET', url);
@@ -48,7 +49,7 @@ window.onload = function() {
                 display.clear();
                 var run = function() {
                     try {
-                        vm.interpret(20, function(ms) {
+                        vm.interpret(30, function(ms) {
                             if (typeof ms === 'number') { // continue running
                                 window.setTimeout(run, ms);
                             } else { // quit

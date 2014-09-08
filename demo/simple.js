@@ -42,7 +42,7 @@ window.onload = function() {
             display.clear();
             function run() {
                 try {
-                    vm.interpret(20, function(ms) {
+                    vm.interpret(30, function(ms) {
                         if (typeof ms === 'number') { // continue running
                             loop = window.setTimeout(run, ms);
                         } else { // quit

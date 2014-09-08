@@ -1289,8 +1289,8 @@ Object.subclass('Squeak.Interpreter',
         if (this.frozen) return 'frozen';
         this.isIdle = false;
         this.breakOutOfInterpreter = false;
-        this.breakOutTick = this.lastTick + (forMilliseconds || 500);
-        while (!this.breakOutOfInterpreter)
+        this.breakOutTick = this.primHandler.millisecondClockValue() + (forMilliseconds || 500);
+        while (this.breakOutOfInterpreter === false)
             this.interpretOne();
         // this is to allow 'freezing' the interpreter and restarting it asynchronously. See freeze()
         if (typeof this.breakOutOfInterpreter == "function")

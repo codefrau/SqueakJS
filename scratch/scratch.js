@@ -32,7 +32,6 @@ window.onload = function() {
     }
     var display = createSqueakDisplay(sqCanvas, {fullscreen: fullscreen, header: sqHeader, footer: sqFooter});
     function loadAndRunImage(url) {
-        //url = "../demo/mini.image"    // for debugging
         var imageName = Squeak.splitFilePath(url).basename;
         if (document.location.hostname == "localhost") url = imageName;         // load from local folder while debugging
         display.showBanner("Downloading " + imageName);
@@ -51,7 +50,7 @@ window.onload = function() {
                 display.clear();
                 var run = function() {
                     try {
-                        vm.interpret(20, function(ms) {
+                        vm.interpret(30, function(ms) {
                             if (typeof ms === 'number') { // continue running
                                 window.setTimeout(run, ms);
                             } else { // quit

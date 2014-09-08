@@ -1973,8 +1973,9 @@ Object.subclass('Squeak.Interpreter',
         return rcvr - Math.floor(rcvr/arg) * arg;
     },
     safeShift: function(smallInt, shiftCount) {
+         // JS shifts only up to 31 bits
         if (shiftCount < 0) {
-            if (shiftCount < -31) return 0; // JS shifts only up to 31 bits
+            if (shiftCount < -31) return smallInt < 0 ? -1 : 0;
             return smallInt >> -shiftCount; // OK to lose bits shifting right
         }
         if (shiftCount > 31) return smallInt == 0 ? 0 : Squeak.NonSmallInt;

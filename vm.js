@@ -4902,7 +4902,70 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     scratch_primitiveHueShift: function(argCount) {
-        return this.fakePrimitive("ScratchPlugin.primitiveHueShift", 42);
+        var inOop, outOop, shift, v_in, sz, out, pix, r, g, b, max, min, brightness, saturation, hue;
+        inOop = this.stackNonInteger(2);
+        outOop = this.stackNonInteger(1);
+        shift = this.stackInteger(0);
+        if (!this.success || !inOop.words || !outOop.words) return false;
+        v_in = inOop.words;
+        out = outOop.words;
+        sz = v_in.length;
+        if (sz !== out.length) return false;
+        for (var i = 0 ; i < sz; i++) {
+            pix = v_in[i] & 0xFFFFFF;
+            if (pix !== 0) { // skip pixel values of 0 (transparent)
+                r = (pix >> 16) & 0xFF;
+                g = (pix >> 8) & 0xFF;
+                b = pix & 0xFF;
+                max = Math.max(r, g, b);
+                min = Math.min(r, g, b);
+                // find current brightness (v) and saturation with range 0 to 1000
+                brightness = (max * 1000) / 255 |0;
+                saturation = max === 0 ? 0 : (max - min) * 1000 / max |0;
+                if (brightness < 110) {					// force black to a very dark, saturated gray
+                    brightness = 110;  saturation = 1000;
+                }
+                if (saturation < 90) saturation = 90;   // force a small color change on grays
+                // tint all blacks and grays the same
+                hue = (brightness === 110) || (saturation === 90) ? 0 : this.scratch_hueFromRGBMinMax(r, g, b, min, max);
+                hue = (hue + shift + 360000000) % 360;  // compute new hue
+                this.scratch_bitmapAtPutHSV(out, i, hue, saturation, brightness);
+            }
+        }
+        this.vm.popN(3);  // pop args, leave rcvr on stack
+        return true;
+    },
+    scratch_hueFromRGBMinMax: function(r, g, b, min, max) {
+	    // Answer the hue, an angle between 0 and 360
+	    var span, result;
+    	span = max - min;
+	    if (span === 0) return 0;
+        result = r === max ? (60 * (g - b)) / span :
+            g === max ? 120 + (60 * (b - r) / span) :
+            240 + (60 * (r - g) / span);
+        return result < 0 ? result + 360 : result;
+    },
+    scratch_bitmapAtPutHSV: function(bitmap, i, hue, saturation, brightness) {
+        var hI, hF, p, q, t, v, outPix;
+        hI = hue / 60 | 0;      // integer part of hue (0..5)
+        hF = hue % 60;          // fractional part of hue
+        p = (1000 - saturation) * brightness;
+        q = (1000 - ((saturation * hF) / 60 | 0)) * brightness;
+        t = (1000 - ((saturation * (60 - hF)) / 60 | 0)) * brightness;
+        v = (brightness * 1000) / 3922 | 0;
+        p = p / 3922 | 0;
+        q = q / 3922 | 0;
+        t = t / 3922 | 0;
+        switch (hI) {
+            case 0: outPix = ((v << 16) + (t << 8) + p); break;
+            case 1: outPix = ((q << 16) + (v << 8) + p); break;
+            case 2: outPix = ((p << 16) + (v << 8) + t); break;
+            case 3: outPix = ((p << 16) + (q << 8) + v); break;
+            case 4: outPix = ((t << 16) + (p << 8) + v); break;
+            case 5: outPix = ((v << 16) + (p << 8) + q); break;
+        }
+        if (outPix === 0) outPix = 1;   // convert transparent to 1
+        bitmap[i] = outPix;
     },
 });
 

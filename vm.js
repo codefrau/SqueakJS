@@ -1282,7 +1282,7 @@ Object.subclass('Squeak.Interpreter',
         }
     },
     interpret: function(forMilliseconds, thenDo) {
-        // run until idle, but at most for a couple milliseconds
+        // run for a couple milliseconds (but only until idle or break)
         // answer milliseconds to sleep (until next timer wakeup)
         // or 'break' if reached breakpoint
         // call thenDo with that result when done
@@ -1299,7 +1299,7 @@ Object.subclass('Squeak.Interpreter',
         var result = this.breakOutOfInterpreter == 'break' ? 'break'
             : !this.isIdle ? 0
             : !this.nextWakeupTick ? 'sleep'        // all processes waiting
-            : Math.max(200, this.nextWakeupTick - this.primHandler.millisecondClockValue());
+            : Math.max(1, this.nextWakeupTick - this.primHandler.millisecondClockValue());
         if (thenDo) thenDo(result);
         return result;
     },

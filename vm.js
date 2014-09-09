@@ -26,7 +26,7 @@ Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.4.1",
+    vmVersion: "SqueakJS 0.4.2",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",

@@ -4845,6 +4845,7 @@ Object.subclass('Squeak.Primitives',
         initialiseModule: "scratch_initialiseModule",
         primitiveOpenURL: "scratch_primitiveOpenURL",
         primitiveGetFolderPath: "scratch_primitiveGetFolderPath",
+        primitiveDoubleSize: "scratch_primitiveDoubleSize",
         primitiveHueShift: "scratch_primitiveHueShift",
     },
     scratch_initialiseModule: function(interpreterProxy) {
@@ -4868,6 +4869,36 @@ Object.subclass('Squeak.Primitives',
         }
         if (!path) return false;
         this.vm.popNandPush(argCount + 1, this.makeStString(this.filenameToSqueak(path)));
+        return true;
+    },
+    scratch_primitiveDoubleSize: function(argCount) {
+        var v_in, v_out, v_inOop, v_outOop, v_inW, v_inH, v_outW, v_outH, v_dstX, v_dstY, v_baseIndex, v_pix, v_i;
+        v_inOop = this.stackNonInteger(7);
+        v_inW = this.stackInteger(6);
+        v_inH = this.stackInteger(5);
+        v_outOop = this.stackNonInteger(4);
+        v_outW = this.stackInteger(3);
+        v_outH = this.stackInteger(2);
+        v_dstX = this.stackInteger(1);
+        v_dstY = this.stackInteger(0);
+        if (!this.success) return false;
+        v_in = v_inOop.words;
+        v_out = v_outOop.words;
+        if (!v_in || !v_out) return false;
+        if (!((v_dstX + (2 * v_inW)) < v_outW)) return false;
+        if (!((v_dstY + (2 * v_inH)) < v_outH)) return false;
+        for (var v_y = 0; v_y < v_inH; v_y++) {
+            v_baseIndex = ((v_dstY + (2 * v_y)) * v_outW) + v_dstX;
+            for (var v_x = 0; v_x < v_inW; v_x++) {
+                v_pix = v_in[v_x + (v_y * v_inW)];
+                v_i = v_baseIndex + (2 * v_x);
+                v_out[v_i] = v_pix;
+                v_out[v_i + 1] = v_pix;
+                v_out[v_i + v_outW] = v_pix;
+                v_out[v_i + v_outW + 1] = v_pix;
+            }
+        }
+        this.vm.popN(8);
         return true;
     },
     scratch_primitiveHueShift: function(argCount) {

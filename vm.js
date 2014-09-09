@@ -26,7 +26,7 @@ Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.4.1",
+    vmVersion: "SqueakJS 0.4.2",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -1282,15 +1282,15 @@ Object.subclass('Squeak.Interpreter',
         }
     },
     interpret: function(forMilliseconds, thenDo) {
-        // run until idle, but at most for a couple milliseconds
+        // run for a couple milliseconds (but only until idle or break)
         // answer milliseconds to sleep (until next timer wakeup)
         // or 'break' if reached breakpoint
         // call thenDo with that result when done
         if (this.frozen) return 'frozen';
         this.isIdle = false;
         this.breakOutOfInterpreter = false;
-        this.breakOutTick = this.lastTick + (forMilliseconds || 500);
-        while (!this.breakOutOfInterpreter)
+        this.breakOutTick = this.primHandler.millisecondClockValue() + (forMilliseconds || 500);
+        while (this.breakOutOfInterpreter === false)
             this.interpretOne();
         // this is to allow 'freezing' the interpreter and restarting it asynchronously. See freeze()
         if (typeof this.breakOutOfInterpreter == "function")
@@ -1299,7 +1299,7 @@ Object.subclass('Squeak.Interpreter',
         var result = this.breakOutOfInterpreter == 'break' ? 'break'
             : !this.isIdle ? 0
             : !this.nextWakeupTick ? 'sleep'        // all processes waiting
-            : Math.max(200, this.nextWakeupTick - this.primHandler.millisecondClockValue());
+            : Math.max(1, this.nextWakeupTick - this.primHandler.millisecondClockValue());
         if (thenDo) thenDo(result);
         return result;
     },
@@ -1973,8 +1973,9 @@ Object.subclass('Squeak.Interpreter',
         return rcvr - Math.floor(rcvr/arg) * arg;
     },
     safeShift: function(smallInt, shiftCount) {
+         // JS shifts only up to 31 bits
         if (shiftCount < 0) {
-            if (shiftCount < -31) return 0; // JS shifts only up to 31 bits
+            if (shiftCount < -31) return smallInt < 0 ? -1 : 0;
             return smallInt >> -shiftCount; // OK to lose bits shifting right
         }
         if (shiftCount > 31) return smallInt == 0 ? 0 : Squeak.NonSmallInt;
@@ -2556,8 +2557,7 @@ Object.subclass('Squeak.Primitives',
             case 218: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketListenOnPort', argCount);
             case 219: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketCloseConnection', argCount);
             case 220: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketAbortConnection', argCount);
-            case 221: debugger;
-                if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketReceiveDataBufCount', argCount);
+            case 221: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketReceiveDataBufCount', argCount);
                 else return this.primitiveClosureValueNoContextSwitch(argCount);
             case 222: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketReceiveDataAvailable', argCount);
                 else return this.primitiveClosureValueNoContextSwitch(argCount);
@@ -3793,7 +3793,7 @@ Object.subclass('Squeak.Primitives',
         if (pixels.data !== pixelData) {
             pixels.data.set(pixelData);
         }
-        ctx.putImageData(pixels, rect.left, rect.top);
+        ctx.putImageData(pixels, rect.left + (rect.offsetX || 0), rect.top + (rect.offsetY || 0));
     },
     primitiveDeferDisplayUpdates: function(argCount) {
         var flag = this.stackBoolean(0);
@@ -3813,8 +3813,8 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     primitiveScreenSize: function(argCount) {
-        var canvas = this.display.context.canvas;
-        return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(canvas.width, canvas.height));
+        var display = this.display;
+        return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(display.width, display.height));
     },
     primitiveSetFullScreen: function(argCount) {
         var flag = this.stackBoolean(0);
@@ -3842,6 +3842,8 @@ Object.subclass('Squeak.Primitives',
     },
     displayUpdate: function(form, rect, noCursor) {
         this.display.lastTick = this.vm.lastTick;
+        rect.offsetX = this.display.offsetX;
+        rect.offsetY = this.display.offsetY;
         this.showForm(this.display.context, form, rect);
         if (noCursor) return;
         // show cursor if it was just overwritten

@@ -3813,8 +3813,8 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     primitiveScreenSize: function(argCount) {
-        var canvas = this.display.context.canvas;
-        return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(canvas.width, canvas.height));
+        var display = this.display;
+        return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(display.width, display.height));
     },
     primitiveSetFullScreen: function(argCount) {
         var flag = this.stackBoolean(0);

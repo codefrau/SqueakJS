@@ -24,56 +24,13 @@
 var fullscreen = navigator.standalone;
 
 window.onload = function() {
-    if (fullscreen) {
-        document.body.style.margin = 0;
-        document.body.style.backgroundColor = 'black';
-        sqHeader.style.display = 'none';
-        sqFooter.style.display = 'none';
-    }
-    var display = createSqueakDisplay(sqCanvas, {fullscreen: fullscreen, header: sqHeader, footer: sqFooter});
-    function loadAndRunImage(url) {
-        var imageName = Squeak.splitFilePath(url).basename;
-        if (document.location.hostname == "localhost") url = imageName;         // load from local folder while debugging
-        display.showBanner("Downloading " + imageName);
-        display.showProgress(0);
-        var rq = new XMLHttpRequest();
-        rq.open('GET', url);
-        rq.responseType = 'arraybuffer';
-        rq.onprogress = function(e) {
-            if (e.lengthComputable) display.showProgress(e.loaded / e.total);
-        }
-        rq.onload = function(e) {
-            display.showBanner("Initializing, please wait");
-            window.setTimeout(function(){
-                var image = new Squeak.Image(rq.response, imageName);
-                var vm = new Squeak.Interpreter(image, display);
-                display.clear();
-                var run = function() {
-                    try {
-                        vm.interpret(30, function(ms) {
-                            if (typeof ms === 'number') { // continue running
-                                window.setTimeout(run, ms);
-                            } else { // quit
-                                sqCanvas.style.webkitTransition = "-webkit-transform 0.5s";
-                                sqCanvas.style.webkitTransform = "scale(0)";
-                                window.setTimeout(function(){sqCanvas.style.display = 'none'}, 500);
-                            }
-                        });
-                    } catch(error) {
-                        console.error(error);
-                        alert(error);
-                    }
-                };
-                run();
-            }, 0);
-        };
-        rq.send();
-    };
-    loadAndRunImage("http://freudenbergs.de/bert/squeakjs/scratch/Scratch.image");
+    var url = "http://freudenbergs.de/bert/squeakjs/scratch/Scratch.image";
+    if (document.location == "http://localhost/squeakjs/scratch/") url = "Scratch.image"; // load from local folder while debugging
+    runSqueak(url, sqCanvas, {fullscreen: fullscreen, header: sqHeader, footer: sqFooter});
 };
 
 if (addToHomescreen.isStandalone)
     fullscreen = true;
 else addToHomescreen({
-   appID: 'squeakjs.scratch.add2home',
+    appID: 'squeakjs.scratch.add2home',
 });

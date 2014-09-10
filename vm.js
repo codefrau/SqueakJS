@@ -4049,6 +4049,7 @@ Object.subclass('Squeak.Primitives',
             entry = entries[keys[index - 1]];
         if (sqDirName === "/") { // fake top-level dir
             if (index === 1) {
+                if (!entry) entry = [0, 0, 0, 0, 0];
                 entry[0] = "SqueakJS";
                 entry[3] = true;
             }

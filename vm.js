@@ -3689,8 +3689,8 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     redrawDisplay: function(rect) {
-        var display = this.theDisplay(),
-            bounds = {left: 0, top: 0, right: display.width, bottom: display.height};
+        var theDisplay = this.theDisplay(),
+            bounds = {left: 0, top: 0, right: theDisplay.width, bottom: theDisplay.height};
         if (rect) {
             if (rect.left > bounds.left) bounds.left = rect.left;
             if (rect.right < bounds.right) bounds.right = rect.right;
@@ -3698,7 +3698,7 @@ Object.subclass('Squeak.Primitives',
             if (rect.bottom < bounds.bottom) bounds.bottom = rect.bottom;
         }
         if (bounds.left < bounds.right && bounds.top < bounds.bottom)
-            this.displayUpdate(display, bounds);
+            this.displayUpdate(theDisplay, bounds);
     },
     showForm: function(ctx, form, rect) {
         if (!rect) return;

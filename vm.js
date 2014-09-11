@@ -3821,7 +3821,18 @@ Object.subclass('Squeak.Primitives',
     primitiveSetFullScreen: function(argCount) {
         var flag = this.stackBoolean(0);
         if (!this.success) return false;
-        this.display.fullscreen = flag;
+        if (this.display.fullscreen != flag) {
+            if (this.display.fullscreenRequest) {
+                // freeze until we get the right display size
+                var unfreeze = this.vm.freeze();
+                this.display.fullscreenRequest(flag, function thenDo() {
+                    unfreeze();
+                });
+            } else {
+                this.display.fullscreen = flag;
+                this.vm.breakOut(); // let VM go into fullscreen mode
+            }
+        }
         this.vm.popN(argCount);
         return true;
     },

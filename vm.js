@@ -3906,7 +3906,13 @@ Object.subclass('Squeak.Primitives',
         return this.popNandPushIfOK(argCount+1, this.ensureSmallInt(this.display.buttons));
     },
     primitiveMousePoint: function(argCount) {
-        return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(this.ensureSmallInt(this.display.mouseX), this.ensureSmallInt(this.display.mouseY)));
+        // only used in non-event based (old MVC) images
+        // if the image asks for the mouse position it means it's done displaying
+        // we break out of the VM so the browser shows it quickly
+        this.vm.breakOut();
+        var x = this.ensureSmallInt(this.display.mouseX),
+            y = this.ensureSmallInt(this.display.mouseY);
+        return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(x, y));
     },
     primitiveInputSemaphore: function(argCount) {
         var semaIndex = this.stackInteger(0);

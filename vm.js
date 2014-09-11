@@ -3857,6 +3857,7 @@ Object.subclass('Squeak.Primitives',
     },
     displayUpdate: function(form, rect, noCursor) {
         this.display.lastTick = this.vm.lastTick;
+        this.display.idle = 0;
         rect.offsetX = this.display.offsetX;
         rect.offsetY = this.display.offsetY;
         this.showForm(this.display.context, form, rect);
@@ -3905,13 +3906,15 @@ Object.subclass('Squeak.Primitives',
         return this.popNandPushIfOK(argCount+1, length ? this.ensureSmallInt(this.display.keys[0] || 0) : this.vm.nilObj);
     },
     primitiveMouseButtons: function(argCount) {
+        // only used in non-event based (old MVC) images
+        // if the image calls this primitive it means it's done displaying
+        // we break out of the VM so the browser shows it quickly
+        if (this.display.idle++ > 10)
+            this.vm.isIdle = true;
+        this.vm.breakOut();
         return this.popNandPushIfOK(argCount+1, this.ensureSmallInt(this.display.buttons));
     },
     primitiveMousePoint: function(argCount) {
-        // only used in non-event based (old MVC) images
-        // if the image asks for the mouse position it means it's done displaying
-        // we break out of the VM so the browser shows it quickly
-        this.vm.breakOut();
         var x = this.ensureSmallInt(this.display.mouseX),
             y = this.ensureSmallInt(this.display.mouseY);
         return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(x, y));
@@ -3938,15 +3941,10 @@ Object.subclass('Squeak.Primitives',
 },
 'time', {
     primitiveRelinquishProcessorForMicroseconds: function(argCount) {
-        var millis = 100;
-        if (argCount > 1) return false;
-        if (argCount > 0) {
-            var micros = this.stackInteger(0);
-            if (!this.success) return false;
-            this.vm.pop();
-            millis = micros / 1000;
-        }
+        // we ignore the optional arg
+        this.vm.pop(argCount);
         // make sure we tend to pending delays
+        // might switch process, so must be after pop
         this.vm.checkForInterrupts();
         this.vm.isIdle = true;
         this.vm.breakOut();

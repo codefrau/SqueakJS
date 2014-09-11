@@ -1339,13 +1339,15 @@ Object.subclass('Squeak.Interpreter',
                 this.nextWakeupTick = now + (this.nextWakeupTick - this.lastTick);
         }
         //Feedback logic attempts to keep interrupt response around 3ms...
-        if ((now - this.lastTick) < this.interruptChecksEveryNms)  //wrapping is not a concern
-            this.interruptCheckCounterFeedBackReset += 10;
-        else {
-            if (this.interruptCheckCounterFeedBackReset <= 1000)
-                this.interruptCheckCounterFeedBackReset = 1000;
-            else
-                this.interruptCheckCounterFeedBackReset -= 12;
+        if (this.interruptCheckCounter <= 0) { // only if not a forced check
+            if ((now - this.lastTick) < this.interruptChecksEveryNms) { //wrapping is not a concern
+                this.interruptCheckCounterFeedBackReset += 10;
+            } else { // do a thousand sends even if we are too slow for 3ms
+                if (this.interruptCheckCounterFeedBackReset <= 1000)
+                    this.interruptCheckCounterFeedBackReset = 1000;
+                else
+                    this.interruptCheckCounterFeedBackReset -= 12;
+            }
         }
     	this.interruptCheckCounter = this.interruptCheckCounterFeedBackReset; //reset the interrupt check counter
     	this.lastTick = now; //used to detect wraparound of millisecond clock
@@ -3945,7 +3947,7 @@ Object.subclass('Squeak.Primitives',
             millis = micros / 1000;
         }
         // make sure we tend to pending delays
-        this.vm.interruptCheckCounter = 0;
+        this.vm.checkForInterrupts();
         this.vm.isIdle = true;
         this.vm.breakOut();
         return true;

@@ -3916,9 +3916,10 @@ Object.subclass('Squeak.Primitives',
             this.vm.popNandPush(1, this.makeStString(this.display.clipboardString));
         } else if (argCount === 1) { // write to clipboard
             var stringObj = this.vm.top();
-            if (!stringObj.bytes) return false;
-            this.display.clipboardString = stringObj.bytesAsString();
-            this.display.clipboardStringChanged = true;
+            if (stringObj.bytes) {
+                this.display.clipboardString = stringObj.bytesAsString();
+                this.display.clipboardStringChanged = true;
+            }
             this.vm.pop();
         }
         return true;

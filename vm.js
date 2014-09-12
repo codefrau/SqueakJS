@@ -3923,12 +3923,14 @@ Object.subclass('Squeak.Primitives',
     },
     primitiveMouseButtons: function(argCount) {
         // only used in non-event based (old MVC) images
+        this.popNandPushIfOK(argCount+1, this.ensureSmallInt(this.display.buttons));
         // if the image calls this primitive it means it's done displaying
         // we break out of the VM so the browser shows it quickly
-        if (this.display.idle++ > 10)
+        if (this.display.idle++ > 10) {
             this.vm.isIdle = true;
+            this.vm.checkForInterrupts();
+        }
         this.vm.breakOut();
-        return this.popNandPushIfOK(argCount+1, this.ensureSmallInt(this.display.buttons));
     },
     primitiveMousePoint: function(argCount) {
         var x = this.ensureSmallInt(this.display.mouseX),

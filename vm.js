@@ -1303,6 +1303,15 @@ Object.subclass('Squeak.Interpreter',
         if (thenDo) thenDo(result);
         return result;
     },
+    goIdle: function() {
+        // make sure we tend to pending delays
+        var hadTimer = this.nextWakeupTick !== 0;
+        this.checkForInterrupts();
+        var hasTimer = this.nextWakeupTick !== 0;
+        // go idle unless a timer just expired
+        this.isIdle = hasTimer || !hadTimer;
+        this.breakOut();
+    },
     freeze: function(externalContinueFunc) {
         // Stop the interpreter. Answer a function that can be
         // called to continue interpreting.
@@ -3926,11 +3935,12 @@ Object.subclass('Squeak.Primitives',
         this.popNandPushIfOK(argCount+1, this.ensureSmallInt(this.display.buttons));
         // if the image calls this primitive it means it's done displaying
         // we break out of the VM so the browser shows it quickly
-        if (this.display.idle++ > 10) {
-            this.vm.isIdle = true;
-            this.vm.checkForInterrupts();
-        }
         this.vm.breakOut();
+        // if nothing was drawn but the image looks at the buttons rapidly,
+        // it must be idle.
+        if (this.display.idle++ > 20)
+            this.vm.goIdle(); // might switch process, so must be after pop
+        return true;
     },
     primitiveMousePoint: function(argCount) {
         var x = this.ensureSmallInt(this.display.mouseX),
@@ -3961,11 +3971,7 @@ Object.subclass('Squeak.Primitives',
     primitiveRelinquishProcessorForMicroseconds: function(argCount) {
         // we ignore the optional arg
         this.vm.pop(argCount);
-        // make sure we tend to pending delays
-        // might switch process, so must be after pop
-        this.vm.checkForInterrupts();
-        this.vm.isIdle = true;
-        this.vm.breakOut();
+        this.vm.goIdle();        // might switch process, so must be after pop
         return true;
     },
 	millisecondClockValue: function() {

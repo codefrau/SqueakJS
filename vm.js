@@ -2026,7 +2026,7 @@ Object.subclass('Squeak.Interpreter',
         if (this.addMessage(message) == 1)
             console.warn(message);
     },
-    printMethod: function(aMethod) {
+    printMethod: function(aMethod, optContext) {
         // return a 'class>>selector' description for the method
         // in old images this is expensive, we have to search all classes
         if (!aMethod) aMethod = this.activeContext.contextMethod();
@@ -2035,7 +2035,12 @@ Object.subclass('Squeak.Interpreter',
             if (methodObj === aMethod)
                 return found = classObj.className() + '>>' + selectorObj.bytesAsString();
         });
-        return found || "?>>?";
+        if (found) return found;
+        if (optContext) {
+            var rcvr = optContext.pointers[Squeak.Context_receiver];
+            return "(" + rcvr + ")>>?";
+        }
+        return "?>>?";
     },
     allMethodsDo: function(callback) {
         // callback(classObj, methodObj, selectorObj) should return true to break out of iteration
@@ -2089,15 +2094,15 @@ Object.subclass('Squeak.Interpreter',
             if (!ctx.pointers) {
                 stack.push('...\n');
             } else {
-                var block = '';
-                var method = ctx.pointers[Squeak.Context_method];
+                var block = '',
+                    method = ctx.pointers[Squeak.Context_method];
                 if (typeof method === 'number') { // it's a block context, fetch home
                     method = ctx.pointers[Squeak.BlockContext_home].pointers[Squeak.Context_method];
                     block = '[] in ';
                 } else if (!ctx.pointers[Squeak.Context_closure].isNil) {
                     block = '[] in '; // it's a closure activation
                 }
-                stack.push(block + this.printMethod(method) + '\n');
+                stack.push(block + this.printMethod(method, ctx) + '\n');
             }
         }
         return stack.join('');
@@ -2169,17 +2174,28 @@ Object.subclass('Squeak.Interpreter',
         }
         return stack;
     },
-    printProcesses: function() {
+    printAllProcesses: function() {
         var schedAssn = this.specialObjects[Squeak.splOb_SchedulerAssociation],
-            sched = schedAssn.pointers[Squeak.Assn_value],
-            activeProc = sched.pointers[Squeak.ProcSched_activeProcess],
-            semaClass = this.specialObjects[Squeak.splOb_ClassSemaphore],
-            sema = this.image.someInstanceOf(semaClass),
-            result = this.printProcess(activeProc, true);
+            sched = schedAssn.pointers[Squeak.Assn_value];
+        // print active process
+        var activeProc = sched.pointers[Squeak.ProcSched_activeProcess],
+            result = "Active: " + this.printProcess(activeProc, true);
+        // print other runnable processes
+        var lists = sched.pointers[Squeak.ProcSched_processLists].pointers;
+        for (var priority = lists.length - 1; priority >= 0; priority--) {
+            var process = lists[priority].pointers[Squeak.LinkedList_firstLink];
+            while (!process.isNil) {
+                result += "\nRunnable: " + this.printProcess(process);
+                process = process.pointers[Squeak.Link_nextLink];
+            }
+        }
+        // print all processes waiting on a semaphore
+        var semaClass = this.specialObjects[Squeak.splOb_ClassSemaphore],
+            sema = this.image.someInstanceOf(semaClass);
         while (sema) {
             var process = sema.pointers[Squeak.LinkedList_firstLink];
             while (!process.isNil) {
-                result += "\n" + this.printProcess(process);
+                result += "\nWaiting: " + this.printProcess(process);
                 process = process.pointers[Squeak.Link_nextLink];
             }
             sema = this.image.nextInstanceAfter(sema);

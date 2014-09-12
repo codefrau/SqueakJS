@@ -26,7 +26,7 @@ Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.4.3",
+    vmVersion: "SqueakJS 0.4.4",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -1303,6 +1303,15 @@ Object.subclass('Squeak.Interpreter',
         if (thenDo) thenDo(result);
         return result;
     },
+    goIdle: function() {
+        // make sure we tend to pending delays
+        var hadTimer = this.nextWakeupTick !== 0;
+        this.checkForInterrupts();
+        var hasTimer = this.nextWakeupTick !== 0;
+        // go idle unless a timer just expired
+        this.isIdle = hasTimer || !hadTimer;
+        this.breakOut();
+    },
     freeze: function(externalContinueFunc) {
         // Stop the interpreter. Answer a function that can be
         // called to continue interpreting.
@@ -1339,13 +1348,15 @@ Object.subclass('Squeak.Interpreter',
                 this.nextWakeupTick = now + (this.nextWakeupTick - this.lastTick);
         }
         //Feedback logic attempts to keep interrupt response around 3ms...
-        if ((now - this.lastTick) < this.interruptChecksEveryNms)  //wrapping is not a concern
-            this.interruptCheckCounterFeedBackReset += 10;
-        else {
-            if (this.interruptCheckCounterFeedBackReset <= 1000)
-                this.interruptCheckCounterFeedBackReset = 1000;
-            else
-                this.interruptCheckCounterFeedBackReset -= 12;
+        if (this.interruptCheckCounter <= 0) { // only if not a forced check
+            if ((now - this.lastTick) < this.interruptChecksEveryNms) { //wrapping is not a concern
+                this.interruptCheckCounterFeedBackReset += 10;
+            } else { // do a thousand sends even if we are too slow for 3ms
+                if (this.interruptCheckCounterFeedBackReset <= 1000)
+                    this.interruptCheckCounterFeedBackReset = 1000;
+                else
+                    this.interruptCheckCounterFeedBackReset -= 12;
+            }
         }
     	this.interruptCheckCounter = this.interruptCheckCounterFeedBackReset; //reset the interrupt check counter
     	this.lastTick = now; //used to detect wraparound of millisecond clock
@@ -2024,7 +2035,7 @@ Object.subclass('Squeak.Interpreter',
         if (this.addMessage(message) == 1)
             console.warn(message);
     },
-    printMethod: function(aMethod) {
+    printMethod: function(aMethod, optContext) {
         // return a 'class>>selector' description for the method
         // in old images this is expensive, we have to search all classes
         if (!aMethod) aMethod = this.activeContext.contextMethod();
@@ -2033,7 +2044,12 @@ Object.subclass('Squeak.Interpreter',
             if (methodObj === aMethod)
                 return found = classObj.className() + '>>' + selectorObj.bytesAsString();
         });
-        return found || "?>>?";
+        if (found) return found;
+        if (optContext) {
+            var rcvr = optContext.pointers[Squeak.Context_receiver];
+            return "(" + rcvr + ")>>?";
+        }
+        return "?>>?";
     },
     allMethodsDo: function(callback) {
         // callback(classObj, methodObj, selectorObj) should return true to break out of iteration
@@ -2087,15 +2103,15 @@ Object.subclass('Squeak.Interpreter',
             if (!ctx.pointers) {
                 stack.push('...\n');
             } else {
-                var block = '';
-                var method = ctx.pointers[Squeak.Context_method];
+                var block = '',
+                    method = ctx.pointers[Squeak.Context_method];
                 if (typeof method === 'number') { // it's a block context, fetch home
                     method = ctx.pointers[Squeak.BlockContext_home].pointers[Squeak.Context_method];
                     block = '[] in ';
                 } else if (!ctx.pointers[Squeak.Context_closure].isNil) {
                     block = '[] in '; // it's a closure activation
                 }
-                stack.push(block + this.printMethod(method) + '\n');
+                stack.push(block + this.printMethod(method, ctx) + '\n');
             }
         }
         return stack.join('');
@@ -2167,17 +2183,28 @@ Object.subclass('Squeak.Interpreter',
         }
         return stack;
     },
-    printProcesses: function() {
+    printAllProcesses: function() {
         var schedAssn = this.specialObjects[Squeak.splOb_SchedulerAssociation],
-            sched = schedAssn.pointers[Squeak.Assn_value],
-            activeProc = sched.pointers[Squeak.ProcSched_activeProcess],
-            semaClass = this.specialObjects[Squeak.splOb_ClassSemaphore],
-            sema = this.image.someInstanceOf(semaClass),
-            result = this.printProcess(activeProc, true);
+            sched = schedAssn.pointers[Squeak.Assn_value];
+        // print active process
+        var activeProc = sched.pointers[Squeak.ProcSched_activeProcess],
+            result = "Active: " + this.printProcess(activeProc, true);
+        // print other runnable processes
+        var lists = sched.pointers[Squeak.ProcSched_processLists].pointers;
+        for (var priority = lists.length - 1; priority >= 0; priority--) {
+            var process = lists[priority].pointers[Squeak.LinkedList_firstLink];
+            while (!process.isNil) {
+                result += "\nRunnable: " + this.printProcess(process);
+                process = process.pointers[Squeak.Link_nextLink];
+            }
+        }
+        // print all processes waiting on a semaphore
+        var semaClass = this.specialObjects[Squeak.splOb_ClassSemaphore],
+            sema = this.image.someInstanceOf(semaClass);
         while (sema) {
             var process = sema.pointers[Squeak.LinkedList_firstLink];
             while (!process.isNil) {
-                result += "\n" + this.printProcess(process);
+                result += "\nWaiting: " + this.printProcess(process);
                 process = process.pointers[Squeak.Link_nextLink];
             }
             sema = this.image.nextInstanceAfter(sema);
@@ -3689,8 +3716,8 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     redrawDisplay: function(rect) {
-        var display = this.theDisplay(),
-            bounds = {left: 0, top: 0, right: display.width, bottom: display.height};
+        var theDisplay = this.theDisplay(),
+            bounds = {left: 0, top: 0, right: theDisplay.width, bottom: theDisplay.height};
         if (rect) {
             if (rect.left > bounds.left) bounds.left = rect.left;
             if (rect.right < bounds.right) bounds.right = rect.right;
@@ -3698,7 +3725,7 @@ Object.subclass('Squeak.Primitives',
             if (rect.bottom < bounds.bottom) bounds.bottom = rect.bottom;
         }
         if (bounds.left < bounds.right && bounds.top < bounds.bottom)
-            this.displayUpdate(display, bounds);
+            this.displayUpdate(theDisplay, bounds);
     },
     showForm: function(ctx, form, rect) {
         if (!rect) return;
@@ -3813,13 +3840,26 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     primitiveScreenSize: function(argCount) {
-        var display = this.display;
-        return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(display.width, display.height));
+        var display = this.display,
+            w = display.width || display.context.canvas.width,
+            h = display.height || display.context.canvas.height;
+        return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(w, h));
     },
     primitiveSetFullScreen: function(argCount) {
         var flag = this.stackBoolean(0);
         if (!this.success) return false;
-        this.display.fullscreen = flag;
+        if (this.display.fullscreen != flag) {
+            if (this.display.fullscreenRequest) {
+                // freeze until we get the right display size
+                var unfreeze = this.vm.freeze();
+                this.display.fullscreenRequest(flag, function thenDo() {
+                    unfreeze();
+                });
+            } else {
+                this.display.fullscreen = flag;
+                this.vm.breakOut(); // let VM go into fullscreen mode
+            }
+        }
         this.vm.popN(argCount);
         return true;
     },
@@ -3842,6 +3882,7 @@ Object.subclass('Squeak.Primitives',
     },
     displayUpdate: function(form, rect, noCursor) {
         this.display.lastTick = this.vm.lastTick;
+        this.display.idle = 0;
         rect.offsetX = this.display.offsetX;
         rect.offsetY = this.display.offsetY;
         this.showForm(this.display.context, form, rect);
@@ -3890,10 +3931,21 @@ Object.subclass('Squeak.Primitives',
         return this.popNandPushIfOK(argCount+1, length ? this.ensureSmallInt(this.display.keys[0] || 0) : this.vm.nilObj);
     },
     primitiveMouseButtons: function(argCount) {
-        return this.popNandPushIfOK(argCount+1, this.ensureSmallInt(this.display.buttons));
+        // only used in non-event based (old MVC) images
+        this.popNandPushIfOK(argCount+1, this.ensureSmallInt(this.display.buttons));
+        // if the image calls this primitive it means it's done displaying
+        // we break out of the VM so the browser shows it quickly
+        this.vm.breakOut();
+        // if nothing was drawn but the image looks at the buttons rapidly,
+        // it must be idle.
+        if (this.display.idle++ > 20)
+            this.vm.goIdle(); // might switch process, so must be after pop
+        return true;
     },
     primitiveMousePoint: function(argCount) {
-        return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(this.ensureSmallInt(this.display.mouseX), this.ensureSmallInt(this.display.mouseY)));
+        var x = this.ensureSmallInt(this.display.mouseX),
+            y = this.ensureSmallInt(this.display.mouseY);
+        return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(x, y));
     },
     primitiveInputSemaphore: function(argCount) {
         var semaIndex = this.stackInteger(0);
@@ -3917,18 +3969,9 @@ Object.subclass('Squeak.Primitives',
 },
 'time', {
     primitiveRelinquishProcessorForMicroseconds: function(argCount) {
-        var millis = 100;
-        if (argCount > 1) return false;
-        if (argCount > 0) {
-            var micros = this.stackInteger(0);
-            if (!this.success) return false;
-            this.vm.pop();
-            millis = micros / 1000;
-        }
-        // make sure we tend to pending delays
-        this.vm.interruptCheckCounter = 0;
-        this.vm.isIdle = true;
-        this.vm.breakOut();
+        // we ignore the optional arg
+        this.vm.pop(argCount);
+        this.vm.goIdle();        // might switch process, so must be after pop
         return true;
     },
 	millisecondClockValue: function() {
@@ -4049,6 +4092,7 @@ Object.subclass('Squeak.Primitives',
             entry = entries[keys[index - 1]];
         if (sqDirName === "/") { // fake top-level dir
             if (index === 1) {
+                if (!entry) entry = [0, 0, 0, 0, 0];
                 entry[0] = "SqueakJS";
                 entry[3] = true;
             }

@@ -26,7 +26,7 @@ Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.4.4",
+    vmVersion: "SqueakJS 0.4.5",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -708,6 +708,16 @@ Object.subclass('Squeak.Object',
             //These words are actually a Float
             this.isFloat = true;
             this.float = this.decodeFloat(this.bits, littleEndian, nativeFloats);
+            if (this.float == 1.3797216632888e-310) {
+                if (/noFloatDecodeWorkaround/.test(window.location.hash)) {
+                    // floatDecode workaround disabled
+                } else {
+                    this.constructor.prototype.decodeFloat = this.decodeFloatDeoptimized;
+                    this.float = this.decodeFloat(this.bits, littleEndian, nativeFloats);
+                    if (this.float == 1.3797216632888e-310)
+                        throw Error("Cannot deoptimize decodeFloat");
+                } 
+            }
         } else {
             if (nWords > 0)
                 this.words = this.decodeWords(nWords, this.bits, littleEndian);
@@ -753,6 +763,23 @@ Object.subclass('Squeak.Object',
             swapped = new DataView(buffer);
         swapped.setUint32(0, data.getUint32(4));
         swapped.setUint32(4, data.getUint32(0));
+        return swapped.getFloat64(0, true);
+    },
+    decodeFloatDeoptimized: function(theBits, littleEndian, nativeFloats) {
+        var data = new DataView(theBits.buffer, theBits.byteOffset);
+        // it's either big endian ...
+        if (!littleEndian) return data.getFloat64(0, false);
+        // or real little endian
+        if (nativeFloats) return data.getFloat64(0, true);
+        // or little endian, but with swapped words
+        var buffer = new ArrayBuffer(8),
+            swapped = new DataView(buffer);
+        // wrap in function to defeat Safari's optimizer, which always
+        // answers 1.3797216632888e-310 if called more than 25000 times
+        (function() {
+            swapped.setUint32(0, data.getUint32(4));
+            swapped.setUint32(4, data.getUint32(0));
+        })();
         return swapped.getFloat64(0, true);
     },
     fillArray: function(length, filler) {
@@ -3916,9 +3943,10 @@ Object.subclass('Squeak.Primitives',
             this.vm.popNandPush(1, this.makeStString(this.display.clipboardString));
         } else if (argCount === 1) { // write to clipboard
             var stringObj = this.vm.top();
-            if (!stringObj.bytes) return false;
-            this.display.clipboardString = stringObj.bytesAsString();
-            this.display.clipboardStringChanged = true;
+            if (stringObj.bytes) {
+                this.display.clipboardString = stringObj.bytesAsString();
+                this.display.clipboardStringChanged = true;
+            }
             this.vm.pop();
         }
         return true;

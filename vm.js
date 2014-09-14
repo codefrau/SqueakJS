@@ -1360,7 +1360,7 @@ Object.subclass('Squeak.Interpreter',
         this.breakOutOfInterpreter = this.breakOutOfInterpreter || true; // do not overwrite break string
     },
     nextByte: function() {
-        return this.methodBytes[this.pc++] & 0xFF;
+        return this.methodBytes[this.pc++];
     },
     nono: function() {
         throw Error("Oh No!");

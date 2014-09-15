@@ -1002,7 +1002,7 @@ footer {
     color: #444;
   }
 }
-@media print, screen and (max-height: 680px) {
+@media print, screen and (max-height: 850px) {
   footer {
     text-align: center;
     margin: 20px auto;

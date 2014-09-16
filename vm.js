@@ -4529,12 +4529,12 @@ Object.subclass('Squeak.Primitives',
             }
             state.context.beginPath();
             state.flushNeeded = false;
-            this.geReadPixels();
+            this.geBlendOverForm();
             // if (this.b2d_debug) this.vm.breakNow("b2d_debug");
         }
         return 0; // answer stop reason
     },
-    geReadPixels: function() {
+    geBlendOverForm: function() {
         var state = this.b2d_state,
             bitblt = state.bitblt,
             form = bitblt.dest;
@@ -4542,9 +4542,11 @@ Object.subclass('Squeak.Primitives',
         if (!form.width || !form.height || state.maxX <= state.minX || state.maxY <= state.minY) return;
         if (!form.msb) return this.vm.warnOnce("B2D: drawing to little-endian forms not implemented yet");
         if (form.depth == 32) {
-            this.geReadPixels32();
+            this.geBlendOverForm32();
         } else if (form.depth == 16) {
-            this.geReadPixels16();
+            this.geBlendOverForm16();
+        } else if (form.depth == 8) {
+            this.geBlendOverForm8();
         } else {
             this.vm.warnOnce("B2D: drawing to " + form.depth + " bit forms not supported yet");
         }
@@ -4555,7 +4557,51 @@ Object.subclass('Squeak.Primitives',
         bitblt.bbH = state.maxY - state.minY;
         this.displayDirty(bitblt);
     },
-    geReadPixels16: function() {
+    geBlendOverForm8: function() {
+        // since we have four pixels per word, round to 4 pixels
+        var state = this.b2d_state,
+            form = state.bitblt.dest,
+            minX = state.minX & ~3,
+            minY = state.minY,
+            maxX = (state.maxX + 3) & ~3,
+            maxY = state.maxY,
+            width = maxX - minX,
+            height = maxY - minY,
+            canvasBytes = state.context.getImageData(minX, minY, width, height).data,
+            srcIndex = 0;
+        if (this.b2d_debug) console.log("==> clipped to " + width + "x" + height);
+        for (var y = minY; y < maxY; y++) {
+            var dstIndex = y * form.pitch + (minX / 4);
+            for (var x = minX; x < maxX; x += 4) {
+                if (!(canvasBytes[srcIndex+3] | canvasBytes[srcIndex+7] | canvasBytes[srcIndex+11] | canvasBytes[srcIndex+15])) {
+                    srcIndex += 16; dstIndex++; // skip pixels if fully transparent
+                    continue;
+                }
+                var dstPixels = form.bits[dstIndex],  // four 8-bit pixels
+                    dstShift = 24,
+                    result = 0;
+                for (var i = 0; i < 4; i++) {
+                    var alpha = canvasBytes[srcIndex+3] / 255;
+                    if (alpha < 0.1) {
+                        result = result | (dstPixels & (0xFF << dstShift)); // keep dst
+                    } else {
+                        var oneMinusAlpha = 1 - alpha,
+                            pix = this.indexedColors[(dstPixels >> dstShift) & 0xFF],
+                            r = alpha * canvasBytes[srcIndex  ] + oneMinusAlpha * ((pix >> 16) & 0xFF),
+                            g = alpha * canvasBytes[srcIndex+1] + oneMinusAlpha * ((pix >>  8) & 0xFF),
+                            b = alpha * canvasBytes[srcIndex+2] + oneMinusAlpha * ( pix        & 0xFF),
+                            res = 40 + (r / 255 * 5.5|0) * 36 + (b / 255 * 5.5|0) * 6 + (g / 255 * 5.5|0);  // 6x6x6 RGB cube
+                        result = result | (res << dstShift);
+                    }
+                    dstShift -= 8;
+                    srcIndex += 4;
+                }
+                form.bits[dstIndex] = result;
+                dstIndex++;
+            }
+        }
+    },
+    geBlendOverForm16: function() {
         // since we have two pixels per word, grab from even positions
         var state = this.b2d_state,
             form = state.bitblt.dest,
@@ -4595,7 +4641,7 @@ Object.subclass('Squeak.Primitives',
             }
         }
     },
-    geReadPixels32: function() {
+    geBlendOverForm32: function() {
         var state = this.b2d_state,
             minX = state.minX,
             minY = state.minY,

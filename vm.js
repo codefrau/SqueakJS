@@ -2303,44 +2303,28 @@ Object.subclass('Squeak.Primitives',
                     primitiveCompareString: this.primitiveCompareString.bind(this),
                     primitiveFindSubstring: this.primitiveFindSubstring.bind(this),
             },
-            FilePlugin: {
-                    primitiveDirectoryDelimitor: this.primitiveDirectoryDelimitor.bind(this),
-                    primitiveDirectoryCreate: this.primitiveDirectoryCreate.bind(this),
-                    primitiveDirectoryDelete: this.primitiveDirectoryDelete.bind(this),
-                    primitiveDirectoryDelimitor: this.primitiveDirectoryDelimitor.bind(this),
-                    primitiveDirectoryEntry: this.primitiveDirectoryEntry.bind(this),
-                    primitiveDirectoryLookup: this.primitiveDirectoryLookup.bind(this),
-                    primitiveDirectorySetMacTypeAndCreator: this.primitiveDirectorySetMacTypeAndCreator.bind(this),
-                    primitiveFileAtEnd: this.primitiveFileAtEnd.bind(this),
-                    primitiveFileClose: this.primitiveFileClose.bind(this),
-                    primitiveFileDelete: this.primitiveFileDelete.bind(this),
-                    primitiveFileFlush: this.primitiveFileFlush.bind(this),
-                    primitiveFileGetPosition: this.primitiveFileGetPosition.bind(this),
-                    primitiveFileOpen: this.primitiveFileOpen.bind(this),
-                    primitiveFileRead: this.primitiveFileRead.bind(this),
-                    primitiveFileRename: this.primitiveFileRename.bind(this),
-                    primitiveFileSetPosition: this.primitiveFileSetPosition.bind(this),
-                    primitiveFileSize: this.primitiveFileSize.bind(this),
-                    primitiveFileStdioHandles: this.primitiveFileStdioHandles.bind(this),
-                    primitiveFileTruncate: this.primitiveFileTruncate.bind(this),
-                    primitiveFileWrite: this.primitiveFileWrite.bind(this),
-            },
-            BitBltPlugin: {
-                    initialiseModule: "bitblt_initialiseModule",
-                    primitiveCopyBits: "bitblt_primitiveCopyBits",
-                    primitiveWarpBits: "bitblt_primitiveWarpBits",
-            },
             FloatArrayPlugin: {
                     primitiveAt: this.primitiveFloatArrayAtAndPut.bind(this),
                     primitiveAtPut: this.primitiveFloatArrayAtAndPut.bind(this),
             },
-            SoundPlugin: {
-                primitiveSoundStop: this.fakePrimitive.bind(this, 'SoundPlugin.primitiveSoundStop', undefined),
-                primitiveSoundStopRecording: this.fakePrimitive.bind(this, 'SoundPlugin.primitiveSoundStopRecording', undefined),
-            },
-            ScratchPlugin: this.ScratchPlugin,
-            B2DPlugin: this.B2DPlugin(),
+            FilePlugin:    this.findPluginFunctions("",         "primitive(File|Directory)"),
+            BitBltPlugin:  this.findPluginFunctions("bitblt_",  ""),
+            SoundPlugin:   this.findPluginFunctions("",         "primitiveSound.*", true),
+            ScratchPlugin: this.findPluginFunctions("scratch_", ""),
+            B2DPlugin:     this.findPluginFunctions("ge",       ""),
         };
+    },
+    findPluginFunctions: function(prefix, match, bindLate) {
+        match = match || "(initialise|shutdown|primitive)";
+        var plugin = {},
+            regex = new RegExp("^" + prefix + match, "i");
+        for (var funcName in this)
+            if (regex.test(funcName) && typeof this[funcName] == "function") {
+                var primName = funcName;
+                if (prefix) primName = funcName[prefix.length].toLowerCase() + funcName.slice(prefix.length + 1);
+                plugin[primName] = bindLate ? funcName : this[funcName].bind(this);
+            }
+        return plugin;
     },
 },
 'dispatch', {
@@ -4455,18 +4439,15 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
 },
-'B2DPlugin', {
-    B2DPlugin: function() {
-        // find all ge* functions and declare as primitive
-        // (because old images use the gePrimitives without a modulename)
-        var plugin = {};
-        for (var funcName in this)
-            if (/^ge(Initialise|Shutdown|Primitive)/.test(funcName) && typeof this[funcName] == "function") {
-                var primName = funcName[2].toLowerCase() + funcName.slice(3);
-                plugin[primName] = funcName;
-            }
-        return plugin;
+'SoundPlugin', {
+    primitiveSoundStop: function(argCount) {
+        return this.fakePrimitive('SoundPlugin.primitiveSoundStop', undefined, argCount);
     },
+    primitiveSoundStopRecording: function(argCount) {
+        return this.fakePrimitive('SoundPlugin.primitiveSoundStopRecording', undefined, argCount);
+    },
+},
+'B2DPlugin', {
     geInitialiseModule: function(interpreterProxy) {
         this.b2d_debug = false;
         this.b2d_state = {

@@ -4485,8 +4485,8 @@ Object.subclass('Squeak.Primitives',
         if (state.bitbltObj != bitbltObj) {
             state.bitbltObj = bitbltObj;
             state.bitblt.loadBitBlt(bitbltObj);
-            this.geSetupCanvas();
         }
+        this.geSetupCanvas();
         state.minX = 0;
         state.minY = 0;
         state.maxX = state.bitblt.dest.width;
@@ -4738,6 +4738,11 @@ Object.subclass('Squeak.Primitives',
             g = (word & 0xFF00) >>> 8,
             r = (word & 0xFF0000) >>> 16,
             a = ((word & 0xFF000000) >>> 24) / 255;
+        if (a > 0) { // undo pre-multiplication of alpha
+            b = b / a & 0xFF;
+            g = g / a & 0xFF;
+            r = r / a & 0xFF;
+        }        
         return "rgba(" + [r, g, b, a].join(",") + ")";
     },
     geStyleFrom: function(index) {

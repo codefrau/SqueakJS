@@ -2518,7 +2518,7 @@ Object.subclass('Squeak.Primitives',
             case 137: return this.popNandPushIfOK(1, this.secondClock()); // seconds since Jan 1, 1901
             case 138: return this.popNandPushIfOK(1, this.someObject()); // Object.someObject
             case 139: return this.popNandPushIfOK(1, this.nextObject(this.vm.top())); // Object.nextObject
-            case 140: return this.fakePrimitive('140 (primitiveBeep)', true, argCount); // TODO
+            case 140: return this.primitiveBeep(argCount);
             case 141: return this.primitiveClipboardText(argCount);
             case 142: return this.popNandPushIfOK(1, this.makeStString(this.filenameToSqueak(Squeak.vmPath)));
             case 143: // short at and shortAtPut
@@ -3934,6 +3934,23 @@ Object.subclass('Squeak.Primitives',
     cursorDraw: function() {
         // TODO: create cursorCanvas in setCursor primitive
         // this.display.context.drawImage(this.cursorCanvas, this.cursorX, this.cursorY);
+    },
+    primitiveBeep: function(argCount) {
+        if (!this.audioContext) {
+            var ctxProto = AudioContext || webkitAudioContext;
+            this.audioContext = ctxProto && new ctxProto();
+        }
+        if (this.audioContext) {
+            var ctx = this.audioContext,
+                beep = ctx.createOscillator();
+            beep.connect(ctx.destination);
+            beep.frequency.value = 880;
+            beep.noteOn(0);
+            beep.noteOff(ctx.currentTime + 0.2);
+        } else {
+            this.vm.warnOnce("could not initialize audio");
+        }
+        return this.popNIfOK(argCount);
     },
 },
 'input', {

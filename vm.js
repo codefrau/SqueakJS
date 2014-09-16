@@ -4547,6 +4547,8 @@ Object.subclass('Squeak.Primitives',
             this.geBlendOverForm16();
         } else if (form.depth == 8) {
             this.geBlendOverForm8();
+        } else if (form.depth == 1) {
+            this.geBlendOverForm1();
         } else {
             this.vm.warnOnce("B2D: drawing to " + form.depth + " bit forms not supported yet");
         }
@@ -4556,6 +4558,37 @@ Object.subclass('Squeak.Primitives',
         bitblt.bbW = state.maxX - state.minX;
         bitblt.bbH = state.maxY - state.minY;
         this.displayDirty(bitblt);
+    },
+    geBlendOverForm1: function() {
+        // since we have 32 pixels per word, round to 32 pixels
+        var state = this.b2d_state,
+            form = state.bitblt.dest,
+            minX = state.minX & ~31,
+            minY = state.minY,
+            maxX = (state.maxX + 31) & ~31,
+            maxY = state.maxY,
+            width = maxX - minX,
+            height = maxY - minY,
+            canvasBytes = state.context.getImageData(minX, minY, width, height).data,
+            srcIndex = 0;
+        if (this.b2d_debug) console.log("==> clipped to " + width + "x" + height);
+        for (var y = minY; y < maxY; y++) {
+            var dstIndex = y * form.pitch + (minX / 32);
+            for (var x = minX; x < maxX; x += 32*4) {
+                var dstPixels = form.bits[dstIndex],  // 32 one-bit pixels
+                    dstShift = 31,
+                    result = 0;
+                for (var i = 0; i < 32; i++) {
+                    var alpha = canvasBytes[srcIndex+3],
+                        pix = alpha > 0.5 ? 0 : dstPixels;  // assume we're drawing in black 
+                    result = result | (pix & (1 << dstShift));
+                    dstShift--;
+                    srcIndex += 4;
+                }
+                form.bits[dstIndex] = result;
+                dstIndex++;
+            }
+        }
     },
     geBlendOverForm8: function() {
         // since we have four pixels per word, round to 4 pixels

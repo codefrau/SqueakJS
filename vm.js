@@ -3958,13 +3958,9 @@ Object.subclass('Squeak.Primitives',
         // this.display.context.drawImage(this.cursorCanvas, this.cursorX, this.cursorY);
     },
     primitiveBeep: function(argCount) {
-        if (!this.audioContext) {
-            var ctxProto = AudioContext || webkitAudioContext;
-            this.audioContext = ctxProto && new ctxProto();
-        }
-        if (this.audioContext) {
-            var ctx = this.audioContext,
-                beep = ctx.createOscillator();
+        var ctx = Squeak.startAudio();
+        if (ctx) {
+            var beep = ctx.createOscillator();
             beep.connect(ctx.destination);
             beep.frequency.value = 880;
             beep.noteOn(0);
@@ -6536,6 +6532,13 @@ Object.extend(Squeak, {
     totalSeconds: function() {
         // seconds since 1901-01-01, local time
         return Math.floor(Date.now()/1000) - Squeak.Epoch;
+    },
+    startAudio: function() {
+        if (!this.audioContext) {
+            var ctxProto = AudioContext || webkitAudioContext;
+            this.audioContext = ctxProto && new ctxProto();
+        }
+        return this.audioContext;
     },
 });
 

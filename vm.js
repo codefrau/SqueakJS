@@ -2642,30 +2642,29 @@ Object.subclass('Squeak.Primitives',
             case 553: return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveEncodeStereo', argCount);
             // External primitive support primitives (570-574)
             // case 570: return this.primitiveFlushExternalPrimitives(argCount);
-            // case 571: return this.primitiveUnloadModule(argCount);
-            // case 572: return this.primitiveListBuiltinModule(argCount);
-            // case 573: return this.primitiveListExternalModule(argCount);
+            case 571: return this.primitiveUnloadModule(argCount);
+            case 572: return this.primitiveListBuiltinModule(argCount);
+            case 573: return this.primitiveListLoadedModule(argCount);
         }
         console.error("primitive " + index + " not implemented yet");
         return false;
     },
-    namedPrimitive: function(moduleName, functionName, argCount) {
-        var module = moduleName === "" ? this : this.loadedModules[moduleName];
-        if (module === undefined) { // null if earlier load failed
-            module = this.loadModule(moduleName);
-            this.loadedModules[moduleName] = module;
+    namedPrimitive: function(modName, functionName, argCount) {
+        var mod = modName === "" ? this : this.loadedModules[modName];
+        if (mod === undefined) { // null if earlier load failed
+            mod = this.loadModule(modName);
+            this.loadedModules[modName] = mod;
         }
-        if (module) {
-            var primitive = module[functionName];
-            if (typeof primitive == "string") { // allow late binding
-                module = this;
-                functionName = primitive;
-                primitive = module[functionName];
+        if (mod) {
+            var primitive = mod[functionName];
+            if (typeof primitive === "function") {
+                return mod[functionName](argCount);
+            } else if (typeof primitive === "string") {
+                // allow late binding for built-ins
+                return this[primitive](argCount);
             }
-            if (primitive)
-                return module[functionName](argCount);
         }
-        this.vm.warnOnce("missing primitive: " + moduleName + "." + functionName);
+        this.vm.warnOnce("missing primitive: " + modName + "." + functionName);
         return false;
     },
     doNamedPrimitive: function(primMethod, argCount) {
@@ -2680,18 +2679,57 @@ Object.subclass('Squeak.Primitives',
         // fake a named primitive
         // prim and retVal need to be curried when used:
         //  this.fakePrimitive.bind(this, "Module.primitive", 42)
-        this.vm.warnOnce("missing primitive: " + prim);
+        this.vm.warnOnce("faking primitive: " + prim);
         if (retVal === undefined) this.vm.popN(argCount);
         else this.vm.popNandPush(argCount+1, this.makeStObject(retVal));
         return true;
     },
-    loadModule: function(moduleName) {
-        var module = Squeak.externalModules[moduleName] || this.builtinModules[moduleName];
-        if (!module) return null;
-        var initFunc = module.initialiseModule;
-        if (typeof initFunc == 'string') initFunc = this[initFunc].bind(this); // allow late binding
-        if (initFunc) initFunc(this);
-        return module;
+},
+'modules', {
+    loadModule: function(modName) {
+        var mod = Squeak.externalModules[modName] || this.builtinModules[modName];
+        if (!mod) return null;
+        var initFunc = mod.initialiseModule;
+        if (typeof initFunc === 'function') {
+            mod.initialiseModule(this);
+        } else if (typeof initFunc === 'string') {
+            // allow late binding for built-ins
+            this[initFunc](this);
+        }
+        return mod;
+    },
+    unloadModule: function(modName) {
+        var mod = this.loadedModules[modName];
+        if (!modName || !mod|| mod === this) return null;
+        delete this.loadedModules[modName];
+        var unloadFunc = mod.unloadModule;
+        if (typeof unloadFunc === 'function') {
+            mod.unloadModule(this);
+        } else if (typeof unloadFunc === 'string') {
+            // allow late binding for built-ins
+            this[unloadFunc](this);
+        }
+        return mod;
+    },
+    primitiveUnloadModule: function(argCount) {
+        var	moduleName = this.stackNonInteger(0).bytesAsString();
+        if (!moduleName) return false;
+        this.unloadModule(moduleName);
+    	return this.popNIfOK(argCount);
+	},
+    primitiveListBuiltinModule: function(argCount) {
+        var	index = this.stackInteger(0) - 1;
+        if (!this.success) return false;
+        var moduleNames = Object.keys(this.builtinModules);
+    	return this.popNandPushIfOK(argCount, this.makeStObject(moduleNames[index]));
+    },
+    primitiveListLoadedModule: function(argCount) {
+        var	index = this.stackInteger(0) - 1;
+        if (!this.success) return false;
+        var moduleNames = [];
+        for (var key in this.loadedModules)
+            if (this.loadedModules[key]) moduleNames.push(key);
+    	return this.popNandPushIfOK(argCount, this.makeStObject(moduleNames[index]));
     },
 },
 'stack access', {

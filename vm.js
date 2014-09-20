@@ -2313,6 +2313,7 @@ Object.subclass('Squeak.Primitives',
             ScratchPlugin: this.findPluginFunctions("scratch_", ""),
             B2DPlugin:     this.findPluginFunctions("ge",       ""),
         };
+        this.interpreterProxy = new Squeak.InterpreterProxy(this.vm);
     },
     findPluginFunctions: function(prefix, match, bindLate) {
         match = match || "(initialise|shutdown|primitive)";
@@ -2655,17 +2656,22 @@ Object.subclass('Squeak.Primitives',
             mod = this.loadModule(modName);
             this.loadedModules[modName] = mod;
         }
+        var result = false;
         if (mod) {
             var primitive = mod[functionName];
             if (typeof primitive === "function") {
-                return mod[functionName](argCount);
+                result = mod[functionName](argCount);
             } else if (typeof primitive === "string") {
                 // allow late binding for built-ins
-                return this[primitive](argCount);
+                result = this[primitive](argCount);
+            } else {
+                this.vm.warnOnce("missing primitive: " + modName + "." + functionName);
             }
+        } else {
+            this.vm.warnOnce("missing module: " + modName + " (" + functionName + ")");
         }
-        this.vm.warnOnce("missing primitive: " + modName + "." + functionName);
-        return false;
+        if (result === true || result === false) return result;
+        return this.success;
     },
     doNamedPrimitive: function(primMethod, argCount) {
         if (primMethod.pointersSize() < 2) return false;
@@ -2691,10 +2697,10 @@ Object.subclass('Squeak.Primitives',
         if (!mod) return null;
         var initFunc = mod.initialiseModule;
         if (typeof initFunc === 'function') {
-            mod.initialiseModule(this);
+            mod.initialiseModule(this.interpreterProxy);
         } else if (typeof initFunc === 'string') {
             // allow late binding for built-ins
-            this[initFunc](this);
+            this[initFunc](this.interpreterProxy);
         }
         console.log("Loaded module: " + modName);
         return mod;
@@ -5156,6 +5162,66 @@ Object.subclass('Squeak.Primitives',
         }
         if (outPix === 0) outPix = 1;   // convert transparent to 1
         bitmap[i] = outPix;
+    },
+});
+
+Object.subclass('Squeak.InterpreterProxy',
+// provides function names exactly like the C interpreter, for ease of porting
+// but maybe less efficiently because of the indirection
+'initialization', {
+    initialize: function(vm) {
+        this.vm = vm;
+        Object.defineProperty(this, 'successFlag', {
+          get: function() { return vm.primHandler.success; },
+          set: function(success) { vm.primHandler.success = success; },
+        });
+        this.typeMap = {
+            "short int *": "wordsAsInt16Array",
+            "float *": "wordsAsFloat32Array",
+        };
+    },
+},
+'stack access',
+{
+    stackValue: function(n) {
+        return this.vm.stackValue(n);
+    },
+	stackIntegerValue: function(n) {
+        var int = this.vm.stackValue(n);
+	    if (typeof int !== "number") this.successFlag = false;
+        return int;
+    },
+    pop: function(n) {
+        this.vm.pop(n);
+    },
+},
+'object access',
+{
+	arrayValueOf: function(obj, typeDecl) {
+        var accessMethod;
+        if (typeDecl) {
+            accessMethod = this.typeMap[typeDecl];
+            if (!accessMethod) throw "Unknown type: " + typeDecl;
+        }
+        var array = accessMethod ? obj[accessMethod]() : obj.words || obj.bytes;
+        if (!array) this.successFlag = false;
+        return array;
+    },
+    fetchPointerofObject: function(n, obj) {
+        return obj.pointers[n];
+    },
+    fetchIntegerofObject: function(n, obj) {
+	    var int = obj.pointers[n];
+	    if (typeof int !== "number") this.successFlag = false;
+        return int;
+    },
+	fetchArrayofObject: function(n, obj, accessMethod) {
+        return this.arrayValueOf(obj.pointers[n], accessMethod);
+    },
+    storeIntegerofObjectwithValue: function(n, obj, value) {
+        if (typeof value === "number")
+            obj.pointers[n] = value;
+        else this.successFlag = false;
     },
 });
 

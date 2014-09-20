@@ -1138,13 +1138,14 @@ Object.subclass('Squeak.Interpreter',
             {method: "PluggableTextMorphPlus>>useDefaultStyler", primitive: returnSelf},
             // BitBlt rule not available
             //{method: "BitBlt class>>subPixelRenderColorFonts", primitive: returnFalse},
-            // Scratch relies on event prims. We don't have those yet.
-            //{method: "InputSensor>>fileDropPoint", primitive: returnNil},
-            //{method: "InputSensor class>>startUp", primitive: returnNil},
-            //{method: "ScratchTranslator class>>importLanguagesList", primitive: returnNil},
+            // Cuis needs JPEG plugin
+            {method: "PasteUpMorph>>buildMagnifiedBackgroundImage", primitive: returnNil},
         ].forEach(function(each) {
             var m = this.findMethod(each.method);
-            if (m) m.pointers[0] |= each.primitive;
+            if (m) {
+                m.pointers[0] |= each.primitive;
+                console.log("Hacking " + each.method);
+            }
         }, this);
     },
 },

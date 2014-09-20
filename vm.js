@@ -26,7 +26,7 @@ Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.4.5",
+    vmVersion: "SqueakJS 0.4.6",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -1333,6 +1333,7 @@ Object.subclass('Squeak.Interpreter',
     goIdle: function() {
         // make sure we tend to pending delays
         var hadTimer = this.nextWakeupTick !== 0;
+        this.forceInterruptCheck();
         this.checkForInterrupts();
         var hasTimer = this.nextWakeupTick !== 0;
         // go idle unless a timer just expired
@@ -1360,10 +1361,13 @@ Object.subclass('Squeak.Interpreter',
         this.breakOutOfInterpreter = this.breakOutOfInterpreter || true; // do not overwrite break string
     },
     nextByte: function() {
-        return this.methodBytes[this.pc++] & 0xFF;
+        return this.methodBytes[this.pc++];
     },
     nono: function() {
         throw Error("Oh No!");
+    },
+    forceInterruptCheck: function() {
+        this.interruptCheckCounter = -1000;
     },
     checkForInterrupts: function() {
         //Check for interrupts at sends and backward jumps
@@ -1375,7 +1379,7 @@ Object.subclass('Squeak.Interpreter',
                 this.nextWakeupTick = now + (this.nextWakeupTick - this.lastTick);
         }
         //Feedback logic attempts to keep interrupt response around 3ms...
-        if (this.interruptCheckCounter <= 0) { // only if not a forced check
+        if (this.interruptCheckCounter > -100) { // only if not a forced check
             if ((now - this.lastTick) < this.interruptChecksEveryNms) { //wrapping is not a concern
                 this.interruptCheckCounterFeedBackReset += 10;
             } else { // do a thousand sends even if we are too slow for 3ms
@@ -2303,44 +2307,30 @@ Object.subclass('Squeak.Primitives',
                     primitiveCompareString: this.primitiveCompareString.bind(this),
                     primitiveFindSubstring: this.primitiveFindSubstring.bind(this),
             },
-            FilePlugin: {
-                    primitiveDirectoryDelimitor: this.primitiveDirectoryDelimitor.bind(this),
-                    primitiveDirectoryCreate: this.primitiveDirectoryCreate.bind(this),
-                    primitiveDirectoryDelete: this.primitiveDirectoryDelete.bind(this),
-                    primitiveDirectoryDelimitor: this.primitiveDirectoryDelimitor.bind(this),
-                    primitiveDirectoryEntry: this.primitiveDirectoryEntry.bind(this),
-                    primitiveDirectoryLookup: this.primitiveDirectoryLookup.bind(this),
-                    primitiveDirectorySetMacTypeAndCreator: this.primitiveDirectorySetMacTypeAndCreator.bind(this),
-                    primitiveFileAtEnd: this.primitiveFileAtEnd.bind(this),
-                    primitiveFileClose: this.primitiveFileClose.bind(this),
-                    primitiveFileDelete: this.primitiveFileDelete.bind(this),
-                    primitiveFileFlush: this.primitiveFileFlush.bind(this),
-                    primitiveFileGetPosition: this.primitiveFileGetPosition.bind(this),
-                    primitiveFileOpen: this.primitiveFileOpen.bind(this),
-                    primitiveFileRead: this.primitiveFileRead.bind(this),
-                    primitiveFileRename: this.primitiveFileRename.bind(this),
-                    primitiveFileSetPosition: this.primitiveFileSetPosition.bind(this),
-                    primitiveFileSize: this.primitiveFileSize.bind(this),
-                    primitiveFileStdioHandles: this.primitiveFileStdioHandles.bind(this),
-                    primitiveFileTruncate: this.primitiveFileTruncate.bind(this),
-                    primitiveFileWrite: this.primitiveFileWrite.bind(this),
-            },
-            BitBltPlugin: {
-                    initialiseModule: "bitblt_initialiseModule",
-                    primitiveCopyBits: "bitblt_primitiveCopyBits",
-                    primitiveWarpBits: "bitblt_primitiveWarpBits",
-            },
             FloatArrayPlugin: {
                     primitiveAt: this.primitiveFloatArrayAtAndPut.bind(this),
                     primitiveAtPut: this.primitiveFloatArrayAtAndPut.bind(this),
             },
-            SoundPlugin: {
-                primitiveSoundStop: this.fakePrimitive.bind(this, 'SoundPlugin.primitiveSoundStop', undefined),
-                primitiveSoundStopRecording: this.fakePrimitive.bind(this, 'SoundPlugin.primitiveSoundStopRecording', undefined),
-            },
-            ScratchPlugin: this.ScratchPlugin,
-            B2DPlugin: this.B2DPlugin(),
+            FilePlugin:            this.findPluginFunctions("",         "primitive(File|Directory)"),
+            BitBltPlugin:          this.findPluginFunctions("bitblt_",  ""),
+            SoundPlugin:           this.findPluginFunctions("snd_",     "", true),
+            SoundGenerationPlugin: this.findPluginFunctions("sndgen_",  "", true),
+            ScratchPlugin:         this.findPluginFunctions("scratch_", ""),
+            B2DPlugin:             this.findPluginFunctions("ge",       ""),
         };
+        this.interpreterProxy = new Squeak.InterpreterProxy(this.vm);
+    },
+    findPluginFunctions: function(prefix, match, bindLate) {
+        match = match || "(initialise|shutdown|primitive)";
+        var plugin = {},
+            regex = new RegExp("^" + prefix + match, "i");
+        for (var funcName in this)
+            if (regex.test(funcName) && typeof this[funcName] == "function") {
+                var primName = funcName;
+                if (prefix) primName = funcName[prefix.length].toLowerCase() + funcName.slice(prefix.length + 1);
+                plugin[primName] = bindLate ? funcName : this[funcName].bind(this);
+            }
+        return plugin;
     },
 },
 'dispatch', {
@@ -2518,7 +2508,7 @@ Object.subclass('Squeak.Primitives',
             case 137: return this.popNandPushIfOK(1, this.secondClock()); // seconds since Jan 1, 1901
             case 138: return this.popNandPushIfOK(1, this.someObject()); // Object.someObject
             case 139: return this.popNandPushIfOK(1, this.nextObject(this.vm.top())); // Object.nextObject
-            case 140: return this.fakePrimitive('140 (primitiveBeep)', true, argCount); // TODO
+            case 140: return this.primitiveBeep(argCount);
             case 141: return this.primitiveClipboardText(argCount);
             case 142: return this.popNandPushIfOK(1, this.makeStString(this.filenameToSqueak(Squeak.vmPath)));
             case 143: // short at and shortAtPut
@@ -2552,7 +2542,7 @@ Object.subclass('Squeak.Primitives',
                 else return this.primitiveNotIdentical(argCount);
             // Sound Primitives (170-199)
             case 170: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStart', argCount);
-            // 171: unused?
+            case 171: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStartWithSemaphore', argCount);
             case 172: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStop', argCount);
             case 173: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundAvailableSpace', argCount);
             case 174: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySamples', argCount);
@@ -2658,31 +2648,35 @@ Object.subclass('Squeak.Primitives',
             case 553: return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveEncodeStereo', argCount);
             // External primitive support primitives (570-574)
             // case 570: return this.primitiveFlushExternalPrimitives(argCount);
-            // case 571: return this.primitiveUnloadModule(argCount);
-            // case 572: return this.primitiveListBuiltinModule(argCount);
-            // case 573: return this.primitiveListExternalModule(argCount);
+            case 571: return this.primitiveUnloadModule(argCount);
+            case 572: return this.primitiveListBuiltinModule(argCount);
+            case 573: return this.primitiveListLoadedModule(argCount);
         }
         console.error("primitive " + index + " not implemented yet");
         return false;
     },
-    namedPrimitive: function(moduleName, functionName, argCount) {
-        var module = moduleName === "" ? this : this.loadedModules[moduleName];
-        if (module === undefined) { // null if earlier load failed
-            module = this.loadModule(moduleName);
-            this.loadedModules[moduleName] = module;
+    namedPrimitive: function(modName, functionName, argCount) {
+        var mod = modName === "" ? this : this.loadedModules[modName];
+        if (mod === undefined) { // null if earlier load failed
+            mod = this.loadModule(modName);
+            this.loadedModules[modName] = mod;
         }
-        if (module) {
-            var primitive = module[functionName];
-            if (typeof primitive == "string") { // allow late binding
-                module = this;
-                functionName = primitive;
-                primitive = module[functionName];
+        var result = false;
+        if (mod) {
+            var primitive = mod[functionName];
+            if (typeof primitive === "function") {
+                result = mod[functionName](argCount);
+            } else if (typeof primitive === "string") {
+                // allow late binding for built-ins
+                result = this[primitive](argCount);
+            } else {
+                this.vm.warnOnce("missing primitive: " + modName + "." + functionName);
             }
-            if (primitive)
-                return module[functionName](argCount);
+        } else {
+            this.vm.warnOnce("missing module: " + modName + " (" + functionName + ")");
         }
-        this.vm.warnOnce("missing primitive: " + moduleName + "." + functionName);
-        return false;
+        if (result === true || result === false) return result;
+        return this.success;
     },
     doNamedPrimitive: function(primMethod, argCount) {
         if (primMethod.pointersSize() < 2) return false;
@@ -2696,18 +2690,59 @@ Object.subclass('Squeak.Primitives',
         // fake a named primitive
         // prim and retVal need to be curried when used:
         //  this.fakePrimitive.bind(this, "Module.primitive", 42)
-        this.vm.warnOnce("missing primitive: " + prim);
+        this.vm.warnOnce("faking primitive: " + prim);
         if (retVal === undefined) this.vm.popN(argCount);
         else this.vm.popNandPush(argCount+1, this.makeStObject(retVal));
         return true;
     },
-    loadModule: function(moduleName) {
-        var module = Squeak.externalModules[moduleName] || this.builtinModules[moduleName];
-        if (!module) return null;
-        var initFunc = module.initialiseModule;
-        if (typeof initFunc == 'string') initFunc = this[initFunc].bind(this); // allow late binding
-        if (initFunc) initFunc(this);
-        return module;
+},
+'modules', {
+    loadModule: function(modName) {
+        var mod = Squeak.externalModules[modName] || this.builtinModules[modName];
+        if (!mod) return null;
+        var initFunc = mod.initialiseModule;
+        if (typeof initFunc === 'function') {
+            mod.initialiseModule(this.interpreterProxy);
+        } else if (typeof initFunc === 'string') {
+            // allow late binding for built-ins
+            this[initFunc](this.interpreterProxy);
+        }
+        console.log("Loaded module: " + modName);
+        return mod;
+    },
+    unloadModule: function(modName) {
+        var mod = this.loadedModules[modName];
+        if (!modName || !mod|| mod === this) return null;
+        delete this.loadedModules[modName];
+        var unloadFunc = mod.unloadModule;
+        if (typeof unloadFunc === 'function') {
+            mod.unloadModule(this);
+        } else if (typeof unloadFunc === 'string') {
+            // allow late binding for built-ins
+            this[unloadFunc](this);
+        }
+        console.log("Unloaded module: " + modName);
+        return mod;
+    },
+    primitiveUnloadModule: function(argCount) {
+        var	moduleName = this.stackNonInteger(0).bytesAsString();
+        if (!moduleName) return false;
+        this.unloadModule(moduleName);
+    	return this.popNIfOK(argCount);
+	},
+    primitiveListBuiltinModule: function(argCount) {
+        var	index = this.stackInteger(0) - 1;
+        if (!this.success) return false;
+        var moduleNames = Object.keys(this.builtinModules);
+    	return this.popNandPushIfOK(argCount, this.makeStObject(moduleNames[index]));
+    },
+    primitiveListLoadedModule: function(argCount) {
+        var	index = this.stackInteger(0) - 1;
+        if (!this.success) return false;
+        var moduleNames = [];
+        for (var key in this.loadedModules)
+            if (this.loadedModules[key]) moduleNames.push(key);
+    	return this.popNandPushIfOK(argCount, this.makeStObject(moduleNames[index]));
     },
 },
 'stack access', {
@@ -3935,6 +3970,19 @@ Object.subclass('Squeak.Primitives',
         // TODO: create cursorCanvas in setCursor primitive
         // this.display.context.drawImage(this.cursorCanvas, this.cursorX, this.cursorY);
     },
+    primitiveBeep: function(argCount) {
+        var ctx = Squeak.startAudio();
+        if (ctx) {
+            var beep = ctx.createOscillator();
+            beep.connect(ctx.destination);
+            beep.frequency.value = 880;
+            beep.noteOn(0);
+            beep.noteOff(ctx.currentTime + 0.2);
+        } else {
+            this.vm.warnOnce("could not initialize audio");
+        }
+        return this.popNIfOK(argCount);
+    },
 },
 'input', {
 	primitiveClipboardText: function(argCount) {
@@ -4438,18 +4486,212 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
 },
-'B2DPlugin', {
-    B2DPlugin: function() {
-        // find all ge* functions and declare as primitive
-        // (because old images use the gePrimitives without a modulename)
-        var plugin = {};
-        for (var funcName in this)
-            if (/^ge(Initialise|Shutdown|Primitive)/.test(funcName) && typeof this[funcName] == "function") {
-                var primName = funcName[2].toLowerCase() + funcName.slice(3);
-                plugin[primName] = funcName;
-            }
-        return plugin;
+'SoundPlugin', {
+    snd_primitiveSoundStart: function(argCount) {
+        return this.snd_primitiveSoundStartWithSemaphore(argCount);
     },
+    snd_primitiveSoundStartWithSemaphore: function(argCount) {
+        var bufFrames = this.stackInteger(argCount-1),
+            samplesPerSec = this.stackInteger(argCount-2),
+            stereoFlag = this.stackBoolean(argCount-3),
+            semaIndex = argCount > 3 ? this.stackInteger(argCount-4) : 0;
+        if (!this.success) return false;
+        this.audioContext = Squeak.startAudio();
+        if (!this.audioContext) {
+            this.vm.warnOnce("could not initialize audio");
+            return false;
+        }
+        this.audioContext.sampleRate = samplesPerSec;
+        this.audioSema = semaIndex; // signal when ready to accept another buffer of samples
+        this.audioBuffers = [];
+        this.audioBuffersUnused = [
+            this.audioContext.createBuffer(stereoFlag ? 2 : 1, bufFrames, samplesPerSec),
+            this.audioContext.createBuffer(stereoFlag ? 2 : 1, bufFrames, samplesPerSec),
+        ];
+        return this.popNIfOK(argCount);
+    },
+    snd_playNextBuffer: function() {
+        if (!this.audioContext) return;
+        if (!this.audioBuffers.length) {
+            // console.log("audio buffer underrun " + this.audioBuffersUnused.length);
+            // if (this.audioBuffersUnused.length < 5) {
+            //     var buf = this.audioBuffersUnused[0];
+            //     this.audioContext.createBuffer(buf.numberOfChannels, buf.length, buf.sampleRate),
+            //     this.audioBuffersUnused.push(buf);
+            // }
+            return;
+        }
+        var source = this.audioContext.createBufferSource();
+        source.buffer = this.audioBuffers[0];
+        source.connect(this.audioContext.destination);
+        source.onended = function() {
+            this.audioBuffersUnused.push(this.audioBuffers.shift());
+            if (this.audioSema) this.signalSemaphoreWithIndex(this.audioSema);
+            this.vm.forceInterruptCheck();
+            this.snd_playNextBuffer();
+        }.bind(this);
+        source.start(0);
+        this.audioSource = source;
+    },
+    snd_primitiveSoundAvailableSpace: function(argCount) {
+        if (!this.audioContext) return false;
+        var available = 0;
+        if (this.audioBuffersUnused.length > 0) {
+            var buf = this.audioBuffersUnused[0];
+            available = buf.length * buf.numberOfChannels * 2;
+        }
+        return this.popNandPushIfOK(argCount + 1, available);
+    },
+    snd_primitiveSoundPlaySamples: function(argCount) {
+        if (!this.audioContext || !this.audioBuffersUnused.length) return false;
+        var count = this.stackInteger(2),
+            int16Array = this.stackNonInteger(1).wordsAsInt16Array(),
+            startIndex = this.stackInteger(0) - 1;
+        if (!this.success || !int16Array) return false;
+        var buffer = this.audioBuffersUnused.shift(),
+            channels = buffer.numberOfChannels;
+        for (var channel = 0; channel < channels; channel++) {
+            var float32Array = buffer.getChannelData(channel),
+                index = startIndex + channel;
+            for (var i = 0; i < count; i++) {
+                float32Array[i] = int16Array[index] / 32768;
+                index += channels;
+            }
+        }
+        this.audioBuffers.push(buffer);
+        if (this.audioBuffers.length === 1)
+            this.snd_playNextBuffer();
+        return this.popNIfOK(argCount);
+    },
+    snd_primitiveSoundStop: function(argCount) {
+        if (this.audioSource) this.audioSource.stop(0);
+        this.audioContext = null;
+        this.audioBuffers = null;
+        this.audioBuffersUnused = null;
+        this.audioSource = null;
+        this.audioSema = 0;
+        return this.popNIfOK(argCount);
+    },
+    snd_primitiveSoundStopRecording: function(argCount) {
+        return this.fakePrimitive('SoundPlugin.primitiveSoundStopRecording', undefined, argCount);
+    },
+},
+'SoundGenerationPlugin', {
+    sndgen_primitiveApplyReverb: function(argCount) {
+        // need to fake for now, fallback is too slow
+        return this.fakePrimitive('SoundGenerationPlugin.primitiveApplyReverb', undefined, argCount);
+    },
+    sndgen_primitiveMixSampledSound: function(argCount) {
+        var interpreterProxy = this.interpreterProxy;
+        // constants used in C code
+        var IncrementFractionBits = 16;
+        var ScaledIndexOverflow = 536870912;
+        // transcribed C code follows
+        var rcvr;
+        var n;
+        var aSoundBuffer; // short int *
+        var startIndex;
+        var leftVol;
+        var rightVol;
+        var s;
+        var lastIndex;
+        var outIndex;
+        var i;
+        var sampleIndex;
+        var overflow;
+        var sample;
+        var scaledVol;
+        var scaledVolIncr;
+        var scaledVolLimit;
+        var count;
+        var samples; // short int *
+        var samplesSize;
+        var scaledIndex;
+        var indexHighBits;
+        var scaledIncrement;
+    
+    	rcvr = interpreterProxy.stackValue(5);
+    	n = interpreterProxy.stackIntegerValue(4);
+    	aSoundBuffer = interpreterProxy.arrayValueOf(interpreterProxy.stackValue(3), "short int *");
+    	var aSoundBufferOffset = -1;
+    	startIndex = interpreterProxy.stackIntegerValue(2);
+    	leftVol = interpreterProxy.stackIntegerValue(1);
+    	rightVol = interpreterProxy.stackIntegerValue(0);
+    	scaledVol = interpreterProxy.fetchIntegerofObject(3, rcvr);
+    	scaledVolIncr = interpreterProxy.fetchIntegerofObject(4, rcvr);
+    	scaledVolLimit = interpreterProxy.fetchIntegerofObject(5, rcvr);
+    	count = interpreterProxy.fetchIntegerofObject(7, rcvr);
+    	samples = interpreterProxy.fetchArrayofObject(8, rcvr, "short int *");
+    	var samplesOffset = -1;
+    	samplesSize = interpreterProxy.fetchIntegerofObject(10, rcvr);
+    	scaledIndex = interpreterProxy.fetchIntegerofObject(11, rcvr);
+    	indexHighBits = interpreterProxy.fetchIntegerofObject(12, rcvr);
+    	scaledIncrement = interpreterProxy.fetchIntegerofObject(13, rcvr);
+    	if (!(interpreterProxy.successFlag)) {
+    		return null;
+    	}
+    	lastIndex = (startIndex + n) - 1;
+    
+    	/* index of next stereo output sample pair */
+    
+    	outIndex = startIndex;
+    	sampleIndex = indexHighBits + ((scaledIndex) >> IncrementFractionBits);
+    	while ((sampleIndex <= samplesSize) && (outIndex <= lastIndex)) {
+    		sample = (((samples[sampleIndex + samplesOffset]) * scaledVol) >> 15);
+    		if (leftVol > 0) {
+    			i = (2 * outIndex) - 1;
+    			s = (aSoundBuffer[i + aSoundBufferOffset]) + (((sample * leftVol) >> 15));
+    			if (s > 32767) {
+    				s = 32767;
+    			}
+    			if (s < -32767) {
+    				s = -32767;
+    			}
+    			aSoundBuffer[i + aSoundBufferOffset] = s;
+    		}
+    		if (rightVol > 0) {
+    			i = 2 * outIndex;
+    			s = (aSoundBuffer[i + aSoundBufferOffset]) + (((sample * rightVol) >> 15));
+    			if (s > 32767) {
+    				s = 32767;
+    			}
+    			if (s < -32767) {
+    				s = -32767;
+    			}
+    			aSoundBuffer[i + aSoundBufferOffset] = s;
+    		}
+    		if (scaledVolIncr !== 0) {
+    			scaledVol += scaledVolIncr;
+    			if (((scaledVolIncr > 0) && (scaledVol >= scaledVolLimit)) || ((scaledVolIncr < 0) && (scaledVol <= scaledVolLimit))) {
+    
+    				/* reached the limit; stop incrementing */
+    
+    				scaledVol = scaledVolLimit;
+    				scaledVolIncr = 0;
+    			}
+    		}
+    		scaledIndex += scaledIncrement;
+    		if (scaledIndex >= ScaledIndexOverflow) {
+    			overflow = (scaledIndex) >> IncrementFractionBits;
+    			indexHighBits += overflow;
+    			scaledIndex -= overflow << IncrementFractionBits;
+    		}
+    		sampleIndex = indexHighBits + ((scaledIndex) >> IncrementFractionBits);
+    		outIndex += 1;
+    	}
+    	count -= n;
+    	if (!(interpreterProxy.successFlag)) {
+    		return null;
+    	}
+    	interpreterProxy.storeIntegerofObjectwithValue(3, rcvr, scaledVol);
+    	interpreterProxy.storeIntegerofObjectwithValue(4, rcvr, scaledVolIncr);
+    	interpreterProxy.storeIntegerofObjectwithValue(7, rcvr, count);
+    	interpreterProxy.storeIntegerofObjectwithValue(11, rcvr, scaledIndex);
+    	interpreterProxy.storeIntegerofObjectwithValue(12, rcvr, indexHighBits);
+    	interpreterProxy.pop(5);
+    },
+},
+'B2DPlugin', {
     geInitialiseModule: function(interpreterProxy) {
         this.b2d_debug = false;
         this.b2d_state = {
@@ -4468,8 +4710,8 @@ Object.subclass('Squeak.Primitives',
         if (state.bitbltObj != bitbltObj) {
             state.bitbltObj = bitbltObj;
             state.bitblt.loadBitBlt(bitbltObj);
-            this.geSetupCanvas();
         }
+        this.geSetupCanvas();
         state.minX = 0;
         state.minY = 0;
         state.maxX = state.bitblt.dest.width;
@@ -4512,12 +4754,12 @@ Object.subclass('Squeak.Primitives',
             }
             state.context.beginPath();
             state.flushNeeded = false;
-            this.geReadPixels();
+            this.geBlendOverForm();
             // if (this.b2d_debug) this.vm.breakNow("b2d_debug");
         }
         return 0; // answer stop reason
     },
-    geReadPixels: function() {
+    geBlendOverForm: function() {
         var state = this.b2d_state,
             bitblt = state.bitblt,
             form = bitblt.dest;
@@ -4525,9 +4767,13 @@ Object.subclass('Squeak.Primitives',
         if (!form.width || !form.height || state.maxX <= state.minX || state.maxY <= state.minY) return;
         if (!form.msb) return this.vm.warnOnce("B2D: drawing to little-endian forms not implemented yet");
         if (form.depth == 32) {
-            this.geReadPixels32();
+            this.geBlendOverForm32();
         } else if (form.depth == 16) {
-            this.geReadPixels16();
+            this.geBlendOverForm16();
+        } else if (form.depth == 8) {
+            this.geBlendOverForm8();
+        } else if (form.depth == 1) {
+            this.geBlendOverForm1();
         } else {
             this.vm.warnOnce("B2D: drawing to " + form.depth + " bit forms not supported yet");
         }
@@ -4538,7 +4784,82 @@ Object.subclass('Squeak.Primitives',
         bitblt.bbH = state.maxY - state.minY;
         this.displayDirty(bitblt);
     },
-    geReadPixels16: function() {
+    geBlendOverForm1: function() {
+        // since we have 32 pixels per word, round to 32 pixels
+        var state = this.b2d_state,
+            form = state.bitblt.dest,
+            minX = state.minX & ~31,
+            minY = state.minY,
+            maxX = (state.maxX + 31) & ~31,
+            maxY = state.maxY,
+            width = maxX - minX,
+            height = maxY - minY,
+            canvasBytes = state.context.getImageData(minX, minY, width, height).data,
+            srcIndex = 0;
+        if (this.b2d_debug) console.log("==> clipped to " + width + "x" + height);
+        for (var y = minY; y < maxY; y++) {
+            var dstIndex = y * form.pitch + (minX / 32);
+            for (var x = minX; x < maxX; x += 32*4) {
+                var dstPixels = form.bits[dstIndex],  // 32 one-bit pixels
+                    dstShift = 31,
+                    result = 0;
+                for (var i = 0; i < 32; i++) {
+                    var alpha = canvasBytes[srcIndex+3],
+                        pix = alpha > 0.5 ? 0 : dstPixels;  // assume we're drawing in black 
+                    result = result | (pix & (1 << dstShift));
+                    dstShift--;
+                    srcIndex += 4;
+                }
+                form.bits[dstIndex] = result;
+                dstIndex++;
+            }
+        }
+    },
+    geBlendOverForm8: function() {
+        // since we have four pixels per word, round to 4 pixels
+        var state = this.b2d_state,
+            form = state.bitblt.dest,
+            minX = state.minX & ~3,
+            minY = state.minY,
+            maxX = (state.maxX + 3) & ~3,
+            maxY = state.maxY,
+            width = maxX - minX,
+            height = maxY - minY,
+            canvasBytes = state.context.getImageData(minX, minY, width, height).data,
+            srcIndex = 0;
+        if (this.b2d_debug) console.log("==> clipped to " + width + "x" + height);
+        for (var y = minY; y < maxY; y++) {
+            var dstIndex = y * form.pitch + (minX / 4);
+            for (var x = minX; x < maxX; x += 4) {
+                if (!(canvasBytes[srcIndex+3] | canvasBytes[srcIndex+7] | canvasBytes[srcIndex+11] | canvasBytes[srcIndex+15])) {
+                    srcIndex += 16; dstIndex++; // skip pixels if fully transparent
+                    continue;
+                }
+                var dstPixels = form.bits[dstIndex],  // four 8-bit pixels
+                    dstShift = 24,
+                    result = 0;
+                for (var i = 0; i < 4; i++) {
+                    var alpha = canvasBytes[srcIndex+3] / 255;
+                    if (alpha < 0.1) {
+                        result = result | (dstPixels & (0xFF << dstShift)); // keep dst
+                    } else {
+                        var oneMinusAlpha = 1 - alpha,
+                            pix = this.indexedColors[(dstPixels >> dstShift) & 0xFF],
+                            r = alpha * canvasBytes[srcIndex  ] + oneMinusAlpha * ((pix >> 16) & 0xFF),
+                            g = alpha * canvasBytes[srcIndex+1] + oneMinusAlpha * ((pix >>  8) & 0xFF),
+                            b = alpha * canvasBytes[srcIndex+2] + oneMinusAlpha * ( pix        & 0xFF),
+                            res = 40 + (r / 255 * 5.5|0) * 36 + (b / 255 * 5.5|0) * 6 + (g / 255 * 5.5|0);  // 6x6x6 RGB cube
+                        result = result | (res << dstShift);
+                    }
+                    dstShift -= 8;
+                    srcIndex += 4;
+                }
+                form.bits[dstIndex] = result;
+                dstIndex++;
+            }
+        }
+    },
+    geBlendOverForm16: function() {
         // since we have two pixels per word, grab from even positions
         var state = this.b2d_state,
             form = state.bitblt.dest,
@@ -4578,7 +4899,7 @@ Object.subclass('Squeak.Primitives',
             }
         }
     },
-    geReadPixels32: function() {
+    geBlendOverForm32: function() {
         var state = this.b2d_state,
             minX = state.minX,
             minY = state.minY,
@@ -4675,6 +4996,11 @@ Object.subclass('Squeak.Primitives',
             g = (word & 0xFF00) >>> 8,
             r = (word & 0xFF0000) >>> 16,
             a = ((word & 0xFF000000) >>> 24) / 255;
+        if (a > 0) { // undo pre-multiplication of alpha
+            b = b / a & 0xFF;
+            g = g / a & 0xFF;
+            r = r / a & 0xFF;
+        }        
         return "rgba(" + [r, g, b, a].join(",") + ")";
     },
     geStyleFrom: function(index) {
@@ -5038,6 +5364,66 @@ Object.subclass('Squeak.Primitives',
         }
         if (outPix === 0) outPix = 1;   // convert transparent to 1
         bitmap[i] = outPix;
+    },
+});
+
+Object.subclass('Squeak.InterpreterProxy',
+// provides function names exactly like the C interpreter, for ease of porting
+// but maybe less efficiently because of the indirection
+'initialization', {
+    initialize: function(vm) {
+        this.vm = vm;
+        Object.defineProperty(this, 'successFlag', {
+          get: function() { return vm.primHandler.success; },
+          set: function(success) { vm.primHandler.success = success; },
+        });
+        this.typeMap = {
+            "short int *": "wordsAsInt16Array",
+            "float *": "wordsAsFloat32Array",
+        };
+    },
+},
+'stack access',
+{
+    stackValue: function(n) {
+        return this.vm.stackValue(n);
+    },
+	stackIntegerValue: function(n) {
+        var int = this.vm.stackValue(n);
+	    if (typeof int !== "number") this.successFlag = false;
+        return int;
+    },
+    pop: function(n) {
+        this.vm.pop(n);
+    },
+},
+'object access',
+{
+	arrayValueOf: function(obj, typeDecl) {
+        var accessMethod;
+        if (typeDecl) {
+            accessMethod = this.typeMap[typeDecl];
+            if (!accessMethod) throw "Unknown type: " + typeDecl;
+        }
+        var array = accessMethod ? obj[accessMethod]() : obj.words || obj.bytes;
+        if (!array) this.successFlag = false;
+        return array;
+    },
+    fetchPointerofObject: function(n, obj) {
+        return obj.pointers[n];
+    },
+    fetchIntegerofObject: function(n, obj) {
+	    var int = obj.pointers[n];
+	    if (typeof int !== "number") this.successFlag = false;
+        return int;
+    },
+	fetchArrayofObject: function(n, obj, accessMethod) {
+        return this.arrayValueOf(obj.pointers[n], accessMethod);
+    },
+    storeIntegerofObjectwithValue: function(n, obj, value) {
+        if (typeof value === "number")
+            obj.pointers[n] = value;
+        else this.successFlag = false;
     },
 });
 
@@ -6416,6 +6802,13 @@ Object.extend(Squeak, {
     totalSeconds: function() {
         // seconds since 1901-01-01, local time
         return Math.floor(Date.now()/1000) - Squeak.Epoch;
+    },
+    startAudio: function() {
+        if (!this.audioContext) {
+            var ctxProto = window.AudioContext || window.webkitAudioContext;
+            this.audioContext = ctxProto && new ctxProto();
+        }
+        return this.audioContext;
     },
 });
 

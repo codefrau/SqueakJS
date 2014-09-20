@@ -2696,6 +2696,7 @@ Object.subclass('Squeak.Primitives',
             // allow late binding for built-ins
             this[initFunc](this);
         }
+        console.log("Loaded module: " + modName);
         return mod;
     },
     unloadModule: function(modName) {
@@ -2709,6 +2710,7 @@ Object.subclass('Squeak.Primitives',
             // allow late binding for built-ins
             this[unloadFunc](this);
         }
+        console.log("Unloaded module: " + modName);
         return mod;
     },
     primitiveUnloadModule: function(argCount) {

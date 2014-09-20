@@ -4574,6 +4574,10 @@ Object.subclass('Squeak.Primitives',
     },
 },
 'SoundGenerationPlugin', {
+    sndgen_primitiveApplyReverb: function(argCount) {
+        // need to fake for now, fallback is too slow
+        return this.fakePrimitive('SoundGenerationPlugin.primitiveApplyReverb', undefined, argCount);
+    },
     sndgen_primitiveMixSampledSound: function(argCount) {
         var interpreterProxy = this.interpreterProxy;
         // constants used in C code

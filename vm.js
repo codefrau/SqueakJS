@@ -4530,7 +4530,7 @@ Object.subclass('Squeak.Primitives',
             this.vm.forceInterruptCheck();
             this.snd_playNextBuffer();
         }.bind(this);
-        source.start();
+        source.start(0);
         this.audioSource = source;
     },
     snd_primitiveSoundAvailableSpace: function(argCount) {
@@ -4564,7 +4564,7 @@ Object.subclass('Squeak.Primitives',
         return this.popNIfOK(argCount);
     },
     snd_primitiveSoundStop: function(argCount) {
-        if (this.audioSource) this.audioSource.stop();
+        if (this.audioSource) this.audioSource.stop(0);
         this.audioContext = null;
         this.audioBuffers = null;
         this.audioBuffersUnused = null;
@@ -6805,7 +6805,7 @@ Object.extend(Squeak, {
     },
     startAudio: function() {
         if (!this.audioContext) {
-            var ctxProto = AudioContext || webkitAudioContext;
+            var ctxProto = window.AudioContext || window.webkitAudioContext;
             this.audioContext = ctxProto && new ctxProto();
         }
         return this.audioContext;

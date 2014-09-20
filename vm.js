@@ -2341,7 +2341,7 @@ Object.subclass('Squeak.Primitives',
         switch (lobits) {
             case 0x0: return this.popNandPushIfOK(2, this.objectAt(true,true,false)); // at:
             case 0x1: return this.popNandPushIfOK(3, this.objectAtPut(true,true,false)); // at:put:
-            case 0x2: return this.popNandPushIfOK(1, this.objectSize(0)); // size
+            case 0x2: return this.popNandPushIfOK(1, this.objectSize(true)); // size
             //case 0x3: return false; // next
             //case 0x4: return false; // nextPut:
             //case 0x5: return false; // atEnd
@@ -2426,7 +2426,7 @@ Object.subclass('Squeak.Primitives',
             // Subscript and Stream Primitives (60-67)
             case 60: return this.popNandPushIfOK(2, this.objectAt(false,false,false)); // basicAt:
             case 61: return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); // basicAt:put:
-            case 62: return this.popNandPushIfOK(1, this.objectSize()); // size
+            case 62: return this.popNandPushIfOK(1, this.objectSize(false)); // size
             case 63: return this.popNandPushIfOK(2, this.objectAt(false,true,false)); // String.basicAt:
             case 64: return this.popNandPushIfOK(3, this.objectAtPut(false,true,false)); // String.basicAt:put:
             case 65: return false; // primitiveNext
@@ -3135,9 +3135,19 @@ Object.subclass('Squeak.Primitives',
         array.bytes[index-1-offset] = intToPut;
         return objToPut;
     },
-    objectSize: function(argCount) {
-        var rcvr = this.vm.stackValue(0);
-        var size = this.indexableSize(rcvr);
+    objectSize: function(cameFromBytecode) {
+        var rcvr = this.vm.stackValue(0),
+            size = -1;
+        if (cameFromBytecode) {
+            // must only handle classes with size == basicSize, fail otherwise
+            if (rcvr.sqClass === this.vm.specialObjects[Squeak.splOb_ClassArray]) {
+                size = rcvr.pointersSize();
+            } else if (rcvr.sqClass === this.vm.specialObjects[Squeak.splOb_ClassString]) {
+                size = rcvr.bytesSize();
+            }
+        } else { // basicSize
+            size = this.indexableSize(rcvr);
+        }
         if (size === -1) {this.success = false; return -1}; //not indexable
         return this.pos32BitIntFor(size);
     },

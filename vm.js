@@ -4575,12 +4575,15 @@ Object.subclass('Squeak.Primitives',
         return this.popNIfOK(argCount);
     },
     snd_primitiveSoundStop: function(argCount) {
-        if (this.audioSource) this.audioSource.stop(0);
-        this.audioContext = null;
-        this.audioBuffers = null;
-        this.audioBuffersUnused = null;
-        this.audioSource = null;
-        this.audioSema = 0;
+        if (this.audioContext) {
+            if (this.audioSource)
+                this.audioSource.stop(this.audioContext.currentTime + 0.1);
+            this.audioContext = null;
+            this.audioBuffers = null;
+            this.audioBuffersUnused = null;
+            this.audioSource = null;
+            this.audioSema = 0;
+        }
         return this.popNIfOK(argCount);
     },
     snd_primitiveSoundStopRecording: function(argCount) {

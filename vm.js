@@ -1333,6 +1333,7 @@ Object.subclass('Squeak.Interpreter',
     goIdle: function() {
         // make sure we tend to pending delays
         var hadTimer = this.nextWakeupTick !== 0;
+        this.forceInterruptCheck();
         this.checkForInterrupts();
         var hasTimer = this.nextWakeupTick !== 0;
         // go idle unless a timer just expired
@@ -1365,6 +1366,9 @@ Object.subclass('Squeak.Interpreter',
     nono: function() {
         throw Error("Oh No!");
     },
+    forceInterruptCheck: function() {
+        this.interruptCheckCounter = -1000;
+    },
     checkForInterrupts: function() {
         //Check for interrupts at sends and backward jumps
         var now = this.primHandler.millisecondClockValue();
@@ -1375,7 +1379,7 @@ Object.subclass('Squeak.Interpreter',
                 this.nextWakeupTick = now + (this.nextWakeupTick - this.lastTick);
         }
         //Feedback logic attempts to keep interrupt response around 3ms...
-        if (this.interruptCheckCounter <= 0) { // only if not a forced check
+        if (this.interruptCheckCounter > -100) { // only if not a forced check
             if ((now - this.lastTick) < this.interruptChecksEveryNms) { //wrapping is not a concern
                 this.interruptCheckCounterFeedBackReset += 10;
             } else { // do a thousand sends even if we are too slow for 3ms
@@ -4522,9 +4526,8 @@ Object.subclass('Squeak.Primitives',
         source.connect(this.audioContext.destination);
         source.onended = function() {
             this.audioBuffersUnused.push(this.audioBuffers.shift());
-            if (this.audioSema) {
-                this.signalSemaphoreWithIndex(this.audioSema);
-            }
+            if (this.audioSema) this.signalSemaphoreWithIndex(this.audioSema);
+            this.vm.forceInterruptCheck();
             this.snd_playNextBuffer();
         }.bind(this);
         source.start();

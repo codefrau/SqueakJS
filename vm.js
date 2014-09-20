@@ -2307,11 +2307,11 @@ Object.subclass('Squeak.Primitives',
                     primitiveAt: this.primitiveFloatArrayAtAndPut.bind(this),
                     primitiveAtPut: this.primitiveFloatArrayAtAndPut.bind(this),
             },
-            FilePlugin:    this.findPluginFunctions("",         "primitive(File|Directory)"),
-            BitBltPlugin:  this.findPluginFunctions("bitblt_",  ""),
-            SoundPlugin:   this.findPluginFunctions("",         "primitiveSound.*", true),
-            ScratchPlugin: this.findPluginFunctions("scratch_", ""),
-            B2DPlugin:     this.findPluginFunctions("ge",       ""),
+            FilePlugin:            this.findPluginFunctions("",         "primitive(File|Directory)"),
+            BitBltPlugin:          this.findPluginFunctions("bitblt_",  ""),
+            SoundPlugin:           this.findPluginFunctions("snd_",     "", true),
+            ScratchPlugin:         this.findPluginFunctions("scratch_", ""),
+            B2DPlugin:             this.findPluginFunctions("ge",       ""),
         };
         this.interpreterProxy = new Squeak.InterpreterProxy(this.vm);
     },
@@ -2537,7 +2537,7 @@ Object.subclass('Squeak.Primitives',
                 else return this.primitiveNotIdentical(argCount);
             // Sound Primitives (170-199)
             case 170: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStart', argCount);
-            // 171: unused?
+            case 171: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStartWithSemaphore', argCount);
             case 172: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStop', argCount);
             case 173: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundAvailableSpace', argCount);
             case 174: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySamples', argCount);
@@ -4482,10 +4482,93 @@ Object.subclass('Squeak.Primitives',
     },
 },
 'SoundPlugin', {
-    primitiveSoundStop: function(argCount) {
-        return this.fakePrimitive('SoundPlugin.primitiveSoundStop', undefined, argCount);
+    snd_primitiveSoundStart: function(argCount) {
+        return this.snd_primitiveSoundStartWithSemaphore(argCount);
     },
-    primitiveSoundStopRecording: function(argCount) {
+    snd_primitiveSoundStartWithSemaphore: function(argCount) {
+        var bufFrames = this.stackInteger(argCount-1),
+            samplesPerSec = this.stackInteger(argCount-2),
+            stereoFlag = this.stackBoolean(argCount-3),
+            semaIndex = argCount > 3 ? this.stackInteger(argCount-4) : 0;
+        if (!this.success) return false;
+        this.audioContext = Squeak.startAudio();
+        if (!this.audioContext) {
+            this.vm.warnOnce("could not initialize audio");
+            return false;
+        }
+        this.audioContext.sampleRate = samplesPerSec;
+        this.audioSema = semaIndex; // signal when ready to accept another buffer of samples
+        this.audioBuffers = [];
+        this.audioBuffersUnused = [
+            this.audioContext.createBuffer(stereoFlag ? 2 : 1, bufFrames, samplesPerSec),
+            this.audioContext.createBuffer(stereoFlag ? 2 : 1, bufFrames, samplesPerSec),
+        ];
+        return this.popNIfOK(argCount);
+    },
+    snd_playNextBuffer: function() {
+        if (!this.audioContext) return;
+        if (!this.audioBuffers.length) {
+            // console.log("audio buffer underrun " + this.audioBuffersUnused.length);
+            // if (this.audioBuffersUnused.length < 5) {
+            //     var buf = this.audioBuffersUnused[0];
+            //     this.audioContext.createBuffer(buf.numberOfChannels, buf.length, buf.sampleRate),
+            //     this.audioBuffersUnused.push(buf);
+            // }
+            return;
+        }
+        var source = this.audioContext.createBufferSource();
+        source.buffer = this.audioBuffers[0];
+        source.connect(this.audioContext.destination);
+        source.onended = function() {
+            this.audioBuffersUnused.push(this.audioBuffers.shift());
+            if (this.audioSema) {
+                this.signalSemaphoreWithIndex(this.audioSema);
+            }
+            this.snd_playNextBuffer();
+        }.bind(this);
+        source.start();
+        this.audioSource = source;
+    },
+    snd_primitiveSoundAvailableSpace: function(argCount) {
+        if (!this.audioContext) return false;
+        var available = 0;
+        if (this.audioBuffersUnused.length > 0) {
+            var buf = this.audioBuffersUnused[0];
+            available = buf.length * buf.numberOfChannels * 2;
+        }
+        return this.popNandPushIfOK(argCount + 1, available);
+    },
+    snd_primitiveSoundPlaySamples: function(argCount) {
+        if (!this.audioContext || !this.audioBuffersUnused.length) return false;
+        var count = this.stackInteger(2),
+            int16Array = this.stackNonInteger(1).wordsAsInt16Array(),
+            startIndex = this.stackInteger(0) - 1;
+        if (!this.success || !int16Array) return false;
+        var buffer = this.audioBuffersUnused.shift(),
+            channels = buffer.numberOfChannels;
+        for (var channel = 0; channel < channels; channel++) {
+            var float32Array = buffer.getChannelData(channel),
+                index = startIndex + channel;
+            for (var i = 0; i < count; i++) {
+                float32Array[i] = int16Array[index] / 32768;
+                index += channels;
+            }
+        }
+        this.audioBuffers.push(buffer);
+        if (this.audioBuffers.length === 1)
+            this.snd_playNextBuffer();
+        return this.popNIfOK(argCount);
+    },
+    snd_primitiveSoundStop: function(argCount) {
+        if (this.audioSource) this.audioSource.stop();
+        this.audioContext = null;
+        this.audioBuffers = null;
+        this.audioBuffersUnused = null;
+        this.audioSource = null;
+        this.audioSema = 0;
+        return this.popNIfOK(argCount);
+    },
+    snd_primitiveSoundStopRecording: function(argCount) {
         return this.fakePrimitive('SoundPlugin.primitiveSoundStopRecording', undefined, argCount);
     },
 },

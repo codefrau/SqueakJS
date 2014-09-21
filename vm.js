@@ -1154,6 +1154,7 @@ Object.subclass('Squeak.Interpreter',
         var b, b2;
         this.byteCodeCount++;
         b = this.nextByte();
+        if (b < 128) // Chrome only optimized up to 128 cases
         switch (b) { /* The Main Bytecode Dispatch Loop */
 
             // load receiver variable
@@ -1205,7 +1206,7 @@ Object.subclass('Squeak.Interpreter',
             case 125: this.doReturn(this.pop(), this.activeContext.pointers[Squeak.BlockContext_caller]); break; // blockReturn
             case 126: this.nono(); break;
             case 127: this.nono(); break;
-
+        } else switch (b) { // Chrome only optimized up to 128 cases
             // Sundry
             case 128: this.extendedPush(this.nextByte()); break;
             case 129: this.extendedStore(this.nextByte()); break;

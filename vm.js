@@ -3346,7 +3346,6 @@ Object.subclass('Squeak.Primitives',
         var dst = this.stackNonInteger(4);
         var dstPos = this.stackInteger(3) - 1;
         var count = this.stackInteger(2) - dstPos;
-        //	if (count<=0) {this.success = false; return dst;} //fail for compat, later succeed
         var src = this.stackNonInteger(1);
         var srcPos = this.stackInteger(0) - 1;
         if (!this.success) return dst; //some integer not right
@@ -3367,7 +3366,8 @@ Object.subclass('Squeak.Primitives',
             dstPos += dstInstSize;
             if ((dstPos < 0) || (dstPos + count) > totalLength)
                 {this.success= false; return dst;} //would go out of bounds
-            this.vm.arrayCopy(src.pointers, srcPos, dst.pointers, dstPos, count);
+            for (var i = 0; i < count; i++)
+                dst.pointers[dstPos + i] = src.pointers[srcPos + i];
             return dst;
         } else if (srcFmt < 8) { //words type objects
             var totalLength = src.wordsSize();
@@ -3376,7 +3376,8 @@ Object.subclass('Squeak.Primitives',
             totalLength = dst.wordsSize();
             if ((dstPos < 0) || (dstPos + count) > totalLength)
                 {this.success = false; return dst;} //would go out of bounds
-            this.vm.arrayCopy(src.words, srcPos, dst.words, dstPos, count);
+            for (var i = 0; i < count; i++)
+                dst.words[dstPos + i] = src.words[srcPos + i];
             return dst;
         } else { //bytes type objects
             var totalLength = src.bytesSize();
@@ -3385,7 +3386,8 @@ Object.subclass('Squeak.Primitives',
             totalLength = dst.bytesSize();
             if ((dstPos < 0) || (dstPos + count) > totalLength)
                 {this.success = false; return dst;} //would go out of bounds
-            this.vm.arrayCopy(src.bytes, srcPos, dst.bytes, dstPos, count);
+            for (var i = 0; i < count; i++)
+                dst.bytes[dstPos + i] = src.bytes[srcPos + i];
             return dst;
         }
     },

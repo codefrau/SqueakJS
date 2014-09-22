@@ -1062,6 +1062,7 @@ Object.subclass('Squeak.Interpreter',
 'initialization', {
     initialize: function(image, display) {
         console.log('squeak: initializing interpreter');
+        this.Squeak = Squeak;   // store locally to avoid dynamic lookup in Lively
         this.image = image;
         this.image.vm = this;
         this.primHandler = new Squeak.Primitives(this, display);
@@ -1151,6 +1152,7 @@ Object.subclass('Squeak.Interpreter',
 },
 'interpreting', {
     interpretOne: function() {
+        var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively
         var b, b2;
         this.byteCodeCount++;
         b = this.nextByte();

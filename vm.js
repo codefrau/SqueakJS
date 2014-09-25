@@ -840,6 +840,7 @@ Object.subclass('Squeak.Object',
             case 'ReadOnlyVariableBinding': return this.pointers.join("->");
             case 'LargePositiveInteger': return this.bytesAsNumberString(false);
             case 'LargeNegativeInteger': return this.bytesAsNumberString(true);
+            case 'Character': return "$" + String.fromCharCode(this.pointers[0]) + " (" + this.pointers[0].toString() + ")";
         }
         return  /^[aeiou]/i.test(className) ? 'an ' + className : 'a ' + className;
     },

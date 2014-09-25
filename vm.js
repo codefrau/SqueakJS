@@ -7068,9 +7068,9 @@ Object.subclass('Squeak.InstructionStream',
     			if (type === 7) return client.storeIntoLiteralVariable(this.method.methodGetLiteral(byte3));
     		}
     		if (offset === 5) // Single extended send to super
-    			return client.send(this.method.methodGetLiteral(byte2 % 32), byte2 % 32, true);
-    		if (offset === 6) // Second extended super send
-    			return client.send(this.method.methodGetLiteral(byte2 % 64), byte2 % 64, true);
+    			return client.send(this.method.methodGetLiteral(byte2 & 31), byte2 >> 5, true);
+    		if (offset === 6) // Second extended send
+    			return client.send(this.method.methodGetLiteral(byte2 & 63), byte2 >> 6, false);
     	}
     	if (offset === 7) return client.doPop();
     	if (offset === 8) return client.doDup();

@@ -1,7 +1,8 @@
 CACHE MANIFEST
-# Sep 20 16:16:23 2014
+# Sep 26 11:20:23 2014
 ../lib/squeak.js
 ../vm.js
+../jit.js
 index.html
 etoys.css
 etoys.js

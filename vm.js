@@ -26,7 +26,7 @@ Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.4.6",
+    vmVersion: "SqueakJS 0.5",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -840,6 +840,7 @@ Object.subclass('Squeak.Object',
             case 'ReadOnlyVariableBinding': return this.pointers.join("->");
             case 'LargePositiveInteger': return this.bytesAsNumberString(false);
             case 'LargeNegativeInteger': return this.bytesAsNumberString(true);
+            case 'Character': return "$" + String.fromCharCode(this.pointers[0]) + " (" + this.pointers[0].toString() + ")";
         }
         return  /^[aeiou]/i.test(className) ? 'an ' + className : 'a ' + className;
     },
@@ -1062,6 +1063,7 @@ Object.subclass('Squeak.Interpreter',
 'initialization', {
     initialize: function(image, display) {
         console.log('squeak: initializing interpreter');
+        this.Squeak = Squeak;   // store locally to avoid dynamic lookup in Lively
         this.image = image;
         this.image.vm = this;
         this.primHandler = new Squeak.Primitives(this, display);
@@ -1069,6 +1071,7 @@ Object.subclass('Squeak.Interpreter',
         this.hackImage();
         this.initVMState();
         this.loadInitialContext();
+        this.initCompiler();
         console.log('squeak: interpreter ready');
     },
     loadImageState: function() {
@@ -1122,6 +1125,14 @@ Object.subclass('Squeak.Interpreter',
         this.fetchContextRegisters(this.activeContext);
         this.reclaimableContextCount = 0;
     },
+    initCompiler: function() {
+        try {
+            // compiler might not be loaded, or might decide to not handle current image
+            this.compiler = new Squeak.Compiler(this);
+        } catch(e) {
+            if (Squeak.Compiler) console.warn("Compiler " + e);
+        }
+    },
     hackImage: function() {
         // hack methods to make work for now
         var returnSelf  = 256,
@@ -1138,175 +1149,189 @@ Object.subclass('Squeak.Interpreter',
             {method: "PluggableTextMorphPlus>>useDefaultStyler", primitive: returnSelf},
             // BitBlt rule not available
             //{method: "BitBlt class>>subPixelRenderColorFonts", primitive: returnFalse},
-            // Scratch relies on event prims. We don't have those yet.
-            //{method: "InputSensor>>fileDropPoint", primitive: returnNil},
-            //{method: "InputSensor class>>startUp", primitive: returnNil},
-            //{method: "ScratchTranslator class>>importLanguagesList", primitive: returnNil},
+            // Cuis needs JPEG plugin
+            {method: "PasteUpMorph>>buildMagnifiedBackgroundImage", primitive: returnNil},
         ].forEach(function(each) {
             var m = this.findMethod(each.method);
-            if (m) m.pointers[0] |= each.primitive;
+            if (m) {
+                m.pointers[0] |= each.primitive;
+                console.warn("Hacking " + each.method);
+            }
         }, this);
     },
 },
 'interpreting', {
-    interpretOne: function() {
+    interpretOne: function(singleStep) {
+        if (this.method.compiled) {
+            if (singleStep && !this.method.compiled.canSingleStep) {
+                if (!this.compiler.enableSingleStepping(this.method)) {
+                    this.method.compiled = null;
+                    return this.interpretOne(singleStep);
+                }
+            }
+            this.byteCodeCount += this.method.compiled(this, singleStep);
+            return;
+        }
+        var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively
         var b, b2;
         this.byteCodeCount++;
         b = this.nextByte();
+        if (b < 128) // Chrome only optimized up to 128 cases
         switch (b) { /* The Main Bytecode Dispatch Loop */
 
             // load receiver variable
-            case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7: 
-            case 8: case 9: case 10: case 11: case 12: case 13: case 14: case 15: 
-                this.push(this.receiver.pointers[b&0xF]); break;
+            case 0x00: case 0x01: case 0x02: case 0x03: case 0x04: case 0x05: case 0x06: case 0x07: 
+            case 0x08: case 0x09: case 0x0A: case 0x0B: case 0x0C: case 0x0D: case 0x0E: case 0x0F: 
+                this.push(this.receiver.pointers[b&0xF]); return;
 
             // load temporary variable
-            case 16: case 17: case 18: case 19: case 20: case 21: case 22: case 23: 
-            case 24: case 25: case 26: case 27: case 28: case 29: case 30: case 31: 
-                this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&0xF)]); break;
+            case 0x10: case 0x11: case 0x12: case 0x13: case 0x14: case 0x15: case 0x16: case 0x17: 
+            case 0x18: case 0x19: case 0x1A: case 0x1B: case 0x1C: case 0x1D: case 0x1E: case 0x1F: 
+                this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&0xF)]); return;
 
             // loadLiteral
-            case 32: case 33: case 34: case 35: case 36: case 37: case 38: case 39: 
-            case 40: case 41: case 42: case 43: case 44: case 45: case 46: case 47: 
-            case 48: case 49: case 50: case 51: case 52: case 53: case 54: case 55: 
-            case 56: case 57: case 58: case 59: case 60: case 61: case 62: case 63: 
-                this.push(this.method.methodGetLiteral(b&0x1F)); break;
+            case 0x20: case 0x21: case 0x22: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27: 
+            case 0x28: case 0x29: case 0x2A: case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F: 
+            case 0x30: case 0x31: case 0x32: case 0x33: case 0x34: case 0x35: case 0x36: case 0x37: 
+            case 0x38: case 0x39: case 0x3A: case 0x3B: case 0x3C: case 0x3D: case 0x3E: case 0x3F: 
+                this.push(this.method.methodGetLiteral(b&0x1F)); return;
 
             // loadLiteralIndirect
-            case 64: case 65: case 66: case 67: case 68: case 69: case 70: case 71: 
-            case 72: case 73: case 74: case 75: case 76: case 77: case 78: case 79: 
-            case 80: case 81: case 82: case 83: case 84: case 85: case 86: case 87: 
-            case 88: case 89: case 90: case 91: case 92: case 93: case 94: case 95: 
-                this.push((this.method.methodGetLiteral(b&0x1F)).pointers[Squeak.Assn_value]); break;
+            case 0x40: case 0x41: case 0x42: case 0x43: case 0x44: case 0x45: case 0x46: case 0x47: 
+            case 0x48: case 0x49: case 0x4A: case 0x4B: case 0x4C: case 0x4D: case 0x4E: case 0x4F: 
+            case 0x50: case 0x51: case 0x52: case 0x53: case 0x54: case 0x55: case 0x56: case 0x57: 
+            case 0x58: case 0x59: case 0x5A: case 0x5B: case 0x5C: case 0x5D: case 0x5E: case 0x5F: 
+                this.push((this.method.methodGetLiteral(b&0x1F)).pointers[Squeak.Assn_value]); return;
 
             // storeAndPop rcvr, temp
-            case 96: case 97: case 98: case 99: case 100: case 101: case 102: case 103: 
-                this.receiver.pointers[b&7] = this.pop(); break;
-            case 104: case 105: case 106: case 107: case 108: case 109: case 110: case 111: 
-                this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&7)] = this.pop(); break;
+            case 0x60: case 0x61: case 0x62: case 0x63: case 0x64: case 0x65: case 0x66: case 0x67: 
+                this.receiver.pointers[b&7] = this.pop(); return;
+            case 0x68: case 0x69: case 0x6A: case 0x6B: case 0x6C: case 0x6D: case 0x6E: case 0x6F: 
+                this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&7)] = this.pop(); return;
 
             // Quick push
-            case 112: this.push(this.receiver); break;
-            case 113: this.push(this.trueObj); break;
-            case 114: this.push(this.falseObj); break;
-            case 115: this.push(this.nilObj); break;
-            case 116: this.push(-1); break;
-            case 117: this.push(0); break;
-            case 118: this.push(1); break;
-            case 119: this.push(2); break;
+            case 0x70: this.push(this.receiver); return;
+            case 0x71: this.push(this.trueObj); return;
+            case 0x72: this.push(this.falseObj); return;
+            case 0x73: this.push(this.nilObj); return;
+            case 0x74: this.push(-1); return;
+            case 0x75: this.push(0); return;
+            case 0x76: this.push(1); return;
+            case 0x77: this.push(2); return;
 
             // Quick return
-            case 120: this.doReturn(this.receiver); break;
-            case 121: this.doReturn(this.trueObj); break;
-            case 122: this.doReturn(this.falseObj); break;
-            case 123: this.doReturn(this.nilObj); break;
-            case 124: this.doReturn(this.pop()); break;
-            case 125: this.doReturn(this.pop(), this.activeContext.pointers[Squeak.BlockContext_caller]); break; // blockReturn
-            case 126: this.nono(); break;
-            case 127: this.nono(); break;
-
+            case 0x78: this.doReturn(this.receiver); return;
+            case 0x79: this.doReturn(this.trueObj); return;
+            case 0x7A: this.doReturn(this.falseObj); return;
+            case 0x7B: this.doReturn(this.nilObj); return;
+            case 0x7C: this.doReturn(this.pop()); return;
+            case 0x7D: this.doReturn(this.pop(), this.activeContext.pointers[Squeak.BlockContext_caller]); return; // blockReturn
+            case 0x7E: this.nono(); return;
+            case 0x7F: this.nono(); return;
+        } else switch (b) { // Chrome only optimized up to 128 cases
             // Sundry
-            case 128: this.extendedPush(this.nextByte()); break;
-            case 129: this.extendedStore(this.nextByte()); break;
-            case 130: this.extendedStorePop(this.nextByte()); break;
+            case 0x80: this.extendedPush(this.nextByte()); return;
+            case 0x81: this.extendedStore(this.nextByte()); return;
+            case 0x82: this.extendedStorePop(this.nextByte()); return;
             // singleExtendedSend
-            case 131: b2 = this.nextByte(); this.send(this.method.methodGetSelector(b2&31), b2>>5, false); break;
-            case 132: this.doubleExtendedDoAnything(this.nextByte()); break;
+            case 0x83: b2 = this.nextByte(); this.send(this.method.methodGetSelector(b2&31), b2>>5, false); return;
+            case 0x84: this.doubleExtendedDoAnything(this.nextByte()); return;
             // singleExtendedSendToSuper
-            case 133: b2= this.nextByte(); this.send(this.method.methodGetSelector(b2&31), b2>>5, true); break;
+            case 0x85: b2= this.nextByte(); this.send(this.method.methodGetSelector(b2&31), b2>>5, true); return;
             // secondExtendedSend
-            case 134: b2= this.nextByte(); this.send(this.method.methodGetSelector(b2&63), b2>>6, false); break;
-            case 135: this.pop(); break;	// pop
-            case 136: this.push(this.top()); break;	// dup
+            case 0x86: b2= this.nextByte(); this.send(this.method.methodGetSelector(b2&63), b2>>6, false); return;
+            case 0x87: this.pop(); return;	// pop
+            case 0x88: this.push(this.top()); return;	// dup
             // thisContext
-            case 137: this.push(this.activeContext); this.reclaimableContextCount = 0; break;
+            case 0x89: this.push(this.activeContext); this.reclaimableContextCount = 0; return;
 
             // Closures
-            case 138: this.pushNewArray(this.nextByte());   // create new temp vector
-                break;
-            case 139: this.nono(); break;
-            case 140: b2 = this.nextByte(); // remote push from temp vector
+            case 0x8A: this.pushNewArray(this.nextByte());   // create new temp vector
+                return;
+            case 0x8B: this.nono(); return;
+            case 0x8C: b2 = this.nextByte(); // remote push from temp vector
                 this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2]);
-                break;
-            case 141: b2 = this.nextByte(); // remote store into temp vector
+                return;
+            case 0x8D: b2 = this.nextByte(); // remote store into temp vector
                 this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2] = this.top();
-                break;
-            case 142: b2 = this.nextByte(); // remote store and pop into temp vector
+                return;
+            case 0x8E: b2 = this.nextByte(); // remote store and pop into temp vector
                 this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2] = this.pop();
-                break;
-            case 143: this.pushClosureCopy(); break;
+                return;
+            case 0x8F: this.pushClosureCopy(); return;
 
             // Short jmp
-            case 144: case 145: case 146: case 147: case 148: case 149: case 150: case 151: 
-                this.pc += (b&7)+1; break;
+            case 0x90: case 0x91: case 0x92: case 0x93: case 0x94: case 0x95: case 0x96: case 0x97: 
+                this.pc += (b&7)+1; return;
             // Short conditional jump on false
-            case 152: case 153: case 154: case 155: case 156: case 157: case 158: case 159: 
-                this.jumpIfFalse((b&7)+1); break;
+            case 0x98: case 0x99: case 0x9A: case 0x9B: case 0x9C: case 0x9D: case 0x9E: case 0x9F: 
+                this.jumpIfFalse((b&7)+1); return;
             // Long jump, forward and back
-            case 160: case 161: case 162: case 163: case 164: case 165: case 166: case 167: 
+            case 0xA0: case 0xA1: case 0xA2: case 0xA3: case 0xA4: case 0xA5: case 0xA6: case 0xA7: 
                 b2 = this.nextByte();
                 this.pc += (((b&7)-4)*256 + b2);
                 if ((b&7)<4)        // check for process switch on backward jumps (loops)
                     if (this.interruptCheckCounter-- <= 0) this.checkForInterrupts();
-                break;
+                return;
             // Long conditional jump on true
-            case 168: case 169: case 170: case 171:
-                this.jumpIfTrue((b&3)*256 + this.nextByte()); break;
+            case 0xA8: case 0xA9: case 0xAA: case 0xAB:
+                this.jumpIfTrue((b&3)*256 + this.nextByte()); return;
             // Long conditional jump on false
-            case 172: case 173: case 174: case 175: 
-                this.jumpIfFalse((b&3)*256 + this.nextByte()); break;
+            case 0xAC: case 0xAD: case 0xAE: case 0xAF: 
+                this.jumpIfFalse((b&3)*256 + this.nextByte()); return;
 
-            // Arithmetic Ops... + - < > <= >= = ~=    * / \ @ lshift: lxor: land: lor:
-            case 176: this.success = true; this.resultIsFloat = false;
-                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) + this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); break;	// PLUS +
-            case 177: this.success = true; this.resultIsFloat = false;
-                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) - this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); break;	// MINUS -
-            case 178: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) < this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); break;  // LESS <
-            case 179: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) > this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); break;  // GRTR >
-            case 180: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) <= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); break;  // LEQ <=
-            case 181: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) >= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); break;  // GEQ >=
-            case 182: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) === this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); break;  // EQU =
-            case 183: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) !== this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); break;  // NEQ ~=
-            case 184: this.success = true; this.resultIsFloat = false;
-                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) * this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); break;  // TIMES *
-            case 185: this.success = true;
-                if(!this.pop2AndPushIntResult(this.quickDivide(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); break;  // Divide /
-            case 186: this.success = true;
-                if(!this.pop2AndPushIntResult(this.mod(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); break;  // MOD \\
-            case 187: this.success = true;
-                if(!this.primHandler.primitiveMakePoint(1)) this.sendSpecial(b&0xF); break;  // MakePt int@int
-            case 188: this.success = true;
-                if(!this.pop2AndPushIntResult(this.safeShift(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); break; // bitShift:
-            case 189: this.success = true;
-                if(!this.pop2AndPushIntResult(this.div(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); break;  // Divide //
-            case 190: this.success = true;
-                if(!this.pop2AndPushIntResult(this.stackInteger(1) & this.stackInteger(0))) this.sendSpecial(b&0xF); break; // bitAnd:
-            case 191: this.success = true;
-                if(!this.pop2AndPushIntResult(this.stackInteger(1) | this.stackInteger(0))) this.sendSpecial(b&0xF); break; // bitOr:
+            // Arithmetic Ops... + - < > <= >= = ~=    * /  @ lshift: lxor: land: lor:
+            case 0xB0: this.success = true; this.resultIsFloat = false;
+                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) + this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;	// PLUS +
+            case 0xB1: this.success = true; this.resultIsFloat = false;
+                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) - this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;	// MINUS -
+            case 0xB2: this.success = true;
+                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) < this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LESS <
+            case 0xB3: this.success = true;
+                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) > this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GRTR >
+            case 0xB4: this.success = true;
+                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) <= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LEQ <=
+            case 0xB5: this.success = true;
+                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) >= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GEQ >=
+            case 0xB6: this.success = true;
+                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) === this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // EQU =
+            case 0xB7: this.success = true;
+                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) !== this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // NEQ ~=
+            case 0xB8: this.success = true; this.resultIsFloat = false;
+                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) * this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // TIMES *
+            case 0xB9: this.success = true;
+                if(!this.pop2AndPushIntResult(this.quickDivide(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide /
+            case 0xBA: this.success = true;
+                if(!this.pop2AndPushIntResult(this.mod(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // MOD \
+            case 0xBB: this.success = true;
+                if(!this.primHandler.primitiveMakePoint(1)) this.sendSpecial(b&0xF); return;  // MakePt int@int
+            case 0xBC: this.success = true;
+                if(!this.pop2AndPushIntResult(this.safeShift(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return; // bitShift:
+            case 0xBD: this.success = true;
+                if(!this.pop2AndPushIntResult(this.div(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide //
+            case 0xBE: this.success = true;
+                if(!this.pop2AndPushIntResult(this.stackInteger(1) & this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitAnd:
+            case 0xBF: this.success = true;
+                if(!this.pop2AndPushIntResult(this.stackInteger(1) | this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitOr:
 
             // at:, at:put:, size, next, nextPut:, ...
-            case 192: case 193: case 194: case 195: case 196: case 197: case 198: case 199: 
-            case 200: case 201: case 202: case 203: case 204: case 205: case 206: case 207: 
+            case 0xC0: case 0xC1: case 0xC2: case 0xC3: case 0xC4: case 0xC5: case 0xC6: case 0xC7: 
+            case 0xC8: case 0xC9: case 0xCA: case 0xCB: case 0xCC: case 0xCD: case 0xCE: case 0xCF: 
                 if (!this.primHandler.quickSendOther(this.receiver, b&0xF))
-                    this.sendSpecial((b&0xF)+16); break;
+                    this.sendSpecial((b&0xF)+16); return;
 
             // Send Literal Selector with 0, 1, and 2 args
-            case 208: case 209: case 210: case 211: case 212: case 213: case 214: case 215: 
-            case 216: case 217: case 218: case 219: case 220: case 221: case 222: case 223: 
-                this.send(this.method.methodGetSelector(b&0xF), 0, false); break;
-            case 224: case 225: case 226: case 227: case 228: case 229: case 230: case 231: 
-            case 232: case 233: case 234: case 235: case 236: case 237: case 238: case 239: 
-                this.send(this.method.methodGetSelector(b&0xF), 1, false); break;
-            case 240: case 241: case 242: case 243: case 244: case 245: case 246: case 247: 
-            case 248: case 249: case 250: case 251: case 252: case 253: case 254: case 255:
-                this.send(this.method.methodGetSelector(b&0xF), 2, false); break;
+            case 0xD0: case 0xD1: case 0xD2: case 0xD3: case 0xD4: case 0xD5: case 0xD6: case 0xD7: 
+            case 0xD8: case 0xD9: case 0xDA: case 0xDB: case 0xDC: case 0xDD: case 0xDE: case 0xDF: 
+                this.send(this.method.methodGetSelector(b&0xF), 0, false); return;
+            case 0xE0: case 0xE1: case 0xE2: case 0xE3: case 0xE4: case 0xE5: case 0xE6: case 0xE7: 
+            case 0xE8: case 0xE9: case 0xEA: case 0xEB: case 0xEC: case 0xED: case 0xEE: case 0xEF: 
+                this.send(this.method.methodGetSelector(b&0xF), 1, false); return;
+            case 0xF0: case 0xF1: case 0xF2: case 0xF3: case 0xF4: case 0xF5: case 0xF6: case 0xF7: 
+            case 0xF8: case 0xF9: case 0xFA: case 0xFB: case 0xFC: case 0xFD: case 0xFE: case 0xFF:
+                this.send(this.method.methodGetSelector(b&0xF), 2, false); return;
         }
+        throw Error("not a bytecode: " + b);
     },
     interpret: function(forMilliseconds, thenDo) {
         // run for a couple milliseconds (but only until idle or break)
@@ -1627,6 +1652,8 @@ Object.subclass('Squeak.Interpreter',
         this.receiver = newContext.pointers[Squeak.Context_receiver];
         if (this.receiver !== newRcvr)
             throw Error("receivers don't match");
+        if (!newMethod.compiled && this.compiler)
+            this.compiler.compile(newMethod);
         // check for process switch on full method activation
         if (this.interruptCheckCounter-- <= 0) this.checkForInterrupts();
     },
@@ -2340,7 +2367,7 @@ Object.subclass('Squeak.Primitives',
         switch (lobits) {
             case 0x0: return this.popNandPushIfOK(2, this.objectAt(true,true,false)); // at:
             case 0x1: return this.popNandPushIfOK(3, this.objectAtPut(true,true,false)); // at:put:
-            case 0x2: return this.popNandPushIfOK(1, this.objectSize(0)); // size
+            case 0x2: return this.popNandPushIfOK(1, this.objectSize(true)); // size
             //case 0x3: return false; // next
             //case 0x4: return false; // nextPut:
             //case 0x5: return false; // atEnd
@@ -2425,7 +2452,7 @@ Object.subclass('Squeak.Primitives',
             // Subscript and Stream Primitives (60-67)
             case 60: return this.popNandPushIfOK(2, this.objectAt(false,false,false)); // basicAt:
             case 61: return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); // basicAt:put:
-            case 62: return this.popNandPushIfOK(1, this.objectSize()); // size
+            case 62: return this.popNandPushIfOK(1, this.objectSize(false)); // size
             case 63: return this.popNandPushIfOK(2, this.objectAt(false,true,false)); // String.basicAt:
             case 64: return this.popNandPushIfOK(3, this.objectAtPut(false,true,false)); // String.basicAt:put:
             case 65: return false; // primitiveNext
@@ -3134,9 +3161,19 @@ Object.subclass('Squeak.Primitives',
         array.bytes[index-1-offset] = intToPut;
         return objToPut;
     },
-    objectSize: function(argCount) {
-        var rcvr = this.vm.stackValue(0);
-        var size = this.indexableSize(rcvr);
+    objectSize: function(cameFromBytecode) {
+        var rcvr = this.vm.stackValue(0),
+            size = -1;
+        if (cameFromBytecode) {
+            // must only handle classes with size == basicSize, fail otherwise
+            if (rcvr.sqClass === this.vm.specialObjects[Squeak.splOb_ClassArray]) {
+                size = rcvr.pointersSize();
+            } else if (rcvr.sqClass === this.vm.specialObjects[Squeak.splOb_ClassString]) {
+                size = rcvr.bytesSize();
+            }
+        } else { // basicSize
+            size = this.indexableSize(rcvr);
+        }
         if (size === -1) {this.success = false; return -1}; //not indexable
         return this.pos32BitIntFor(size);
     },
@@ -3332,7 +3369,6 @@ Object.subclass('Squeak.Primitives',
         var dst = this.stackNonInteger(4);
         var dstPos = this.stackInteger(3) - 1;
         var count = this.stackInteger(2) - dstPos;
-        //	if (count<=0) {this.success = false; return dst;} //fail for compat, later succeed
         var src = this.stackNonInteger(1);
         var srcPos = this.stackInteger(0) - 1;
         if (!this.success) return dst; //some integer not right
@@ -3353,7 +3389,8 @@ Object.subclass('Squeak.Primitives',
             dstPos += dstInstSize;
             if ((dstPos < 0) || (dstPos + count) > totalLength)
                 {this.success= false; return dst;} //would go out of bounds
-            this.vm.arrayCopy(src.pointers, srcPos, dst.pointers, dstPos, count);
+            for (var i = 0; i < count; i++)
+                dst.pointers[dstPos + i] = src.pointers[srcPos + i];
             return dst;
         } else if (srcFmt < 8) { //words type objects
             var totalLength = src.wordsSize();
@@ -3362,7 +3399,8 @@ Object.subclass('Squeak.Primitives',
             totalLength = dst.wordsSize();
             if ((dstPos < 0) || (dstPos + count) > totalLength)
                 {this.success = false; return dst;} //would go out of bounds
-            this.vm.arrayCopy(src.words, srcPos, dst.words, dstPos, count);
+            for (var i = 0; i < count; i++)
+                dst.words[dstPos + i] = src.words[srcPos + i];
             return dst;
         } else { //bytes type objects
             var totalLength = src.bytesSize();
@@ -3371,7 +3409,8 @@ Object.subclass('Squeak.Primitives',
             totalLength = dst.bytesSize();
             if ((dstPos < 0) || (dstPos + count) > totalLength)
                 {this.success = false; return dst;} //would go out of bounds
-            this.vm.arrayCopy(src.bytes, srcPos, dst.bytes, dstPos, count);
+            for (var i = 0; i < count; i++)
+                dst.bytes[dstPos + i] = src.bytes[srcPos + i];
             return dst;
         }
     },
@@ -4564,12 +4603,15 @@ Object.subclass('Squeak.Primitives',
         return this.popNIfOK(argCount);
     },
     snd_primitiveSoundStop: function(argCount) {
-        if (this.audioSource) this.audioSource.stop(0);
-        this.audioContext = null;
-        this.audioBuffers = null;
-        this.audioBuffersUnused = null;
-        this.audioSource = null;
-        this.audioSema = 0;
+        if (this.audioContext) {
+            if (this.audioSource)
+                this.audioSource.stop(this.audioContext.currentTime + 0.1);
+            this.audioContext = null;
+            this.audioBuffers = null;
+            this.audioBuffersUnused = null;
+            this.audioSource = null;
+            this.audioSema = 0;
+        }
         return this.popNIfOK(argCount);
     },
     snd_primitiveSoundStopRecording: function(argCount) {
@@ -7049,9 +7091,9 @@ Object.subclass('Squeak.InstructionStream',
     			if (type === 7) return client.storeIntoLiteralVariable(this.method.methodGetLiteral(byte3));
     		}
     		if (offset === 5) // Single extended send to super
-    			return client.send(this.method.methodGetLiteral(byte2 % 32), byte2 % 32, true);
-    		if (offset === 6) // Second extended super send
-    			return client.send(this.method.methodGetLiteral(byte2 % 64), byte2 % 64, true);
+    			return client.send(this.method.methodGetLiteral(byte2 & 31), byte2 >> 5, true);
+    		if (offset === 6) // Second extended send
+    			return client.send(this.method.methodGetLiteral(byte2 & 63), byte2 >> 6, false);
     	}
     	if (offset === 7) return client.doPop();
     	if (offset === 8) return client.doDup();

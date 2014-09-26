@@ -21,7 +21,7 @@ Running it
 
 **Which Browser**
 
-Chrome works best for development at the moment. But current Safari and IE versions outperform Chrome and Firefox by a significant margin. Safari on iPad works somewhat. YMMV.
+All modern browsers should work (Chrome, Safari, IE, FireFox), though Chrome performs best currently. Safari on iPad works somewhat. YMMV.
 Fixes to improve browser compatibility are highly welcome!
 
 
@@ -72,7 +72,7 @@ Things to work on
 -----------------
 SqueakJS is intended to run any Squeak image. It can already load anything from the original 1996 Squeak release to the latest 2014 release. But many pieces (primitives in various plugins) are still missing, in particular media support (sound in/output, MIDI, 3D graphics, Scratch effects) and networking (Socket plugin). 
 
-As for optimizing I think the way to go is a JIT compiler that creates actual Javascript functions from Squeak methods. And to make BitBlt fast, we could probably use WebGL. Besides, there is the obvious not-yet-implemented primitives which fall back to slow Smalltalk code (LargeIntegers, compression/decompression, string search etc).
+As for optimizing I think the way to go is an optimizing JIT compiler. Since we can't access or manipulate the JavaScript stack, we might want that compiler to inline as much as possible, but keep the call sequence flat so we can return to the browser at any time. To make BitBlt fast, we could probably use WebGL. Besides, there is the obvious not-yet-implemented primitives which fall back to slow Smalltalk code (LargeIntegers, compression/decompression, string search etc).
 
 There's also interesting stuff I probably won't be working on. Like a kind-of FFI that lets you call Javascript libraries directly. Or a plugin that gives you access to the DOM (I do have the mechanism for VM plugins in place already). With that you could write a native HTML UI which would certainly be much faster than BitBlt.
 

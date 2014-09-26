@@ -5,7 +5,7 @@
 
 TARGET=../gh-pages/scratch
 MANIFEST=$(TARGET)/offline.appcache
-FILES=../lib/squeak.js ../vm.js index.html scratch.css scratch.js scratch.png \
+FILES=../lib/squeak.js ../vm.js ../jit.js index.html scratch.css scratch.js scratch.png \
 	../lib/lz-string.js ../lib/addtohomescreen.css ../lib/addtohomescreen.js ../lib/gh-fork-ribbon.css
 EXTRA=http://freudenbergs.de/bert/squeakjs/scratch/Scratch.image
 

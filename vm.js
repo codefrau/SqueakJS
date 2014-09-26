@@ -1071,6 +1071,7 @@ Object.subclass('Squeak.Interpreter',
         this.hackImage();
         this.initVMState();
         this.loadInitialContext();
+        this.initCompiler();
         console.log('squeak: interpreter ready');
     },
     loadImageState: function() {
@@ -1124,6 +1125,14 @@ Object.subclass('Squeak.Interpreter',
         this.fetchContextRegisters(this.activeContext);
         this.reclaimableContextCount = 0;
     },
+    initCompiler: function() {
+        try {
+            // compiler might not be loaded, or might decide to not handle current image
+            this.compiler = new Squeak.Compiler(this);
+        } catch(e) {
+            if (Squeak.Compiler) console.warn("Compiler " + e);
+        }
+    },
     hackImage: function() {
         // hack methods to make work for now
         var returnSelf  = 256,
@@ -1146,13 +1155,23 @@ Object.subclass('Squeak.Interpreter',
             var m = this.findMethod(each.method);
             if (m) {
                 m.pointers[0] |= each.primitive;
-                console.log("Hacking " + each.method);
+                console.warn("Hacking " + each.method);
             }
         }, this);
     },
 },
 'interpreting', {
-    interpretOne: function() {
+    interpretOne: function(singleStep) {
+        if (this.method.compiled) {
+            if (singleStep && !this.method.compiled.canSingleStep) {
+                if (!this.compiler.enableSingleStepping(this.method)) {
+                    this.method.compiled = null;
+                    return this.interpretOne(singleStep);
+                }
+            }
+            this.byteCodeCount += this.method.compiled(this, singleStep);
+            return;
+        }
         var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively
         var b, b2;
         this.byteCodeCount++;
@@ -1633,6 +1652,8 @@ Object.subclass('Squeak.Interpreter',
         this.receiver = newContext.pointers[Squeak.Context_receiver];
         if (this.receiver !== newRcvr)
             throw Error("receivers don't match");
+        if (!newMethod.compiled && this.compiler)
+            this.compiler.compile(newMethod);
         // check for process switch on full method activation
         if (this.interruptCheckCounter-- <= 0) this.checkForInterrupts();
     },

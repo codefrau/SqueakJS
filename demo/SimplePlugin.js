@@ -7,21 +7,22 @@
  */
  
 var SimplePlugin = function() {
-    var proxy;
+    var prims;
 
     function initialiseModule(interpreterProxy) {
-        // interpreterProxy is vm.primHandler - might change to a real proxy later?
-        proxy = interpreterProxy;
+        // interpreterProxy interface is not complete yet,
+        // so we use the primHandler methods directly for now
+        prims = interpreterProxy.vm.primHandler;
     };
 
     function primitiveNavigatorInfo(argCount) {
         if (argCount !== 1) return false; // fail
-        var which = proxy.stackInteger(0);
-        if (!proxy.success) return false; // fail
+        var which = prims.stackInteger(0);
+        if (!prims.success) return false; // fail
         var result = getNavigatorInfo(which);
         if (!result) return false; // fail
-        var resultObj = proxy.makeStString(result);
-        proxy.popNandPushIfOK(1 + argCount, resultObj);
+        var resultObj = prims.makeStString(result);
+        prims.popNandPushIfOK(1 + argCount, resultObj);
         return true; // success
     };
 
@@ -40,8 +41,9 @@ var SimplePlugin = function() {
 };
 
 // register plugin in global Squeak object
-Squeak.registerExternalModule('SimplePlugin', new SimplePlugin());
-
+window.addEventListener("load", function() {
+    Squeak.registerExternalModule('SimplePlugin', new SimplePlugin());
+});
 
 /**********************************
 NOTE: the mini.image does not have compiler support for

@@ -6962,7 +6962,7 @@ Object.subclass('Squeak.InstructionPrinter',
     pushNewArray: function(size) {
         this.print('push: (Array new: ' + size + ')');
     },
-    pushConsArray: function(numElements) {
+    popIntoNewArray: function(numElements) {
         this.print('pop: ' + numElements + ' into: (Array new: ' + numElements + ')');
     },
     pushRemoteTemp: function(offset , arrayOffset) {
@@ -7095,7 +7095,7 @@ Object.subclass('Squeak.InstructionStream',
         // closures
         var byte2 = this.method.bytes[this.pc++];
         if (offset === 10)
-            return byte2 < 128 ? client.pushNewArray(byte2) : client.pushConsArray(byte2 - 128);
+            return byte2 < 128 ? client.pushNewArray(byte2) : client.popIntoNewArray(byte2 - 128);
         if (offset === 11) throw Error("unusedBytecode");
         var byte3 = this.method.bytes[this.pc++];
         if (offset === 12) return client.pushRemoteTemp(byte2, byte3);

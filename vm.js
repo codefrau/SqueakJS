@@ -2321,7 +2321,6 @@ Object.subclass('Squeak.Primitives',
         this.display.vm = this.vm;
         this.oldPrims = !this.vm.image.hasClosures;
         this.deferDisplayUpdates = false;
-        this.deferDisplayUpdatesDisabled = 3;   // show first frames with immediate feedback
         this.semaphoresToSignal = [];
         this.initAtCache();
         this.initModules();
@@ -3926,12 +3925,7 @@ Object.subclass('Squeak.Primitives',
     primitiveDeferDisplayUpdates: function(argCount) {
         var flag = this.stackBoolean(0);
         if (!this.success) return false;
-        if (this.deferDisplayUpdatesDisabled) {
-            if (flag && typeof this.deferDisplayUpdatesDisabled == "number")
-                this.deferDisplayUpdatesDisabled--;
-        } else {
-            this.deferDisplayUpdates = flag;
-        }
+        this.deferDisplayUpdates = flag;
         this.vm.popN(argCount);
         return true;
     },

@@ -999,7 +999,7 @@ Object.subclass('Squeak.Object',
         return this.pointers[0];
     },
     methodNumLits: function() {
-        return (this.methodHeader()>>9) & 0xFF;
+        return this.pointers.length - 1;
     },
     methodNumArgs: function() {
         return (this.methodHeader()>>24) & 0xF;
@@ -1874,10 +1874,10 @@ Object.subclass('Squeak.Interpreter',
     encodeSqueakPC: function(intPC, method) {
         // Squeak pc is offset by header and literals
         // and 1 for z-rel addressing
-        return intPC + (((method.methodNumLits()+1)*4) + 1);
+        return intPC + method.pointers.length * 4 + 1;
     },
     decodeSqueakPC: function(squeakPC, method) {
-        return squeakPC - (((method.methodNumLits()+1)*4) + 1);
+        return squeakPC - method.pointers.length * 4 - 1;
     },
     encodeSqueakSP: function(intSP) {
         // sp is offset by tempFrameStart, -1 for z-rel addressing

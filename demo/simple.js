@@ -24,11 +24,17 @@
 var fullscreen = navigator.standalone;
 
 window.onload = function() {
-    runSqueak('mini.image', sqCanvas, {fullscreen: fullscreen, header: sqHeader, footer: sqFooter, swapButtons: true});
+    runSqueak('mini.image', sqCanvas, {
+        fullscreen: fullscreen,
+        swapButtons: true,
+        header: sqHeader,
+        footer: sqFooter,
+        swapCheckbox: sqSwapButtons,
+    });
 };
 
 if (addToHomescreen.isStandalone)
     fullscreen = true;
 else addToHomescreen({
-   appID: 'squeakjs.demo.add2home',
+    appID: 'squeakjs.demo.add2home',
 });

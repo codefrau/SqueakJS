@@ -32,8 +32,8 @@ Object.subclass('Squeak.Compiler',
 'generating',
 {
     generate: function(method, singleStep) {
-        this.comments = !!singleStep; // set to true when debugging
         this.singleStep = !!singleStep;
+        this.debug = this.singleStep || true;   // or true only while debugging
         this.method = method;
         this.pc = 0;                // next bytecode
         this.endPC = 0;             // pc of furthest jump target
@@ -148,10 +148,10 @@ Object.subclass('Squeak.Compiler',
             }
         }
         if (this.singleStep) {
-            if (this.comments) this.source.push("// all valid PCs have a label;\n");
+            if (this.debug) this.source.push("// all valid PCs have a label;\n");
             this.source.push("default: throw Error('invalid PC'); }"); // all PCs handled
         } else {
-            if (this.comments) this.source.push("// fall back to single-stepping\n");
+            if (this.debug) this.source.push("// fall back to single-stepping\n");
             this.source.push("default: return bytecodes + vm.pc + vm.interpretOne(true); }");
             this.deleteUnneededLabels();
         }
@@ -272,7 +272,7 @@ Object.subclass('Squeak.Compiler',
     	}
     },
     generatePush: function(prefix, arg1, suffix1, arg2, suffix2) {
-        if (this.comments) this.generateComment("push");
+        if (this.debug) this.generateDebugInfo("push");
         this.generateLabel();
         this.source.push("ctx[++vm.sp] = ", prefix);
         if (arg1 !== undefined) {
@@ -284,7 +284,7 @@ Object.subclass('Squeak.Compiler',
         this.source.push(";\n");
     },
     generateStoreInto: function(prefix, arg1, suffix1, arg2, suffix2) {
-        if (this.comments) this.generateComment("store into");
+        if (this.debug) this.generateDebugInfo("store into");
         this.generateLabel();
         this.source.push(prefix);
         if (arg1 !== undefined) {
@@ -296,7 +296,7 @@ Object.subclass('Squeak.Compiler',
         this.source.push(" = ctx[vm.sp];\n");
     },
     generatePopInto: function(prefix, arg1, suffix1, arg2, suffix2) {
-        if (this.comments) this.generateComment("pop into");
+        if (this.debug) this.generateDebugInfo("pop into");
         this.generateLabel();
         this.source.push(prefix);
         if (arg1 !== undefined) {
@@ -308,21 +308,21 @@ Object.subclass('Squeak.Compiler',
         this.source.push(" = ctx[vm.sp--];\n");
     },
     generateReturn: function(what) {
-        if (this.comments) this.generateComment("return");
+        if (this.debug) this.generateDebugInfo("return");
         this.generateLabel();
         this.source.push(
             "vm.pc = ", this.pc, ";\nvm.doReturn(", what, ");\nreturn bytecodes + ", this.pc, ";\n");
         this.done = this.pc > this.endPC;
     },
     generateBlockReturn: function() {
-        if (this.comments) this.generateComment("block return");
+        if (this.debug) this.generateDebugInfo("block return");
         this.generateLabel();
         this.source.push(
             "vm.pc = ", this.pc, ";\nvm.doReturn(ctx[vm.sp--], ctx[0]);\nreturn bytecodes + ", this.pc, ";\n");
     },
     generateJump: function(distance) {
         var destination = this.pc + distance;
-        if (this.comments) this.generateComment("jump to " + destination);
+        if (this.debug) this.generateDebugInfo("jump to " + destination);
         this.generateLabel();
         this.source.push("vm.pc = ", destination, ";\n");
         if (distance < 0) this.source.push(
@@ -338,7 +338,7 @@ Object.subclass('Squeak.Compiler',
     },
     generateJumpIf: function(condition, distance) {
         var destination = this.pc + distance;
-        if (this.comments) this.generateComment("jump if " + condition + " to " + destination);
+        if (this.debug) this.generateDebugInfo("jump if " + condition + " to " + destination);
         this.generateLabel();
         this.source.push(
             "var cond = ctx[vm.sp--]; if (cond === vm.", condition, "Obj) {vm.pc = ", destination, "; bytecodes -= ", distance, "; ");
@@ -351,7 +351,7 @@ Object.subclass('Squeak.Compiler',
     }
 ,
     generateQuickPrim: function(byte) {
-        if (this.comments) this.generateComment("quick prim " + this.specialSelectors[(byte & 0x0F) + 16]);
+        if (this.debug) this.generateDebugInfo("quick prim " + this.specialSelectors[(byte & 0x0F) + 16]);
         this.generateLabel();
         switch (byte) {
             //case 0xC0: return this.popNandPushIfOK(2, this.objectAt(true,true,false)); // at:
@@ -399,7 +399,7 @@ Object.subclass('Squeak.Compiler',
         this.needsLabel[this.pc] = true;
     },
     generateNumericOp: function(byte) {
-        if (this.comments) this.generateComment("numeric op " + this.specialSelectors[byte & 0x0F]);
+        if (this.debug) this.generateDebugInfo("numeric op " + this.specialSelectors[byte & 0x0F]);
         this.generateLabel();
         this.needsLabel[this.pc] = true;
         switch (byte) {
@@ -482,7 +482,7 @@ Object.subclass('Squeak.Compiler',
         }
     },
     generateSend: function(prefix, num, suffix, numArgs, superSend) {
-        if (this.comments) this.generateComment("send " + (prefix === "lit[" ? this.method.pointers[num].bytesAsString() : "..."));
+        if (this.debug) this.generateDebugInfo("send " + (prefix === "lit[" ? this.method.pointers[num].bytesAsString() : "..."));
         this.generateLabel();
         this.source.push(
             "vm.pc = ", this.pc, ";\n",
@@ -491,7 +491,7 @@ Object.subclass('Squeak.Compiler',
         this.needsLabel[this.pc] = true;
     },
     generateClosureTemps: function(count, popValues) {
-        if (this.comments) this.generateComment("closure temps");
+        if (this.debug) this.generateDebugInfo("closure temps");
         this.generateLabel();
         this.source.push("var array = vm.instantiateClass(vm.specialObjects[7], ", count, ");\n");
         if (popValues) {
@@ -505,7 +505,7 @@ Object.subclass('Squeak.Compiler',
     generateClosureCopy: function(numArgs, numCopied, blockSize) {
         var from = this.pc,
             to = from + blockSize;  // encodeSqueakPC
-        if (this.comments) this.generateComment("push closure(" + from + "-" + (to-1) + "): " + numArgs + " args, " + numCopied + " captured");
+        if (this.debug) this.generateDebugInfo("push closure(" + from + "-" + (to-1) + "): " + numArgs + " args, " + numCopied + " captured");
         this.generateLabel();
         this.source.push(
             "var closure = vm.instantiateClass(vm.specialObjects[36], ", numCopied + 3, ");\n",
@@ -532,11 +532,13 @@ Object.subclass('Squeak.Compiler',
         this.source.push("case ", this.instructionStart, ":\n");
         this.instructionStart = this.pc;
     },
-    generateComment: function(comment) {
+    generateDebugInfo: function(comment) {
+        // single-step for previous instructiuon
         if (this.singleStep && this.instructionStart > 0 && this.source[this.source.length - 7] !== "// ") {
              this.source.push("if (singleStep || vm.breakOutOfInterpreter !== false) {vm.pc = ", this.instructionStart, "; return bytecodes + ", this.instructionStart, "}\n");
              this.needsLabel[this.instructionStart] = true;
         }
+        // comment for this instructiuon
         var bytecodes = [];
         for (var i = this.instructionStart; i < this.pc; i++)
             bytecodes.push((this.method.bytes[i] + 0x100).toString(16).slice(-2).toUpperCase());

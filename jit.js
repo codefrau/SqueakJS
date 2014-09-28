@@ -158,10 +158,6 @@ Object.subclass('Squeak.Compiler',
         return this.source.join(""); 
     },
     generateExtended: function(bytecode) {
-        if (this.comments)
-            this.generateComment(['ext push', 'ext store', 'ext pop into', 'ext send', 'ext anything',
-                'super send', 'ext send', 'pop', 'dup', 'thisContext', 'closureArray', 'unused',
-                'remote push', 'remote store', 'remote pop into', 'closure copy'][bytecode - 0x80]);
         switch (bytecode) {
             // extended push
             case 0x80:
@@ -222,15 +218,15 @@ Object.subclass('Squeak.Compiler',
         		 return;
         	// pop
         	case 0x87:
-        	    this.generateInstruction("vm.sp--");
+        	    this.generateInstruction("pop", "vm.sp--");
         	    return;
         	// dup
         	case 0x88:
-        	    this.generateInstruction("var dup = ctx[vm.sp]; ctx[++vm.sp] = dup;");
+        	    this.generateInstruction("dup", "var dup = ctx[vm.sp]; ctx[++vm.sp] = dup;");
         	    return;
         	// thisContext
         	case 0x89:
-        	    this.generateInstruction("ctx[++vm.sp] = context;\nvm.reclaimableContextCount = 0");
+        	    this.generateInstruction("thisContext", "ctx[++vm.sp] = context;\nvm.reclaimableContextCount = 0");
         	    return;
             // closures
             case 0x8A:
@@ -534,7 +530,7 @@ Object.subclass('Squeak.Compiler',
     },
     generateDebugInfo: function(comment) {
         // single-step for previous instructiuon
-        if (this.singleStep && this.instructionStart > 0 && this.source[this.source.length - 7] !== "// ") {
+        if (this.singleStep && this.instructionStart > 0) {
              this.source.push("if (singleStep || vm.breakOutOfInterpreter !== false) {vm.pc = ", this.instructionStart, "; return bytecodes + ", this.instructionStart, "}\n");
              this.needsLabel[this.instructionStart] = true;
         }
@@ -544,7 +540,8 @@ Object.subclass('Squeak.Compiler',
             bytecodes.push((this.method.bytes[i] + 0x100).toString(16).slice(-2).toUpperCase());
         this.source.push("// ", this.instructionStart, " <", bytecodes.join(" "), "> ", comment, "\n");
     },
-    generateInstruction: function(instr) {
+    generateInstruction: function(comment, instr) {
+        if (this.debug) this.generateDebugInfo(comment); 
         this.generateLabel();
         this.source.push(instr, ";\n");
     },

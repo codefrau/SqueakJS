@@ -148,8 +148,14 @@ Object.subclass('Squeak.Compiler',
                     break;
             }
         }
-        this.source.push("default: vm.interpretOne(); return bytecodes;}");
-        this.deleteUnneededLabels();
+        if (this.singleStep) {
+            if (this.comments) this.source.push("// all valid PCs have a label;\n");
+            this.source.push("default: throw Error('invalid PC'); }"); // all PCs handled
+        } else {
+            if (this.comments) this.source.push("// fall back to single-stepping\n");
+            this.source.push("default: return bytecodes + vm.pc + vm.interpretOne(true); }");
+            this.deleteUnneededLabels();
+        }
         return this.source.join(""); 
     },
     generateExtended: function(bytecode) {

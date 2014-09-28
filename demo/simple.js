@@ -29,6 +29,7 @@ window.onload = function() {
         swapButtons: true,
         header: sqHeader,
         footer: sqFooter,
+        spinner: sqSpinner,
         swapCheckbox: sqSwapButtons,
         fullscreenCheckbox: sqFullscreen,
     });

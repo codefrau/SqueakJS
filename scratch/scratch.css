@@ -28,3 +28,20 @@ div#sqFooter {
     padding: 10px;
     border-top: 6px double gray;
 }
+div#sqSpinner {
+    position: absolute;
+    margin: auto; top: 0; left: 0; bottom: 0; right: 0;
+    width: 100px;
+    height: 100px;
+    display: none;
+    transform: rotate(30deg);
+}
+div#sqSpinner > div {
+    position: absolute;
+    top: 45px;
+    width: 100px; 
+    height: 10px;
+    border-radius: 5px;
+    background: #000;
+    box-shadow: 0 0 5px 5px #F90; 
+}

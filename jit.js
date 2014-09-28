@@ -3,7 +3,6 @@ module('users.bert.SqueakJS.jit').requires("users.bert.SqueakJS.vm").toRun(funct
 Object.subclass('Squeak.Compiler',
 'initialization', {
     initialize: function(vm) {
-        if (vm.image.hasClosures) throw Error("Can't compile closures yet"); 
         this.specialSelectors = ['+', '-', '<', '>', '<=', '>=', '=', '~=', '*', '/', '\\', '@',
             'bitShift:', '//', 'bitAnd:', 'bitOr:', 'at:', 'at:put:', 'size', 'next', 'nextPut:',
             'atEnd', '==', 'class', 'blockCopy:', 'value', 'value:', 'do:', 'new', 'new:', 'x', 'y'];
@@ -161,7 +160,7 @@ Object.subclass('Squeak.Compiler',
     generateExtended: function(bytecode) {
         if (this.comments)
             this.generateComment(['ext push', 'ext store', 'ext pop into', 'ext send', 'ext anything',
-                'super send', 'ext send', 'pop', 'dup', 'thisContext', 'closureArray', 
+                'super send', 'ext send', 'pop', 'dup', 'thisContext', 'closureArray', 'unused',
                 'remote push', 'remote store', 'remote pop into', 'closure copy'][bytecode - 0x80]);
         switch (bytecode) {
             // extended push
@@ -235,8 +234,10 @@ Object.subclass('Squeak.Compiler',
         	    return;
             // closures
             case 0x8A:
-                var byte2 = this.method.bytes[this.pc++];
-                this.generateClosureArray(byte2);
+                var byte2 = this.method.bytes[this.pc++],
+                    popValues = byte2 > 127,
+                    count = byte2 & 127;
+                this.generateClosureTemps(count, popValues);
                 return;
             case 0x8B:
                 throw Error("unusedBytecode");
@@ -244,23 +245,29 @@ Object.subclass('Squeak.Compiler',
             case 0x8C:
                 var byte2 = this.method.bytes[this.pc++];
                 var byte3 = this.method.bytes[this.pc++];
-                this.generatePush("temp[', 6 + byte3, '].pointers[", byte2, "]");
+                this.generatePush("temp[", 6 + byte3, "].pointers[", byte2, "]");
                 return;
             // remote store into temp vector
             case 0x8D:
                 var byte2 = this.method.bytes[this.pc++];
                 var byte3 = this.method.bytes[this.pc++];
-                this.generateStoreInto("temp[', 6 + byte3, '].pointers[", byte2, "]");
+                this.generateStoreInto("temp[", 6 + byte3, "].pointers[", byte2, "]");
                 return;
             // remote store and pop into temp vector
             case 0x8E:
                 var byte2 = this.method.bytes[this.pc++];
                 var byte3 = this.method.bytes[this.pc++];
-                this.generatePopInto("temp[', 6 + byte3, '].pointers[", byte2, "]");
+                this.generatePopInto("temp[", 6 + byte3, "].pointers[", byte2, "]");
                 return;
             // pushClosureCopy
             case 0x8F:
-                this.generateInstruction("vm.pushClosureCopy()");
+                var byte2 = this.method.bytes[this.pc++];
+                var byte3 = this.method.bytes[this.pc++];
+                var byte4 = this.method.bytes[this.pc++];
+                var numArgs = byte2 & 0xF,
+                    numCopied = byte2 >> 4,
+                    blockSize = byte3 << 8 | byte4;
+                this.generateClosureCopy(numArgs, numCopied, blockSize);
                 return;
     	}
     },
@@ -481,6 +488,43 @@ Object.subclass('Squeak.Compiler',
             "vm.send(", prefix, num, suffix, ", ", numArgs, ", ", superSend, ");\n",
             "if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, ";\n");
         this.needsLabel[this.pc] = true;
+    },
+    generateClosureTemps: function(count, popValues) {
+        if (this.comments) this.generateComment("closure temps");
+        this.generateLabel();
+        this.source.push("var array = vm.instantiateClass(vm.specialObjects[7], ", count, ");\n");
+        if (popValues) {
+            for (var i = 0; i < count; i++)
+                this.source.push("array.pointers[", i, "] = ctx[vm.sp - ", count - i - 1,"];\n");
+            this.source.push("ctx[vm.sp -= ", count - 1,"] = array;\n");
+        } else {
+            this.source.push("ctx[++vm.sp] = array;\n");
+        }
+    },
+    generateClosureCopy: function(numArgs, numCopied, blockSize) {
+        var from = this.pc,
+            to = from + blockSize;  // encodeSqueakPC
+        if (this.comments) this.generateComment("push closure(" + from + "-" + (to-1) + "): " + numArgs + " args, " + numCopied + " captured");
+        this.generateLabel();
+        this.source.push(
+            "var closure = vm.instantiateClass(vm.specialObjects[36], ", numCopied + 3, ");\n",
+            "closure.pointers[0] = context; vm.reclaimableContextCount = 0;\n",
+            "closure.pointers[1] = ", from + this.method.pointers.length * 4 + 1, ";\n",  // encodeSqueakPC
+            "closure.pointers[2] = ", numArgs, ";\n");
+        if (numCopied > 0) {
+            for (var i = 0; i < numCopied; i++)
+                this.source.push("closure.pointers[", i + 3, "] = ctx[vm.sp - ", numCopied - i - 1,"];\n");
+            this.source.push("ctx[vm.sp -= ", numCopied - 1,"] = closure;\n");
+        } else {
+            this.source.push("ctx[++vm.sp] = closure;\n");
+        }
+        this.source.push("vm.pc = ", to, ";\n");
+        this.source.push("bytecodes -= ", blockSize, ";\n"); 
+        if (this.singleStep) this.source.push("if (singleStep) return bytecodes + ", this.pc,";\n");
+        this.source.push("continue;\n");
+        this.needsLabel[from] = true;
+        this.needsLabel[to] = true;
+    	if (to > this.endPC) this.endPC = to;
     },
     generateLabel: function() {
         this.sourceLabels[this.instructionStart] = this.source.length;

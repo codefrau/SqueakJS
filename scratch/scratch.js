@@ -25,7 +25,12 @@ var fullscreen = navigator.standalone;
 
 window.onload = function() {
     var url = "http://freudenbergs.de/bert/squeakjs/scratch/Scratch.image";
-    runSqueak(url, sqCanvas, {fullscreen: fullscreen, header: sqHeader, footer: sqFooter});
+    runSqueak(url, sqCanvas, {
+        fullscreen: fullscreen,
+        header: sqHeader,
+        footer: sqFooter,
+        spinner: sqSpinner,
+    });
 };
 
 if (addToHomescreen.isStandalone)

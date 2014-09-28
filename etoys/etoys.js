@@ -25,7 +25,14 @@ var fullscreen = navigator.standalone;
 
 window.onload = function() {
     var url = "http://freudenbergs.de/bert/squeakjs/etoys.image";
-    runSqueak(url, sqCanvas, {fixedWidth: 1200, fixedHeight: 900, fullscreen: fullscreen, header: sqHeader, footer: sqFooter});
+    runSqueak(url, sqCanvas, {
+        fixedWidth: 1200,
+        fixedHeight: 900,
+        fullscreen: fullscreen,
+        header: sqHeader,
+        footer: sqFooter,
+        spinner: sqSpinner,
+    });
 };
 
 if (addToHomescreen.isStandalone)

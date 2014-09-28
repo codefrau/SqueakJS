@@ -4070,6 +4070,7 @@ Object.subclass('Squeak.Primitives',
         return this.popNandPushIfOK(1, 0);      // noop for now
     },
     primitiveGetNextEvent: function(argCount) {
+        this.display.idle++;
         var evtBuf = this.stackNonInteger(0);
         if (!this.display.getNextEvent) return false;
         this.display.getNextEvent(evtBuf.pointers, this.vm.startupTime);

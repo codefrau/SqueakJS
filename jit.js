@@ -345,6 +345,7 @@ Object.subclass('Squeak.Compiler',
         if (this.singleStep) this.source.push("if (singleStep) return bytecodes + ", this.pc,"; else ");
         this.source.push("continue}\n",
             "else if (cond !== vm.", !condition, "Obj) {vm.sp++; vm.pc = ", this.pc, "; vm.send(vm.specialObjects[25], 1, false); return bytecodes + ", this.pc, "}\n");
+        this.needsLabel[this.pc] = true;
         this.needsLabel[destination] = true;
         if (destination > this.endPC) this.endPC = destination;
     }

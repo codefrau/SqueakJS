@@ -32,8 +32,9 @@ Object.subclass('Squeak.Compiler',
 },
 'generating',
 {
-    generate: function(method, debug) {
-        this.debug = !!debug;
+    generate: function(method, singleStep) {
+        this.comments = !!singleStep; // set to true when debugging
+        this.singleStep = !!singleStep;
         this.method = method;
         this.pc = 0;                // next bytecode
         this.endPC = 0;             // pc of furthest jump target
@@ -152,7 +153,7 @@ Object.subclass('Squeak.Compiler',
         return this.source.join(""); 
     },
     generateExtended: function(bytecode) {
-        if (this.debug)
+        if (this.comments)
             this.generateComment(['ext push', 'ext store', 'ext pop into', 'ext send', 'ext anything',
                 'super send', 'ext send', 'pop', 'dup', 'thisContext', 'closureArray', 
                 'remote push', 'remote store', 'remote pop into', 'closure copy'][bytecode - 0x80]);
@@ -258,7 +259,7 @@ Object.subclass('Squeak.Compiler',
     	}
     },
     generatePush: function(prefix, arg1, suffix1, arg2, suffix2) {
-        if (this.debug) this.generateComment("push");
+        if (this.comments) this.generateComment("push");
         this.generateLabel();
         this.source.push("ctx[++vm.sp] = ", prefix);
         if (arg1 !== undefined) {
@@ -270,7 +271,7 @@ Object.subclass('Squeak.Compiler',
         this.source.push(";\n");
     },
     generateStoreInto: function(prefix, arg1, suffix1, arg2, suffix2) {
-        if (this.debug) this.generateComment("store into");
+        if (this.comments) this.generateComment("store into");
         this.generateLabel();
         this.source.push(prefix);
         if (arg1 !== undefined) {
@@ -282,7 +283,7 @@ Object.subclass('Squeak.Compiler',
         this.source.push(" = ctx[vm.sp];\n");
     },
     generatePopInto: function(prefix, arg1, suffix1, arg2, suffix2) {
-        if (this.debug) this.generateComment("pop into");
+        if (this.comments) this.generateComment("pop into");
         this.generateLabel();
         this.source.push(prefix);
         if (arg1 !== undefined) {
@@ -294,21 +295,21 @@ Object.subclass('Squeak.Compiler',
         this.source.push(" = ctx[vm.sp--];\n");
     },
     generateReturn: function(what) {
-        if (this.debug) this.generateComment("return");
+        if (this.comments) this.generateComment("return");
         this.generateLabel();
         this.source.push(
             "vm.pc = ", this.pc, ";\nvm.doReturn(", what, ");\nreturn bytecodes + ", this.pc, ";\n");
         this.done = this.pc > this.endPC;
     },
     generateBlockReturn: function() {
-        if (this.debug) this.generateComment("block return");
+        if (this.comments) this.generateComment("block return");
         this.generateLabel();
         this.source.push(
             "vm.pc = ", this.pc, ";\nvm.doReturn(ctx[vm.sp--], ctx[0]);\nreturn bytecodes + ", this.pc, ";\n");
     },
     generateJump: function(distance) {
         var destination = this.pc + distance;
-        if (this.debug) this.generateComment("jump to " + destination);
+        if (this.comments) this.generateComment("jump to " + destination);
         this.generateLabel();
         this.source.push("vm.pc = ", destination, ";\n");
         if (distance < 0) this.source.push(
@@ -317,18 +318,18 @@ Object.subclass('Squeak.Compiler',
             "   if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, ";\n",
             "}\nbytecodes += ", -distance, ";\n");
         else this.source.push("bytecodes -= ", distance, ";\n"); 
-        if (this.debug) this.source.push("if (singleStep) return bytecodes + ", this.pc,";\n");
+        if (this.singleStep) this.source.push("if (singleStep) return bytecodes + ", this.pc,";\n");
         this.source.push("continue;\n");
         this.needsLabel[destination] = true;
         if (destination > this.endPC) this.endPC = destination;
     },
     generateJumpIf: function(condition, distance) {
         var destination = this.pc + distance;
-        if (this.debug) this.generateComment("jump if " + condition + " to " + destination);
+        if (this.comments) this.generateComment("jump if " + condition + " to " + destination);
         this.generateLabel();
         this.source.push(
             "var cond = ctx[vm.sp--]; if (cond === vm.", condition, "Obj) {vm.pc = ", destination, "; bytecodes -= ", distance, "; ");
-        if (this.debug) this.source.push("if (singleStep) return bytecodes + ", this.pc,"; else ");
+        if (this.singleStep) this.source.push("if (singleStep) return bytecodes + ", this.pc,"; else ");
         this.source.push("continue}\n",
             "else if (cond !== vm.", !condition, "Obj) {vm.sp++; vm.pc = ", this.pc, "; vm.send(vm.specialObjects[25], 1, false); return bytecodes + ", this.pc, "}\n");
         this.needsLabel[destination] = true;
@@ -336,7 +337,7 @@ Object.subclass('Squeak.Compiler',
     }
 ,
     generateQuickPrim: function(byte) {
-        if (this.debug) this.generateComment("quick prim " + this.specialSelectors[(byte & 0x0F) + 16]);
+        if (this.comments) this.generateComment("quick prim " + this.specialSelectors[(byte & 0x0F) + 16]);
         this.generateLabel();
         switch (byte) {
             //case 0xC0: return this.popNandPushIfOK(2, this.objectAt(true,true,false)); // at:
@@ -384,7 +385,7 @@ Object.subclass('Squeak.Compiler',
         this.needsLabel[this.pc] = true;
     },
     generateNumericOp: function(byte) {
-        if (this.debug) this.generateComment("numeric op " + this.specialSelectors[byte & 0x0F]);
+        if (this.comments) this.generateComment("numeric op " + this.specialSelectors[byte & 0x0F]);
         this.generateLabel();
         this.needsLabel[this.pc] = true;
         switch (byte) {
@@ -467,7 +468,7 @@ Object.subclass('Squeak.Compiler',
         }
     },
     generateSend: function(prefix, num, suffix, numArgs, superSend) {
-        if (this.debug) this.generateComment("send " + (prefix === "lit[" ? this.method.pointers[num].bytesAsString() : "..."));
+        if (this.comments) this.generateComment("send " + (prefix === "lit[" ? this.method.pointers[num].bytesAsString() : "..."));
         this.generateLabel();
         this.source.push(
             "vm.pc = ", this.pc, ";\n",
@@ -481,7 +482,7 @@ Object.subclass('Squeak.Compiler',
         this.instructionStart = this.pc;
     },
     generateComment: function(comment) {
-        if (this.debug && this.instructionStart > 0 && this.source[this.source.length - 7] !== "// ") {
+        if (this.singleStep && this.instructionStart > 0 && this.source[this.source.length - 7] !== "// ") {
              this.source.push("if (singleStep || vm.breakOutOfInterpreter !== false) {vm.pc = ", this.instructionStart, "; return bytecodes + ", this.instructionStart, "}\n");
              this.needsLabel[this.instructionStart] = true;
         }

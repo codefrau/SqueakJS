@@ -26,7 +26,7 @@ Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.5",
+    vmVersion: "SqueakJS 0.5.1",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -999,7 +999,7 @@ Object.subclass('Squeak.Object',
         return this.pointers[0];
     },
     methodNumLits: function() {
-        return (this.methodHeader()>>9) & 0xFF;
+        return this.pointers.length - 1;
     },
     methodNumArgs: function() {
         return (this.methodHeader()>>24) & 0xF;
@@ -1874,10 +1874,10 @@ Object.subclass('Squeak.Interpreter',
     encodeSqueakPC: function(intPC, method) {
         // Squeak pc is offset by header and literals
         // and 1 for z-rel addressing
-        return intPC + (((method.methodNumLits()+1)*4) + 1);
+        return intPC + method.pointers.length * 4 + 1;
     },
     decodeSqueakPC: function(squeakPC, method) {
-        return squeakPC - (((method.methodNumLits()+1)*4) + 1);
+        return squeakPC - method.pointers.length * 4 - 1;
     },
     encodeSqueakSP: function(intSP) {
         // sp is offset by tempFrameStart, -1 for z-rel addressing
@@ -2321,7 +2321,6 @@ Object.subclass('Squeak.Primitives',
         this.display.vm = this.vm;
         this.oldPrims = !this.vm.image.hasClosures;
         this.deferDisplayUpdates = false;
-        this.deferDisplayUpdatesDisabled = 3;   // show first frames with immediate feedback
         this.semaphoresToSignal = [];
         this.initAtCache();
         this.initModules();
@@ -3926,12 +3925,7 @@ Object.subclass('Squeak.Primitives',
     primitiveDeferDisplayUpdates: function(argCount) {
         var flag = this.stackBoolean(0);
         if (!this.success) return false;
-        if (this.deferDisplayUpdatesDisabled) {
-            if (flag && typeof this.deferDisplayUpdatesDisabled == "number")
-                this.deferDisplayUpdatesDisabled--;
-        } else {
-            this.deferDisplayUpdates = flag;
-        }
+        this.deferDisplayUpdates = flag;
         this.vm.popN(argCount);
         return true;
     },
@@ -4076,6 +4070,7 @@ Object.subclass('Squeak.Primitives',
         return this.popNandPushIfOK(1, 0);      // noop for now
     },
     primitiveGetNextEvent: function(argCount) {
+        this.display.idle++;
         var evtBuf = this.stackNonInteger(0);
         if (!this.display.getNextEvent) return false;
         this.display.getNextEvent(evtBuf.pointers, this.vm.startupTime);
@@ -6968,7 +6963,7 @@ Object.subclass('Squeak.InstructionPrinter',
     pushNewArray: function(size) {
         this.print('push: (Array new: ' + size + ')');
     },
-    pushConsArray: function(numElements) {
+    popIntoNewArray: function(numElements) {
         this.print('pop: ' + numElements + ' into: (Array new: ' + numElements + ')');
     },
     pushRemoteTemp: function(offset , arrayOffset) {
@@ -7101,7 +7096,7 @@ Object.subclass('Squeak.InstructionStream',
         // closures
         var byte2 = this.method.bytes[this.pc++];
         if (offset === 10)
-            return byte2 < 128 ? client.pushNewArray(byte2) : client.pushConsArray(byte2 - 128);
+            return byte2 < 128 ? client.pushNewArray(byte2) : client.popIntoNewArray(byte2 - 128);
         if (offset === 11) throw Error("unusedBytecode");
         var byte3 = this.method.bytes[this.pc++];
         if (offset === 12) return client.pushRemoteTemp(byte2, byte3);

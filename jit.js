@@ -3,7 +3,6 @@ module('users.bert.SqueakJS.jit').requires("users.bert.SqueakJS.vm").toRun(funct
 Object.subclass('Squeak.Compiler',
 'initialization', {
     initialize: function(vm) {
-        if (vm.image.hasClosures) throw Error("Can't compile closures yet"); 
         this.specialSelectors = ['+', '-', '<', '>', '<=', '>=', '=', '~=', '*', '/', '\\', '@',
             'bitShift:', '//', 'bitAnd:', 'bitOr:', 'at:', 'at:put:', 'size', 'next', 'nextPut:',
             'atEnd', '==', 'class', 'blockCopy:', 'value', 'value:', 'do:', 'new', 'new:', 'x', 'y'];
@@ -32,8 +31,9 @@ Object.subclass('Squeak.Compiler',
 },
 'generating',
 {
-    generate: function(method, debug) {
-        this.debug = !!debug;
+    generate: function(method, singleStep) {
+        this.singleStep = !!singleStep;
+        this.debug = this.singleStep || true;   // or true only while debugging
         this.method = method;
         this.pc = 0;                // next bytecode
         this.endPC = 0;             // pc of furthest jump target
@@ -147,15 +147,17 @@ Object.subclass('Squeak.Compiler',
                     break;
             }
         }
-        this.source.push("default: vm.interpretOne(); return bytecodes;}");
-        this.deleteUnneededLabels();
+        if (this.singleStep) {
+            if (this.debug) this.source.push("// all valid PCs have a label;\n");
+            this.source.push("default: throw Error('invalid PC'); }"); // all PCs handled
+        } else {
+            if (this.debug) this.source.push("// fall back to single-stepping\n");
+            this.source.push("default: return bytecodes + vm.pc + vm.interpretOne(true); }");
+            this.deleteUnneededLabels();
+        }
         return this.source.join(""); 
     },
     generateExtended: function(bytecode) {
-        if (this.debug)
-            this.generateComment(['ext push', 'ext store', 'ext pop into', 'ext send', 'ext anything',
-                'super send', 'ext send', 'pop', 'dup', 'thisContext', 'closureArray', 
-                'remote push', 'remote store', 'remote pop into', 'closure copy'][bytecode - 0x80]);
         switch (bytecode) {
             // extended push
             case 0x80:
@@ -216,20 +218,22 @@ Object.subclass('Squeak.Compiler',
         		 return;
         	// pop
         	case 0x87:
-        	    this.generateInstruction("vm.sp--");
+        	    this.generateInstruction("pop", "vm.sp--");
         	    return;
         	// dup
         	case 0x88:
-        	    this.generateInstruction("var dup = ctx[vm.sp]; ctx[++vm.sp] = dup;");
+        	    this.generateInstruction("dup", "var dup = ctx[vm.sp]; ctx[++vm.sp] = dup;");
         	    return;
         	// thisContext
         	case 0x89:
-        	    this.generateInstruction("ctx[++vm.sp] = context;\nvm.reclaimableContextCount = 0");
+        	    this.generateInstruction("thisContext", "ctx[++vm.sp] = context;\nvm.reclaimableContextCount = 0");
         	    return;
             // closures
             case 0x8A:
-                var byte2 = this.method.bytes[this.pc++];
-                this.generateClosureArray(byte2);
+                var byte2 = this.method.bytes[this.pc++],
+                    popValues = byte2 > 127,
+                    count = byte2 & 127;
+                this.generateClosureTemps(count, popValues);
                 return;
             case 0x8B:
                 throw Error("unusedBytecode");
@@ -237,28 +241,34 @@ Object.subclass('Squeak.Compiler',
             case 0x8C:
                 var byte2 = this.method.bytes[this.pc++];
                 var byte3 = this.method.bytes[this.pc++];
-                this.generatePush("temp[', 6 + byte3, '].pointers[", byte2, "]");
+                this.generatePush("temp[", 6 + byte3, "].pointers[", byte2, "]");
                 return;
             // remote store into temp vector
             case 0x8D:
                 var byte2 = this.method.bytes[this.pc++];
                 var byte3 = this.method.bytes[this.pc++];
-                this.generateStoreInto("temp[', 6 + byte3, '].pointers[", byte2, "]");
+                this.generateStoreInto("temp[", 6 + byte3, "].pointers[", byte2, "]");
                 return;
             // remote store and pop into temp vector
             case 0x8E:
                 var byte2 = this.method.bytes[this.pc++];
                 var byte3 = this.method.bytes[this.pc++];
-                this.generatePopInto("temp[', 6 + byte3, '].pointers[", byte2, "]");
+                this.generatePopInto("temp[", 6 + byte3, "].pointers[", byte2, "]");
                 return;
             // pushClosureCopy
             case 0x8F:
-                this.generateInstruction("vm.pushClosureCopy()");
+                var byte2 = this.method.bytes[this.pc++];
+                var byte3 = this.method.bytes[this.pc++];
+                var byte4 = this.method.bytes[this.pc++];
+                var numArgs = byte2 & 0xF,
+                    numCopied = byte2 >> 4,
+                    blockSize = byte3 << 8 | byte4;
+                this.generateClosureCopy(numArgs, numCopied, blockSize);
                 return;
     	}
     },
     generatePush: function(prefix, arg1, suffix1, arg2, suffix2) {
-        if (this.debug) this.generateComment("push");
+        if (this.debug) this.generateDebugInfo("push");
         this.generateLabel();
         this.source.push("ctx[++vm.sp] = ", prefix);
         if (arg1 !== undefined) {
@@ -270,7 +280,7 @@ Object.subclass('Squeak.Compiler',
         this.source.push(";\n");
     },
     generateStoreInto: function(prefix, arg1, suffix1, arg2, suffix2) {
-        if (this.debug) this.generateComment("store into");
+        if (this.debug) this.generateDebugInfo("store into");
         this.generateLabel();
         this.source.push(prefix);
         if (arg1 !== undefined) {
@@ -282,7 +292,7 @@ Object.subclass('Squeak.Compiler',
         this.source.push(" = ctx[vm.sp];\n");
     },
     generatePopInto: function(prefix, arg1, suffix1, arg2, suffix2) {
-        if (this.debug) this.generateComment("pop into");
+        if (this.debug) this.generateDebugInfo("pop into");
         this.generateLabel();
         this.source.push(prefix);
         if (arg1 !== undefined) {
@@ -294,21 +304,21 @@ Object.subclass('Squeak.Compiler',
         this.source.push(" = ctx[vm.sp--];\n");
     },
     generateReturn: function(what) {
-        if (this.debug) this.generateComment("return");
+        if (this.debug) this.generateDebugInfo("return");
         this.generateLabel();
         this.source.push(
             "vm.pc = ", this.pc, ";\nvm.doReturn(", what, ");\nreturn bytecodes + ", this.pc, ";\n");
         this.done = this.pc > this.endPC;
     },
     generateBlockReturn: function() {
-        if (this.debug) this.generateComment("block return");
+        if (this.debug) this.generateDebugInfo("block return");
         this.generateLabel();
         this.source.push(
             "vm.pc = ", this.pc, ";\nvm.doReturn(ctx[vm.sp--], ctx[0]);\nreturn bytecodes + ", this.pc, ";\n");
     },
     generateJump: function(distance) {
         var destination = this.pc + distance;
-        if (this.debug) this.generateComment("jump to " + destination);
+        if (this.debug) this.generateDebugInfo("jump to " + destination);
         this.generateLabel();
         this.source.push("vm.pc = ", destination, ";\n");
         if (distance < 0) this.source.push(
@@ -317,26 +327,27 @@ Object.subclass('Squeak.Compiler',
             "   if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, ";\n",
             "}\nbytecodes += ", -distance, ";\n");
         else this.source.push("bytecodes -= ", distance, ";\n"); 
-        if (this.debug) this.source.push("if (singleStep) return bytecodes + ", this.pc,";\n");
+        if (this.singleStep) this.source.push("if (singleStep) return bytecodes + ", this.pc,";\n");
         this.source.push("continue;\n");
         this.needsLabel[destination] = true;
         if (destination > this.endPC) this.endPC = destination;
     },
     generateJumpIf: function(condition, distance) {
         var destination = this.pc + distance;
-        if (this.debug) this.generateComment("jump if " + condition + " to " + destination);
+        if (this.debug) this.generateDebugInfo("jump if " + condition + " to " + destination);
         this.generateLabel();
         this.source.push(
             "var cond = ctx[vm.sp--]; if (cond === vm.", condition, "Obj) {vm.pc = ", destination, "; bytecodes -= ", distance, "; ");
-        if (this.debug) this.source.push("if (singleStep) return bytecodes + ", this.pc,"; else ");
+        if (this.singleStep) this.source.push("if (singleStep) return bytecodes + ", this.pc,"; else ");
         this.source.push("continue}\n",
             "else if (cond !== vm.", !condition, "Obj) {vm.sp++; vm.pc = ", this.pc, "; vm.send(vm.specialObjects[25], 1, false); return bytecodes + ", this.pc, "}\n");
+        this.needsLabel[this.pc] = true;
         this.needsLabel[destination] = true;
         if (destination > this.endPC) this.endPC = destination;
     }
 ,
     generateQuickPrim: function(byte) {
-        if (this.debug) this.generateComment("quick prim " + this.specialSelectors[(byte & 0x0F) + 16]);
+        if (this.debug) this.generateDebugInfo("quick prim " + this.specialSelectors[(byte & 0x0F) + 16]);
         this.generateLabel();
         switch (byte) {
             //case 0xC0: return this.popNandPushIfOK(2, this.objectAt(true,true,false)); // at:
@@ -384,7 +395,7 @@ Object.subclass('Squeak.Compiler',
         this.needsLabel[this.pc] = true;
     },
     generateNumericOp: function(byte) {
-        if (this.debug) this.generateComment("numeric op " + this.specialSelectors[byte & 0x0F]);
+        if (this.debug) this.generateDebugInfo("numeric op " + this.specialSelectors[byte & 0x0F]);
         this.generateLabel();
         this.needsLabel[this.pc] = true;
         switch (byte) {
@@ -467,7 +478,7 @@ Object.subclass('Squeak.Compiler',
         }
     },
     generateSend: function(prefix, num, suffix, numArgs, superSend) {
-        if (this.debug) this.generateComment("send " + (prefix === "lit[" ? this.method.pointers[num].bytesAsString() : "..."));
+        if (this.debug) this.generateDebugInfo("send " + (prefix === "lit[" ? this.method.pointers[num].bytesAsString() : "..."));
         this.generateLabel();
         this.source.push(
             "vm.pc = ", this.pc, ";\n",
@@ -475,22 +486,62 @@ Object.subclass('Squeak.Compiler',
             "if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, ";\n");
         this.needsLabel[this.pc] = true;
     },
+    generateClosureTemps: function(count, popValues) {
+        if (this.debug) this.generateDebugInfo("closure temps");
+        this.generateLabel();
+        this.source.push("var array = vm.instantiateClass(vm.specialObjects[7], ", count, ");\n");
+        if (popValues) {
+            for (var i = 0; i < count; i++)
+                this.source.push("array.pointers[", i, "] = ctx[vm.sp - ", count - i - 1,"];\n");
+            this.source.push("ctx[vm.sp -= ", count - 1,"] = array;\n");
+        } else {
+            this.source.push("ctx[++vm.sp] = array;\n");
+        }
+    },
+    generateClosureCopy: function(numArgs, numCopied, blockSize) {
+        var from = this.pc,
+            to = from + blockSize;  // encodeSqueakPC
+        if (this.debug) this.generateDebugInfo("push closure(" + from + "-" + (to-1) + "): " + numArgs + " args, " + numCopied + " captured");
+        this.generateLabel();
+        this.source.push(
+            "var closure = vm.instantiateClass(vm.specialObjects[36], ", numCopied + 3, ");\n",
+            "closure.pointers[0] = context; vm.reclaimableContextCount = 0;\n",
+            "closure.pointers[1] = ", from + this.method.pointers.length * 4 + 1, ";\n",  // encodeSqueakPC
+            "closure.pointers[2] = ", numArgs, ";\n");
+        if (numCopied > 0) {
+            for (var i = 0; i < numCopied; i++)
+                this.source.push("closure.pointers[", i + 3, "] = ctx[vm.sp - ", numCopied - i - 1,"];\n");
+            this.source.push("ctx[vm.sp -= ", numCopied - 1,"] = closure;\n");
+        } else {
+            this.source.push("ctx[++vm.sp] = closure;\n");
+        }
+        this.source.push("vm.pc = ", to, ";\n");
+        this.source.push("bytecodes -= ", blockSize, ";\n"); 
+        if (this.singleStep) this.source.push("if (singleStep) return bytecodes + ", this.pc,";\n");
+        this.source.push("continue;\n");
+        this.needsLabel[from] = true;
+        this.needsLabel[to] = true;
+    	if (to > this.endPC) this.endPC = to;
+    },
     generateLabel: function() {
         this.sourceLabels[this.instructionStart] = this.source.length;
         this.source.push("case ", this.instructionStart, ":\n");
         this.instructionStart = this.pc;
     },
-    generateComment: function(comment) {
-        if (this.debug && this.instructionStart > 0 && this.source[this.source.length - 7] !== "// ") {
+    generateDebugInfo: function(comment) {
+        // single-step for previous instructiuon
+        if (this.singleStep && this.instructionStart > 0) {
              this.source.push("if (singleStep || vm.breakOutOfInterpreter !== false) {vm.pc = ", this.instructionStart, "; return bytecodes + ", this.instructionStart, "}\n");
              this.needsLabel[this.instructionStart] = true;
         }
+        // comment for this instructiuon
         var bytecodes = [];
         for (var i = this.instructionStart; i < this.pc; i++)
             bytecodes.push((this.method.bytes[i] + 0x100).toString(16).slice(-2).toUpperCase());
         this.source.push("// ", this.instructionStart, " <", bytecodes.join(" "), "> ", comment, "\n");
     },
-    generateInstruction: function(instr) {
+    generateInstruction: function(comment, instr) {
+        if (this.debug) this.generateDebugInfo(comment); 
         this.generateLabel();
         this.source.push(instr, ";\n");
     },

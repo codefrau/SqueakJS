@@ -41,6 +41,8 @@ THE SOFTWARE.
 <body>
     <div id="sqHeader">
         <h1>SqueakJS</h1>
+        <label title="Swap middle and right mouse buttons"><input id="sqSwapButtons" type="checkbox">swap buttons</label>
+        <label title="Make Squeak as large as possible"><input id="sqFullscreen" type="checkbox">full screen</label>
         <div class="github-fork-ribbon-wrapper right">
             <div class="github-fork-ribbon">
                 <a href="https://github.com/bertfreudenberg/SqueakJS" target="_blank">Fork me on GitHub</a>
@@ -48,6 +50,7 @@ THE SOFTWARE.
         </div>
     </div>
     <canvas id="sqCanvas"></canvas>
+    <div id="sqSpinner"><div></div></div>
     <div id="sqFooter">
         <p><a href="http://bertfreudenberg.github.io/SqueakJS/" target="_blank">SqueakJS</a> is a Virtual Machine
         for the Squeak dialect of Smalltalk, written in pure JavaScript by Bert Freudenberg.

@@ -62,33 +62,43 @@ sends, etc.
 Jumps are handled by wrapping the whole method in a loop and switch. This also
 enables continuing in the middle of a compiled method: whenever another context
 is activated, the method returns to the main loop, and is entered again later
-with a different PC:
+with a different PC. Here is an example method, its bytecodes, and a simplified
+version of the generated JavaScript code:
+
+    method
+        [value selector] whileFalse.
+        ^ 42
+
+    0 <00> pushInstVar: 0
+    1 <D0> send: #selector
+    2 <A8 02> jumpIfTrue: 6
+    4 <A3 FA> jumpTo: 0
+    6 <21> pushConst: 42
+    7 <7C> return: topOfStack
 
     while (true) switch (vm.pc) {
     case 0:
-        ... push argument ...
-        vm.stack[++vm.sp] = value;
-        // fall through to next bytecode
-    case 1:
-        ... a send ...
-        vm.pc = 1;
-        vm.send(selector); // activates new context
+        ctx[++vm.sp] = inst[0];
+        vm.pc = 2; vm.send(lit[1]);
         return 0;
     case 2:
-        ... conditional jump ...
-        if (...) {vm.pc = 4; continue;}
-    case 3:
-        ... regular jump ...
-        vm.pc = 0; continue;
+        if (ctx[vm.sp--] === vm.trueObj) {
+            vm.pc = 6;
+            continue; // jump to case 6
+        }
+        // otherwise fall through to next case
     case 4:
-        vm.pc = 5;
-        vm.doReturn(stack top);  // activates parent context
+        vm.pc = 0;
+        continue; // jump to case 0
+    case 6:
+        ctx[++vm.sp] = lit[2];
+        vm.pc = 7;
+        vm.doReturn(ctx[vm.sp]);
         return 0;
     }
 
-The compiled method returns the number of bytecodes executed, but for
-statistical purposes only. It would be fine to return 0 if utmost speed is
-wanted.
+The compiled method should return the number of bytecodes executed, but for
+statistical purposes only. It's fine to return 0.
 
 Debugging support
 =================

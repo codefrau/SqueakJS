@@ -1107,7 +1107,7 @@ Object.subclass('Squeak.Interpreter',
         this.methodCacheRandomish = 0;
         this.methodCache = [];
         for (var i = 0; i < this.methodCacheSize; i++)
-            this.methodCache[i] = {lkupClass: null, selector: null, method: null, primIndex: 0, argCount: 0};
+            this.methodCache[i] = {lkupClass: null, selector: null, method: null, primIndex: 0, argCount: 0, mClass: null};
         this.breakOutOfInterpreter = false;
         this.breakOutTick = 0;
         this.breakOnMethod = null; // method to break on
@@ -1562,7 +1562,7 @@ Object.subclass('Squeak.Interpreter',
             this.verifyAtSelector = selector;
             this.verifyAtClass = lookupClass;
         }
-        this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex);
+        this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
     },
     findSelectorInClass: function(selector, argCount, startingClass) {
         var cacheEntry = this.findMethodCacheEntry(selector, startingClass);
@@ -1585,6 +1585,7 @@ Object.subclass('Squeak.Interpreter',
                 cacheEntry.method = newMethod;
                 cacheEntry.primIndex = newMethod.methodPrimitiveIndex();
                 cacheEntry.argCount = argCount;
+                cacheEntry.mClass = currentClass;
                 return cacheEntry;
             }  
             currentClass = currentClass.pointers[Squeak.Class_superclass];
@@ -1618,10 +1619,10 @@ Object.subclass('Squeak.Interpreter',
             }
         }
     },
-    executeNewMethod: function(newRcvr, newMethod, argumentCount, primitiveIndex) {
+    executeNewMethod: function(newRcvr, newMethod, argumentCount, primitiveIndex, optClass, optSel) {
         this.sendCount++;
-        if (newMethod === this.breakOnMethod) this.breakNow("executing method " + this.printMethod(newMethod));
-        if (this.logSends) console.log(this.sendCount + ' ' + this.printMethod(newMethod));
+        if (newMethod === this.breakOnMethod) this.breakNow("executing method " + this.printMethod(newMethod, optClass, optSel));
+        if (this.logSends) console.log(this.sendCount + ' ' + this.printMethod(newMethod, optClass, optSel));
         if (this.breakOnContextChanged) {
             this.breakOnContextChanged = false;
             this.breakNow();
@@ -1658,7 +1659,7 @@ Object.subclass('Squeak.Interpreter',
         if (this.receiver !== newRcvr)
             throw Error("receivers don't match");
         if (!newMethod.compiled && this.compiler)
-            this.compiler.compile(newMethod);
+            this.compiler.compile(newMethod, optClass, optSel);
         // check for process switch on full method activation
         if (this.interruptCheckCounter-- <= 0) this.checkForInterrupts();
     },
@@ -1766,7 +1767,7 @@ Object.subclass('Squeak.Interpreter',
         this.arrayCopy(stack, selectorIndex+1, stack, selectorIndex, trueArgCount);
         this.sp--; // adjust sp accordingly
         var entry = this.findSelectorInClass(selector, trueArgCount, this.getClass(rcvr));
-        this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex);
+        this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
         return true;
     },
     primitivePerformWithArgs: function(argCount, supered) {
@@ -1788,7 +1789,7 @@ Object.subclass('Squeak.Interpreter',
         this.arrayCopy(args.pointers, 0, stack, this.sp - 1, trueArgCount);
         this.sp += trueArgCount - argCount; //pop selector and array then push args
         var entry = this.findSelectorInClass(selector, trueArgCount, lookupClass);
-        this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex);
+        this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
         return true;
     },
     findMethodCacheEntry: function(selector, lkupClass) {
@@ -2098,9 +2099,10 @@ Object.subclass('Squeak.Interpreter',
         if (this.addMessage(message) == 1)
             console.warn(message);
     },
-    printMethod: function(aMethod, optContext) {
+    printMethod: function(aMethod, optContext, optSel) {
         // return a 'class>>selector' description for the method
-        // in old images this is expensive, we have to search all classes
+        if (optSel) return optContext.className() + '>>' + optSel.bytesAsStrings;
+        // this is expensive, we have to search all classes
         if (!aMethod) aMethod = this.activeContext.contextMethod();
         var found;
         this.allMethodsDo(function(classObj, methodObj, selectorObj) {
@@ -3358,7 +3360,7 @@ Object.subclass('Squeak.Primitives',
         this.vm.popNandPush(argCount+1, receiver);
         for (var i = 0; i < numArgs; i++) 
             this.vm.push(argsArray.pointers[i]);
-        this.vm.executeNewMethod(receiver, methodObj, numArgs, methodObj.methodPrimitiveIndex());
+        this.vm.executeNewMethod(receiver, methodObj, numArgs, methodObj.methodPrimitiveIndex(), null, null);
         return true;
     },
     primitiveArrayBecome: function(argCount, doBothWays) {

@@ -22,7 +22,7 @@ module('users.bert.SqueakJS.vm').requires().toRun(function() {
  */
  
 // shorter name for convenience
-Squeak = users.bert.SqueakJS.vm;
+window.Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
@@ -4357,7 +4357,7 @@ Object.subclass('Squeak.Primitives',
         // they must share the contents. That's why all open files
         // are held in the ref-counted global SqueakFiles
         if (typeof SqueakFiles == 'undefined')
-            SqueakFiles = {};
+            window.SqueakFiles = {};
         var path = Squeak.splitFilePath(filename);
         if (!path.basename) return null;    // malformed filename
         // if it is open already, return it   
@@ -6645,7 +6645,7 @@ Object.extend(Squeak, {
         if (typeof SqueakDBFake == "undefined") {
             if (typeof indexedDB == "undefined")
                 console.warn("IndexedDB not supported by this browser, using localStorage");
-            SqueakDBFake = {
+            window.SqueakDBFake = {
                 get: function(filename) {
                     var string = localStorage["squeak-file:" + filename];
                     if (!string) {
@@ -6841,7 +6841,7 @@ Object.extend(Squeak, {
     closeAllFiles: function() {
         // close the files held open in memory
         Squeak.flushAllFiles();
-        delete SqueakFiles;
+        delete window.SqueakFiles;
     },
     totalSeconds: function() {
         // seconds since 1901-01-01, local time

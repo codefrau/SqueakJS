@@ -1163,13 +1163,14 @@ Object.subclass('Squeak.Interpreter',
 'interpreting', {
     interpretOne: function(singleStep) {
         if (this.method.compiled) {
-            if (singleStep && !this.method.compiled.canSingleStep) {
+            if (singleStep) {
                 if (!this.compiler.enableSingleStepping(this.method)) {
                     this.method.compiled = null;
                     return this.interpretOne(singleStep);
                 }
+                this.breakNow();
             }
-            this.byteCodeCount += this.method.compiled(this, singleStep);
+            this.byteCodeCount += this.method.compiled(this);
             return;
         }
         var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively

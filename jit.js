@@ -132,7 +132,7 @@ to single-step.
         // recompile method for single-stepping
         if (!method.compiled || !method.compiled.canSingleStep) {
             var source = this.generate(method, true);
-            method.compiled = new Function('vm', 'singleStep', source);
+            method.compiled = new Function('vm', source);
             method.compiled.canSingleStep = true;
         }
         // if a compiler does not support single-stepping, return false
@@ -147,10 +147,11 @@ to single-step.
         this.method = method;
         this.pc = 0;                // next bytecode
         this.endPC = 0;             // pc of furthest jump target
-        this.instructionStart = 0;  // pc at start of current instruction
+        this.prevPC = 0;            // pc at start of current instruction
         this.source = [];           // snippets will be joined in the end
         this.sourceLabels = {};     // source pos of generated labels 
         this.needsLabel = {0: true}; // jump targets
+        this.needsBreak = false;    // insert break check for previous bytecode 
         this.source.push(
             "var context = vm.activeContext,\n",
             "    ctx = context.pointers,\n",
@@ -418,6 +419,7 @@ to single-step.
         this.generateLabel();
         this.source.push(
             "vm.pc = ", this.pc, ";\nvm.doReturn(", what, ");\nreturn bytecodes + ", this.pc, ";\n");
+        this.needsBreak = false; // returning anyway
         this.done = this.pc > this.endPC;
     },
     generateBlockReturn: function() {
@@ -425,6 +427,7 @@ to single-step.
         this.generateLabel();
         this.source.push(
             "vm.pc = ", this.pc, ";\nvm.doReturn(ctx[vm.sp--], ctx[0]);\nreturn bytecodes + ", this.pc, ";\n");
+        this.needsBreak = false; // returning anyway
     },
     generateJump: function(distance) {
         var destination = this.pc + distance;
@@ -437,8 +440,9 @@ to single-step.
             "   if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, ";\n",
             "}\nbytecodes += ", -distance, ";\n");
         else this.source.push("bytecodes -= ", distance, ";\n"); 
-        if (this.singleStep) this.source.push("if (singleStep) return bytecodes + ", this.pc,";\n");
+        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", this.pc,"; // single-step\n");
         this.source.push("continue;\n");
+        this.needsBreak = false; // already checked
         this.needsLabel[destination] = true;
         if (destination > this.endPC) this.endPC = destination;
     },
@@ -448,9 +452,10 @@ to single-step.
         this.generateLabel();
         this.source.push(
             "var cond = ctx[vm.sp--]; if (cond === vm.", condition, "Obj) {vm.pc = ", destination, "; bytecodes -= ", distance, "; ");
-        if (this.singleStep) this.source.push("if (singleStep) return bytecodes + ", this.pc,"; else ");
+        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", this.pc,"; /* single-step */ else ");
         this.source.push("continue}\n",
             "else if (cond !== vm.", !condition, "Obj) {vm.sp++; vm.pc = ", this.pc, "; vm.send(vm.specialObjects[25], 1, false); return bytecodes + ", this.pc, "}\n");
+        this.needsBreak = false; // already checked
         this.needsLabel[this.pc] = true;
         this.needsLabel[destination] = true;
         if (destination > this.endPC) this.endPC = destination;
@@ -502,6 +507,7 @@ to single-step.
             " vm.sendSpecial(", ((byte & 0x0F) + 16), ");\n",
             "if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, ";\n",
             "if (vm.pc !== ", this.pc, ") throw Error('Huh?');\n");
+        this.needsBreak = false; // already checked
         this.needsLabel[this.pc] = true;
     },
     generateNumericOp: function(byte) {
@@ -594,6 +600,7 @@ to single-step.
             "vm.pc = ", this.pc, ";\n",
             "vm.send(", prefix, num, suffix, ", ", numArgs, ", ", superSend, ");\n",
             "if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, ";\n");
+        this.needsBreak = false; // already checked
         this.needsLabel[this.pc] = true;
     },
     generateClosureTemps: function(count, popValues) {
@@ -627,28 +634,30 @@ to single-step.
         }
         this.source.push("vm.pc = ", to, ";\n");
         this.source.push("bytecodes -= ", blockSize, ";\n"); 
-        if (this.singleStep) this.source.push("if (singleStep) return bytecodes + ", this.pc,";\n");
+        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", this.pc,"; // single-step\n");
         this.source.push("continue;\n");
+        this.needsBreak = false; // already checked
         this.needsLabel[from] = true;
         this.needsLabel[to] = true;
     	if (to > this.endPC) this.endPC = to;
     },
     generateLabel: function() {
-        this.sourceLabels[this.instructionStart] = this.source.length;
-        this.source.push("case ", this.instructionStart, ":\n");
-        this.instructionStart = this.pc;
+        this.sourceLabels[this.prevPC] = this.source.length;
+        this.source.push("case ", this.prevPC, ":\n");
+        this.prevPC = this.pc;
     },
     generateDebugInfo: function(comment) {
         // single-step for previous instructiuon
-        if (this.singleStep && this.instructionStart > 0) {
-             this.source.push("if (singleStep || vm.breakOutOfInterpreter !== false) {vm.pc = ", this.instructionStart, "; return bytecodes + ", this.instructionStart, "}\n");
-             this.needsLabel[this.instructionStart] = true;
+        if (this.needsBreak) {
+             this.source.push("if (vm.breakOutOfInterpreter) {vm.pc = ", this.prevPC, "; return bytecodes + ", this.prevPC, "} // single-step\n");
+             this.needsLabel[this.prevPC] = true;
         }
         // comment for this instructiuon
         var bytecodes = [];
-        for (var i = this.instructionStart; i < this.pc; i++)
+        for (var i = this.prevPC; i < this.pc; i++)
             bytecodes.push((this.method.bytes[i] + 0x100).toString(16).slice(-2).toUpperCase());
-        this.source.push("// ", this.instructionStart, " <", bytecodes.join(" "), "> ", comment, "\n");
+        this.source.push("// ", this.prevPC, " <", bytecodes.join(" "), "> ", comment, "\n");
+        this.needsBreak = this.singleStep;
     },
     generateInstruction: function(comment, instr) {
         if (this.debug) this.generateDebugInfo(comment); 

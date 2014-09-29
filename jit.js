@@ -79,7 +79,7 @@ version of the generated JavaScript code:
     while (true) switch (vm.pc) {
     case 0:
         stack[++vm.sp] = inst[0];
-        vm.pc = 2; vm.send(lit[1]);
+        vm.pc = 2; vm.send(#selector);
         return 0;
     case 2:
         if (stack[vm.sp--] === vm.trueObj) {
@@ -91,9 +91,8 @@ version of the generated JavaScript code:
         vm.pc = 0;
         continue; // jump to case 0
     case 6:
-        stack[++vm.sp] = lit[2];
-        vm.pc = 7;
-        vm.doReturn(stack[vm.sp]);
+        stack[++vm.sp] = 42;
+        vm.pc = 7; vm.doReturn(stack[vm.sp]);
         return 0;
     }
 
@@ -123,6 +122,7 @@ to single-step.
 
 'initialization', {
     initialize: function(vm) {
+        // for debug-printing only
         this.specialSelectors = ['+', '-', '<', '>', '<=', '>=', '=', '~=', '*', '/', '\\', '@',
             'bitShift:', '//', 'bitAnd:', 'bitOr:', 'at:', 'at:put:', 'size', 'next', 'nextPut:',
             'atEnd', '==', 'class', 'blockCopy:', 'value', 'value:', 'do:', 'new', 'new:', 'x', 'y'];
@@ -276,6 +276,7 @@ to single-step.
             this.source.push("default: return bytecodes + vm.pc + vm.interpretOne(true); }");
             this.deleteUnneededLabels();
         }
+        // concatenate all snippets into one big string
         return this.source.join(""); 
     },
     generateExtended: function(bytecode) {
@@ -435,6 +436,7 @@ to single-step.
     generateBlockReturn: function() {
         if (this.debug) this.generateDebugInfo("block return");
         this.generateLabel();
+        // actually stack === context.pointers but that would look weird
         this.source.push(
             "vm.pc = ", this.pc, ";\nvm.doReturn(stack[vm.sp--], context.pointers[0]);\nreturn bytecodes + ", this.pc, ";\n");
         this.needsBreak = false; // returning anyway
@@ -465,9 +467,9 @@ to single-step.
         if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", this.pc,"; /* single-step */ else ");
         this.source.push("continue}\n",
             "else if (cond !== vm.", !condition, "Obj) {vm.sp++; vm.pc = ", this.pc, "; vm.send(vm.specialObjects[25], 1, false); return bytecodes + ", this.pc, "}\n");
-        this.needsBreak = false; // already checked
-        this.needsLabel[this.pc] = true;
-        this.needsLabel[destination] = true;
+        this.needsBreak = false; // already inserted above
+        this.needsLabel[this.pc] = true; // for coming back after #mustBeBoolean send
+        this.needsLabel[destination] = true; // obviously
         if (destination > this.endPC) this.endPC = destination;
     }
 ,
@@ -512,17 +514,21 @@ to single-step.
             //case 0xCE: return false; // x
             //case 0xCF: return false; // y
         }
+        // generic version for the bytecodes not yet handled above
         this.source.push(
             "vm.pc = ", this.pc, "; if (!vm.primHandler.quickSendOther(rcvr, ", (byte & 0x0F), "))",
             " vm.sendSpecial(", ((byte & 0x0F) + 16), ");\n",
             "if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, ";\n",
             "if (vm.pc !== ", this.pc, ") throw Error('Huh?');\n");
         this.needsBreak = false; // already checked
+        // if falling back to a full send we need a label for coming back
         this.needsLabel[this.pc] = true;
     },
     generateNumericOp: function(byte) {
         if (this.debug) this.generateDebugInfo("numeric op " + this.specialSelectors[byte & 0x0F]);
         this.generateLabel();
+        // if the op cannot be executed here, do a full send and return to main loop
+        // we need a label for coming back
         this.needsLabel[this.pc] = true;
         switch (byte) {
             case 0xB0: // PLUS +
@@ -606,11 +612,14 @@ to single-step.
     generateSend: function(prefix, num, suffix, numArgs, superSend) {
         if (this.debug) this.generateDebugInfo("send " + (prefix === "lit[" ? this.method.pointers[num].bytesAsString() : "..."));
         this.generateLabel();
+        // set pc, activate new method, and return to main loop
+        // unless the method was a successfull primitive call (no context change)
         this.source.push(
             "vm.pc = ", this.pc, ";\n",
             "vm.send(", prefix, num, suffix, ", ", numArgs, ", ", superSend, ");\n",
             "if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, ";\n");
         this.needsBreak = false; // already checked
+        // need a label for coming back after send
         this.needsLabel[this.pc] = true;
     },
     generateClosureTemps: function(count, popValues) {
@@ -619,15 +628,15 @@ to single-step.
         this.source.push("var array = vm.instantiateClass(vm.specialObjects[7], ", count, ");\n");
         if (popValues) {
             for (var i = 0; i < count; i++)
-                this.source.push("array.pointers[", i, "] = stack[vm.sp - ", count - i - 1,"];\n");
-            this.source.push("stack[vm.sp -= ", count - 1,"] = array;\n");
+                this.source.push("array.pointers[", i, "] = stack[vm.sp - ", count - i - 1, "];\n");
+            this.source.push("stack[vm.sp -= ", count - 1, "] = array;\n");
         } else {
             this.source.push("stack[++vm.sp] = array;\n");
         }
     },
     generateClosureCopy: function(numArgs, numCopied, blockSize) {
         var from = this.pc,
-            to = from + blockSize;  // encodeSqueakPC
+            to = from + blockSize;
         if (this.debug) this.generateDebugInfo("push closure(" + from + "-" + (to-1) + "): " + numArgs + " args, " + numCopied + " captured");
         this.generateLabel();
         this.source.push(
@@ -647,11 +656,12 @@ to single-step.
         if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", this.pc,"; // single-step\n");
         this.source.push("continue;\n");
         this.needsBreak = false; // already checked
-        this.needsLabel[from] = true;
-        this.needsLabel[to] = true;
+        this.needsLabel[from] = true;   // initial pc when activated
+        this.needsLabel[to] = true;     // for jump over closure
     	if (to > this.endPC) this.endPC = to;
     },
     generateLabel: function() {
+        // remember label position for deleteUnneededLabels()
         this.sourceLabels[this.prevPC] = this.source.length;
         this.source.push("case ", this.prevPC, ":\n");
         this.prevPC = this.pc;
@@ -667,6 +677,7 @@ to single-step.
         for (var i = this.prevPC; i < this.pc; i++)
             bytecodes.push((this.method.bytes[i] + 0x100).toString(16).slice(-2).toUpperCase());
         this.source.push("// ", this.prevPC, " <", bytecodes.join(" "), "> ", comment, "\n");
+        // enable single-step for next instruction
         this.needsBreak = this.singleStep;
     },
     generateInstruction: function(comment, instr) {
@@ -675,8 +686,9 @@ to single-step.
         this.source.push(instr, ";\n");
     },
     deleteUnneededLabels: function() {
+        // switch statement is more efficient with fewer labels
         for (var i in this.sourceLabels) 
-            if (this.sourceLabels[i] && !this.needsLabel[i])
+            if (!this.needsLabel[i])
                 for (var j = 0; j < 3; j++) 
                     this.source[this.sourceLabels[i] + j] = "";
     },

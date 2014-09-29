@@ -52,6 +52,11 @@ compiled method instead (which typically will execute many bytecodes):
     interpret:
         if (method.compiled) method.compiled(vm);
 
+Note that a compiler could hook itself into a compiled method by dispatching
+to vm.compiler in the generated code. This would allow gathering statistics,
+recompiling with optimized code etc.
+
+
 About This Compiler
 ===================
 

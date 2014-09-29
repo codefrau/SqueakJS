@@ -151,12 +151,28 @@ to single-step.
     enableSingleStepping: function(method) {
         // recompile method for single-stepping
         if (!method.compiled || !method.compiled.canSingleStep) {
-            var source = this.generate(method, true);
-            method.compiled = new Function('vm', source);
+            var source = this.generate(method, true),
+                methodName = this.vm.printMethod(method),    // rather expensive
+                clsAndSel = methodName.split(">>"),
+                funcName = this.functionNameFor(clsAndSel[0], clsAndSel[1]);
+            method.compiled = new Function("return function " + funcName + "(vm, singleStep) {\n" +
+                "// " + methodName + "\n" +
+                source + "\n}")();
             method.compiled.canSingleStep = true;
         }
         // if a compiler does not support single-stepping, return false
         return true;
+    },
+    functionNameFor: function(cls, sel) {
+        if (!/[^a-zA-Z:_]/.test(sel))
+            return cls + "_" + sel.replace(/[^a-zA-Z:_]/g, "_");
+        var op = sel.replace(/./g, function(char) {
+            var repl = {'|': "OR", '~': "NOT", '<': "LT", '=': "EQ", '>': "GT",
+                    '&': "AND", '@': "AT", '*': "TIMES", '+': "PLUS", '\\': "MOD",
+                    '-': "MINUS", ',': "COMMA", '/': "DIV", '?': "IF"}[char];
+            return repl || 'OPERATOR';
+        });
+        return cls + "__" + op + "__";
     },
 },
 'generating',
@@ -171,7 +187,7 @@ to single-step.
         this.source = [];           // snippets will be joined in the end
         this.sourceLabels = {};     // source pos of generated labels 
         this.needsLabel = {0: true}; // jump targets
-        this.needsBreak = false;    // insert break check for previous bytecode 
+        this.needsBreak = false;    // insert break check for previous bytecode
         this.source.push(
             "var context = vm.activeContext,\n",
             "    stack = context.pointers,\n",

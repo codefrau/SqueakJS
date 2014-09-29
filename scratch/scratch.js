@@ -30,6 +30,7 @@ window.onload = function() {
         header: sqHeader,
         footer: sqFooter,
         spinner: sqSpinner,
+        fullscreenCheckbox: sqFullscreen,
     });
 };
 

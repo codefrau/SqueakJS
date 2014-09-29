@@ -283,7 +283,7 @@ to single-step.
             this.source.push("default: throw Error('invalid PC'); }"); // all PCs handled
         } else {
             if (this.debug) this.source.push("// fall back to single-stepping\n");
-            this.source.push("default: return bytecodes + vm.pc + vm.interpretOne(true); }");
+            this.source.push("default: bytecodes += vm.pc; vm.interpretOne(true); return bytecodes;}");
             this.deleteUnneededLabels();
         }
         // concatenate all snippets into one big string

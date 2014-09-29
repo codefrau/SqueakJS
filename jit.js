@@ -35,14 +35,17 @@ script providing Squeak.Compiler.
 
 The VM creates the compiler instance after an image has been loaded and the VM
 been initialized. Whenever a method is activated that was not compiled yet, the
-compiler gets a chance to compile it. Finally, whenever the interpreter is about
-to execute a bytecode, it calls the compiled method instead (which typically will
-execute many bytecodes):
+compiler gets a chance to compile it. The compiler may decide to wait for a couple
+of activations before actually compiling it. This might prevent do-its from ever
+getting compiled, because they are only activated once. Therefore, the compiler
+is also called when a long-running non-optimized loop calls checkForInterrupts.
+Finally, whenever the interpreter is about to execute a bytecode, it calls the
+compiled method instead (which typically will execute many bytecodes):
 
     initialize:
         compiler = new Squeak.Compiler(vm);
 
-    executeNewMethod:
+    executeNewMethod, checkForInterrupts:
         if (!method.compiled && compiler)
             compiler.compile(method);
 

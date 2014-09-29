@@ -1440,7 +1440,11 @@ Object.subclass('Squeak.Interpreter',
         //            if(sema != nilObj) primHandler.synchronousSignal(sema); }
         if (this.primHandler.semaphoresToSignal.length > 0)
             this.primHandler.signalExternalSemaphores();  // signal pending semaphores, if any
-        if (now >= this.breakOutTick) // have to return to web browser once in a while
+        // if this is a long-running do-it, compile it
+        if (!this.method.compiled && this.compiler)
+            this.compiler.compile(this.method);
+        // have to return to web browser once in a while
+        if (now >= this.breakOutTick)
             this.breakOut();
     },
     extendedPush: function(nextByte) {

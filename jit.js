@@ -1,49 +1,198 @@
 module('users.bert.SqueakJS.jit').requires("users.bert.SqueakJS.vm").toRun(function() {
+/*
+ * Copyright (c) 2014 Bert Freudenberg
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
 
 Object.subclass('Squeak.Compiler',
+
+/****************************************************************************
+
+VM and Compiler
+===============
+
+The VM has an interpreter, it will work fine (and much more memory-efficient)
+without loading a compiler. The compiler plugs into the VM by providing the
+Squeak.Compiler global. It can be easily replaced by just loading a different
+script providing Squeak.Compiler.
+
+The VM creates the compiler instance after an image has been loaded and the VM
+been initialized. Whenever a method is activated that was not compiled yet, the
+compiler gets a chance to compile it. The compiler may decide to wait for a couple
+of activations before actually compiling it. This might prevent do-its from ever
+getting compiled, because they are only activated once. Therefore, the compiler
+is also called when a long-running non-optimized loop calls checkForInterrupts.
+Finally, whenever the interpreter is about to execute a bytecode, it calls the
+compiled method instead (which typically will execute many bytecodes):
+
+    initialize:
+        compiler = new Squeak.Compiler(vm);
+
+    executeNewMethod, checkForInterrupts:
+        if (!method.compiled && compiler)
+            compiler.compile(method);
+
+    interpret:
+        if (method.compiled) method.compiled(vm);
+
+Note that a compiler could hook itself into a compiled method by dispatching
+to vm.compiler in the generated code. This would allow gathering statistics,
+recompiling with optimized code etc.
+
+
+About This Compiler
+===================
+
+The compiler in this file is meant to be simple, fast-compiling, and general.
+It transcribes bytecodes 1-to-1 into equivalent JavaScript code using
+templates (and thus can even support single-stepping). It uses the
+interpreter's stack pointer (SP) and program counter (PC), actual context
+objects just like the interpreter, no register mapping, it does not optimize
+sends, etc.
+
+Jumps are handled by wrapping the whole method in a loop and switch. This also
+enables continuing in the middle of a compiled method: whenever another context
+is activated, the method returns to the main loop, and is entered again later
+with a different PC. Here is an example method, its bytecodes, and a simplified
+version of the generated JavaScript code:
+
+    method
+        [value selector] whileFalse.
+        ^ 42
+
+    0 <00> pushInstVar: 0
+    1 <D0> send: #selector
+    2 <A8 02> jumpIfTrue: 6
+    4 <A3 FA> jumpTo: 0
+    6 <21> pushConst: 42
+    7 <7C> return: topOfStack
+
+    while (true) switch (vm.pc) {
+    case 0:
+        stack[++vm.sp] = inst[0];
+        vm.pc = 2; vm.send(#selector);
+        return 0;
+    case 2:
+        if (stack[vm.sp--] === vm.trueObj) {
+            vm.pc = 6;
+            continue; // jump to case 6
+        }
+        // otherwise fall through to next case
+    case 4:
+        vm.pc = 0;
+        continue; // jump to case 0
+    case 6:
+        stack[++vm.sp] = 42;
+        vm.pc = 7; vm.doReturn(stack[vm.sp]);
+        return 0;
+    }
+
+The compiled method should return the number of bytecodes executed, but for
+statistical purposes only. It's fine to return 0.
+
+Debugging support
+=================
+
+This compiler supports generating single-stepping code and comments, which are
+rather helpful during debugging.
+
+Normally, only bytecodes that can be a jump target are given a label. Also,
+bytecodes following a send operation need a label, to enable returning to that
+spot after the context switch. All other bytecodes are executed continuously.
+
+When compiling for single-stepping, each bytecode gets a label, and after each
+bytecode a flag is checked and the method returns if needed. Because this is
+a performance penalty, methods are first compiled without single-step support, 
+and recompiled for single-stepping on demand.
+
+This is optional, another compiler can answer false from enableSingleStepping().
+In that case the VM will delete the compiled method and invoke the interpreter
+to single-step.
+
+*****************************************************************************/
+
 'initialization', {
     initialize: function(vm) {
+        this.vm = vm;
+        this.comments = !!Squeak.Compiler.comments, // generate comments
+        // for debug-printing only
         this.specialSelectors = ['+', '-', '<', '>', '<=', '>=', '=', '~=', '*', '/', '\\', '@',
             'bitShift:', '//', 'bitAnd:', 'bitOr:', 'at:', 'at:put:', 'size', 'next', 'nextPut:',
             'atEnd', '==', 'class', 'blockCopy:', 'value', 'value:', 'do:', 'new', 'new:', 'x', 'y'];
     },
 },
 'accessing', {
-    compile: function(method) {
-        if (method.compiled === undefined) {
+    compile: function(method, optClass, optSel) {
+        if (!method.isHot) {
             // 1st time
-            method.compiled = false;
+            method.isHot = true;
         } else {
             // 2nd time
-            method.compiled = new Function('vm', this.generate(method));
+            this.singleStep = false;
+            this.debug = this.comments;
+            var clsName = optClass && optClass.className(),
+                sel = optSel && optSel.bytesAsString();
+            method.compiled = this.generate(method, clsName, sel);
         }
     },
-    enableSingleStepping: function(method) {
+    enableSingleStepping: function(method, optClass, optSel) {
         // recompile method for single-stepping
         if (!method.compiled || !method.compiled.canSingleStep) {
-            var source = this.generate(method, true);
-            method.compiled = new Function('vm', 'singleStep', source);
+            this.singleStep = true; // generate breakpoint support
+            this.debug = true;
+            var clsAndSel = this.vm.printMethod(method, optClass, optSel).split(">>");    // likely expensive
+            method.compiled = this.generate(method, clsAndSel[0], clsAndSel[1]);
             method.compiled.canSingleStep = true;
         }
         // if a compiler does not support single-stepping, return false
         return true;
     },
+    functionNameFor: function(cls, sel) {
+        if (!cls || !sel) return "Squeak_DOIT";
+        if (!/[^a-zA-Z:_]/.test(sel))
+            return (cls + "_" + sel).replace(/[: ]/g, "_");
+        var op = sel.replace(/./g, function(char) {
+            var repl = {'|': "OR", '~': "NOT", '<': "LT", '=': "EQ", '>': "GT",
+                    '&': "AND", '@': "AT", '*': "TIMES", '+': "PLUS", '\\': "MOD",
+                    '-': "MINUS", ',': "COMMA", '/': "DIV", '?': "IF"}[char];
+            return repl || 'OPERATOR';
+        });
+        return cls.replace(/[ ]/, "_") + "__" + op + "__";
+    },
 },
 'generating',
 {
-    generate: function(method, singleStep) {
-        this.singleStep = !!singleStep;
-        this.debug = this.singleStep || true;   // or true only while debugging
+    generate: function(method, optClass, optSel) {
         this.method = method;
         this.pc = 0;                // next bytecode
         this.endPC = 0;             // pc of furthest jump target
-        this.instructionStart = 0;  // pc at start of current instruction
+        this.prevPC = 0;            // pc at start of current instruction
         this.source = [];           // snippets will be joined in the end
         this.sourceLabels = {};     // source pos of generated labels 
         this.needsLabel = {0: true}; // jump targets
+        this.needsBreak = false;    // insert break check for previous bytecode
+        if (optClass && optSel)
+            this.source.push("// ", optClass, ">>", optSel, "\n");
         this.source.push(
             "var context = vm.activeContext,\n",
-            "    ctx = context.pointers,\n",
+            "    stack = context.pointers,\n",
             "    rcvr = vm.receiver,\n",
             "    inst = rcvr.pointers,\n",
             "    temp = vm.homeContext.pointers,\n",
@@ -100,7 +249,7 @@ Object.subclass('Squeak.Compiler',
                         case 0x79: this.generateReturn("vm.trueObj"); break;
                         case 0x7A: this.generateReturn("vm.falseObj"); break;
                         case 0x7B: this.generateReturn("vm.nilObj"); break;
-                        case 0x7C: this.generateReturn("ctx[vm.sp]"); break;
+                        case 0x7C: this.generateReturn("stack[vm.sp]"); break;
                         case 0x7D: this.generateBlockReturn(); break;
                         default: throw Error("unusedBytecode");
                     }
@@ -147,15 +296,17 @@ Object.subclass('Squeak.Compiler',
                     break;
             }
         }
+        var funcName = this.functionNameFor(optClass, optSel);
         if (this.singleStep) {
             if (this.debug) this.source.push("// all valid PCs have a label;\n");
             this.source.push("default: throw Error('invalid PC'); }"); // all PCs handled
+            return new Function("return function " + funcName + "(vm, singleStep) {\n" + this.source.join("") + "\n}")();
         } else {
             if (this.debug) this.source.push("// fall back to single-stepping\n");
-            this.source.push("default: return bytecodes + vm.pc + vm.interpretOne(true); }");
+            this.source.push("default: bytecodes += vm.pc; vm.interpretOne(true); return bytecodes;}");
             this.deleteUnneededLabels();
+            return new Function("return function " + funcName + "(vm) {\n" + this.source.join("") + "\n}")();
         }
-        return this.source.join(""); 
     },
     generateExtended: function(bytecode) {
         switch (bytecode) {
@@ -222,11 +373,11 @@ Object.subclass('Squeak.Compiler',
         	    return;
         	// dup
         	case 0x88:
-        	    this.generateInstruction("dup", "var dup = ctx[vm.sp]; ctx[++vm.sp] = dup;");
+        	    this.generateInstruction("dup", "var dup = stack[vm.sp]; stack[++vm.sp] = dup;");
         	    return;
         	// thisContext
         	case 0x89:
-        	    this.generateInstruction("thisContext", "ctx[++vm.sp] = context;\nvm.reclaimableContextCount = 0");
+        	    this.generateInstruction("thisContext", "stack[++vm.sp] = context;\nvm.reclaimableContextCount = 0");
         	    return;
             // closures
             case 0x8A:
@@ -267,10 +418,10 @@ Object.subclass('Squeak.Compiler',
                 return;
     	}
     },
-    generatePush: function(prefix, arg1, suffix1, arg2, suffix2) {
-        if (this.debug) this.generateDebugInfo("push");
+    generatePush: function(value, arg1, suffix1, arg2, suffix2) {
+        if (this.debug) this.generateDebugCode("push");
         this.generateLabel();
-        this.source.push("ctx[++vm.sp] = ", prefix);
+        this.source.push("stack[++vm.sp] = ", value);
         if (arg1 !== undefined) {
             this.source.push(arg1, suffix1);
             if (arg2 !== undefined) {
@@ -279,46 +430,49 @@ Object.subclass('Squeak.Compiler',
         }
         this.source.push(";\n");
     },
-    generateStoreInto: function(prefix, arg1, suffix1, arg2, suffix2) {
-        if (this.debug) this.generateDebugInfo("store into");
+    generateStoreInto: function(value, arg1, suffix1, arg2, suffix2) {
+        if (this.debug) this.generateDebugCode("store into");
         this.generateLabel();
-        this.source.push(prefix);
+        this.source.push(value);
         if (arg1 !== undefined) {
             this.source.push(arg1, suffix1);
             if (arg2 !== undefined) {
                 this.source.push(arg2, suffix2);
             }
         }
-        this.source.push(" = ctx[vm.sp];\n");
+        this.source.push(" = stack[vm.sp];\n");
     },
-    generatePopInto: function(prefix, arg1, suffix1, arg2, suffix2) {
-        if (this.debug) this.generateDebugInfo("pop into");
+    generatePopInto: function(value, arg1, suffix1, arg2, suffix2) {
+        if (this.debug) this.generateDebugCode("pop into");
         this.generateLabel();
-        this.source.push(prefix);
+        this.source.push(value);
         if (arg1 !== undefined) {
             this.source.push(arg1, suffix1);
             if (arg2 !== undefined) {
                 this.source.push(arg2, suffix2);
             }
         }
-        this.source.push(" = ctx[vm.sp--];\n");
+        this.source.push(" = stack[vm.sp--];\n");
     },
     generateReturn: function(what) {
-        if (this.debug) this.generateDebugInfo("return");
+        if (this.debug) this.generateDebugCode("return");
         this.generateLabel();
         this.source.push(
             "vm.pc = ", this.pc, ";\nvm.doReturn(", what, ");\nreturn bytecodes + ", this.pc, ";\n");
+        this.needsBreak = false; // returning anyway
         this.done = this.pc > this.endPC;
     },
     generateBlockReturn: function() {
-        if (this.debug) this.generateDebugInfo("block return");
+        if (this.debug) this.generateDebugCode("block return");
         this.generateLabel();
+        // actually stack === context.pointers but that would look weird
         this.source.push(
-            "vm.pc = ", this.pc, ";\nvm.doReturn(ctx[vm.sp--], ctx[0]);\nreturn bytecodes + ", this.pc, ";\n");
+            "vm.pc = ", this.pc, ";\nvm.doReturn(stack[vm.sp--], context.pointers[0]);\nreturn bytecodes + ", this.pc, ";\n");
+        this.needsBreak = false; // returning anyway
     },
     generateJump: function(distance) {
         var destination = this.pc + distance;
-        if (this.debug) this.generateDebugInfo("jump to " + destination);
+        if (this.debug) this.generateDebugCode("jump to " + destination);
         this.generateLabel();
         this.source.push("vm.pc = ", destination, ";\n");
         if (distance < 0) this.source.push(
@@ -327,35 +481,37 @@ Object.subclass('Squeak.Compiler',
             "   if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, ";\n",
             "}\nbytecodes += ", -distance, ";\n");
         else this.source.push("bytecodes -= ", distance, ";\n"); 
-        if (this.singleStep) this.source.push("if (singleStep) return bytecodes + ", this.pc,";\n");
+        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", this.pc,"; // single-step\n");
         this.source.push("continue;\n");
+        this.needsBreak = false; // already checked
         this.needsLabel[destination] = true;
         if (destination > this.endPC) this.endPC = destination;
     },
     generateJumpIf: function(condition, distance) {
         var destination = this.pc + distance;
-        if (this.debug) this.generateDebugInfo("jump if " + condition + " to " + destination);
+        if (this.debug) this.generateDebugCode("jump if " + condition + " to " + destination);
         this.generateLabel();
         this.source.push(
-            "var cond = ctx[vm.sp--]; if (cond === vm.", condition, "Obj) {vm.pc = ", destination, "; bytecodes -= ", distance, "; ");
-        if (this.singleStep) this.source.push("if (singleStep) return bytecodes + ", this.pc,"; else ");
+            "var cond = stack[vm.sp--]; if (cond === vm.", condition, "Obj) {vm.pc = ", destination, "; bytecodes -= ", distance, "; ");
+        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", this.pc,"; /* single-step */ else ");
         this.source.push("continue}\n",
             "else if (cond !== vm.", !condition, "Obj) {vm.sp++; vm.pc = ", this.pc, "; vm.send(vm.specialObjects[25], 1, false); return bytecodes + ", this.pc, "}\n");
-        this.needsLabel[this.pc] = true;
-        this.needsLabel[destination] = true;
+        this.needsBreak = false; // already inserted above
+        this.needsLabel[this.pc] = true; // for coming back after #mustBeBoolean send
+        this.needsLabel[destination] = true; // obviously
         if (destination > this.endPC) this.endPC = destination;
     }
 ,
     generateQuickPrim: function(byte) {
-        if (this.debug) this.generateDebugInfo("quick prim " + this.specialSelectors[(byte & 0x0F) + 16]);
+        if (this.debug) this.generateDebugCode("quick prim " + this.specialSelectors[(byte & 0x0F) + 16]);
         this.generateLabel();
         switch (byte) {
             //case 0xC0: return this.popNandPushIfOK(2, this.objectAt(true,true,false)); // at:
             //case 0xC1: return this.popNandPushIfOK(3, this.objectAtPut(true,true,false)); // at:put:
             case 0xC2: // size
                 this.source.push(
-                    "if (ctx[vm.sp].sqClass === vm.specialObjects[7]) ctx[vm.sp] = ctx[vm.sp].pointersSize();\n",
-                    "else if (ctx[vm.sp].sqClass === vm.specialObjects[6]) ctx[vm.sp] = ctx[vm.sp].bytesSize();\n",
+                    "if (stack[vm.sp].sqClass === vm.specialObjects[7]) stack[vm.sp] = stack[vm.sp].pointersSize();\n",
+                    "else if (stack[vm.sp].sqClass === vm.specialObjects[6]) stack[vm.sp] = stack[vm.sp].bytesSize();\n",
                     "else { vm.pc = ", this.pc, "; vm.sendSpecial(18); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "; }\n"); 
                 this.needsLabel[this.pc] = true;
                 return;
@@ -363,10 +519,10 @@ Object.subclass('Squeak.Compiler',
             //case 0xC4: return false; // nextPut:
             //case 0xC5: return false; // atEnd
             case 0xC6: // ==
-                this.source.push("var cond = ctx[vm.sp-1] === ctx[vm.sp];\nctx[--vm.sp] = cond ? vm.trueObj : vm.falseObj;\n");
+                this.source.push("var cond = stack[vm.sp-1] === stack[vm.sp];\nstack[--vm.sp] = cond ? vm.trueObj : vm.falseObj;\n");
                 return;
             case 0xC7: // class
-                this.source.push("ctx[vm.sp] = typeof ctx[vm.sp] === 'number' ? vm.specialObjects[5] : ctx[vm.sp].sqClass;\n");
+                this.source.push("stack[vm.sp] = typeof stack[vm.sp] === 'number' ? vm.specialObjects[5] : stack[vm.sp].sqClass;\n");
                 return;
             case 0xC8: // blockCopy:
                 this.source.push(
@@ -387,68 +543,73 @@ Object.subclass('Squeak.Compiler',
             //case 0xCE: return false; // x
             //case 0xCF: return false; // y
         }
+        // generic version for the bytecodes not yet handled above
         this.source.push(
             "vm.pc = ", this.pc, "; if (!vm.primHandler.quickSendOther(rcvr, ", (byte & 0x0F), "))",
             " vm.sendSpecial(", ((byte & 0x0F) + 16), ");\n",
             "if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, ";\n",
             "if (vm.pc !== ", this.pc, ") throw Error('Huh?');\n");
+        this.needsBreak = false; // already checked
+        // if falling back to a full send we need a label for coming back
         this.needsLabel[this.pc] = true;
     },
     generateNumericOp: function(byte) {
-        if (this.debug) this.generateDebugInfo("numeric op " + this.specialSelectors[byte & 0x0F]);
+        if (this.debug) this.generateDebugCode("numeric op " + this.specialSelectors[byte & 0x0F]);
         this.generateLabel();
+        // if the op cannot be executed here, do a full send and return to main loop
+        // we need a label for coming back
         this.needsLabel[this.pc] = true;
         switch (byte) {
             case 0xB0: // PLUS +
-                this.source.push("var a = ctx[vm.sp - 1], b = ctx[vm.sp];\n",
+                this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
-                "   ctx[--vm.sp] = vm.primHandler.signed32BitIntegerFor(a + b);\n",
+                "   stack[--vm.sp] = vm.primHandler.signed32BitIntegerFor(a + b);\n",
                 "} else { vm.pc = ", this.pc, "; vm.sendSpecial(0); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xB1: // MINUS -
-                this.source.push("var a = ctx[vm.sp - 1], b = ctx[vm.sp];\n",
+                this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
-                "   ctx[--vm.sp] = vm.primHandler.signed32BitIntegerFor(a - b);\n",
+                "   stack[--vm.sp] = vm.primHandler.signed32BitIntegerFor(a - b);\n",
                 "} else { vm.pc = ", this.pc, "; vm.sendSpecial(1); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xB2: // LESS <
-                this.source.push("var a = ctx[vm.sp - 1], b = ctx[vm.sp];\n",
+                this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
-                "   ctx[--vm.sp] = a < b ? vm.trueObj : vm.falseObj;\n",
+                "   stack[--vm.sp] = a < b ? vm.trueObj : vm.falseObj;\n",
                 "} else { vm.pc = ", this.pc, "; vm.sendSpecial(2); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xB3: // GRTR >
-                this.source.push("var a = ctx[vm.sp - 1], b = ctx[vm.sp];\n",
+                this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
-                "   ctx[--vm.sp] = a > b ? vm.trueObj : vm.falseObj;\n",
+                "   stack[--vm.sp] = a > b ? vm.trueObj : vm.falseObj;\n",
                 "} else { vm.pc = ", this.pc, "; vm.sendSpecial(3); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xB4: // LEQ <=
-                this.source.push("var a = ctx[vm.sp - 1], b = ctx[vm.sp];\n",
+                this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
-                "   ctx[--vm.sp] = a <= b ? vm.trueObj : vm.falseObj;\n",
+                "   stack[--vm.sp] = a <= b ? vm.trueObj : vm.falseObj;\n",
                 "} else { vm.pc = ", this.pc, "; vm.sendSpecial(4); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xB5: // GEQ >=
-                this.source.push("var a = ctx[vm.sp - 1], b = ctx[vm.sp];\n",
+                this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
-                "   ctx[--vm.sp] = a >= b ? vm.trueObj : vm.falseObj;\n",
+                "   stack[--vm.sp] = a >= b ? vm.trueObj : vm.falseObj;\n",
                 "} else { vm.pc = ", this.pc, "; vm.sendSpecial(5); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xB6: // EQU =
-                this.source.push("var a = ctx[vm.sp - 1], b = ctx[vm.sp];\n",
+                this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
-                "   ctx[--vm.sp] = a === b ? vm.trueObj : vm.falseObj;\n",
+                "   stack[--vm.sp] = a === b ? vm.trueObj : vm.falseObj;\n",
                 "} else if (a === b) {\n",
-                "   ctx[--vm.sp] = vm.trueObj;\n",
+                "   stack[--vm.sp] = vm.trueObj;\n",
                 "} else { vm.pc = ", this.pc, "; vm.sendSpecial(6); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xB7: // NEQ ~=
-                this.source.push("var a = ctx[vm.sp - 1], b = ctx[vm.sp];\n",
+                this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
-                "   ctx[--vm.sp] = a !== b ? vm.trueObj : vm.falseObj;\n",
+                "   stack[--vm.sp] = a !== b ? vm.trueObj : vm.falseObj;\n",
                 "} else if (a === b) {\n",
-                "   ctx[--vm.sp] = vm.falseObj;\n",
+                "   stack[--vm.sp] = vm.falseObj;\n",
                 "} else { vm.pc = ", this.pc, "; vm.sendSpecial(7); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xB8: // TIMES *
@@ -478,30 +639,34 @@ Object.subclass('Squeak.Compiler',
         }
     },
     generateSend: function(prefix, num, suffix, numArgs, superSend) {
-        if (this.debug) this.generateDebugInfo("send " + (prefix === "lit[" ? this.method.pointers[num].bytesAsString() : "..."));
+        if (this.debug) this.generateDebugCode("send " + (prefix === "lit[" ? this.method.pointers[num].bytesAsString() : "..."));
         this.generateLabel();
+        // set pc, activate new method, and return to main loop
+        // unless the method was a successfull primitive call (no context change)
         this.source.push(
             "vm.pc = ", this.pc, ";\n",
             "vm.send(", prefix, num, suffix, ", ", numArgs, ", ", superSend, ");\n",
             "if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, ";\n");
+        this.needsBreak = false; // already checked
+        // need a label for coming back after send
         this.needsLabel[this.pc] = true;
     },
     generateClosureTemps: function(count, popValues) {
-        if (this.debug) this.generateDebugInfo("closure temps");
+        if (this.debug) this.generateDebugCode("closure temps");
         this.generateLabel();
         this.source.push("var array = vm.instantiateClass(vm.specialObjects[7], ", count, ");\n");
         if (popValues) {
             for (var i = 0; i < count; i++)
-                this.source.push("array.pointers[", i, "] = ctx[vm.sp - ", count - i - 1,"];\n");
-            this.source.push("ctx[vm.sp -= ", count - 1,"] = array;\n");
+                this.source.push("array.pointers[", i, "] = stack[vm.sp - ", count - i - 1, "];\n");
+            this.source.push("stack[vm.sp -= ", count - 1, "] = array;\n");
         } else {
-            this.source.push("ctx[++vm.sp] = array;\n");
+            this.source.push("stack[++vm.sp] = array;\n");
         }
     },
     generateClosureCopy: function(numArgs, numCopied, blockSize) {
         var from = this.pc,
-            to = from + blockSize;  // encodeSqueakPC
-        if (this.debug) this.generateDebugInfo("push closure(" + from + "-" + (to-1) + "): " + numArgs + " args, " + numCopied + " captured");
+            to = from + blockSize;
+        if (this.debug) this.generateDebugCode("push closure(" + from + "-" + (to-1) + "): " + numArgs + " args, " + numCopied + " captured");
         this.generateLabel();
         this.source.push(
             "var closure = vm.instantiateClass(vm.specialObjects[36], ", numCopied + 3, ");\n",
@@ -510,44 +675,49 @@ Object.subclass('Squeak.Compiler',
             "closure.pointers[2] = ", numArgs, ";\n");
         if (numCopied > 0) {
             for (var i = 0; i < numCopied; i++)
-                this.source.push("closure.pointers[", i + 3, "] = ctx[vm.sp - ", numCopied - i - 1,"];\n");
-            this.source.push("ctx[vm.sp -= ", numCopied - 1,"] = closure;\n");
+                this.source.push("closure.pointers[", i + 3, "] = stack[vm.sp - ", numCopied - i - 1,"];\n");
+            this.source.push("stack[vm.sp -= ", numCopied - 1,"] = closure;\n");
         } else {
-            this.source.push("ctx[++vm.sp] = closure;\n");
+            this.source.push("stack[++vm.sp] = closure;\n");
         }
         this.source.push("vm.pc = ", to, ";\n");
         this.source.push("bytecodes -= ", blockSize, ";\n"); 
-        if (this.singleStep) this.source.push("if (singleStep) return bytecodes + ", this.pc,";\n");
+        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", this.pc,"; // single-step\n");
         this.source.push("continue;\n");
-        this.needsLabel[from] = true;
-        this.needsLabel[to] = true;
+        this.needsBreak = false; // already checked
+        this.needsLabel[from] = true;   // initial pc when activated
+        this.needsLabel[to] = true;     // for jump over closure
     	if (to > this.endPC) this.endPC = to;
     },
     generateLabel: function() {
-        this.sourceLabels[this.instructionStart] = this.source.length;
-        this.source.push("case ", this.instructionStart, ":\n");
-        this.instructionStart = this.pc;
+        // remember label position for deleteUnneededLabels()
+        this.sourceLabels[this.prevPC] = this.source.length;
+        this.source.push("case ", this.prevPC, ":\n");
+        this.prevPC = this.pc;
     },
-    generateDebugInfo: function(comment) {
+    generateDebugCode: function(comment) {
         // single-step for previous instructiuon
-        if (this.singleStep && this.instructionStart > 0) {
-             this.source.push("if (singleStep || vm.breakOutOfInterpreter !== false) {vm.pc = ", this.instructionStart, "; return bytecodes + ", this.instructionStart, "}\n");
-             this.needsLabel[this.instructionStart] = true;
+        if (this.needsBreak) {
+             this.source.push("if (vm.breakOutOfInterpreter) {vm.pc = ", this.prevPC, "; return bytecodes + ", this.prevPC, "} // single-step\n");
+             this.needsLabel[this.prevPC] = true;
         }
         // comment for this instructiuon
         var bytecodes = [];
-        for (var i = this.instructionStart; i < this.pc; i++)
+        for (var i = this.prevPC; i < this.pc; i++)
             bytecodes.push((this.method.bytes[i] + 0x100).toString(16).slice(-2).toUpperCase());
-        this.source.push("// ", this.instructionStart, " <", bytecodes.join(" "), "> ", comment, "\n");
+        this.source.push("// ", this.prevPC, " <", bytecodes.join(" "), "> ", comment, "\n");
+        // enable single-step for next instruction
+        this.needsBreak = this.singleStep;
     },
     generateInstruction: function(comment, instr) {
-        if (this.debug) this.generateDebugInfo(comment); 
+        if (this.debug) this.generateDebugCode(comment); 
         this.generateLabel();
         this.source.push(instr, ";\n");
     },
     deleteUnneededLabels: function() {
+        // switch statement is more efficient with fewer labels
         for (var i in this.sourceLabels) 
-            if (this.sourceLabels[i] && !this.needsLabel[i])
+            if (!this.needsLabel[i])
                 for (var j = 0; j < 3; j++) 
                     this.source[this.sourceLabels[i] + j] = "";
     },

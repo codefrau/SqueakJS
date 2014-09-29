@@ -22,11 +22,11 @@ module('users.bert.SqueakJS.vm').requires().toRun(function() {
  */
  
 // shorter name for convenience
-Squeak = users.bert.SqueakJS.vm;
+window.Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.5.1",
+    vmVersion: "SqueakJS 0.5.2",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -1072,7 +1072,7 @@ Object.subclass('Squeak.Interpreter',
         this.initVMState();
         this.loadInitialContext();
         this.initCompiler();
-        console.log('squeak: interpreter ready');
+        console.log('squeak: ready');
     },
     loadImageState: function() {
         this.specialObjects = this.image.specialObjectsArray.pointers;
@@ -1107,7 +1107,7 @@ Object.subclass('Squeak.Interpreter',
         this.methodCacheRandomish = 0;
         this.methodCache = [];
         for (var i = 0; i < this.methodCacheSize; i++)
-            this.methodCache[i] = {lkupClass: null, selector: null, method: null, primIndex: 0, argCount: 0};
+            this.methodCache[i] = {lkupClass: null, selector: null, method: null, primIndex: 0, argCount: 0, mClass: null};
         this.breakOutOfInterpreter = false;
         this.breakOutTick = 0;
         this.breakOnMethod = null; // method to break on
@@ -1126,11 +1126,14 @@ Object.subclass('Squeak.Interpreter',
         this.reclaimableContextCount = 0;
     },
     initCompiler: function() {
+        if (!Squeak.Compiler)
+            return console.warn("Squeak.Compiler not loaded, using interpreter only");
         try {
-            // compiler might not be loaded, or might decide to not handle current image
+            // compiler might decide to not handle current image
+            console.log("squeak: initializing JIT compiler");
             this.compiler = new Squeak.Compiler(this);
         } catch(e) {
-            if (Squeak.Compiler) console.warn("Compiler " + e);
+            console.warn("Compiler " + e);
         }
     },
     hackImage: function() {
@@ -1163,13 +1166,14 @@ Object.subclass('Squeak.Interpreter',
 'interpreting', {
     interpretOne: function(singleStep) {
         if (this.method.compiled) {
-            if (singleStep && !this.method.compiled.canSingleStep) {
+            if (singleStep) {
                 if (!this.compiler.enableSingleStepping(this.method)) {
                     this.method.compiled = null;
                     return this.interpretOne(singleStep);
                 }
+                this.breakNow();
             }
-            this.byteCodeCount += this.method.compiled(this, singleStep);
+            this.byteCodeCount += this.method.compiled(this);
             return;
         }
         var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively
@@ -1343,7 +1347,11 @@ Object.subclass('Squeak.Interpreter',
         this.breakOutOfInterpreter = false;
         this.breakOutTick = this.primHandler.millisecondClockValue() + (forMilliseconds || 500);
         while (this.breakOutOfInterpreter === false)
-            this.interpretOne();
+            if (this.method.compiled) {
+                this.byteCodeCount += this.method.compiled(this);
+            } else {
+                this.interpretOne();
+            }
         // this is to allow 'freezing' the interpreter and restarting it asynchronously. See freeze()
         if (typeof this.breakOutOfInterpreter == "function")
             return this.breakOutOfInterpreter(thenDo);
@@ -1439,7 +1447,11 @@ Object.subclass('Squeak.Interpreter',
         //            if(sema != nilObj) primHandler.synchronousSignal(sema); }
         if (this.primHandler.semaphoresToSignal.length > 0)
             this.primHandler.signalExternalSemaphores();  // signal pending semaphores, if any
-        if (now >= this.breakOutTick) // have to return to web browser once in a while
+        // if this is a long-running do-it, compile it
+        if (!this.method.compiled && this.compiler)
+            this.compiler.compile(this.method);
+        // have to return to web browser once in a while
+        if (now >= this.breakOutTick)
             this.breakOut();
     },
     extendedPush: function(nextByte) {
@@ -1557,7 +1569,7 @@ Object.subclass('Squeak.Interpreter',
             this.verifyAtSelector = selector;
             this.verifyAtClass = lookupClass;
         }
-        this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex);
+        this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
     },
     findSelectorInClass: function(selector, argCount, startingClass) {
         var cacheEntry = this.findMethodCacheEntry(selector, startingClass);
@@ -1580,6 +1592,7 @@ Object.subclass('Squeak.Interpreter',
                 cacheEntry.method = newMethod;
                 cacheEntry.primIndex = newMethod.methodPrimitiveIndex();
                 cacheEntry.argCount = argCount;
+                cacheEntry.mClass = currentClass;
                 return cacheEntry;
             }  
             currentClass = currentClass.pointers[Squeak.Class_superclass];
@@ -1613,10 +1626,10 @@ Object.subclass('Squeak.Interpreter',
             }
         }
     },
-    executeNewMethod: function(newRcvr, newMethod, argumentCount, primitiveIndex) {
+    executeNewMethod: function(newRcvr, newMethod, argumentCount, primitiveIndex, optClass, optSel) {
         this.sendCount++;
-        if (newMethod === this.breakOnMethod) this.breakNow("executing method " + this.printMethod(newMethod));
-        if (this.logSends) console.log(this.sendCount + ' ' + this.printMethod(newMethod));
+        if (newMethod === this.breakOnMethod) this.breakNow("executing method " + this.printMethod(newMethod, optClass, optSel));
+        if (this.logSends) console.log(this.sendCount + ' ' + this.printMethod(newMethod, optClass, optSel));
         if (this.breakOnContextChanged) {
             this.breakOnContextChanged = false;
             this.breakNow();
@@ -1653,7 +1666,7 @@ Object.subclass('Squeak.Interpreter',
         if (this.receiver !== newRcvr)
             throw Error("receivers don't match");
         if (!newMethod.compiled && this.compiler)
-            this.compiler.compile(newMethod);
+            this.compiler.compile(newMethod, optClass, optSel);
         // check for process switch on full method activation
         if (this.interruptCheckCounter-- <= 0) this.checkForInterrupts();
     },
@@ -1761,7 +1774,7 @@ Object.subclass('Squeak.Interpreter',
         this.arrayCopy(stack, selectorIndex+1, stack, selectorIndex, trueArgCount);
         this.sp--; // adjust sp accordingly
         var entry = this.findSelectorInClass(selector, trueArgCount, this.getClass(rcvr));
-        this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex);
+        this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
         return true;
     },
     primitivePerformWithArgs: function(argCount, supered) {
@@ -1783,7 +1796,7 @@ Object.subclass('Squeak.Interpreter',
         this.arrayCopy(args.pointers, 0, stack, this.sp - 1, trueArgCount);
         this.sp += trueArgCount - argCount; //pop selector and array then push args
         var entry = this.findSelectorInClass(selector, trueArgCount, lookupClass);
-        this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex);
+        this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
         return true;
     },
     findMethodCacheEntry: function(selector, lkupClass) {
@@ -2093,9 +2106,10 @@ Object.subclass('Squeak.Interpreter',
         if (this.addMessage(message) == 1)
             console.warn(message);
     },
-    printMethod: function(aMethod, optContext) {
+    printMethod: function(aMethod, optContext, optSel) {
         // return a 'class>>selector' description for the method
-        // in old images this is expensive, we have to search all classes
+        if (optSel) return optContext.className() + '>>' + optSel.bytesAsStrings;
+        // this is expensive, we have to search all classes
         if (!aMethod) aMethod = this.activeContext.contextMethod();
         var found;
         this.allMethodsDo(function(classObj, methodObj, selectorObj) {
@@ -3353,7 +3367,7 @@ Object.subclass('Squeak.Primitives',
         this.vm.popNandPush(argCount+1, receiver);
         for (var i = 0; i < numArgs; i++) 
             this.vm.push(argsArray.pointers[i]);
-        this.vm.executeNewMethod(receiver, methodObj, numArgs, methodObj.methodPrimitiveIndex());
+        this.vm.executeNewMethod(receiver, methodObj, numArgs, methodObj.methodPrimitiveIndex(), null, null);
         return true;
     },
     primitiveArrayBecome: function(argCount, doBothWays) {
@@ -4350,7 +4364,7 @@ Object.subclass('Squeak.Primitives',
         // they must share the contents. That's why all open files
         // are held in the ref-counted global SqueakFiles
         if (typeof SqueakFiles == 'undefined')
-            SqueakFiles = {};
+            window.SqueakFiles = {};
         var path = Squeak.splitFilePath(filename);
         if (!path.basename) return null;    // malformed filename
         // if it is open already, return it   
@@ -6638,7 +6652,7 @@ Object.extend(Squeak, {
         if (typeof SqueakDBFake == "undefined") {
             if (typeof indexedDB == "undefined")
                 console.warn("IndexedDB not supported by this browser, using localStorage");
-            SqueakDBFake = {
+            window.SqueakDBFake = {
                 get: function(filename) {
                     var string = localStorage["squeak-file:" + filename];
                     if (!string) {
@@ -6834,7 +6848,7 @@ Object.extend(Squeak, {
     closeAllFiles: function() {
         // close the files held open in memory
         Squeak.flushAllFiles();
-        delete SqueakFiles;
+        delete window.SqueakFiles;
     },
     totalSeconds: function() {
         // seconds since 1901-01-01, local time

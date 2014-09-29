@@ -78,11 +78,11 @@ version of the generated JavaScript code:
 
     while (true) switch (vm.pc) {
     case 0:
-        ctx[++vm.sp] = inst[0];
+        stack[++vm.sp] = inst[0];
         vm.pc = 2; vm.send(lit[1]);
         return 0;
     case 2:
-        if (ctx[vm.sp--] === vm.trueObj) {
+        if (stack[vm.sp--] === vm.trueObj) {
             vm.pc = 6;
             continue; // jump to case 6
         }
@@ -91,9 +91,9 @@ version of the generated JavaScript code:
         vm.pc = 0;
         continue; // jump to case 0
     case 6:
-        ctx[++vm.sp] = lit[2];
+        stack[++vm.sp] = lit[2];
         vm.pc = 7;
-        vm.doReturn(ctx[vm.sp]);
+        vm.doReturn(stack[vm.sp]);
         return 0;
     }
 
@@ -164,7 +164,7 @@ to single-step.
         this.needsBreak = false;    // insert break check for previous bytecode 
         this.source.push(
             "var context = vm.activeContext,\n",
-            "    ctx = context.pointers,\n",
+            "    stack = context.pointers,\n",
             "    rcvr = vm.receiver,\n",
             "    inst = rcvr.pointers,\n",
             "    temp = vm.homeContext.pointers,\n",
@@ -221,7 +221,7 @@ to single-step.
                         case 0x79: this.generateReturn("vm.trueObj"); break;
                         case 0x7A: this.generateReturn("vm.falseObj"); break;
                         case 0x7B: this.generateReturn("vm.nilObj"); break;
-                        case 0x7C: this.generateReturn("ctx[vm.sp]"); break;
+                        case 0x7C: this.generateReturn("stack[vm.sp]"); break;
                         case 0x7D: this.generateBlockReturn(); break;
                         default: throw Error("unusedBytecode");
                     }
@@ -343,11 +343,11 @@ to single-step.
         	    return;
         	// dup
         	case 0x88:
-        	    this.generateInstruction("dup", "var dup = ctx[vm.sp]; ctx[++vm.sp] = dup;");
+        	    this.generateInstruction("dup", "var dup = stack[vm.sp]; stack[++vm.sp] = dup;");
         	    return;
         	// thisContext
         	case 0x89:
-        	    this.generateInstruction("thisContext", "ctx[++vm.sp] = context;\nvm.reclaimableContextCount = 0");
+        	    this.generateInstruction("thisContext", "stack[++vm.sp] = context;\nvm.reclaimableContextCount = 0");
         	    return;
             // closures
             case 0x8A:
@@ -391,7 +391,7 @@ to single-step.
     generatePush: function(value, arg1, suffix1, arg2, suffix2) {
         if (this.debug) this.generateDebugInfo("push");
         this.generateLabel();
-        this.source.push("ctx[++vm.sp] = ", value);
+        this.source.push("stack[++vm.sp] = ", value);
         if (arg1 !== undefined) {
             this.source.push(arg1, suffix1);
             if (arg2 !== undefined) {
@@ -410,7 +410,7 @@ to single-step.
                 this.source.push(arg2, suffix2);
             }
         }
-        this.source.push(" = ctx[vm.sp];\n");
+        this.source.push(" = stack[vm.sp];\n");
     },
     generatePopInto: function(value, arg1, suffix1, arg2, suffix2) {
         if (this.debug) this.generateDebugInfo("pop into");
@@ -422,7 +422,7 @@ to single-step.
                 this.source.push(arg2, suffix2);
             }
         }
-        this.source.push(" = ctx[vm.sp--];\n");
+        this.source.push(" = stack[vm.sp--];\n");
     },
     generateReturn: function(what) {
         if (this.debug) this.generateDebugInfo("return");
@@ -436,7 +436,7 @@ to single-step.
         if (this.debug) this.generateDebugInfo("block return");
         this.generateLabel();
         this.source.push(
-            "vm.pc = ", this.pc, ";\nvm.doReturn(ctx[vm.sp--], ctx[0]);\nreturn bytecodes + ", this.pc, ";\n");
+            "vm.pc = ", this.pc, ";\nvm.doReturn(stack[vm.sp--], context.pointers[0]);\nreturn bytecodes + ", this.pc, ";\n");
         this.needsBreak = false; // returning anyway
     },
     generateJump: function(distance) {
@@ -461,7 +461,7 @@ to single-step.
         if (this.debug) this.generateDebugInfo("jump if " + condition + " to " + destination);
         this.generateLabel();
         this.source.push(
-            "var cond = ctx[vm.sp--]; if (cond === vm.", condition, "Obj) {vm.pc = ", destination, "; bytecodes -= ", distance, "; ");
+            "var cond = stack[vm.sp--]; if (cond === vm.", condition, "Obj) {vm.pc = ", destination, "; bytecodes -= ", distance, "; ");
         if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", this.pc,"; /* single-step */ else ");
         this.source.push("continue}\n",
             "else if (cond !== vm.", !condition, "Obj) {vm.sp++; vm.pc = ", this.pc, "; vm.send(vm.specialObjects[25], 1, false); return bytecodes + ", this.pc, "}\n");
@@ -479,8 +479,8 @@ to single-step.
             //case 0xC1: return this.popNandPushIfOK(3, this.objectAtPut(true,true,false)); // at:put:
             case 0xC2: // size
                 this.source.push(
-                    "if (ctx[vm.sp].sqClass === vm.specialObjects[7]) ctx[vm.sp] = ctx[vm.sp].pointersSize();\n",
-                    "else if (ctx[vm.sp].sqClass === vm.specialObjects[6]) ctx[vm.sp] = ctx[vm.sp].bytesSize();\n",
+                    "if (stack[vm.sp].sqClass === vm.specialObjects[7]) stack[vm.sp] = stack[vm.sp].pointersSize();\n",
+                    "else if (stack[vm.sp].sqClass === vm.specialObjects[6]) stack[vm.sp] = stack[vm.sp].bytesSize();\n",
                     "else { vm.pc = ", this.pc, "; vm.sendSpecial(18); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "; }\n"); 
                 this.needsLabel[this.pc] = true;
                 return;
@@ -488,10 +488,10 @@ to single-step.
             //case 0xC4: return false; // nextPut:
             //case 0xC5: return false; // atEnd
             case 0xC6: // ==
-                this.source.push("var cond = ctx[vm.sp-1] === ctx[vm.sp];\nctx[--vm.sp] = cond ? vm.trueObj : vm.falseObj;\n");
+                this.source.push("var cond = stack[vm.sp-1] === stack[vm.sp];\nstack[--vm.sp] = cond ? vm.trueObj : vm.falseObj;\n");
                 return;
             case 0xC7: // class
-                this.source.push("ctx[vm.sp] = typeof ctx[vm.sp] === 'number' ? vm.specialObjects[5] : ctx[vm.sp].sqClass;\n");
+                this.source.push("stack[vm.sp] = typeof stack[vm.sp] === 'number' ? vm.specialObjects[5] : stack[vm.sp].sqClass;\n");
                 return;
             case 0xC8: // blockCopy:
                 this.source.push(
@@ -526,55 +526,55 @@ to single-step.
         this.needsLabel[this.pc] = true;
         switch (byte) {
             case 0xB0: // PLUS +
-                this.source.push("var a = ctx[vm.sp - 1], b = ctx[vm.sp];\n",
+                this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
-                "   ctx[--vm.sp] = vm.primHandler.signed32BitIntegerFor(a + b);\n",
+                "   stack[--vm.sp] = vm.primHandler.signed32BitIntegerFor(a + b);\n",
                 "} else { vm.pc = ", this.pc, "; vm.sendSpecial(0); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xB1: // MINUS -
-                this.source.push("var a = ctx[vm.sp - 1], b = ctx[vm.sp];\n",
+                this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
-                "   ctx[--vm.sp] = vm.primHandler.signed32BitIntegerFor(a - b);\n",
+                "   stack[--vm.sp] = vm.primHandler.signed32BitIntegerFor(a - b);\n",
                 "} else { vm.pc = ", this.pc, "; vm.sendSpecial(1); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xB2: // LESS <
-                this.source.push("var a = ctx[vm.sp - 1], b = ctx[vm.sp];\n",
+                this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
-                "   ctx[--vm.sp] = a < b ? vm.trueObj : vm.falseObj;\n",
+                "   stack[--vm.sp] = a < b ? vm.trueObj : vm.falseObj;\n",
                 "} else { vm.pc = ", this.pc, "; vm.sendSpecial(2); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xB3: // GRTR >
-                this.source.push("var a = ctx[vm.sp - 1], b = ctx[vm.sp];\n",
+                this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
-                "   ctx[--vm.sp] = a > b ? vm.trueObj : vm.falseObj;\n",
+                "   stack[--vm.sp] = a > b ? vm.trueObj : vm.falseObj;\n",
                 "} else { vm.pc = ", this.pc, "; vm.sendSpecial(3); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xB4: // LEQ <=
-                this.source.push("var a = ctx[vm.sp - 1], b = ctx[vm.sp];\n",
+                this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
-                "   ctx[--vm.sp] = a <= b ? vm.trueObj : vm.falseObj;\n",
+                "   stack[--vm.sp] = a <= b ? vm.trueObj : vm.falseObj;\n",
                 "} else { vm.pc = ", this.pc, "; vm.sendSpecial(4); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xB5: // GEQ >=
-                this.source.push("var a = ctx[vm.sp - 1], b = ctx[vm.sp];\n",
+                this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
-                "   ctx[--vm.sp] = a >= b ? vm.trueObj : vm.falseObj;\n",
+                "   stack[--vm.sp] = a >= b ? vm.trueObj : vm.falseObj;\n",
                 "} else { vm.pc = ", this.pc, "; vm.sendSpecial(5); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xB6: // EQU =
-                this.source.push("var a = ctx[vm.sp - 1], b = ctx[vm.sp];\n",
+                this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
-                "   ctx[--vm.sp] = a === b ? vm.trueObj : vm.falseObj;\n",
+                "   stack[--vm.sp] = a === b ? vm.trueObj : vm.falseObj;\n",
                 "} else if (a === b) {\n",
-                "   ctx[--vm.sp] = vm.trueObj;\n",
+                "   stack[--vm.sp] = vm.trueObj;\n",
                 "} else { vm.pc = ", this.pc, "; vm.sendSpecial(6); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xB7: // NEQ ~=
-                this.source.push("var a = ctx[vm.sp - 1], b = ctx[vm.sp];\n",
+                this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
-                "   ctx[--vm.sp] = a !== b ? vm.trueObj : vm.falseObj;\n",
+                "   stack[--vm.sp] = a !== b ? vm.trueObj : vm.falseObj;\n",
                 "} else if (a === b) {\n",
-                "   ctx[--vm.sp] = vm.falseObj;\n",
+                "   stack[--vm.sp] = vm.falseObj;\n",
                 "} else { vm.pc = ", this.pc, "; vm.sendSpecial(7); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xB8: // TIMES *
@@ -619,10 +619,10 @@ to single-step.
         this.source.push("var array = vm.instantiateClass(vm.specialObjects[7], ", count, ");\n");
         if (popValues) {
             for (var i = 0; i < count; i++)
-                this.source.push("array.pointers[", i, "] = ctx[vm.sp - ", count - i - 1,"];\n");
-            this.source.push("ctx[vm.sp -= ", count - 1,"] = array;\n");
+                this.source.push("array.pointers[", i, "] = stack[vm.sp - ", count - i - 1,"];\n");
+            this.source.push("stack[vm.sp -= ", count - 1,"] = array;\n");
         } else {
-            this.source.push("ctx[++vm.sp] = array;\n");
+            this.source.push("stack[++vm.sp] = array;\n");
         }
     },
     generateClosureCopy: function(numArgs, numCopied, blockSize) {
@@ -637,10 +637,10 @@ to single-step.
             "closure.pointers[2] = ", numArgs, ";\n");
         if (numCopied > 0) {
             for (var i = 0; i < numCopied; i++)
-                this.source.push("closure.pointers[", i + 3, "] = ctx[vm.sp - ", numCopied - i - 1,"];\n");
-            this.source.push("ctx[vm.sp -= ", numCopied - 1,"] = closure;\n");
+                this.source.push("closure.pointers[", i + 3, "] = stack[vm.sp - ", numCopied - i - 1,"];\n");
+            this.source.push("stack[vm.sp -= ", numCopied - 1,"] = closure;\n");
         } else {
-            this.source.push("ctx[++vm.sp] = closure;\n");
+            this.source.push("stack[++vm.sp] = closure;\n");
         }
         this.source.push("vm.pc = ", to, ";\n");
         this.source.push("bytecodes -= ", blockSize, ";\n"); 

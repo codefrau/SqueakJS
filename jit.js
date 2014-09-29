@@ -174,7 +174,7 @@ to single-step.
                     '-': "MINUS", ',': "COMMA", '/': "DIV", '?': "IF"}[char];
             return repl || 'OPERATOR';
         });
-        return cls.replace(/[ ]/, "_"); + "__" + op + "__";
+        return cls.replace(/[ ]/, "_") + "__" + op + "__";
     },
 },
 'generating',

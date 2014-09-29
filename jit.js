@@ -22,6 +22,95 @@ module('users.bert.SqueakJS.jit').requires("users.bert.SqueakJS.vm").toRun(funct
  */
 
 Object.subclass('Squeak.Compiler',
+
+/****************************************************************************
+
+VM and Compiler
+===============
+
+The VM has an interpreter, it will work fine (and much more memory-efficient)
+without loading a compiler. The compiler plugs into the VM by providing the
+Squeak.Compiler global. It can be easily replaced by just loading a different
+script providing Squeak.Compiler.
+
+The VM creates the compiler instance after an image has been loaded and the VM
+been initialized. Whenever a method is activated that was not compiled yet, the
+compiler gets a chance to compile it. Finally, whenever the interpreter is about
+to execute a bytecode, it calls the compiled method instead (which typically will
+execute many bytecodes):
+
+    initialize:
+        compiler = new Squeak.Compiler(vm);
+
+    executeNewMethod:
+        if (!method.compiled && compiler)
+            compiler.compile(method);
+
+    interpret:
+        if (method.compiled) method.compiled(vm);
+
+About This Compiler
+===================
+
+The compiler in this file is meant to be simple, fast-compiling, and general.
+It transcribes bytecodes 1-to-1 into equivalent JavaScript code using
+templates (and thus can even support single-stepping). It uses the
+interpreter's stack pointer (SP) and program counter (PC), actual context
+objects just like the interpreter, no register mapping, it does not optimize
+sends, etc.
+
+Jumps are handled by wrapping the whole method in a loop and switch. This also
+enables continuing in the middle of a compiled method: whenever another context
+is activated, the method returns to the main loop, and is entered again later
+with a different PC:
+
+    while (true) switch (vm.pc) {
+    case 0:
+        ... push argument ...
+        vm.stack[++vm.sp] = value;
+        // fall through to next bytecode
+    case 1:
+        ... a send ...
+        vm.pc = 1;
+        vm.send(selector); // activates new context
+        return 0;
+    case 2:
+        ... conditional jump ...
+        if (...) {vm.pc = 4; continue;}
+    case 3:
+        ... regular jump ...
+        vm.pc = 0; continue;
+    case 4:
+        vm.pc = 5;
+        vm.doReturn(stack top);  // activates parent context
+        return 0;
+    }
+
+The compiled method returns the number of bytecodes executed, but for
+statistical purposes only. It would be fine to return 0 if utmost speed is
+wanted.
+
+Debugging support
+=================
+
+This compiler supports generating single-stepping code and comments, which are
+rather helpful during debugging.
+
+Normally, only bytecodes that can be a jump target are given a label. Also,
+bytecodes following a send operation need a label, to enable returning to that
+spot after the context switch. All other bytecodes are executed continuously.
+
+When compiling for single-stepping, each bytecode gets a label, and after each
+bytecode a flag is checked and the method returns if needed. Because this is
+a performance penalty, methods are first compiled without single-step support, 
+and recompiled for single-stepping on demand.
+
+This is optional, another compiler can answer false from enableSingleStepping().
+In that case the VM will delete the compiled method and invoke the interpreter
+to single-step.
+
+*****************************************************************************/
+
 'initialization', {
     initialize: function(vm) {
         this.specialSelectors = ['+', '-', '<', '>', '<=', '>=', '=', '~=', '*', '/', '\\', '@',

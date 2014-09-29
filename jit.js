@@ -130,6 +130,8 @@ to single-step.
 
 'initialization', {
     initialize: function(vm) {
+        this.vm = vm;
+        this.comments = !!Squeak.Compiler.comments, // generate comments
         // for debug-printing only
         this.specialSelectors = ['+', '-', '<', '>', '<=', '>=', '=', '~=', '*', '/', '\\', '@',
             'bitShift:', '//', 'bitAnd:', 'bitOr:', 'at:', 'at:put:', 'size', 'next', 'nextPut:',
@@ -160,8 +162,8 @@ to single-step.
 'generating',
 {
     generate: function(method, singleStep) {
-        this.singleStep = !!singleStep;
-        this.debug = this.singleStep || true;   // or true only while debugging
+        this.singleStep = !!singleStep; // generate breakpoint support
+        this.debug = this.singleStep || this.comments;
         this.method = method;
         this.pc = 0;                // next bytecode
         this.endPC = 0;             // pc of furthest jump target
@@ -398,7 +400,7 @@ to single-step.
     	}
     },
     generatePush: function(value, arg1, suffix1, arg2, suffix2) {
-        if (this.debug) this.generateDebugInfo("push");
+        if (this.debug) this.generateDebugCode("push");
         this.generateLabel();
         this.source.push("stack[++vm.sp] = ", value);
         if (arg1 !== undefined) {
@@ -410,7 +412,7 @@ to single-step.
         this.source.push(";\n");
     },
     generateStoreInto: function(value, arg1, suffix1, arg2, suffix2) {
-        if (this.debug) this.generateDebugInfo("store into");
+        if (this.debug) this.generateDebugCode("store into");
         this.generateLabel();
         this.source.push(value);
         if (arg1 !== undefined) {
@@ -422,7 +424,7 @@ to single-step.
         this.source.push(" = stack[vm.sp];\n");
     },
     generatePopInto: function(value, arg1, suffix1, arg2, suffix2) {
-        if (this.debug) this.generateDebugInfo("pop into");
+        if (this.debug) this.generateDebugCode("pop into");
         this.generateLabel();
         this.source.push(value);
         if (arg1 !== undefined) {
@@ -434,7 +436,7 @@ to single-step.
         this.source.push(" = stack[vm.sp--];\n");
     },
     generateReturn: function(what) {
-        if (this.debug) this.generateDebugInfo("return");
+        if (this.debug) this.generateDebugCode("return");
         this.generateLabel();
         this.source.push(
             "vm.pc = ", this.pc, ";\nvm.doReturn(", what, ");\nreturn bytecodes + ", this.pc, ";\n");
@@ -442,7 +444,7 @@ to single-step.
         this.done = this.pc > this.endPC;
     },
     generateBlockReturn: function() {
-        if (this.debug) this.generateDebugInfo("block return");
+        if (this.debug) this.generateDebugCode("block return");
         this.generateLabel();
         // actually stack === context.pointers but that would look weird
         this.source.push(
@@ -451,7 +453,7 @@ to single-step.
     },
     generateJump: function(distance) {
         var destination = this.pc + distance;
-        if (this.debug) this.generateDebugInfo("jump to " + destination);
+        if (this.debug) this.generateDebugCode("jump to " + destination);
         this.generateLabel();
         this.source.push("vm.pc = ", destination, ";\n");
         if (distance < 0) this.source.push(
@@ -468,7 +470,7 @@ to single-step.
     },
     generateJumpIf: function(condition, distance) {
         var destination = this.pc + distance;
-        if (this.debug) this.generateDebugInfo("jump if " + condition + " to " + destination);
+        if (this.debug) this.generateDebugCode("jump if " + condition + " to " + destination);
         this.generateLabel();
         this.source.push(
             "var cond = stack[vm.sp--]; if (cond === vm.", condition, "Obj) {vm.pc = ", destination, "; bytecodes -= ", distance, "; ");
@@ -482,7 +484,7 @@ to single-step.
     }
 ,
     generateQuickPrim: function(byte) {
-        if (this.debug) this.generateDebugInfo("quick prim " + this.specialSelectors[(byte & 0x0F) + 16]);
+        if (this.debug) this.generateDebugCode("quick prim " + this.specialSelectors[(byte & 0x0F) + 16]);
         this.generateLabel();
         switch (byte) {
             //case 0xC0: return this.popNandPushIfOK(2, this.objectAt(true,true,false)); // at:
@@ -533,7 +535,7 @@ to single-step.
         this.needsLabel[this.pc] = true;
     },
     generateNumericOp: function(byte) {
-        if (this.debug) this.generateDebugInfo("numeric op " + this.specialSelectors[byte & 0x0F]);
+        if (this.debug) this.generateDebugCode("numeric op " + this.specialSelectors[byte & 0x0F]);
         this.generateLabel();
         // if the op cannot be executed here, do a full send and return to main loop
         // we need a label for coming back
@@ -618,7 +620,7 @@ to single-step.
         }
     },
     generateSend: function(prefix, num, suffix, numArgs, superSend) {
-        if (this.debug) this.generateDebugInfo("send " + (prefix === "lit[" ? this.method.pointers[num].bytesAsString() : "..."));
+        if (this.debug) this.generateDebugCode("send " + (prefix === "lit[" ? this.method.pointers[num].bytesAsString() : "..."));
         this.generateLabel();
         // set pc, activate new method, and return to main loop
         // unless the method was a successfull primitive call (no context change)
@@ -631,7 +633,7 @@ to single-step.
         this.needsLabel[this.pc] = true;
     },
     generateClosureTemps: function(count, popValues) {
-        if (this.debug) this.generateDebugInfo("closure temps");
+        if (this.debug) this.generateDebugCode("closure temps");
         this.generateLabel();
         this.source.push("var array = vm.instantiateClass(vm.specialObjects[7], ", count, ");\n");
         if (popValues) {
@@ -645,7 +647,7 @@ to single-step.
     generateClosureCopy: function(numArgs, numCopied, blockSize) {
         var from = this.pc,
             to = from + blockSize;
-        if (this.debug) this.generateDebugInfo("push closure(" + from + "-" + (to-1) + "): " + numArgs + " args, " + numCopied + " captured");
+        if (this.debug) this.generateDebugCode("push closure(" + from + "-" + (to-1) + "): " + numArgs + " args, " + numCopied + " captured");
         this.generateLabel();
         this.source.push(
             "var closure = vm.instantiateClass(vm.specialObjects[36], ", numCopied + 3, ");\n",
@@ -674,7 +676,7 @@ to single-step.
         this.source.push("case ", this.prevPC, ":\n");
         this.prevPC = this.pc;
     },
-    generateDebugInfo: function(comment) {
+    generateDebugCode: function(comment) {
         // single-step for previous instructiuon
         if (this.needsBreak) {
              this.source.push("if (vm.breakOutOfInterpreter) {vm.pc = ", this.prevPC, "; return bytecodes + ", this.prevPC, "} // single-step\n");
@@ -689,7 +691,7 @@ to single-step.
         this.needsBreak = this.singleStep;
     },
     generateInstruction: function(comment, instr) {
-        if (this.debug) this.generateDebugInfo(comment); 
+        if (this.debug) this.generateDebugCode(comment); 
         this.generateLabel();
         this.source.push(instr, ";\n");
     },

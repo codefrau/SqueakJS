@@ -139,47 +139,47 @@ to single-step.
     },
 },
 'accessing', {
-    compile: function(method) {
+    compile: function(method, optClass, optSel) {
         if (method.compiled === undefined) {
             // 1st time
             method.compiled = false;
         } else {
             // 2nd time
-            method.compiled = new Function('vm', this.generate(method));
+            this.singleStep = false;
+            this.debug = this.comments;
+            var clsName = optClass && optClass.className(),
+                sel = optSel && optSel.bytesAsString();
+            method.compiled = this.generate(method, clsName, sel);
         }
     },
-    enableSingleStepping: function(method) {
+    enableSingleStepping: function(method, optClass, optSel) {
         // recompile method for single-stepping
         if (!method.compiled || !method.compiled.canSingleStep) {
-            var source = this.generate(method, true),
-                methodName = this.vm.printMethod(method),    // rather expensive
-                clsAndSel = methodName.split(">>"),
-                funcName = this.functionNameFor(clsAndSel[0], clsAndSel[1]);
-            method.compiled = new Function("return function " + funcName + "(vm, singleStep) {\n" +
-                "// " + methodName + "\n" +
-                source + "\n}")();
+            this.singleStep = true; // generate breakpoint support
+            this.debug = true;
+            var clsAndSel = this.vm.printMethod(method, optClass, optSel).split(">>");    // likely expensive
+            method.compiled = this.generate(method, clsAndSel[0], clsAndSel[1]);
             method.compiled.canSingleStep = true;
         }
         // if a compiler does not support single-stepping, return false
         return true;
     },
     functionNameFor: function(cls, sel) {
+        if (!cls || !sel) return "Squeak_UNKNOWN";
         if (!/[^a-zA-Z:_]/.test(sel))
-            return cls + "_" + sel.replace(/[^a-zA-Z:_]/g, "_");
+            return (cls + "_" + sel).replace(/[: ]/g, "_");
         var op = sel.replace(/./g, function(char) {
             var repl = {'|': "OR", '~': "NOT", '<': "LT", '=': "EQ", '>': "GT",
                     '&': "AND", '@': "AT", '*': "TIMES", '+': "PLUS", '\\': "MOD",
                     '-': "MINUS", ',': "COMMA", '/': "DIV", '?': "IF"}[char];
             return repl || 'OPERATOR';
         });
-        return cls + "__" + op + "__";
+        return cls.replace(/[ ]/, "_"); + "__" + op + "__";
     },
 },
 'generating',
 {
-    generate: function(method, singleStep) {
-        this.singleStep = !!singleStep; // generate breakpoint support
-        this.debug = this.singleStep || this.comments;
+    generate: function(method, optClass, optSel) {
         this.method = method;
         this.pc = 0;                // next bytecode
         this.endPC = 0;             // pc of furthest jump target
@@ -188,6 +188,8 @@ to single-step.
         this.sourceLabels = {};     // source pos of generated labels 
         this.needsLabel = {0: true}; // jump targets
         this.needsBreak = false;    // insert break check for previous bytecode
+        if (optClass && optSel)
+            this.source.push("// ", optClass, ">>", optSel, "\n");
         this.source.push(
             "var context = vm.activeContext,\n",
             "    stack = context.pointers,\n",
@@ -294,16 +296,17 @@ to single-step.
                     break;
             }
         }
+        var funcName = this.functionNameFor(optClass, optSel);
         if (this.singleStep) {
             if (this.debug) this.source.push("// all valid PCs have a label;\n");
             this.source.push("default: throw Error('invalid PC'); }"); // all PCs handled
+            return new Function("return function " + funcName + "(vm, singleStep) {\n" + this.source.join("") + "\n}")();
         } else {
             if (this.debug) this.source.push("// fall back to single-stepping\n");
             this.source.push("default: bytecodes += vm.pc; vm.interpretOne(true); return bytecodes;}");
             this.deleteUnneededLabels();
+            return new Function("return function " + funcName + "(vm) {\n" + this.source.join("") + "\n}")();
         }
-        // concatenate all snippets into one big string
-        return this.source.join(""); 
     },
     generateExtended: function(bytecode) {
         switch (bytecode) {

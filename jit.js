@@ -288,10 +288,10 @@ Object.subclass('Squeak.Compiler',
                 return;
     	}
     },
-    generatePush: function(prefix, arg1, suffix1, arg2, suffix2) {
+    generatePush: function(value, arg1, suffix1, arg2, suffix2) {
         if (this.debug) this.generateDebugInfo("push");
         this.generateLabel();
-        this.source.push("ctx[++vm.sp] = ", prefix);
+        this.source.push("ctx[++vm.sp] = ", value);
         if (arg1 !== undefined) {
             this.source.push(arg1, suffix1);
             if (arg2 !== undefined) {
@@ -300,10 +300,10 @@ Object.subclass('Squeak.Compiler',
         }
         this.source.push(";\n");
     },
-    generateStoreInto: function(prefix, arg1, suffix1, arg2, suffix2) {
+    generateStoreInto: function(value, arg1, suffix1, arg2, suffix2) {
         if (this.debug) this.generateDebugInfo("store into");
         this.generateLabel();
-        this.source.push(prefix);
+        this.source.push(value);
         if (arg1 !== undefined) {
             this.source.push(arg1, suffix1);
             if (arg2 !== undefined) {
@@ -312,10 +312,10 @@ Object.subclass('Squeak.Compiler',
         }
         this.source.push(" = ctx[vm.sp];\n");
     },
-    generatePopInto: function(prefix, arg1, suffix1, arg2, suffix2) {
+    generatePopInto: function(value, arg1, suffix1, arg2, suffix2) {
         if (this.debug) this.generateDebugInfo("pop into");
         this.generateLabel();
-        this.source.push(prefix);
+        this.source.push(value);
         if (arg1 !== undefined) {
             this.source.push(arg1, suffix1);
             if (arg2 !== undefined) {

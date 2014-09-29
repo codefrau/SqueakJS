@@ -1072,7 +1072,7 @@ Object.subclass('Squeak.Interpreter',
         this.initVMState();
         this.loadInitialContext();
         this.initCompiler();
-        console.log('squeak: interpreter ready');
+        console.log('squeak: ready');
     },
     loadImageState: function() {
         this.specialObjects = this.image.specialObjectsArray.pointers;
@@ -1126,11 +1126,14 @@ Object.subclass('Squeak.Interpreter',
         this.reclaimableContextCount = 0;
     },
     initCompiler: function() {
+        if (!Squeak.Compiler)
+            return console.warn("Squeak.Compiler not loaded, using interpreter only");
         try {
-            // compiler might not be loaded, or might decide to not handle current image
+            // compiler might decide to not handle current image
+            console.log("squeak: initializing JIT compiler");
             this.compiler = new Squeak.Compiler(this);
         } catch(e) {
-            if (Squeak.Compiler) console.warn("Compiler " + e);
+            console.warn("Compiler " + e);
         }
     },
     hackImage: function() {

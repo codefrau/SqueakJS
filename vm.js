@@ -2740,12 +2740,23 @@ Object.subclass('Squeak.Primitives',
     loadModule: function(modName) {
         var mod = Squeak.externalModules[modName] || this.builtinModules[modName];
         if (!mod) return null;
-        var initFunc = mod.initialiseModule;
+        if (mod.setInterpreter) {
+            if (!mod.setInterpreter(this.interpreterProxy)) {
+                console.log("Wrong interpreter proxy version: " + modName);
+                return null;
+            }
+        }
+        var success = true,
+            initFunc = mod.initialiseModule;
         if (typeof initFunc === 'function') {
-            mod.initialiseModule(this.interpreterProxy);
+            success = mod.initialiseModule();
         } else if (typeof initFunc === 'string') {
             // allow late binding for built-ins
-            this[initFunc](this.interpreterProxy);
+            success = this[initFunc]();
+        }
+        if (!success) {
+            console.log("Module initialization failed: " + modName);
+            return null;
         }
         console.log("Loaded module: " + modName);
         return mod;
@@ -4430,7 +4441,7 @@ Object.subclass('Squeak.Primitives',
     },
 },
 'BitBltPlugin', {
-    bitblt_initialiseModule: function(interpreterProxy) {
+    bitblt_initialiseModule: function() {
         this.bitblt = new Squeak.BitBlt();
         this.bitblt.stats = {};
         this.indexedColors = [
@@ -4466,6 +4477,7 @@ Object.subclass('Squeak.Primitives',
             0xFFFF0066, 0xFFFF3366, 0xFFFF6666, 0xFFFF9966, 0xFFFFCC66, 0xFFFFFF66, 0xFFFF0099, 0xFFFF3399, 
             0xFFFF6699, 0xFFFF9999, 0xFFFFCC99, 0xFFFFFF99, 0xFFFF00CC, 0xFFFF33CC, 0xFFFF66CC, 0xFFFF99CC, 
             0xFFFFCCCC, 0xFFFFFFCC, 0xFFFF00FF, 0xFFFF33FF, 0xFFFF66FF, 0xFFFF99FF, 0xFFFFCCFF, 0xFFFFFFFF];
+        return true;
     },
 	bitblt_primitiveCopyBits: function(argCount) {
         var bitbltObj = this.stackNonInteger(argCount),
@@ -4743,12 +4755,13 @@ Object.subclass('Squeak.Primitives',
     },
 },
 'B2DPlugin', {
-    geInitialiseModule: function(interpreterProxy) {
+    geInitialiseModule: function() {
         this.b2d_debug = false;
         this.b2d_state = {
             bitblt: new Squeak.BitBlt(),
             bitbltObj: null,
         };
+        return true;
     },
     geReset: function(bitbltObj) {
         if (this.b2d_debug) console.log("-- reset");
@@ -5297,7 +5310,8 @@ Object.subclass('Squeak.Primitives',
         primitiveDoubleSize: "scratch_primitiveDoubleSize",
         primitiveHueShift: "scratch_primitiveHueShift",
     },
-    scratch_initialiseModule: function(interpreterProxy) {
+    scratch_initialiseModule: function() {
+        return true;
     },
     scratch_primitiveOpenURL: function(argCount) {
         var url = this.stackNonInteger(0).bytesAsString();

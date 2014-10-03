@@ -1,0 +1,14 @@
+{
+	"category" : "VMMakerJS-SmartSyntaxPlugins",
+	"classinstvars" : [
+		 ],
+	"classvars" : [
+		 ],
+	"commentStamp" : "bf 10/3/2014 04:18",
+	"instvars" : [
+		"debugFlag" ],
+	"name" : "JSSmartSyntaxPluginCodeGenerator",
+	"pools" : [
+		 ],
+	"super" : "JSPluginCodeGenerator",
+	"type" : "normal" }

@@ -1,0 +1,19 @@
+{
+	"category" : "VMMakerJS-SmartSyntaxPlugins",
+	"classinstvars" : [
+		 ],
+	"classvars" : [
+		 ],
+	"commentStamp" : "bf 10/3/2014 04:18",
+	"instvars" : [
+		"isPrimitive",
+		"suppressingFailureGuards",
+		"selectorOverride",
+		"fullArgs",
+		"parmSpecs",
+		"rcvrSpec" ],
+	"name" : "JSSmartSyntaxPluginMethod",
+	"pools" : [
+		 ],
+	"super" : "JSMethod",
+	"type" : "normal" }

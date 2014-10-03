@@ -1,0 +1,1 @@
+(name 'VMMakerJS-bf.1' message 'Initial version: can translate LargeIntegersPlugin usingJSCodeGenerator isActive: true.LargeIntegersPlugin translateInDirectory: (FileDirectory on: ''/Users/bert/SqueakJS/plugins'') doInlining: false' id 'bf4d839f-b54e-4569-b6b1-a3d2348ab9f7' date '3 October 2014' time '4:23:53.315 am' author 'bf' ancestors () stepChildren ())

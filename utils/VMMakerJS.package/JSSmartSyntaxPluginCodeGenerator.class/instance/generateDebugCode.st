@@ -1,0 +1,3 @@
+debug code
+generateDebugCode
+	^ debugFlag

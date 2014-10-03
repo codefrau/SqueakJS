@@ -1,0 +1,3 @@
+accessing
+globalStructureBuildMethodHasFoo: number
+	globalStructureBuildMethodHasFoo := number

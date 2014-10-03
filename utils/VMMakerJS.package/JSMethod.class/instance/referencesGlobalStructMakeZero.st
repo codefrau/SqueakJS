@@ -1,0 +1,3 @@
+accessing
+referencesGlobalStructMakeZero
+	globalStructureBuildMethodHasFoo := 0

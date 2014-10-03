@@ -1,0 +1,1 @@
+Subclass of JSCodeGenerator, used in connection with SmartSyntaxInterpreterPlugin to generate named primitives with type coercion specifications.

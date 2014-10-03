@@ -1,0 +1,15 @@
+{
+	"category" : "VMMakerJS-Translation to JS",
+	"classinstvars" : [
+		 ],
+	"classvars" : [
+		 ],
+	"commentStamp" : "bf 10/3/2014 04:13",
+	"instvars" : [
+		"pluginClass",
+		"pluginName" ],
+	"name" : "JSPluginCodeGenerator",
+	"pools" : [
+		 ],
+	"super" : "JSCodeGenerator",
+	"type" : "normal" }

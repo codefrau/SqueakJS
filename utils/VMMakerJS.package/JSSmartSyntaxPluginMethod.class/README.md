@@ -1,0 +1,1 @@
+Variation of JSMethod node of the Smalltalk JS Code Generator, used in conjunction with SmartSyntaxCodeGenerator and SmartSyntaxInterpreterPlugin to generate named primitives with type coercion specifications.

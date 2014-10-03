@@ -1,0 +1,35 @@
+{
+	"category" : "VMMakerJS-Translation to JS",
+	"classinstvars" : [
+		 ],
+	"classvars" : [
+		"CaseStatements" ],
+	"commentStamp" : "bf 10/3/2014 04:14",
+	"instvars" : [
+		"selector",
+		"returnType",
+		"args",
+		"locals",
+		"declarations",
+		"primitive",
+		"parseTree",
+		"labels",
+		"possibleSideEffectsCache",
+		"complete",
+		"export",
+		"static",
+		"sharedLabel",
+		"sharedCase",
+		"comment",
+		"definingClass",
+		"globalStructureBuildMethodHasFoo",
+		"canAsmLabel",
+		"mustAsmLabel",
+		"properties",
+		"cascadeVariableNumber",
+		"extraVariableNumber" ],
+	"name" : "JSMethod",
+	"pools" : [
+		 ],
+	"super" : "Object",
+	"type" : "normal" }

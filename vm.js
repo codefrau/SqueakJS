@@ -2422,6 +2422,7 @@ Object.subclass('Squeak.Primitives',
             case 19: return false;                                 // Guard primitive for simulation -- *must* fail
             // LargeInteger Primitives (20-39)
             // 32-bit logic is aliased to Integer prims above
+            case 20: return false; // primitiveRemLargeIntegers
             case 21: return false; // primitiveAddLargeIntegers
             case 22: return false; // primitiveSubtractLargeIntegers
             case 23: return false; // primitiveLessThanLargeIntegers
@@ -5436,6 +5437,8 @@ Object.subclass('Squeak.InterpreterProxy',
 // provides function names exactly like the C interpreter, for ease of porting
 // but maybe less efficiently because of the indirection
 'initialization', {
+    VM_PROXY_MAJOR: 1,
+    VM_PROXY_MINOR: 11,
     initialize: function(vm) {
         this.vm = vm;
         Object.defineProperty(this, 'successFlag', {
@@ -5446,6 +5449,21 @@ Object.subclass('Squeak.InterpreterProxy',
             "short int *": "wordsAsInt16Array",
             "float *": "wordsAsFloat32Array",
         };
+    },
+    success: function(boolean) {
+        if (!boolean) this.successFlag = false;
+    },
+    primitiveFail: function() {
+        this.successFlag = false;
+    },
+    failed: function() {
+        return !this.successFlag;
+    },
+    majorVersion: function() {
+        return this.VM_PROXY_MAJOR;
+    },
+    minorVersion: function() {
+        return this.VM_PROXY_MINOR;
     },
 },
 'stack access',
@@ -5461,9 +5479,18 @@ Object.subclass('Squeak.InterpreterProxy',
     pop: function(n) {
         this.vm.pop(n);
     },
+    popthenPush: function(n, obj) {
+        this.vm.popNandPush(n, obj);
+    },
 },
 'object access',
 {
+    booleanValueOf: function(obj) {
+        if (obj.isTrue) return true;
+        if (obj.isFalse) return false;
+        this.successFlag = false;
+        return false;
+    },
 	arrayValueOf: function(obj, typeDecl) {
         var accessMethod;
         if (typeDecl) {
@@ -5489,6 +5516,40 @@ Object.subclass('Squeak.InterpreterProxy',
         if (typeof value === "number")
             obj.pointers[n] = value;
         else this.successFlag = false;
+    },
+    stObjectatput: function(array, index, obj) {
+        if (array.sqClass !== this.classArray()) throw Error("Array expected");
+        if (index < 1 || index >= array.pointers.length) return this.successFlag = false;
+        array.pointers[index] = obj;
+    },
+}, 
+'constant access',
+{
+    isKindOfInteger: function(obj) {
+        return typeof obj === "number" ||
+            obj.sqClass == this.classLargeNegativeInteger() ||
+            obj.sqClass == this.classLargePositiveInteger();
+    },
+    classArray: function() {
+        return this.vm.specialObjects[Squeak.splOb_ClassArray];
+    },
+    classLargePositiveInteger: function() {
+        return this.vm.specialObjects[Squeak.splOb_ClassLargePositiveInteger];
+    },
+    classLargeNegativeInteger: function() {
+        return this.vm.specialObjects[Squeak.splOb_ClassLargeNegativeInteger];
+    },
+    falseObject: function() {
+        return this.vm.falseObj;
+    },
+    trueObject: function() {
+        return this.vm.trueObj;
+    },
+},
+'vm functions',
+{
+    instantiateClassindexableSize: function(aClass, indexableSize) {
+        return this.vm.instantiateClass(aClass, indexableSize);
     },
 });
 

@@ -2533,7 +2533,7 @@ Object.subclass('Squeak.Primitives',
             case 115: return this.primitiveChangeClass(argCount);
             case 116: return this.vm.flushMethodCacheForMethod(this.vm.top());  // after Squeak 2.2 uses 119
             case 117: return this.doNamedPrimitive(primMethod, argCount); // named prims
-            //case 118: return false; //TODO primitiveDoPrimitiveWithArgs
+            case 118: return this.primitiveDoPrimitiveWithArgs(argCount);
             case 119: return this.vm.flushMethodCacheForSelector(this.vm.top()); // before Squeak 2.3 uses 116
             // Miscellaneous Primitives (120-149)
             case 120: return false; //primitiveCalloutToFFI
@@ -3308,7 +3308,27 @@ Object.subclass('Squeak.Primitives',
         rcvr.sqClass = arg.sqClass;
         return this.popNIfOK(1);
     },
-    primitiveShortAtAndPut:  function(argCount) {
+    primitiveDoPrimitiveWithArgs: function(argCount) {
+        var argumentArray = this.stackNonInteger(0),
+            primIdx = this.stackInteger(1);
+        if (!this.success) return false;
+        var arraySize = argumentArray.pointersSize(),
+            cntxSize = this.vm.activeContext.pointersSize();
+        if (this.vm.sp + arraySize >= cntxSize) return false;
+        // Pop primIndex and argArray, then push args in place...
+        this.vm.popN(2);
+        for (var i = 0; i < arraySize; i++)
+            this.vm.push(argumentArray[i]);
+        // Run the primitive
+        if (this.doPrimitive(primIdx, arraySize))
+            return true;
+        // Primitive failed, restore state for failure code
+        this.vm.popN(arraySize);
+        this.vm.push(primIdx);
+        this.vm.push(argumentArray);
+        return false;
+    },
+    primitiveShortAtAndPut: function(argCount) {
         var rcvr = this.stackNonInteger(argCount),
             index = this.stackInteger(argCount-1) - 1, // make zero-based
             array = rcvr.wordsAsInt16Array();

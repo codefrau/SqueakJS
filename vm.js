@@ -255,6 +255,7 @@ Object.subclass('Squeak.Image',
         this.allocationCount = 0;
         this.oldSpaceCount = 0;
         this.newSpaceCount = 0;
+        this.hasNewInstances = {};
         this.readFromBuffer(arraybuffer);
     },
     readFromBuffer: function(arraybuffer) {
@@ -397,6 +398,7 @@ Object.subclass('Squeak.Image',
         this.oldSpaceCount += newObjects.length - removedObjects.length;
         this.allocationCount += this.newSpaceCount;
         this.newSpaceCount = 0;
+        this.hasNewInstances = {};
         this.gcCount++;
         this.gcTenured += newObjects.length;
         this.gcCompacted += removedObjects.length;
@@ -489,12 +491,14 @@ Object.subclass('Squeak.Image',
         var newObject = new Squeak.Object();
         var hash = this.registerObject(newObject);
         newObject.initInstanceOf(aClass, indexableSize, hash, filler);
+        this.hasNewInstances[aClass.oop] = true;   // need GC to find all instances
         return newObject;
     },
     clone: function(object) {
         var newObject = new Squeak.Object();
         var hash = this.registerObject(newObject);
         newObject.initAsClone(object, hash);
+        this.hasNewInstances[newObject.sqClass.oop] = true;   // need GC to find all instances
         return newObject;
     },
 },
@@ -547,27 +551,31 @@ Object.subclass('Squeak.Image',
         this.vm.flushMethodCacheAfterBecome(mutations);
         return true;
     },
+    objectAfter: function(obj) {
+        // if this was the last old object, tenure new objects and try again
+        return obj.nextObject || (this.newSpaceCount > 0 && this.fullGC("nextObject"));
+    },
     someInstanceOf: function(clsObj) {
         var obj = this.firstOldObject;
         while (true) {
             if (obj.sqClass === clsObj)
                 return obj;
-            obj = obj.nextObject || (this.newSpaceCount > 0 && this.fullGC("someInstance of " + clsObj.className()));
+            obj = obj.nextObject || this.nextObjectWithGCFor(clsObj);
             if (!obj) return null;
         }
-    },
-    objectAfter: function(obj) {
-        // if this was the last old object, tenure new objects and try again
-        return obj.nextObject || (this.newSpaceCount > 0 && this.fullGC("nextObject"));
     },
     nextInstanceAfter: function(obj) {
         var clsObj = obj.sqClass;
         while (true) {
-            obj = obj.nextObject || (this.newSpaceCount > 0 && this.fullGC("nextInstance of " + clsObj.className()));
+            obj = obj.nextObject || this.nextObjectWithGCFor(clsObj);
             if (!obj) return null;
             if (obj.sqClass === clsObj)
                 return obj;
         }
+    },
+    nextObjectWithGCFor: function(clsObj) {
+        if (this.newSpaceCount === 0 || !this.hasNewInstances[clsObj.oop]) return null;
+        return this.fullGC("instance of " + clsObj.className());
     },
     writeToBuffer: function() {
         var headerSize = 64,

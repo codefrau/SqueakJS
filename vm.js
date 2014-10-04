@@ -3467,6 +3467,19 @@ Object.subclass('Squeak.Primitives',
             return dst;
         }
     },
+    primitiveCopyObject: function(argCount) {
+        var rcvr = this.stackNonInteger(1),
+            arg = this.stackNonInteger(0),
+            length = rcvr.pointersSize();
+        if (!this.success ||
+            rcvr.isWordsOrBytes() ||
+            rcvr.sqClass !== arg.sqClass ||
+            length !== arg.pointersSize()) return false;
+        for (var i = 0; i < length; i++)
+            arg.pointers[i] = rcvr.pointers[i];
+        this.vm.pop(argCount);
+        return true;
+    },
 },
 'blocks/closures', {
     doBlockCopy: function() {

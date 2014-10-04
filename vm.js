@@ -2959,10 +2959,11 @@ Object.subclass('Squeak.Primitives',
     },
     ldexp: function(mantissa, exponent) {
         // construct a float from mantissa and exponent
-        return exponent <= 1023 // avoid multiplying by infinity
-            ? mantissa * Math.pow(2, exponent)
-            : mantissa * Math.pow(2, 1023) * Math.pow(2, exponent - 1023);
-        // the smallest positive float is Math.pow(2, -1074)
+        return exponent > 1023 // avoid multiplying by infinity
+            ? mantissa * Math.pow(2, 1023) * Math.pow(2, exponent - 1023)
+            : exponent < -1074 // avoid multiplying by zero
+            ? mantissa * Math.pow(2, -1074) * Math.pow(2, exponent + 1074)
+            : mantissa * Math.pow(2, exponent);
     },
 },
 'utils', {

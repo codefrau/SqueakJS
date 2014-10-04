@@ -4586,6 +4586,7 @@ Object.subclass('Squeak.Primitives',
         source.buffer = this.audioBuffers[0];
         source.connect(this.audioContext.destination);
         source.onended = function() {
+            if (!this.audioContext) return;
             this.audioBuffersUnused.push(this.audioBuffers.shift());
             if (this.audioSema) this.signalSemaphoreWithIndex(this.audioSema);
             this.vm.forceInterruptCheck();

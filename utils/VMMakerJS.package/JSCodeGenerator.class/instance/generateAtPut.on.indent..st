@@ -1,9 +1,6 @@
 JS translation
 generateAtPut: msgNode on: aStream indent: level
 	"Generate the JS code for this message onto the given stream."
-
-	self emitJSExpression: msgNode receiver on: aStream.
-	aStream nextPut: $[.
-	msgNode args first emitJSCodeAsExpressionOn: aStream level: level + 1 generator: self.
-	aStream nextPutAll: '] = '.
+	self generateAt: msgNode on: aStream indent: level.
+	aStream nextPutAll: ' = '.
 	self emitJSExpression: msgNode args last on: aStream

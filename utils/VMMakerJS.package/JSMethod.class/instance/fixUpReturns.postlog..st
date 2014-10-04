@@ -17,11 +17,10 @@ fixUpReturns: argCount postlog: postlog
 									setExpression: (TVariableNode new setName: 'null'))]
 							ifFalse: [  "normal return"
 								newStmts addAll: postlog.
-								newStmts addAll: (self popArgsExpr: argCount + 1).
 								newStmts addLast: (TSendNode new
-									setSelector: #pushInteger:
+									setSelector: #pop:thenPush:
 									receiver: (TVariableNode new setName: self vmNameString)
-									arguments: (Array with: stmt expression)).
+									arguments: {TConstantNode new setValue: argCount + 1. stmt expression}).
 								newStmts addLast: (TReturnNode new
 									setExpression: (TVariableNode new setName: 'null'))]]
 					ifFalse: [

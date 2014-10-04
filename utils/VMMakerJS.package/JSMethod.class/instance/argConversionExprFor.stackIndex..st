@@ -3,18 +3,19 @@ argConversionExprFor: varName stackIndex: stackIndex
 	"Return the parse tree for an expression that fetches and converts the 
 	primitive argument at the given stack offset."
 	| exprList decl stmtList |
+	oneBasedArrays ifNil: [oneBasedArrays := Set new]. "only non-nil in a primitive method"
 	exprList := OrderedCollection new.
 	(declarations includesKey: varName) ifTrue:[
 		decl := declarations at: varName.
 		(decl includes: $*) ifTrue:["array"
-			(decl includesSubString: 'char') ifTrue:[ | expr |
-				expr := '(interpreterProxy isBytes: (interpreterProxy stackValue: (stackIndex))) ifFalse:[^interpreterProxy primitiveFail].'.
-				expr := expr copyReplaceAll: 'interpreterProxy' with: self vmNameString.
-				expr := expr copyReplaceAll: 'stackIndex' with: stackIndex printString.
-				exprList add: expr.
-			].
-			exprList add: varName , ' := ', self vmNameString, ' arrayValueOf: (', self vmNameString, ' stackValue: (' , stackIndex printString , '))'.
-			exprList add: varName , ' := ' , varName , ' - 1'.
+			(decl includesSubString: 'char') ifTrue:[
+				exprList add: varName , ' := ', self vmNameString, ' stackBytes: ',stackIndex printString] ifFalse: [
+			(decl beginsWith: 'unsigned short') ifTrue:[
+				exprList add: varName , ' := ', self vmNameString, ' stackUint16Array: ',stackIndex printString] ifFalse: [
+			(decl beginsWith: 'int') ifTrue:[
+				exprList add: varName , ' := ', self vmNameString, ' stackInt32Array: ',stackIndex printString]
+			ifFalse: [self halt]]].
+			self beOneBasedArray: varName.
 		] ifFalse:["must be a double"
 			(decl findString: 'double' startingAt: 1) = 0 ifTrue: [
 				self error: 'unsupported type declaration in a primitive method'

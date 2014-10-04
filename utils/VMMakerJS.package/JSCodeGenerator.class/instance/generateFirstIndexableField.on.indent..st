@@ -1,6 +1,7 @@
 JS hacks
 generateFirstIndexableField: msgNode on: aStream indent: level
 	| parent cType accessor |
+	self oneBasedArrays: false.
 	"HACK: detect cType from parent node"
 	parent := thisContext sender sender sender.
 	cType := parent method == (TAssignmentNode>>#emitJSCodeOn:level:generator:) 

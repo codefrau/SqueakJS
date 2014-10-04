@@ -7,7 +7,6 @@ generateCDigitCopy: msgNode on: aStream indent: level
 		ifFalse: [self halt: 'not handled: ', msgNode asString].
 	aStream nextPutAll: 'function() {
 		// inlining ', msgNode asString, '
-		debugger;
 		var len = stop - start + 1;
 		for (var i = 0; i < len; i++) {
 			pTo[i + start] = pFrom[i + repStart];

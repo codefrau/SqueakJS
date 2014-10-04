@@ -2397,6 +2397,7 @@ Object.subclass('Squeak.Primitives',
     },
     doPrimitive: function(index, argCount, primMethod) {
         this.success = true;
+        if (index < 128) // Chrome only optimized up to 128 cases
         switch (index) {
             // Integer Primitives (0-19)
             case 1: return this.popNandPushIntIfOK(2,this.stackInteger(1) + this.stackInteger(0));  // Integer.add
@@ -2535,6 +2536,7 @@ Object.subclass('Squeak.Primitives',
             case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
             case 126: return this.primitiveDeferDisplayUpdates(argCount);
     		case 127: return this.primitiveShowDisplayRect(argCount);
+    	} else if (index < 256) switch (index) { // Chrome only optimized up to 128 cases
             case 128: return this.primitiveArrayBecome(argCount, true); // both ways
             case 129: return this.popNandPushIfOK(1, this.vm.image.specialObjectsArray); //specialObjectsOop
             case 130: return this.primitiveFullGC(argCount);
@@ -2668,6 +2670,7 @@ Object.subclass('Squeak.Primitives',
             // 247, 248: unused
             case 249: return this.primitiveArrayBecome(argCount, false); // one way, opt. copy hash
             case 254: return this.primitiveVMParameter(argCount);
+    	} else switch (index) { // Chrome only optimized up to 128 cases
             //MIDI Primitives (520-539)
             case 521: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIClosePort', argCount);
             case 522: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIGetClock', argCount);

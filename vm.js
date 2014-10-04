@@ -2345,11 +2345,6 @@ Object.subclass('Squeak.Primitives',
     initModules: function() {
         this.loadedModules = {};
         this.builtinModules = {
-            MiscPrimitivePlugin: {
-                    primitiveStringHash: this.primitiveStringHash.bind(this),
-                    primitiveCompareString: this.primitiveCompareString.bind(this),
-                    primitiveFindSubstring: this.primitiveFindSubstring.bind(this),
-            },
             FloatArrayPlugin: {
                     primitiveAt: this.primitiveFloatArrayAtAndPut.bind(this),
                     primitiveAtPut: this.primitiveFloatArrayAtAndPut.bind(this),
@@ -2657,20 +2652,19 @@ Object.subclass('Squeak.Primitives',
             case 231: return this.primitiveForceDisplayUpdate(argCount);
             // case 232:  return this.primitiveFormPrint(argCount);
             case 233: return this.primitiveSetFullScreen(argCount);
-            case 234: return false; // primBitmapdecompressfromByteArrayat
-            case 235: return this.primitiveCompareString(argCount);
-            case 236: return false; // primSampledSoundconvert8bitSignedFromto16Bit
-            case 237: return false; // primBitmapcompresstoByteArray
-            // 238-241: serial port primitives
+            case 234: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveDecompressFromByteArray', argCount);
+            case 235: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompareString', argCount);
+            case 236: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveConvert8BitSigned', argCount);
+            case 237: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompressToByteArray', argCount);
             case 238: return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortOpen', argCount);
             case 239: return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortClose', argCount);
             case 240: return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortWrite', argCount);
             case 241: return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortRead', argCount);
             // 242: unused
-            case 243: return false; // primStringtranslatefromtotable
-            case 244: return this.primitiveFindSubstring(argCount);
-            case 245: return false; // primStringindexOfAsciiinStringstartingAt
-            case 246: return false; // primStringfindSubstringinstartingAtmatchTable
+            case 243: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveTranslateStringWithTable', argCount);
+            case 244: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindFirstInString' , argCount);
+            case 245: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveIndexOfAsciiInString', argCount);
+            case 246: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount);
             // 247, 248: unused
             case 249: return this.primitiveArrayBecome(argCount, false); // one way, opt. copy hash
             case 254: return this.primitiveVMParameter(argCount);
@@ -4127,65 +4121,6 @@ Object.subclass('Squeak.Primitives',
 	},
 	secondClock: function() {
         return this.pos32BitIntFor(Squeak.totalSeconds()); // will overflow 32 bits in 2037
-    },
-},
-'MiscPrimitivePlugin', {
-    primitiveStringHash: function(argCount) {
-        // need to implement this because in older Etoys image the fallback code is wrong
-        var initialHash = this.stackInteger(0);
-        var stringObj = this.stackNonInteger(1);
-        if (!this.success) return false;
-        var stringSize = stringObj.bytesSize();
-        var string = stringObj.bytes;
-        var hash = initialHash & 0x0FFFFFFF;
-        for (var i = 0; i < stringSize; i++) {
-            hash += string[i];
-            var low = hash & 0x3FFF;
-            hash = (0x260D * low + ((0x260D * (hash >>> 14) + (0x0065 * low) & 16383) * 16384)) & 0x0FFFFFFF;
-        }
-        this.vm.popNandPush(3, hash);
-        return true;
-    },
-    primitiveCompareString: function(argCount) {
-        var string1 = this.stackNonInteger(2).bytes,
-            string2 = this.stackNonInteger(1).bytes,
-            order = this.stackNonInteger(0).bytes;
-        if (!string1 || !string2 || !order) return false;
-        if (string1 === string2) {
-            this.vm.popNandPush(4, 2);
-            return true;
-        }
-        var len1 = string1.length,
-            len2 = string2.length,
-            len = Math.min(len1, len2);
-        for (var i = 0; i < len; i++) {
-            var c1 = order[string1[i]],
-                c2 = order[string2[i]];
-            if (c1 !== c2) {
-                this.vm.popNandPush(4, c1 < c2 ? 1 : 3);
-                return true;
-            }
-        }
-        this.vm.popNandPush(4, len1 === len2 ? 2 : len1 < len2 ? 1 : 3); 
-        return true;
-    },
-    primitiveFindSubstring: function(argCount) {
-        var key = this.stackNonInteger(3).bytes,
-            body = this.stackNonInteger(2).bytes,
-            start = this.stackInteger(1) - 1, // make zero-based
-            matchTable = this.stackNonInteger(0).bytes;
-        if (!this.success || !key || !body || start < 0 || !matchTable) return false;
-        if (key.length > 0) {
-            var endIndex = body.length - key.length;
-            for (var startIndex = start; startIndex <= endIndex; startIndex++) {
-                var index = 0;
-                while (matchTable[body[startIndex+index]] == matchTable[key[index]]) {
-                    if (++index == key.length)
-                        return this.popNandPushIfOK(5, startIndex + 1); // make 1-based
-                }
-            }
-        }
-        return this.popNandPushIfOK(5, 0);
     },
 },
 'FilePlugin', {

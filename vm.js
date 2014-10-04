@@ -846,6 +846,9 @@ Object.subclass('Squeak.Object',
     },
 },
 'accessing', {
+    isWords: function() {
+        return this.format === 6;
+    },
     isWordsOrBytes: function() {
         var fmt = this.format;
         return fmt == 6  || (fmt >= 8 && fmt <= 11);
@@ -5451,15 +5454,6 @@ Object.subclass('Squeak.InterpreterProxy',
             "float *": "wordsAsFloat32Array",
         };
     },
-    success: function(boolean) {
-        if (!boolean) this.successFlag = false;
-    },
-    primitiveFail: function() {
-        this.successFlag = false;
-    },
-    failed: function() {
-        return !this.successFlag;
-    },
     majorVersion: function() {
         return this.VM_PROXY_MAJOR;
     },
@@ -5467,8 +5461,26 @@ Object.subclass('Squeak.InterpreterProxy',
         return this.VM_PROXY_MINOR;
     },
 },
+'success',
+{
+    failed: function() {
+        return !this.successFlag;
+    },
+    primitiveFail: function() {
+        this.successFlag = false;
+    },
+    success: function(boolean) {
+        if (!boolean) this.successFlag = false;
+    },
+},
 'stack access',
 {
+    pop: function(n) {
+        this.vm.pop(n);
+    },
+    popthenPush: function(n, obj) {
+        this.vm.popNandPush(n, obj);
+    },
     stackValue: function(n) {
         return this.vm.stackValue(n);
     },
@@ -5477,11 +5489,24 @@ Object.subclass('Squeak.InterpreterProxy',
 	    if (typeof int !== "number") this.successFlag = false;
         return int;
     },
-    pop: function(n) {
-        this.vm.pop(n);
+    stackBytes: function(n) {
+        var oop = this.vm.stackValue(n);
+        if (oop.bytes) return oop.bytes;
+        if (oop.words) return oop.wordsAsUint8Array();
+        if (typeof oop === "number" || !oop.isWordsOrBytes()) this.successFlag = false;
+        return [];
     },
-    popthenPush: function(n, obj) {
-        this.vm.popNandPush(n, obj);
+    stackInt32Array: function(n) {
+        var oop = this.vm.stackValue(n);
+        if (oop.words) return oop.wordsAsInt32Array();
+        if (typeof oop === "number" || !oop.isWords()) this.successFlag = false;
+        return [];
+    },
+    stackUint16Array: function(n) {
+        var oop = this.vm.stackValue(n);
+        if (oop.words) return oop.wordsAsUint16Array();
+        if (typeof oop === "number" || !oop.isWords()) this.successFlag = false;
+        return [];
     },
 },
 'object access',

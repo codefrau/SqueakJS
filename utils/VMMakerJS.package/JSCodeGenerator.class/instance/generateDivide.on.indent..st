@@ -13,15 +13,13 @@ generateDivide: msgNode on: aStream indent: level
 	 [divisor <= (1 bitShift: 31)]]]]])
 	ifTrue: [
 		"use signed (arithmetic) right shift instead of divide"
-		aStream nextPutAll: '('.
 		self emitJSExpression: rcvr on: aStream.
 		aStream nextPutAll: ' >> ', (divisor log: 2) asInteger printString.
-		aStream nextPutAll: ')'.
 	] ifFalse: [
 		"use float divide and coerce to integer"
-		aStream nextPutAll: '('.
+		aStream nextPutAll: 'DIV('.
 		self emitJSExpression: rcvr on: aStream.
-		aStream nextPutAll: ' / '.
+		aStream nextPutAll: ', '.
 		self emitJSExpression: arg on: aStream.
-		aStream nextPutAll: '|0)'.
+		aStream nextPutAll: ')'.
 	].

@@ -7,20 +7,16 @@ generateShiftLeft: msgNode on: aStream indent: level
 	arg isConstant ifTrue: [
 		"bit shift amount is a constant"
 		arg value < 31 ifTrue: [
-			aStream nextPutAll: '('.
 			self emitJSExpression: rcvr on: aStream.
 				aStream nextPutAll: ' << ', arg value printString.
-			aStream nextPutAll: ')'.
 		] ifFalse: [
 			self error: 'cannot shift by more than 31'
 		].
 	] ifFalse: [
 		"bit shift amount is an expression"
-		aStream nextPutAll: '('.
-		self emitJSExpression: arg on: aStream.
-		aStream nextPutAll: ' > 31 ? 0 : '.
+		aStream nextPutAll: 'SHL('.
 		self emitJSExpression: rcvr on: aStream.
-		aStream nextPutAll: ' << '.
+		aStream nextPutAll: ', '.
 		self emitJSExpression: arg on: aStream.
 		aStream nextPutAll: ')'.
 	].

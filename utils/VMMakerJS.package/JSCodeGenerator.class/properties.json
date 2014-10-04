@@ -5,7 +5,7 @@
 	"classvars" : [
 		"IsActive",
 		"UseRightShiftForDivide" ],
-	"commentStamp" : "bf 10/3/2014 04:17",
+	"commentStamp" : "bf 10/4/2014 13:42",
 	"instvars" : [
 		"translationDict",
 		"inlineList",
@@ -32,7 +32,8 @@
 		"pools",
 		"abstractDeclarations",
 		"uncheckedAbstractMethods",
-		"cCodeTranslationDict" ],
+		"cCodeTranslationDict",
+		"oneBasedArrays" ],
 	"name" : "JSCodeGenerator",
 	"pools" : [
 		 ],

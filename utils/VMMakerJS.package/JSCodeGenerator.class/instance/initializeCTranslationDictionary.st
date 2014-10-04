@@ -110,6 +110,9 @@ initializeCTranslationDictionary
 	#fetchClassOf:						#generateFetchClassOf:on:indent:
 	#is:KindOf: 							#generateIsKindOf:on:indent:
 	#cDigitCopyFrom:to:len:				#generateCDigitCopy:on:indent:
+	#sizeOfSTArrayFromCPrimitive:		#generateSizeOfSTArrayFromCPrimitive:on:indent:
+	#asciiValue							#generateIdentityUnary:on:indent:
+	#primitiveFail						#generateInterpreterProxyCall:on:indent:
 	).
 
 	1 to: pairs size by: 2 do: [:i |

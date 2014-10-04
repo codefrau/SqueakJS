@@ -27,7 +27,8 @@
 		"mustAsmLabel",
 		"properties",
 		"cascadeVariableNumber",
-		"extraVariableNumber" ],
+		"extraVariableNumber",
+		"oneBasedArrays" ],
 	"name" : "JSMethod",
 	"pools" : [
 		 ],

@@ -44,9 +44,12 @@ addMethodsForPrimitives: classAndSelectorList
 			Transcript cr].
 
 	"code generation"
-	self doInlining: true.
+	self doInlining: false.
 
 	methods do:[:m|
 		"if this method is supposed to be a primitive (rather than a helper 
 		routine), add assorted prolog and epilog items"
-		m primitive > 0 ifTrue: [m preparePrimitivePrologue]].
+		m primitive > 0 ifTrue: [m preparePrimitivePrologue].
+		"check for one-based array access"	
+		m oneBasedArrays ifNotNil: [self oneBasedArrays: true].
+	].

@@ -22,8 +22,10 @@ generateToByDo: msgNode on: aStream indent: level
 					and: [step receiver isConstant and: [step receiver value >= 0]]]].
 	aStream nextPutAll: (negative ifTrue: [' >= '] ifFalse: [' <= ']).
 	self emitJSExpression: limitExpr on: aStream.
-	aStream nextPutAll: '; ', iterationVar, ' += '.
-	self emitJSExpression: step on: aStream.
+	(step isConstant and: step value = 1)
+		ifTrue: [aStream nextPutAll: '; ', iterationVar, '++']
+		ifFalse: [aStream nextPutAll: '; ', iterationVar, ' += '.
+			self emitJSExpression: step on: aStream].
 	aStream nextPutAll: ') {'; cr.
 	blockExpr emitJSCodeOn: aStream level: level + 1 generator: self.
 	aStream tab: level.

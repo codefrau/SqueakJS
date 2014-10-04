@@ -12,4 +12,10 @@ module("users.bert.SqueakJS.plugins.', pluginName, '").requires("users.bert.Sque
 var VM_PROXY_MAJOR = ', InterpreterPrimitives vmProxyMajorVersion, ';
 var VM_PROXY_MINOR = ', InterpreterPrimitives vmProxyMinorVersion, ';
 
+/*** Functions ***/
+function DIV(a, b) { return Math.floor(a / b) | 0; }   // integer division
+function MOD(a, b) { return a - DIV(a, b) * b | 0; }   // signed modulus
+function SHL(a, b) { return b > 31 ? 0 : a << b ; }    // fix JS shift
+function SHR(a, b) { return b > 31 ? 0 : a >>> b ; }   // fix JS shift
+
 '.

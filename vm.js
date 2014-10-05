@@ -857,9 +857,16 @@ Object.subclass('Squeak.Object',
     isWords: function() {
         return this.format === 6;
     },
+    isBytes: function() {
+        var fmt = this.format;
+        return fmt >= 8 && fmt <= 11;
+    },
     isWordsOrBytes: function() {
         var fmt = this.format;
         return fmt == 6  || (fmt >= 8 && fmt <= 11);
+    },
+    isPointers: function() {
+        return this.format <= 4;
     },
     pointersSize: function() {
     	return this.pointers ? this.pointers.length : 0;
@@ -2712,6 +2719,7 @@ Object.subclass('Squeak.Primitives',
         }
         var result = false;
         if (mod) {
+            this.interpreterProxy.argCount = argCount;
             var primitive = mod[functionName];
             if (typeof primitive === "function") {
                 result = mod[functionName](argCount);
@@ -2840,22 +2848,7 @@ Object.subclass('Squeak.Primitives',
         return this.checkSmallInt(this.vm.stackValue(nDeep));
     },
     stackPos32BitInt: function(nDeep) {
-        var stackVal = this.vm.stackValue(nDeep);
-        if (typeof stackVal === "number") { // SmallInteger
-            if (stackVal >= 0)
-                return stackVal;
-            this.success = false;
-            return 0;
-        }
-        if (!this.isA(stackVal, Squeak.splOb_ClassLargePositiveInteger) || stackVal.bytesSize() !== 4) {
-            this.success = false;
-            return 0;
-        }
-        var bytes = stackVal.bytes;
-        var value = 0;
-        for (var i=0; i<4; i++)
-            value += (bytes[i]&255) * (1 << 8*i);
-        return value;
+        return this.positive32BitValueOf(this.vm.stackValue(nDeep));
     },
     pos32BitIntFor: function(signed32) {
         // Return the 32-bit quantity as an unsigned 32-bit integer
@@ -2976,6 +2969,23 @@ Object.subclass('Squeak.Primitives',
         if (obj.isFloat) return obj.float;
         if (typeof obj === "number") return obj;  // SmallInteger
         return 0;
+    },
+    positive32BitValueOf: function(obj) {
+        if (typeof obj === "number") { // SmallInteger
+            if (obj >= 0)
+                return obj;
+            this.success = false;
+            return 0;
+        }
+        if (!this.isA(obj, Squeak.splOb_ClassLargePositiveInteger) || obj.bytesSize() !== 4) {
+            this.success = false;
+            return 0;
+        }
+        var bytes = obj.bytes;
+        var value = 0;
+        for (var i=0; i<4; i++)
+            value += (bytes[i]&255) * (1 << 8*i);
+        return value;
     },
     checkFloat: function(maybeFloat) { // returns a number and sets success
         if (maybeFloat.isFloat)
@@ -5478,6 +5488,12 @@ Object.subclass('Squeak.InterpreterProxy',
     popthenPush: function(n, obj) {
         this.vm.popNandPush(n, obj);
     },
+    pushBool: function(bool) {
+        this.vm.push(bool ? this.vm.trueObj : this.vm.falseObj);
+    },
+    pushInteger: function(int) {
+        this.vm.push(int);
+    },
     stackValue: function(n) {
         return this.vm.stackValue(n);
     },
@@ -5485,6 +5501,11 @@ Object.subclass('Squeak.InterpreterProxy',
         var int = this.vm.stackValue(n);
 	    if (typeof int !== "number") this.successFlag = false;
         return int;
+    },
+	stackObjectValue: function(n) {
+        var obj = this.vm.stackValue(n);
+	    if (typeof obj === "number") this.successFlag = false;
+        return obj;
     },
     stackBytes: function(n) {
         var oop = this.vm.stackValue(n);
@@ -5508,6 +5529,15 @@ Object.subclass('Squeak.InterpreterProxy',
 },
 'object access',
 {
+    isBytes: function(obj) {
+        return typeof obj !== "number" && obj.isBytes();
+    },
+    isWords: function(obj) {
+        return typeof obj !== "number" && obj.isWords();
+    },
+    isPointers: function(obj) {
+        return typeof obj !== "number" && obj.isPointers();
+    },
     booleanValueOf: function(obj) {
         if (obj.isTrue) return true;
         if (obj.isFalse) return false;
@@ -5524,13 +5554,20 @@ Object.subclass('Squeak.InterpreterProxy',
         if (!array) this.successFlag = false;
         return array;
     },
+    positive32BitValueOf: function(obj) {
+        return this.vm.primHandler.positive32BitValueOf(obj);
+    },
+    positive32BitIntegerFor: function(int) {
+        return this.vm.primHandler.pos32BitIntFor(int);
+    },
     fetchPointerofObject: function(n, obj) {
         return obj.pointers[n];
     },
     fetchIntegerofObject: function(n, obj) {
 	    var int = obj.pointers[n];
-	    if (typeof int !== "number") this.successFlag = false;
-        return int;
+	    if (typeof int === "number") return int;
+	    this.successFlag = false;
+	    return 0;
     },
 	fetchArrayofObject: function(n, obj, accessMethod) {
         return this.arrayValueOf(obj.pointers[n], accessMethod);
@@ -5556,11 +5593,17 @@ Object.subclass('Squeak.InterpreterProxy',
     classArray: function() {
         return this.vm.specialObjects[Squeak.splOb_ClassArray];
     },
+    classSmallInteger: function() {
+        return this.vm.specialObjects[Squeak.splOb_ClassInteger];
+    },
     classLargePositiveInteger: function() {
         return this.vm.specialObjects[Squeak.splOb_ClassLargePositiveInteger];
     },
     classLargeNegativeInteger: function() {
         return this.vm.specialObjects[Squeak.splOb_ClassLargeNegativeInteger];
+    },
+    nilObject: function() {
+        return this.vm.nilObj;
     },
     falseObject: function() {
         return this.vm.falseObj;
@@ -5573,6 +5616,9 @@ Object.subclass('Squeak.InterpreterProxy',
 {
     instantiateClassindexableSize: function(aClass, indexableSize) {
         return this.vm.instantiateClass(aClass, indexableSize);
+    },
+    methodArgumentCount: function() {
+        return this.argCount;
     },
 });
 

@@ -5456,10 +5456,6 @@ Object.subclass('Squeak.InterpreterProxy',
           get: function() { return vm.primHandler.success; },
           set: function(success) { vm.primHandler.success = success; },
         });
-        this.typeMap = {
-            "short int *": "wordsAsInt16Array",
-            "float *": "wordsAsFloat32Array",
-        };
     },
     majorVersion: function() {
         return this.VM_PROXY_MAJOR;
@@ -5514,9 +5510,21 @@ Object.subclass('Squeak.InterpreterProxy',
         if (typeof oop === "number" || !oop.isWordsOrBytes()) this.successFlag = false;
         return [];
     },
+    stackWords: function(n) {
+        var oop = this.vm.stackValue(n);
+        if (oop.words) return oop.words;
+        if (typeof oop === "number" || !oop.isWords()) this.successFlag = false;
+        return [];
+    },
     stackInt32Array: function(n) {
         var oop = this.vm.stackValue(n);
         if (oop.words) return oop.wordsAsInt32Array();
+        if (typeof oop === "number" || !oop.isWords()) this.successFlag = false;
+        return [];
+    },
+    stackInt16Array: function(n) {
+        var oop = this.vm.stackValue(n);
+        if (oop.words) return oop.wordsAsInt16Array();
         if (typeof oop === "number" || !oop.isWords()) this.successFlag = false;
         return [];
     },
@@ -5544,16 +5552,6 @@ Object.subclass('Squeak.InterpreterProxy',
         this.successFlag = false;
         return false;
     },
-	arrayValueOf: function(obj, typeDecl) {
-        var accessMethod;
-        if (typeDecl) {
-            accessMethod = this.typeMap[typeDecl];
-            if (!accessMethod) throw "Unknown type: " + typeDecl;
-        }
-        var array = accessMethod ? obj[accessMethod]() : obj.words || obj.bytes;
-        if (!array) this.successFlag = false;
-        return array;
-    },
     positive32BitValueOf: function(obj) {
         return this.vm.primHandler.positive32BitValueOf(obj);
     },
@@ -5563,14 +5561,42 @@ Object.subclass('Squeak.InterpreterProxy',
     fetchPointerofObject: function(n, obj) {
         return obj.pointers[n];
     },
+    fetchBytesofObject: function(n, obj) {
+        var oop = obj.pointers[n];
+        if (oop.bytes) return oop.bytes;
+        if (oop.words) return oop.wordsAsUint8Array();
+        if (typeof oop === "number" || !oop.isWordsOrBytes()) this.successFlag = false;
+        return [];
+    },
+    fetchWordsofObject: function(n, obj) {
+        var oop = obj.pointers[n];
+        if (oop.words) return oop.words;
+        if (typeof oop === "number" || !oop.isWords()) this.successFlag = false;
+        return [];
+    },
+    fetchInt32ArrayofObject: function(n, obj) {
+        var oop = obj.pointers[n];
+        if (oop.words) return oop.wordsAsInt32Array();
+        if (typeof oop === "number" || !oop.isWords()) this.successFlag = false;
+        return [];
+    },
+    fetchInt16ArrayofObject: function(n, obj) {
+        var oop = obj.pointers[n];
+        if (oop.words) return oop.wordsAsInt16Array();
+        if (typeof oop === "number" || !oop.isWords()) this.successFlag = false;
+        return [];
+    },
+    fetchUint16ArrayofObject: function(n, obj) {
+        var oop = obj.pointers[n];
+        if (oop.words) return oop.wordsAsUint16Array();
+        if (typeof oop === "number" || !oop.isWords()) this.successFlag = false;
+        return [];
+    },
     fetchIntegerofObject: function(n, obj) {
 	    var int = obj.pointers[n];
 	    if (typeof int === "number") return int;
 	    this.successFlag = false;
 	    return 0;
-    },
-	fetchArrayofObject: function(n, obj, accessMethod) {
-        return this.arrayValueOf(obj.pointers[n], accessMethod);
     },
     storeIntegerofObjectwithValue: function(n, obj, value) {
         if (typeof value === "number")

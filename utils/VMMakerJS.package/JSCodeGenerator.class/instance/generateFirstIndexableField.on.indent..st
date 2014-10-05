@@ -15,7 +15,8 @@ generateFirstIndexableField: msgNode on: aStream indent: level
 			ifFalse: [(cType beginsWith: 'unsigned int*') ifTrue: ['.words']
 			ifFalse: [(cType beginsWith: 'int*') ifTrue: ['.wordsAsInt32Array()']
 			ifFalse: [(cType beginsWith: 'char*') ifTrue: ['.bytes']
-			ifFalse: [self halt: 'need to handle ', cType]]]].
+			ifFalse: [(cType beginsWith: 'float*') ifTrue: ['.wordsAsFloat32Array()']
+			ifFalse: [self halt: 'need to handle ', cType]]]]].
 		accessor ifNotNil: [msgNode args first emitJSCodeOn: aStream level: level generator: self.
 			^aStream nextPutAll: accessor]].
 	"generic code below, not needed ever hopefully"

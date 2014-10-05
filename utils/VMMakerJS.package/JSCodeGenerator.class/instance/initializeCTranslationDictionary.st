@@ -106,16 +106,19 @@ initializeCTranslationDictionary
 	"optimized interpreterProxy calls"
 	#firstIndexableField:				#generateFirstIndexableField:on:indent:
 	#slotSizeOf:						#generateSlotSizeOf:on:indent:
+	#stSizeOf:							#generateSlotSizeOf:on:indent:
 	#byteSizeOfBytes:					#generateByteSizeOf:on:indent:
 	#byteSizeOf:						#generateByteSizeOf:on:indent:
 	#fetchClassOf:						#generateFetchClassOf:on:indent:
 	#superclassOf:						#generateSuperclassOf:on:indent:
 	#instanceSizeOf:					#generateInstanceSizeOf:on:indent:
 	#is:KindOf: 							#generateIsKindOf:on:indent:
+	#isFloatObject:						#generateIsFloatObject:on:indent:
 	#cDigitCopyFrom:to:len:				#generateCDigitCopy:on:indent:
 	#sizeOfSTArrayFromCPrimitive:		#generateSizeOfSTArrayFromCPrimitive:on:indent:
 	#asciiValue							#generateIdentityUnary:on:indent:
 	#primitiveFail						#generateInterpreterProxyCall:on:indent:
+	#intAtPointer:						#generateIntAtPointer:on:indent:
 	).
 
 	1 to: pairs size by: 2 do: [:i |
@@ -139,6 +142,8 @@ initializeCTranslationDictionary
 		'fprintf(stderr, "\n%s: %s", moduleName, s)'					'console.log(moduleName + ": " + s)'
 		'interpreterProxy->majorVersion() == VM_PROXY_MAJOR'	'interpreterProxy.majorVersion() == VM_PROXY_MAJOR'
 		'interpreterProxy->minorVersion() >= VM_PROXY_MINOR'	'interpreterProxy.minorVersion() >= VM_PROXY_MINOR'
+		'sqrt(result)'												'Math.sqrt(result)'
+		'sqrt(len)'													'Math.sqrt(len)'
 	).
 	1 to: pairs size by: 2 do: [:i |
 		cCodeTranslationDict at: (pairs at: i) put: (pairs at: i + 1)].

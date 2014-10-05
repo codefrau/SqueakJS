@@ -10,11 +10,15 @@ argConversionExprFor: varName stackIndex: stackIndex
 		(decl includes: $*) ifTrue:["array"
 			(decl includesSubString: 'char') ifTrue:[
 				exprList add: varName , ' := ', self vmNameString, ' stackBytes: ',stackIndex printString] ifFalse: [
+			(decl beginsWith: 'unsigned int') ifTrue:[
+				exprList add: varName , ' := ', self vmNameString, ' stackWords: ',stackIndex printString] ifFalse: [
 			(decl beginsWith: 'unsigned short') ifTrue:[
 				exprList add: varName , ' := ', self vmNameString, ' stackUint16Array: ',stackIndex printString] ifFalse: [
+			(decl beginsWith: 'short int') ifTrue:[
+				exprList add: varName , ' := ', self vmNameString, ' stackInt16Array: ',stackIndex printString] ifFalse: [
 			(decl beginsWith: 'int') ifTrue:[
 				exprList add: varName , ' := ', self vmNameString, ' stackInt32Array: ',stackIndex printString]
-			ifFalse: [self halt]]].
+			ifFalse: [self halt]]]]].
 			self beOneBasedArray: varName.
 		] ifFalse:["must be a double"
 			(decl findString: 'double' startingAt: 1) = 0 ifTrue: [

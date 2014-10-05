@@ -2482,8 +2482,8 @@ Object.subclass('Squeak.Primitives',
             // StorageManagement Primitives (68-79)
             case 68: return this.popNandPushIfOK(2, this.objectAt(false,false,true)); // Method.objectAt:
             case 69: return this.popNandPushIfOK(3, this.objectAtPut(false,false,true)); // Method.objectAt:put:
-            case 70: return this.popNandPushIfOK(1, this.vm.instantiateClass(this.stackNonInteger(0), 0)); // Class.new
-            case 71: return this.popNandPushIfOK(2, this.vm.instantiateClass(this.stackNonInteger(1), this.stackPos32BitInt(0))); // Class.new:
+            case 70: return this.popNandPushIfOK(1, this.instantiateClass(this.stackNonInteger(0), 0)); // Class.new
+            case 71: return this.popNandPushIfOK(2, this.instantiateClass(this.stackNonInteger(1), this.stackPos32BitInt(0))); // Class.new:
             case 72: return this.primitiveArrayBecome(argCount, false); // one way
             case 73: return this.popNandPushIfOK(2, this.objectAt(false,false,true)); // instVarAt:
             case 74: return this.popNandPushIfOK(3, this.objectAtPut(false,false,true)); // instVarAt:put:
@@ -3256,6 +3256,17 @@ Object.subclass('Squeak.Primitives',
     },
 },
 'basic',{
+    instantiateClass: function(clsObj, indexableSize) {
+        if (indexableSize * 4 > this.vm.image.bytesLeft()) {
+            // we're not really out of memory, we have no idea how much memory is available
+            // but we need to stop runaway allocations
+            console.warn("squeak: out of memory");
+            this.success = false;
+            return null;
+        } else {
+            return this.vm.instantiateClass(clsObj, indexableSize);
+        }
+    },
     someObject: function() {
         return this.vm.image.firstOldObject;
     },

@@ -2119,7 +2119,7 @@ Object.subclass('Squeak.Interpreter',
     },
     printMethod: function(aMethod, optContext, optSel) {
         // return a 'class>>selector' description for the method
-        if (optSel) return optContext.className() + '>>' + optSel.bytesAsStrings;
+        if (optSel) return optContext.className() + '>>' + optSel.bytesAsString();
         // this is expensive, we have to search all classes
         if (!aMethod) aMethod = this.activeContext.contextMethod();
         var found;

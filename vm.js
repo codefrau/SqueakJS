@@ -5336,6 +5336,7 @@ Object.subclass('Squeak.InterpreterProxy',
     VM_PROXY_MINOR: 11,
     initialize: function(vm) {
         this.vm = vm;
+        this.remappableOops = [];
         Object.defineProperty(this, 'successFlag', {
           get: function() { return vm.primHandler.success; },
           set: function(success) { vm.primHandler.success = success; },
@@ -5529,6 +5530,12 @@ Object.subclass('Squeak.InterpreterProxy',
     },
     methodArgumentCount: function() {
         return this.argCount;
+    },
+    pushRemappableOop: function(obj) {
+        this.remappableOops.push(obj);
+    },
+    popRemappableOop: function() {
+        return this.remappableOops.pop();
     },
 });
 

@@ -2367,7 +2367,6 @@ Object.subclass('Squeak.Primitives',
             FilePlugin:            this.findPluginFunctions("",         "primitive(File|Directory)"),
             BitBltPlugin:          this.findPluginFunctions("bitblt_",  ""),
             SoundPlugin:           this.findPluginFunctions("snd_",     "", true),
-            SoundGenerationPlugin: this.findPluginFunctions("sndgen_",  "", true),
             ScratchPlugin:         this.findPluginFunctions("scratch_", ""),
             B2DPlugin:             this.findPluginFunctions("ge",       ""),
         };
@@ -4649,121 +4648,6 @@ Object.subclass('Squeak.Primitives',
     },
     snd_primitiveSoundStopRecording: function(argCount) {
         return this.fakePrimitive('SoundPlugin.primitiveSoundStopRecording', undefined, argCount);
-    },
-},
-'SoundGenerationPlugin', {
-    sndgen_primitiveApplyReverb: function(argCount) {
-        // need to fake for now, fallback is too slow
-        return this.fakePrimitive('SoundGenerationPlugin.primitiveApplyReverb', undefined, argCount);
-    },
-    sndgen_primitiveMixSampledSound: function(argCount) {
-        var interpreterProxy = this.interpreterProxy;
-        // constants used in C code
-        var IncrementFractionBits = 16;
-        var ScaledIndexOverflow = 536870912;
-        // transcribed C code follows
-        var rcvr;
-        var n;
-        var aSoundBuffer; // short int *
-        var startIndex;
-        var leftVol;
-        var rightVol;
-        var s;
-        var lastIndex;
-        var outIndex;
-        var i;
-        var sampleIndex;
-        var overflow;
-        var sample;
-        var scaledVol;
-        var scaledVolIncr;
-        var scaledVolLimit;
-        var count;
-        var samples; // short int *
-        var samplesSize;
-        var scaledIndex;
-        var indexHighBits;
-        var scaledIncrement;
-    
-    	rcvr = interpreterProxy.stackValue(5);
-    	n = interpreterProxy.stackIntegerValue(4);
-    	aSoundBuffer = interpreterProxy.arrayValueOf(interpreterProxy.stackValue(3), "short int *");
-    	var aSoundBufferOffset = -1;
-    	startIndex = interpreterProxy.stackIntegerValue(2);
-    	leftVol = interpreterProxy.stackIntegerValue(1);
-    	rightVol = interpreterProxy.stackIntegerValue(0);
-    	scaledVol = interpreterProxy.fetchIntegerofObject(3, rcvr);
-    	scaledVolIncr = interpreterProxy.fetchIntegerofObject(4, rcvr);
-    	scaledVolLimit = interpreterProxy.fetchIntegerofObject(5, rcvr);
-    	count = interpreterProxy.fetchIntegerofObject(7, rcvr);
-    	samples = interpreterProxy.fetchArrayofObject(8, rcvr, "short int *");
-    	var samplesOffset = -1;
-    	samplesSize = interpreterProxy.fetchIntegerofObject(10, rcvr);
-    	scaledIndex = interpreterProxy.fetchIntegerofObject(11, rcvr);
-    	indexHighBits = interpreterProxy.fetchIntegerofObject(12, rcvr);
-    	scaledIncrement = interpreterProxy.fetchIntegerofObject(13, rcvr);
-    	if (!(interpreterProxy.successFlag)) {
-    		return null;
-    	}
-    	lastIndex = (startIndex + n) - 1;
-    
-    	/* index of next stereo output sample pair */
-    
-    	outIndex = startIndex;
-    	sampleIndex = indexHighBits + ((scaledIndex) >> IncrementFractionBits);
-    	while ((sampleIndex <= samplesSize) && (outIndex <= lastIndex)) {
-    		sample = (((samples[sampleIndex + samplesOffset]) * scaledVol) >> 15);
-    		if (leftVol > 0) {
-    			i = (2 * outIndex) - 1;
-    			s = (aSoundBuffer[i + aSoundBufferOffset]) + (((sample * leftVol) >> 15));
-    			if (s > 32767) {
-    				s = 32767;
-    			}
-    			if (s < -32767) {
-    				s = -32767;
-    			}
-    			aSoundBuffer[i + aSoundBufferOffset] = s;
-    		}
-    		if (rightVol > 0) {
-    			i = 2 * outIndex;
-    			s = (aSoundBuffer[i + aSoundBufferOffset]) + (((sample * rightVol) >> 15));
-    			if (s > 32767) {
-    				s = 32767;
-    			}
-    			if (s < -32767) {
-    				s = -32767;
-    			}
-    			aSoundBuffer[i + aSoundBufferOffset] = s;
-    		}
-    		if (scaledVolIncr !== 0) {
-    			scaledVol += scaledVolIncr;
-    			if (((scaledVolIncr > 0) && (scaledVol >= scaledVolLimit)) || ((scaledVolIncr < 0) && (scaledVol <= scaledVolLimit))) {
-    
-    				/* reached the limit; stop incrementing */
-    
-    				scaledVol = scaledVolLimit;
-    				scaledVolIncr = 0;
-    			}
-    		}
-    		scaledIndex += scaledIncrement;
-    		if (scaledIndex >= ScaledIndexOverflow) {
-    			overflow = (scaledIndex) >> IncrementFractionBits;
-    			indexHighBits += overflow;
-    			scaledIndex -= overflow << IncrementFractionBits;
-    		}
-    		sampleIndex = indexHighBits + ((scaledIndex) >> IncrementFractionBits);
-    		outIndex += 1;
-    	}
-    	count -= n;
-    	if (!(interpreterProxy.successFlag)) {
-    		return null;
-    	}
-    	interpreterProxy.storeIntegerofObjectwithValue(3, rcvr, scaledVol);
-    	interpreterProxy.storeIntegerofObjectwithValue(4, rcvr, scaledVolIncr);
-    	interpreterProxy.storeIntegerofObjectwithValue(7, rcvr, count);
-    	interpreterProxy.storeIntegerofObjectwithValue(11, rcvr, scaledIndex);
-    	interpreterProxy.storeIntegerofObjectwithValue(12, rcvr, indexHighBits);
-    	interpreterProxy.pop(5);
     },
 },
 'B2DPlugin', {

@@ -4378,18 +4378,19 @@ Object.subclass('Squeak.Primitives',
             window.SqueakFiles = {};
         var path = Squeak.splitFilePath(filename);
         if (!path.basename) return null;    // malformed filename
-        // if it is open already, return it   
-        var file = SqueakFiles[path.fullname];
-        if (file) {
-            ++file.refCount;
-            return file;
-        }
-        // otherwise, fetch or create its directory entry
+        // fetch or create directory entry
         var directory = Squeak.dirList(path.dirname);
         if (!directory) return null;
         var entry = directory[path.basename],
             contents = null;
-        if (!entry) {
+        if (entry) {
+            // if it is open already, return it
+            var file = SqueakFiles[path.fullname];
+            if (file) {
+                ++file.refCount;
+                return file;
+            }
+        } else {
             if (!writeFlag) {
                 console.log("File not found: " + path.fullname);
                 return null;
@@ -4402,7 +4403,7 @@ Object.subclass('Squeak.Primitives',
             }
         }
         // make the file object
-        file = {
+        var file = {
             name: path.fullname,
             size: entry[4],         // actual file size, may differ from contents.length
             contents: contents,     // possibly null, fetched when needed

@@ -2800,8 +2800,13 @@ Object.subclass('Squeak.Primitives',
         var	index = this.stackInteger(0) - 1;
         if (!this.success) return false;
         var moduleNames = [];
-        for (var key in this.loadedModules)
-            if (this.loadedModules[key]) moduleNames.push(key);
+        for (var key in this.loadedModules) {
+            var module = this.loadedModules[key];
+            if (module) {
+                var moduleName = module.getModuleName ? module.getModuleName() : key;
+                moduleNames.push(moduleName);
+            }
+        }
     	return this.popNandPushIfOK(argCount, this.makeStObject(moduleNames[index]));
     },
 },

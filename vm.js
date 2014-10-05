@@ -5677,9 +5677,11 @@ Object.subclass('Squeak.BitBlt',
                 shifts = colorMapObj.pointers[0].words,
                 masks = colorMapObj.pointers[1].words;
                 colors = colorMapObj.pointers[2].words;
-                if (!shifts || shifts.length != 4 || !masks || masks.length != 4) return false;
-                this.cmShiftTable = new Int32Array(shifts.buffer);
-                this.cmMaskTable = masks;
+                if (shifts || masks) {
+                    if (!shifts || shifts.length != 4 || !masks || masks.length != 4) return false;
+                    this.cmShiftTable = new Int32Array(shifts.buffer);
+                    this.cmMaskTable = masks;
+                }
             }
             if (colors && colors.length) {
                 this.cmLookupTable = colors;

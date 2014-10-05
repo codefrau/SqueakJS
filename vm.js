@@ -5335,7 +5335,7 @@ Object.subclass('Squeak.InterpreterProxy',
 'stack access',
 {
     pop: function(n) {
-        this.vm.pop(n);
+        this.vm.popN(n);
     },
     popthenPush: function(n, obj) {
         this.vm.popNandPush(n, obj);
@@ -5346,18 +5346,30 @@ Object.subclass('Squeak.InterpreterProxy',
     pushInteger: function(int) {
         this.vm.push(int);
     },
+    pushFloat: function(num) {
+        this.vm.push(this.floatObjectOf(num));
+    },
     stackValue: function(n) {
         return this.vm.stackValue(n);
     },
 	stackIntegerValue: function(n) {
         var int = this.vm.stackValue(n);
-	    if (typeof int !== "number") this.successFlag = false;
-        return int;
+        if (typeof int === "number") return int;
+        this.successFlag = false;
+        return 0;
+    },
+    stackFloatValue: function(n) {
+        this.vm.success = true;
+        var float = this.vm.stackIntOrFloat(n);
+        if (this.vm.success) return float;
+        this.successFlag = false;
+        return 0;
     },
 	stackObjectValue: function(n) {
         var obj = this.vm.stackValue(n);
-	    if (typeof obj === "number") this.successFlag = false;
-        return obj;
+        if (typeof obj !== "number") return obj;
+        this.successFlag = false;
+        return this.vm.nilObj;
     },
     stackBytes: function(n) {
         var oop = this.vm.stackValue(n);
@@ -5414,6 +5426,14 @@ Object.subclass('Squeak.InterpreterProxy',
     positive32BitIntegerFor: function(int) {
         return this.vm.primHandler.pos32BitIntFor(int);
     },
+    floatValueOf: function(obj) {
+        if (obj.isFloat) return obj.float;
+        this.successFlag = false;
+        return 0;
+    },
+    floatObjectOf: function(num) {
+        return this.vm.primHandler.makeFloat(num);
+    },
     fetchPointerofObject: function(n, obj) {
         return obj.pointers[n];
     },
@@ -5459,6 +5479,9 @@ Object.subclass('Squeak.InterpreterProxy',
             obj.pointers[n] = value;
         else this.successFlag = false;
     },
+    storePointerofObjectwithValue: function(n, obj, value) {
+        obj.pointers[n] = value;
+    },
     stObjectatput: function(array, index, obj) {
         if (array.sqClass !== this.classArray()) throw Error("Array expected");
         if (index < 1 || index >= array.pointers.length) return this.successFlag = false;
@@ -5484,6 +5507,9 @@ Object.subclass('Squeak.InterpreterProxy',
     classLargeNegativeInteger: function() {
         return this.vm.specialObjects[Squeak.splOb_ClassLargeNegativeInteger];
     },
+    classPoint: function() {
+        return this.vm.specialObjects[Squeak.splOb_ClassPoint];
+    },
     nilObject: function() {
         return this.vm.nilObj;
     },
@@ -5501,6 +5527,9 @@ Object.subclass('Squeak.InterpreterProxy',
     },
     methodArgumentCount: function() {
         return this.argCount;
+    },
+    makePointwithxValueyValue: function(x, y) {
+        return this.vm.primHandler.makePointWithXandY(x, y);
     },
     pushRemappableOop: function(obj) {
         this.remappableOops.push(obj);

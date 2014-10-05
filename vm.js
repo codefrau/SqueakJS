@@ -2360,10 +2360,6 @@ Object.subclass('Squeak.Primitives',
     initModules: function() {
         this.loadedModules = {};
         this.builtinModules = {
-            FloatArrayPlugin: {
-                    primitiveAt: this.primitiveFloatArrayAtAndPut.bind(this),
-                    primitiveAtPut: this.primitiveFloatArrayAtAndPut.bind(this),
-            },
             FilePlugin:            this.findPluginFunctions("",         "primitive(File|Directory)"),
             BitBltPlugin:          this.findPluginFunctions("bitblt_",  ""),
             SoundPlugin:           this.findPluginFunctions("snd_",     "", true),
@@ -4530,31 +4526,6 @@ Object.subclass('Squeak.Primitives',
         this.vm.popN(argCount);
         return true;
 	},
-},
-'FloatArrayPlugin', {
-    primitiveFloatArrayAt: function(argCount) {
-        return this.primitiveFloatArrayAtAndPut(argCount);
-    },
-    primitiveFloatArrayAtPut: function(argCount) {
-        return this.primitiveFloatArrayAtAndPut(argCount);
-    },
-    primitiveFloatArrayAtAndPut: function(argCount) {
-        var rcvr = this.stackNonInteger(argCount),
-            index = this.stackPos32BitInt(argCount-1) - 1,
-            array = rcvr.wordsAsFloat32Array();
-        if (!this.success || index < 0 || index >= array.length)
-            return false;
-        if (argCount < 2) {// at:
-            var value = array[index];
-            this.vm.popNandPush(argCount+1, this.makeFloat(value));
-        } else { // at:put:
-            var value = this.stackFloat(0);
-            if (!this.success) return false;
-            array[index] = value;
-            this.vm.popNandPush(argCount+1, this.vm.stackValue(0));
-        }
-        return true;
-    },
 },
 'SoundPlugin', {
     snd_primitiveSoundStart: function(argCount) {

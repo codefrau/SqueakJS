@@ -1,0 +1,3 @@
+*vmmakerjs
+isInterpreterProxyConstant
+	^false

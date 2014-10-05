@@ -1,7 +1,7 @@
 public
 var: varName type: type array: array
-"use this in preference to #var:declareC: when possible. This produces a C statment of the form
-int * fooArray[]={1,2,3}
+"use this in preference to #var:declareC: when possible. This produces a JS statment of the form
+var fooArray = [1,2,3]
 See also #var:type: for simple var decls" 
 	self
 		var: varName
@@ -9,6 +9,6 @@ See also #var:type: for simple var decls"
 			s nextPutAll: type.
 			s space.
 			s nextPutAll: varName.
-			s nextPutAll: '[] = {'.
+			s nextPutAll: ' = ['.
 			self printArray: array on: s.
-			s nextPut: $}])
+			s nextPut: $]])

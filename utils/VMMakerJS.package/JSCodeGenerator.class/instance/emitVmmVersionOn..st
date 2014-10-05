@@ -5,7 +5,7 @@ emitVmmVersionOn: aStream
 	identifier for platform source code version, such the the VM can identify
 	the source code version for its platform source and matching VMMaker source."
 
-	aStream nextPutAll: '#define VMMAKER_VERSION "';
+	aStream nextPutAll: 'var VMMAKER_VERSION = "';
 		nextPutAll: VMMaker versionString;
 		nextPut: $";
 		cr

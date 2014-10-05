@@ -106,8 +106,11 @@ initializeCTranslationDictionary
 	"optimized interpreterProxy calls"
 	#firstIndexableField:				#generateFirstIndexableField:on:indent:
 	#slotSizeOf:						#generateSlotSizeOf:on:indent:
-	#byteSizeOfBytes:					#generateByteSizeOfBytes:on:indent:
+	#byteSizeOfBytes:					#generateByteSizeOf:on:indent:
+	#byteSizeOf:						#generateByteSizeOf:on:indent:
 	#fetchClassOf:						#generateFetchClassOf:on:indent:
+	#superclassOf:						#generateSuperclassOf:on:indent:
+	#instanceSizeOf:					#generateInstanceSizeOf:on:indent:
 	#is:KindOf: 							#generateIsKindOf:on:indent:
 	#cDigitCopyFrom:to:len:				#generateCDigitCopy:on:indent:
 	#sizeOfSTArrayFromCPrimitive:		#generateSizeOfSTArrayFromCPrimitive:on:indent:

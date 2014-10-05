@@ -8,6 +8,9 @@ emitJSVariablesOn: aStream
 			aStream nextPutAll: 'var ', varString.
 			varDecl := variableDeclarations at: varString ifAbsent: [''].
 			(varDecl includes: $=)
-				ifTrue: [aStream nextPutAll: ' =', (varDecl copyAfter: $=)].
+				ifTrue: [aStream nextPutAll: ' =', (varDecl copyAfter: $=)]
+				ifFalse: [(varDecl includes: $*)
+					ifTrue: [aStream nextPutAll: ' = null']
+					ifFalse: [aStream nextPutAll: ' = 0']].
 			aStream nextPutAll: ';'; cr].
 	aStream cr.

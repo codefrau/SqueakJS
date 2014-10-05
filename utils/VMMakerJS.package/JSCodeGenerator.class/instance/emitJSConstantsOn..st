@@ -13,10 +13,11 @@ emitJSConstantsOn: aStream
 	constList asSortedCollection do: [ :varName |
 		node := constants at: varName.
 		node name isEmpty ifFalse: [
-			aStream nextPutAll: '#define '.
+			aStream nextPutAll: 'var '.
 			aStream nextPutAll: node name.
-			aStream space.
+			aStream nextPutAll: ' = '.
 			aStream nextPutAll: (self cLiteralFor: node value).
+			aStream nextPut: $;.
 			aStream cr
 		].
 	].

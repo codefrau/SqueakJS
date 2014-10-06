@@ -4608,17 +4608,15 @@ Object.subclass('Squeak.Primitives',
     },
     geReset: function(bitbltObj) {
         if (this.b2d_debug) console.log("-- reset");
-        var state = this.b2d_state;
+        var state = this.b2d_state,
+            formObj = bitbltObj.pointers[Squeak.BitBlt_dest];
+        if (!state.form || state.form.obj !== formObj)
+            state.form = this.loadForm(formObj);
+        this.geSetupCanvas();
         state.needsFlush = false;
         state.hasFill = false;
         state.hasStroke = false;
         state.fills = [];
-        // Reuse drawing context if possible
-        debugger;
-        var formObj = bitbltObj.pointers[Squeak.BitBlt_dest];
-        if (!state.form || state.form.obj !== formObj)
-            state.form = this.loadForm(formObj);
-        this.geSetupCanvas();
         state.minX = 0;
         state.minY = 0;
         state.maxX = state.form.width;

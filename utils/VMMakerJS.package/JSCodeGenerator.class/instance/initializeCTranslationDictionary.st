@@ -15,6 +15,9 @@ initializeCTranslationDictionary
 	#-				#generateMinus:on:indent:
 	#negated		#generateNegated:on:indent:
 	#abs			#generateAbs:on:indent:
+	#sqrt			#generateSqrt:on:indent:
+	#sin			#generateSin:on:indent:
+	#cos			#generateCos:on:indent:
 	#*				#generateTimes:on:indent:
 	#/				#generateDivide:on:indent:
 	#//				#generateDivide:on:indent:
@@ -152,6 +155,13 @@ initializeCTranslationDictionary
 		'interpreterProxy->minorVersion() >= VM_PROXY_MINOR'	'interpreterProxy.minorVersion() >= VM_PROXY_MINOR'
 		'sqrt(result)'												'Math.sqrt(result)'
 		'sqrt(len)'													'Math.sqrt(len)'
+		'atan2(dy,dx)'												'Math.atan2(dy, dx)'
+		'rand()'														'Math.random()'
+		'*src++'													'src[_src++]' 	
+		'*dst++ = max'												'dst[_dst++] = max'
+		'src++'		 												'_src++'
+		'*dst++ = *src; src += 2'									'dst[_dst++] = src[_src]; _src += 2'
+
 	).
 	1 to: pairs size by: 2 do: [:i |
 		cCodeTranslationDict at: (pairs at: i) put: (pairs at: i + 1)].

@@ -6,7 +6,9 @@
 		"emitExportsOn:" : "bf 10/1/2014 13:26",
 		"emitJSHeaderOn:" : "bf 10/6/2014 18:57",
 		"generateCodeStringForPrimitives" : "bf 10/6/2014 15:37",
+		"ignoredMethods" : "bf 10/6/2014 23:52",
 		"isGeneratingPluginCode" : "ar 10/7/1998 17:54",
 		"isTypePointerToStruct:" : "eem 11/7/2009 10:03",
 		"localizeGlobalVariables" : "tpr 1/10/2003 16:20",
+		"pluginName" : "bf 10/7/2014 00:18",
 		"pluginName:" : "tpr 1/10/2003 16:18" } }

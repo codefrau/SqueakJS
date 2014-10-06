@@ -20,4 +20,6 @@ emitJSHeaderOn: aStream generator: aCodeGen
 						aStream nextPutAll: ' = new Array(', size, ')']].
 		aStream nextPutAll: ';'; cr
 	].
+	(#(primitiveExtractChannel primitiveCondenseSound) includes: selector)
+		ifTrue: [#(src dst) do: [:v | aStream nextPutAll: '	var _', v, ' = 0;'; cr]].
 	locals isEmpty ifFalse: [ aStream cr ].

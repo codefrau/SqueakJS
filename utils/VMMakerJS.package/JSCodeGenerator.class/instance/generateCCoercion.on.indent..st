@@ -8,8 +8,11 @@ generateCCoercion: msgNode on: aStream indent: level
 		cType := msgNode args second value.
 		self emitJSExpression: expr args first on: aStream.
 		cType = 'unsigned char *' ifTrue: [^aStream nextPutAll: '.bytes'].
+		cType = 'unsigned int *' ifTrue: [^aStream nextPutAll: '.words'].
 		cType = 'int *' ifTrue: [^aStream nextPutAll: '.wordsAsInt32Array()'].
+		cType = 'short *' ifTrue: [^aStream nextPutAll: '.wordsAsInt16Array()'].
 		cType = 'float *' ifTrue: [^aStream nextPutAll: '.wordsAsFloat32Array()'].
+		cType = 'double *' ifTrue: [^aStream nextPutAll: '.wordsAsFloat64Array()'].
 		self halt.
 	] ifFalse: [
 		((#('double' 'float') includes: cType) or: ['sqInt (*)(*)'match: cType])

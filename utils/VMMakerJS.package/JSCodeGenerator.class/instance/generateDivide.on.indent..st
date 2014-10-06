@@ -5,6 +5,10 @@ generateDivide: msgNode on: aStream indent: level
 	| rcvr arg divisor |
 	rcvr := msgNode receiver.
 	arg := msgNode args first.
+	(msgNode selector == #/ and: [self pluginName = 'ScratchPlugin']) ifTrue: [
+		self emitJSExpression: rcvr on: aStream.
+		aStream nextPutAll: ' / '.
+		^self emitJSExpression: arg on: aStream].
 	(arg isConstant and:
 	 [UseRightShiftForDivide and:
 	 [(divisor := arg value) isInteger and:

@@ -5,7 +5,7 @@
 
 TARGET=../gh-pages/scratch
 MANIFEST=$(TARGET)/offline.appcache
-FILES=../lib/squeak.js ../vm.js ../jit.js index.html scratch.css scratch.js scratch.png \
+FILES=../lib/squeak.js ../vm.js ../jit.js ../plugins/*.js index.html scratch.css scratch.js scratch.png \
 	../lib/lz-string.js ../lib/addtohomescreen.css ../lib/addtohomescreen.js ../lib/gh-fork-ribbon.css
 EXTRA=http://freudenbergs.de/bert/squeakjs/scratch/Scratch.image
 
@@ -16,7 +16,7 @@ $(MANIFEST): Makefile $(TARGET)
 	@for f in $(FILES) $(EXTRA); do echo $$f >> $@ ; done
 
 $(TARGET): $(FILES)
-	@mkdir -pv $@ $@/../lib
+	mkdir -pv $@ $@/../lib $@/../plugins
 	@for f in $^ ; do install -pvm 444 $$f $@/$$f ; done
 	@touch $@
 

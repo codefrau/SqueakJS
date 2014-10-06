@@ -5,7 +5,8 @@
 
 TARGET=../gh-pages/demo
 MANIFEST=$(TARGET)/offline.appcache
-FILES=../lib/squeak.js ../vm.js ../jit.js simple.html simple.css simple.js SimplePlugin.js mini.image icon.png \
+FILES=../lib/squeak.js ../vm.js ../jit.js ../plugins/*.js \
+	simple.html simple.css simple.js SimplePlugin.js mini.image icon.png \
 	../lib/lz-string.js ../lib/addtohomescreen.css ../lib/addtohomescreen.js ../lib/gh-fork-ribbon.css
 EXTRA=
 
@@ -16,7 +17,7 @@ $(MANIFEST): Makefile $(TARGET)
 	@for f in $(FILES) $(EXTRA); do echo $$f >> $@ ; done
 
 $(TARGET): $(FILES)
-	@mkdir -pv $@ $@/../lib
+	mkdir -pv $@ $@/../lib $@/../plugins
 	@for f in $^ ; do install -pvm 444 $$f $@/$$f ; done
 	@touch $@
 

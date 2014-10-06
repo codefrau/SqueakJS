@@ -5265,6 +5265,92 @@ Object.subclass('Squeak.Primitives',
         if (outPix === 0) outPix = 1;   // convert transparent to 1
         bitmap[i] = outPix;
     },
+},
+'Obsolete', {
+    primitiveFloatArrayAt: function(argCount) {
+        return this.namedPrimitive("FloatArrayPlugin", "primitiveAt", argCount);
+    },
+    primitiveFloatArrayMulFloatArray: function(argCount) {
+        return this.namedPrimitive("FloatArrayPlugin", "primitiveMulFloatArray", argCount);
+    },
+    primitiveFloatArrayAddScalar: function(argCount) {
+        return this.namedPrimitive("FloatArrayPlugin", "primitiveAddScalar", argCount);
+    },
+    primitiveFloatArrayDivFloatArray: function(argCount) {
+        return this.namedPrimitive("FloatArrayPlugin", "primitiveDivFloatArray", argCount);
+    },
+    primitiveFloatArrayDivScalar: function(argCount) {
+        return this.namedPrimitive("FloatArrayPlugin", "primitiveDivScalar", argCount);
+    },
+    primitiveFloatArrayHash: function(argCount) {
+        return this.namedPrimitive("FloatArrayPlugin", "primitiveHash", argCount);
+    },
+    primitiveFloatArrayAtPut: function(argCount) {
+        return this.namedPrimitive("FloatArrayPlugin", "primitiveAtPut", argCount);
+    },
+    primitiveFloatArrayMulScalar: function(argCount) {
+        return this.namedPrimitive("FloatArrayPlugin", "primitiveMulScalar", argCount);
+    },
+    primitiveFloatArrayAddFloatArray: function(argCount) {
+        return this.namedPrimitive("FloatArrayPlugin", "primitiveAddFloatArray", argCount);
+    },
+    primitiveFloatArraySubScalar: function(argCount) {
+        return this.namedPrimitive("FloatArrayPlugin", "primitiveSubScalar", argCount);
+    },
+    primitiveFloatArraySubFloatArray: function(argCount) {
+        return this.namedPrimitive("FloatArrayPlugin", "primitiveSubFloatArray", argCount);
+    },
+    primitiveFloatArrayEqual: function(argCount) {
+        return this.namedPrimitive("FloatArrayPlugin", "primitiveEqual", argCount);
+    },
+    primitiveFloatArrayDotProduct: function(argCount) {
+        return this.namedPrimitive("FloatArrayPlugin", "primitiveDotProduct", argCount);
+    },
+    m23PrimitiveInvertRectInto: function(argCount) {
+        return this.namedPrimitive("Matrix2x3Plugin", "primitiveInvertRectInto", argCount);
+    },
+    m23PrimitiveTransformPoint: function(argCount) {
+        return this.namedPrimitive("Matrix2x3Plugin", "primitiveTransformPoint", argCount);
+    },
+    m23PrimitiveIsPureTranslation: function(argCount) {
+        return this.namedPrimitive("Matrix2x3Plugin", "primitiveIsPureTranslation", argCount);
+    },
+    m23PrimitiveComposeMatrix: function(argCount) {
+        return this.namedPrimitive("Matrix2x3Plugin", "primitiveComposeMatrix", argCount);
+    },
+    m23PrimitiveTransformRectInto: function(argCount) {
+        return this.namedPrimitive("Matrix2x3Plugin", "primitiveTransformRectInto", argCount);
+    },
+    m23PrimitiveIsIdentity: function(argCount) {
+        return this.namedPrimitive("Matrix2x3Plugin", "primitiveIsIdentity", argCount);
+    },
+    m23PrimitiveInvertPoint: function(argCount) {
+        return this.namedPrimitive("Matrix2x3Plugin", "primitiveInvertPoint", argCount);
+    },
+    primitiveDeflateBlock: function(argCount) {
+        return this.namedPrimitive("ZipPlugin", "primitiveDeflateBlock", argCount);
+    },
+    primitiveDeflateUpdateHashTable: function(argCount) {
+        return this.namedPrimitive("ZipPlugin", "primitiveDeflateUpdateHashTable", argCount);
+    },
+    primitiveUpdateGZipCrc32: function(argCount) {
+        return this.namedPrimitive("ZipPlugin", "primitiveUpdateGZipCrc32", argCount);
+    },
+    primitiveInflateDecompressBlock: function(argCount) {
+        return this.namedPrimitive("ZipPlugin", "primitiveInflateDecompressBlock", argCount);
+    },
+    primitiveZipSendBlock: function(argCount) {
+        return this.namedPrimitive("ZipPlugin", "primitiveZipSendBlock", argCount);
+    },
+    primitiveFFTTransformData: function(argCount) {
+        return this.namedPrimitive("FFTPlugin", "primitiveFFTTransformData", argCount);
+    },
+    primitiveFFTScaleData: function(argCount) {
+        return this.namedPrimitive("FFTPlugin", "primitiveFFTScaleData", argCount);
+    },
+    primitiveFFTPermuteData: function(argCount) {
+        return this.namedPrimitive("FFTPlugin", "primitiveFFTPermuteData", argCount);
+    },
 });
 
 Object.subclass('Squeak.InterpreterProxy',

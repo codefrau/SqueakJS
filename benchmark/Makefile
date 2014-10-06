@@ -5,7 +5,7 @@
 
 TARGET=../gh-pages/benchmark
 MANIFEST=$(TARGET)/offline.appcache
-FILES=../lib/squeak.js ../vm.js ../jit.js benchmark.html benchmark.css benchmark.js benchmark.image \
+FILES=../lib/squeak.js ../vm.js ../jit.js ../plugins/*.js benchmark.html benchmark.css benchmark.js benchmark.image \
 	../lib/lz-string.js
 EXTRA=
 
@@ -16,7 +16,7 @@ $(MANIFEST): Makefile $(TARGET)
 	@for f in $(FILES) $(EXTRA); do echo $$f >> $@ ; done
 
 $(TARGET): $(FILES)
-	@mkdir -pv $@ $@/../lib
+	mkdir -pv $@ $@/../lib $@/../plugins
 	@for f in $^ ; do install -pvm 444 $$f $@/$$f ; done
 	@touch $@
 

@@ -2368,7 +2368,6 @@ Object.subclass('Squeak.Primitives',
         this.loadedModules = {};
         this.builtinModules = {
             FilePlugin:            this.findPluginFunctions("",         "primitive(File|Directory)"),
-            BitBltPlugin:          this.findPluginFunctions("bitblt_",  ""),
             SoundPlugin:           this.findPluginFunctions("snd_",     "", true),
             ScratchPlugin:         this.findPluginFunctions("scratch_", ""),
             B2DPlugin:             this.findPluginFunctions("ge",       ""),
@@ -2388,8 +2387,6 @@ Object.subclass('Squeak.Primitives',
         return plugin;
     },
     initDisplay: function() {
-        this.bitblt = new Squeak.BitBlt();
-        this.bitblt.stats = {};
         this.indexedColors = [
             0xFFFFFFFF, 0xFF000001, 0xFFFFFFFF, 0xFF808080, 0xFFFF0000, 0xFF00FF00, 0xFF0000FF, 0xFF00FFFF,
             0xFFFFFF00, 0xFFFF00FF, 0xFF202020, 0xFF404040, 0xFF606060, 0xFF9F9F9F, 0xFFBFBFBF, 0xFFDFDFDF,
@@ -4095,17 +4092,34 @@ Object.subclass('Squeak.Primitives',
         var supportedDepths =  [1, 2, 4, 8, 16, 32]; // match showOnDisplay()
         return this.pop2andPushBoolIfOK(supportedDepths.indexOf(this.stackInteger(0)) >= 0);
     },
-    theDisplay: function() {
-        return this.bitblt.loadForm(this.vm.specialObjects[Squeak.splOb_TheDisplay]);
+    loadForm: function(formObj) {
+        if (formObj.isNil) return null;
+        var form = {
+            obj: formObj,
+            bits: formObj.pointers[Squeak.Form_bits].wordsOrBytes(),
+            depth: formObj.pointers[Squeak.Form_depth],
+            width: formObj.pointers[Squeak.Form_width],
+            height: formObj.pointers[Squeak.Form_height],
+        }
+        if (form.width === 0 || form.height === 0) return form;
+        if (!(form.width > 0 && form.height > 0)) return null;
+        form.msb = form.depth > 0;
+        if (!form.msb) form.depth = -form.depth;
+        if (!(form.depth > 0)) return null; // happens if not int
+        form.pixPerWord = 32 / form.depth;
+        form.pitch = (form.width + (form.pixPerWord - 1)) / form.pixPerWord | 0;
+        if (form.bits.length !== (form.pitch * form.height)) return null;
+        return form;
     },
-    displayDirty: function(bitblt) {
-        var rect;
+    theDisplay: function() {
+        return this.loadForm(this.vm.specialObjects[Squeak.splOb_TheDisplay]);
+    },
+    displayDirty: function(form, rect) {
         if (!this.deferDisplayUpdates
-            && bitblt.destForm == this.vm.specialObjects[Squeak.splOb_TheDisplay]
-            && (rect = bitblt.affectedRect()) != null)
+            && form == this.vm.specialObjects[Squeak.splOb_TheDisplay])
                 this.displayUpdate(this.theDisplay(), rect);
     },
-    displayFlush: function(rect) {
+    displayFlush: function() {
         // not needed
     },
     displayUpdate: function(form, rect, noCursor) {
@@ -4490,49 +4504,6 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
 },
-'BitBltPlugin', {
-	bitblt_primitiveCopyBits: function(argCount) {
-        var bitbltObj = this.stackNonInteger(argCount),
-            bitblt = this.bitblt;
-        if (!bitblt.loadBitBlt(bitbltObj)) return false;
-
-        if (bitblt.combinationRule === 30 || bitblt.combinationRule === 31) {
-            // fetch source alpha parameter for alpha blend
-            if (argCount !== 1) return false;
-            bitblt.sourceAlpha = this.stackInteger(0);
-            if (!this.success || bitblt.sourceAlpha < 0 || bitblt.sourceAlpha > 255)
-				return false;
-			this.vm.pop();
-        }
-    	
-        var timer = window.performance || Date,
-            start = timer.now(),
-            mode = [bitblt.combinationRule, bitblt.source ? bitblt.source.depth : 0, bitblt.dest.depth].join("|");
-        bitblt.copyBits();
-        bitblt.stats[mode] = (bitblt.stats[mode] || 0) + (timer.now() - start);
-
-        if (bitblt.combinationRule === 22 || bitblt.combinationRule === 32)
-            this.vm.popNandPush(1, bitblt.bitCount);
-        else this.displayDirty(bitblt);
-        return true;
-	},
-	bitblt_primitiveWarpBits: function(argCount) {
-        var bitbltObj = this.stackNonInteger(argCount),
-            smoothing = argCount == 2 ? Math.max(1, this.stackInteger(1)) : 1,
-            sourceMap = argCount == 2 ? this.stackNonInteger(0).words : null,
-            bitblt = this.bitblt;
-        if (!this.success) return false;
-        if (!bitblt.loadBitBlt(bitbltObj, smoothing, sourceMap)) return false;
-        // color map is required to smooth non-RGB dest
-		if (smoothing > 1 && bitblt.source.depth < 16)
-            if (!sourceMap || sourceMap.length < (1 << bitblt.source.depth))
-                return false; 	// sourceMap must be long enough for source depth
-        bitblt.warpBits();
-        this.displayDirty(bitblt);
-        this.vm.popN(argCount);
-        return true;
-	},
-},
 'SoundPlugin', {
     snd_primitiveSoundStart: function(argCount) {
         return this.snd_primitiveSoundStartWithSemaphore(argCount);
@@ -4631,8 +4602,7 @@ Object.subclass('Squeak.Primitives',
     geInitialiseModule: function() {
         this.b2d_debug = false;
         this.b2d_state = {
-            bitblt: new Squeak.BitBlt(),
-            bitbltObj: null,
+            form: null,
         };
         return true;
     },
@@ -4644,15 +4614,15 @@ Object.subclass('Squeak.Primitives',
         state.hasStroke = false;
         state.fills = [];
         // Reuse drawing context if possible
-        if (state.bitbltObj != bitbltObj) {
-            state.bitbltObj = bitbltObj;
-            state.bitblt.loadBitBlt(bitbltObj);
-        }
+        debugger;
+        var formObj = bitbltObj.pointers[Squeak.BitBlt_dest];
+        if (!state.form || state.form.obj !== formObj)
+            state.form = this.loadForm(formObj);
         this.geSetupCanvas();
         state.minX = 0;
         state.minY = 0;
-        state.maxX = state.bitblt.dest.width;
-        state.maxY = state.bitblt.dest.height;
+        state.maxX = state.form.width;
+        state.maxY = state.form.height;
     },
     geSetupCanvas: function() {
         var state = this.b2d_state;
@@ -4669,7 +4639,7 @@ Object.subclass('Squeak.Primitives',
             if (!state.context) alert("B2D: cannot create context");
         };
         // set canvas size, which also clears it
-        var form = state.bitblt.dest,
+        var form = state.form,
             canvas = state.context.canvas;
         canvas.width = form.width;
         canvas.height = form.height;
@@ -4698,8 +4668,7 @@ Object.subclass('Squeak.Primitives',
     },
     geBlendOverForm: function() {
         var state = this.b2d_state,
-            bitblt = state.bitblt,
-            form = bitblt.dest;
+            form = state.form;
         if (this.b2d_debug) console.log("==> read into " + form.width + "x" + form.height + "@" + form.depth);
         if (!form.width || !form.height || state.maxX <= state.minX || state.maxY <= state.minY) return;
         if (!form.msb) return this.vm.warnOnce("B2D: drawing to little-endian forms not implemented yet");
@@ -4714,17 +4683,12 @@ Object.subclass('Squeak.Primitives',
         } else {
             this.vm.warnOnce("B2D: drawing to " + form.depth + " bit forms not supported yet");
         }
-        // set bitblt values for affectedRect()
-        bitblt.dx = state.minX;
-        bitblt.dy = state.minY;
-        bitblt.bbW = state.maxX - state.minX;
-        bitblt.bbH = state.maxY - state.minY;
-        this.displayDirty(bitblt);
+        this.displayDirty(form.obj, state.minX, state.minY, state.maxX - state.minX, state.maxY - state.minY);
     },
     geBlendOverForm1: function() {
         // since we have 32 pixels per word, round to 32 pixels
         var state = this.b2d_state,
-            form = state.bitblt.dest,
+            form = state.form,
             minX = state.minX & ~31,
             minY = state.minY,
             maxX = (state.maxX + 31) & ~31,
@@ -4755,7 +4719,7 @@ Object.subclass('Squeak.Primitives',
     geBlendOverForm8: function() {
         // since we have four pixels per word, round to 4 pixels
         var state = this.b2d_state,
-            form = state.bitblt.dest,
+            form = state.form,
             minX = state.minX & ~3,
             minY = state.minY,
             maxX = (state.maxX + 3) & ~3,
@@ -4799,7 +4763,7 @@ Object.subclass('Squeak.Primitives',
     geBlendOverForm16: function() {
         // since we have two pixels per word, grab from even positions
         var state = this.b2d_state,
-            form = state.bitblt.dest,
+            form = state.form,
             minX = state.minX & ~1,
             minY = state.minY,
             maxX = (state.maxX + 1) & ~1,
@@ -4845,7 +4809,7 @@ Object.subclass('Squeak.Primitives',
             width = maxX - minX,
             height = maxY - minY,
             canvasBytes = state.context.getImageData(minX, minY, width, height).data,
-            form = state.bitblt.dest,
+            form = state.form,
             srcIndex = 0;
         if (this.b2d_debug) console.log("==> reading " + width + "x" + height + " pixels");
         for (var y = minY; y < maxY; y++) {
@@ -5545,1140 +5509,10 @@ Object.subclass('Squeak.InterpreterProxy',
         return this.remappableOops.pop();
     },
     showDisplayBitsLeftTopRightBottom: function(form, left, top, right, bottom) {
-        this.bitblt.destForm = form;
-        this.bitblt.dx = left;
-        this.bitblt.dy = top;
-        this.bitblt.bbW = right - left;
-        this.bitblt.bbH = bottom - top;
-        this.vm.primHandler.displayDirty(this.bitblt);
-    },
-});
-
-Object.subclass('Squeak.BitBlt',
-'initialization', {
-    initialize: function() {
-        this.maskTable = [
-            0x0, 0x1, 0x3, 0x7, 0xF, 0x1F, 0x3F, 0x7F, 0xFF, 0x1FF, 0x3FF, 0x7FF, 0xFFF,
-            0x1FFF, 0x3FFF, 0x7FFF, 0xFFFF, 0x1FFFF, 0x3FFFF, 0x7FFFF, 0xFFFFF,
-            0x1FFFFF, 0x3FFFFF, 0x7FFFFF, 0xFFFFFF, 0x1FFFFFF, 0x3FFFFFF, 0x7FFFFFF,
-            0xFFFFFFF, 0x1FFFFFFF, 0x3FFFFFFF, 0x7FFFFFFF, 0xFFFFFFFF];
-    }, 
-    reset: function() {
-        this.success = true;
-        this.dest = this.source = null;
-        this.cmLookupTable = this.cmMaskTable = this.cmShiftTable = null;
-        this.warpSmoothing = this.warpSourceMap = null;
-    },
-    loadBitBlt: function(bitbltObj, warpSmoothing, warpSourceMap) {
-        var bitblt = bitbltObj.pointers;
-        this.reset();
-        this.destForm = bitblt[Squeak.BitBlt_dest];
-        this.dest = this.loadForm(this.destForm);
-        if (!this.dest) return false;
-        this.sourceForm = bitblt[Squeak.BitBlt_source];
-        if (!this.sourceForm.isNil) {
-            this.source = this.loadForm(this.sourceForm);
-            if (!this.source) return false;
+        if (left < right && top < bottom) {
+            var rect = {left: left, top: top, right: right, bottom: bottom};
+            this.vm.primHandler.displayDirty(form, rect);
         }
-        this.halftone = this.loadHalftone(bitblt[Squeak.BitBlt_halftone]);
-        this.combinationRule = bitblt[Squeak.BitBlt_combinationRule];
-        this.destX = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_destX], 0);
-        this.destY = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_destY], 0);
-        this.width = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_width], this.dest.width);
-        this.height = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_height], this.dest.height);
-        this.clipX = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_clipX], 0);
-        this.clipY = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_clipY], 0);
-        this.clipW = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_clipW], this.dest.width);
-        this.clipH = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_clipH], this.dest.height);
-        if (!this.success) return false;
-        if (!this.source)
-            this.sourceX = this.sourceY = 0;
-        else {
-            if (!this.loadColorMap(bitblt[Squeak.BitBlt_colorMap])) return false;
-            this.sourceX = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_sourceX], 0);
-            this.sourceY = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_sourceY], 0);
-        }
-        this.mergeFn = this.makeMergeFn(this.combinationRule);
-        if (warpSmoothing) { // this is a warp blt
-            this.warpSmoothing = warpSmoothing;
-            this.warpSourceMap = warpSourceMap; // maps indexed to rgb for smoothing
-            this.p1x = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_warpBase], 0);
-            this.p1y = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_warpBase+1], 0);
-            this.p2x = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_warpBase+3], 0);
-            this.p2y = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_warpBase+4], 0);
-            this.p3x = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_warpBase+6], 0);
-            this.p3y = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_warpBase+7], 0);
-            this.p4x = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_warpBase+9], 0);
-            this.p4y = this.intOrFloatIfNil(bitblt[Squeak.BitBlt_warpBase+10], 0);
-        }
-        return this.success;
-    },
-    loadHalftone: function(halftoneObj) {
-        if (halftoneObj.pointers) // a Pattern
-            halftoneObj = halftoneObj.pointers[Squeak.Form_bits];
-        return halftoneObj.words;
-    },
-    loadForm: function(formObj) {
-        if (formObj.isNil) return null;
-        var form = {};
-        form.bits = formObj.pointers[Squeak.Form_bits].words;
-        form.depth = formObj.pointers[Squeak.Form_depth];
-        form.width = formObj.pointers[Squeak.Form_width];
-        form.height = formObj.pointers[Squeak.Form_height];
-        if (form.width === 0 || form.height === 0) return form;
-        if (!(form.width > 0 && form.height > 0)) return null;
-        if (!form.bits) {
-            var bytes = formObj.pointers[Squeak.Form_bits].bytes;
-            if (!bytes || (bytes.length & 3)) return null;
-            form.bits = new Uint32Array(bytes.buffer);
-        }
-        form.msb = form.depth > 0;
-        if (!form.msb) form.depth = -form.depth;
-        if (!(form.depth > 0)) return null; // happens if not int
-        form.pixPerWord = 32 / form.depth;
-        form.pitch = (form.width + (form.pixPerWord - 1)) / form.pixPerWord | 0;
-        if (form.bits.length !== (form.pitch * form.height)) return null;
-        return form;
-    },
-    loadColorMap: function(colorMapObj) {
-        // ColorMap, if not nil, must be words, and 
-        // 2^N long, where N = sourceDepth for 1, 2, 4, 8 bits, 
-        // or N = 9, 12, or 15 (3, 4, 5 bits per color) for 16 or 32 bits.
-        if (!colorMapObj.isNil) {
-            var oldStyle = !!colorMapObj.words,
-                colors, shifts, masks;
-            if (oldStyle) {
-                // This is an old-style color map (indexed only, with implicit ARGB conversion)
-                colors = colorMapObj.words;
-            } else {
-                // A new-style color map (fully qualified)
-                if (colorMapObj.pointersSize() < 3) return false;
-                shifts = colorMapObj.pointers[0].words,
-                masks = colorMapObj.pointers[1].words;
-                colors = colorMapObj.pointers[2].words;
-                if (shifts || masks) {
-                    if (!shifts || shifts.length != 4 || !masks || masks.length != 4) return false;
-                    this.cmShiftTable = new Int32Array(shifts.buffer);
-                    this.cmMaskTable = masks;
-                }
-            }
-            if (colors && colors.length) {
-                this.cmLookupTable = colors;
-                this.cmSize = colors.length;
-                this.cmMask = this.cmSize - 1;
-                if (this.cmSize & this.cmMask) return false; // not a power of 2
-                this.cmBitsPerColor = 
-                    this.cmSize == 512 ? 3 :
-                    this.cmSize == 4096 ? 4 :
-                    this.cmSize == 32768 ? 5 : 0;
-            }
-        }
-        // set up mapping if none provided
-        if (!this.cmShiftTable && this.source.depth > 8 && (this.source.depth != this.dest.depth || this.combinationRule == 33)) { // needs implicit conversion
-            var srcBits = this.source.depth == 16 ? 5 : 8,
-                dstBits = this.cmBitsPerColor ? this.cmBitsPerColor 
-                    : this.dest.depth == 16 ? 5
-                    : this.dest.depth == 32 ? 8
-                    : srcBits;
-            if (srcBits != dstBits)
-                this.setupColorMasks(srcBits, dstBits);
-        }
-        // tallying is special
-        if (this.combinationRule == 33) {
-            this.cmTallyTable = this.cmLookupTable;
-            this.cmLookupTable = null;
-        }
-        return true;
-    },
-    intOrFloatIfNil: function(intOrFloat, valueIfNil) {
-        if (typeof intOrFloat == "number") return intOrFloat;
-        if (intOrFloat.isNil) return valueIfNil;
-        if (intOrFloat.isFloat) {
-            var floatValue = intOrFloat.float;
-            if (floatValue >= -0x80000000 && floatValue <= 0x7FFFFFFF)
-                return floatValue | 0; // make int
-        }
-        this.success = false;
-        return 0;
-    },
-},
-'blitting', {
-    copyBits: function() {
-        this.bitCount = 0;
-        this.clipRange();
-        if (this.bbW <= 0 || this.bbH <= 0) return;
-        this.destMaskAndPointerInit();
-        /* Choose and perform the actual copy loop. */
-        if (!this.source) {
-            this.copyLoopNoSource();
-        } else {
-            if (this.combinationRule === 34) { // alpha blending is special
-                this.copyLoopAlphaBlendScaled();
-            } else if (this.combinationRule === 33) { // pixel tallying is special
-                this.sourceSkewAndPointerInit();
-                this.copyLoop();
-            } else {
-                this.checkSourceOverlap();
-                if (this.cmLookupTable || this.cmMaskTable || this.source.msb !== this.dest.msb) {
-                    // this is the most general loop
-                    this.copyLoopPixMap();
-                } else { // source and dest have same format
-                    this.sourceSkewAndPointerInit();
-                    this.copyLoop();
-                }
-            }
-        }
-    },
-    copyLoopNoSource: function() {
-        //	Faster copyLoop when source not used.  hDir and vDir are both
-        //	positive, and perload and skew are unused
-        var halftoneWord = 0xFFFFFFFF;
-        for (var i = 0; i < this.bbH; i++) { // vertical loop
-            if (this.halftone) halftoneWord = this.halftone[(this.dy + i) % this.halftone.length];
-            // First word in row is masked
-            var destMask = this.mask1;
-            var destWord = this.dest.bits[this.destIndex];
-            var mergeWord = this.mergeFn(halftoneWord, destWord, destMask);
-            destWord = (destMask & mergeWord) | (destWord & (~destMask));
-            this.dest.bits[this.destIndex++] = destWord;
-            destMask = 0xFFFFFFFF;
-            //the central horizontal loop requires no store masking */
-            if (this.combinationRule === 3) // Store rule requires no dest merging
-                for (var word = 2; word < this.nWords; word++)
-                    this.dest.bits[this.destIndex++] = halftoneWord;
-            else
-                for (var word = 2; word < this.nWords; word++) {
-                    destWord = this.dest.bits[this.destIndex];
-                    mergeWord = this.mergeFn(halftoneWord, destWord, 0xFFFFFFFF);
-                    this.dest.bits[this.destIndex++] = mergeWord;
-                }
-            //last word in row is masked
-            if (this.nWords > 1) {
-                destMask = this.mask2;
-                destWord = this.dest.bits[this.destIndex];
-                mergeWord = this.mergeFn(halftoneWord, destWord, destMask);
-                destWord = (destMask & mergeWord) | (destWord & (~destMask));
-                this.dest.bits[this.destIndex++] = destWord;
-            }
-            this.destIndex += this.destDelta;
-        }
-    },
-    copyLoop: function() {
-        // this version of the inner loop assumes we do have a source
-        var sourceLimit = this.source.bits.length;
-        var hInc = this.hDir;
-        // init skew (the difference in word alignment of source and dest)
-        var unskew;
-        var skewMask;
-        if (this.skew == -32) {
-            this.skew = unskew = skewMask = 0;
-        } else {
-            if (this.skew < 0) {
-                unskew = this.skew + 32;
-                skewMask = 0xFFFFFFFF << -this.skew;
-            } else {
-                if (this.skew === 0) {
-                    unskew = 0;
-                    skewMask = 0xFFFFFFFF;
-                } else {
-                    unskew = this.skew - 32;
-                    skewMask = 0xFFFFFFFF >>> this.skew;
-                }
-            }
-        }
-        var notSkewMask = ~skewMask;
-        // init halftones
-        var halftoneWord;
-        var halftoneHeight;
-       	if (this.halftone) {
-            halftoneWord = this.halftone[0];
-            halftoneHeight = this.halftone.length;
-        } else {
-            halftoneWord = 0xFFFFFFFF;
-            halftoneHeight = 0;
-        }
-        // now loop over all lines
-        var y = this.dy;
-        for (var i = 1; i <= this.bbH; i++) {
-            if (halftoneHeight > 1) {
-                halftoneWord = this.halftone[y % halftoneHeight];
-                y += this.vDir;
-            }
-            var prevWord;
-            if (this.preload) {
-                prevWord = this.source.bits[this.sourceIndex];
-                this.sourceIndex += hInc;
-            } else {
-                prevWord = 0;
-            }
-            var destMask = this.mask1;
-            /* pick up next word */
-            var thisWord = this.source.bits[this.sourceIndex];
-            this.sourceIndex += hInc;
-            /* 32-bit rotate */
-            var skewWord = ((unskew < 0 ? ( (prevWord & notSkewMask) >>> -unskew) : ( (prevWord & notSkewMask) << unskew)))
-                | (((this.skew < 0) ? ( (thisWord & skewMask) >>> -this.skew) : ( (thisWord & skewMask) << this.skew)));
-            prevWord = thisWord;
-            var destWord = this.dest.bits[this.destIndex];
-            var mergeWord = this.mergeFn(skewWord & halftoneWord, destWord, destMask);
-            destWord = (destMask & mergeWord) | (destWord & (~destMask));
-            this.dest.bits[this.destIndex] = destWord;
-            //The central horizontal loop requires no store masking */
-            this.destIndex += hInc;
-            destMask = 0xFFFFFFFF;
-            if (this.combinationRule == 3) { //Store mode avoids dest merge function
-                if ((this.skew === 0) && (halftoneWord === 0xFFFFFFFF)) {
-                    //Non-skewed with no halftone
-                    var n = this.nWords - 2; // without first and last word
-                    if (n > 0) {
-                        if (hInc > 0) {
-                            this.dest.bits[this.destIndex] = prevWord;
-                            if (n > 1) {
-                                var somebits = this.source.bits.subarray(this.sourceIndex, this.sourceIndex-1 + n);
-                                this.dest.bits.set(somebits, this.destIndex+1);
-                            }
-                            prevWord = this.source.bits[this.sourceIndex-1 + n];
-                        } else {
-                            if (n == 1) {
-                                this.dest.bits[this.destIndex] = this.source.bits[this.sourceIndex];
-                            } else {
-                                var somebits = this.source.bits.subarray(this.sourceIndex - n + 1, this.sourceIndex - 1);
-                                this.dest.bits.set(somebits, this.destIndex - n + 1);
-                            }
-                        }
-                        this.sourceIndex += hInc * n;
-                        this.destIndex += hInc * n;
-                    }
-                } else {
-                    //skewed and/or halftoned
-                    for (var word = 2; word < this.nWords; word++) {
-                        thisWord = this.source.bits[this.sourceIndex];
-                        this.sourceIndex += hInc;
-                        /* 32-bit rotate */
-                        skewWord = (((unskew < 0) ? ( (prevWord & notSkewMask) >>> -unskew) : ( (prevWord & notSkewMask) << unskew)))
-                            | (((this.skew < 0) ? ( (thisWord & skewMask) >>> -this.skew) : ( (thisWord & skewMask) << this.skew)));
-                        prevWord = thisWord;
-                        this.dest.bits[this.destIndex] = skewWord & halftoneWord;
-                        this.destIndex += hInc;
-                    }
-                }
-            } else { //Dest merging here...
-                for (var word = 2; word < this.nWords; word++) {
-                    thisWord = this.source.bits[this.sourceIndex]; //pick up next word
-                    this.sourceIndex += hInc;
-                    /* 32-bit rotate */
-                    skewWord = (((unskew < 0) ? ( (prevWord & notSkewMask) >>> -unskew) : ( (prevWord & notSkewMask) << unskew)))
-                        | (((this.skew < 0) ? ( (thisWord & skewMask) >>> -this.skew) : ( (thisWord & skewMask) << this.skew)));
-                    prevWord = thisWord;
-                    mergeWord = this.mergeFn(skewWord & halftoneWord, this.dest.bits[this.destIndex], 0xFFFFFFFF);
-                    this.dest.bits[this.destIndex] = mergeWord;
-                    this.destIndex += hInc;
-                }
-            } 
-            // last word with masking and all
-            if (this.nWords > 1) {
-                destMask = this.mask2;
-                if (this.sourceIndex >= 0 && this.sourceIndex < sourceLimit)
-                //NOTE: we are currently overrunning source bits in some cases
-                //this test makes up for it.
-                    thisWord = this.source.bits[this.sourceIndex]; //pick up next word
-                this.sourceIndex += hInc;
-                /* 32-bit rotate */
-                skewWord = (((unskew < 0) ? ((prevWord & notSkewMask) >>> -unskew) : ((prevWord & notSkewMask) << unskew)))
-                    | (((this.skew < 0) ? ( (thisWord & skewMask) >>> -this.skew) : ( (thisWord & skewMask) << this.skew)));
-                destWord = this.dest.bits[this.destIndex];
-                mergeWord = this.mergeFn(skewWord & halftoneWord, destWord, destMask);
-                destWord = (destMask & mergeWord) | (destWord & (~destMask));
-                this.dest.bits[this.destIndex] = destWord;
-                this.destIndex += hInc;
-            }
-            this.sourceIndex += this.sourceDelta;
-            this.destIndex += this.destDelta;
-        }
-    },
-    copyLoopPixMap: function() {
-        /*	This version of the inner loop maps source pixels
-        to a destination form with different depth.  Because it is already
-        unweildy, the loop is not unrolled as in the other versions.
-        Preload, skew and skewMask are all overlooked, since pickSourcePixels
-        delivers its destination word already properly aligned.
-        Note that pickSourcePixels could be copied in-line at the top of
-        the horizontal loop, and some of its inits moved out of the loop. */
-        /*	The loop has been rewritten to use only one pickSourcePixels call.
-        The idea is that the call itself could be inlined. If we decide not
-        to inline pickSourcePixels we could optimize the loop instead. */
-        var sourcePixMask = this.maskTable[this.source.depth];
-        var destPixMask = this.maskTable[this.dest.depth];
-        //var mapperFlags = cmFlags & (~8);
-        this.sourceIndex = (this.sy * this.source.pitch) + (this.sx / this.source.pixPerWord | 0);
-        var scrStartBits = this.source.pixPerWord - (this.sx & (this.source.pixPerWord - 1));
-        var nSourceIncs = (this.bbW < scrStartBits) ? 0 : ((this.bbW - scrStartBits) / this.source.pixPerWord | 0) + 1;
-        /* Note following two items were already calculated in destmask setup! */
-        this.sourceDelta = this.source.pitch - nSourceIncs;
-        var startBits = this.dest.pixPerWord - (this.dx & (this.dest.pixPerWord - 1));
-        var endBits = (((this.dx + this.bbW) - 1) & (this.dest.pixPerWord - 1)) + 1;
-        if (this.bbW < startBits) startBits = this.bbW; // ?!
-        var srcShift = (this.sx & (this.source.pixPerWord - 1)) * this.source.depth;
-        var dstShift = (this.dx & (this.dest.pixPerWord - 1)) * this.dest.depth;
-        var srcShiftInc = this.source.depth;
-        var dstShiftInc = this.dest.depth;
-        var dstShiftLeft = 0;
-        if (this.source.msb) {
-            srcShift = (32 - this.source.depth) - srcShift;
-            srcShiftInc = -srcShiftInc;
-        }
-        if (this.dest.msb) {
-            dstShift = (32 - this.dest.depth) - dstShift;
-            dstShiftInc = -dstShiftInc;
-            dstShiftLeft = 32 - this.dest.depth;
-        }
-        for (var i = 0; i < this.bbH; i++) {
-            var halftoneWord = this.halftone ? this.halftone[(this.dy + i) % this.halftone.length] : 0xFFFFFFFF;
-		    this.srcBitShift = srcShift;
-		    this.dstBitShift = dstShift;
-		    this.destMask = this.mask1;
-            var nPix = startBits;
-            var words = this.nWords;
-            /* Here is the horizontal loop... */
-            do {
-                var skewWord = this.pickSourcePixels(nPix, sourcePixMask, destPixMask, srcShiftInc, dstShiftInc);
-                /* align next word to leftmost pixel */
-                this.dstBitShift = dstShiftLeft;
-                if (this.destMask === 0xFFFFFFFF) { // avoid read-modify-write
-                    this.dest.bits[this.destIndex] = this.mergeFn(skewWord & halftoneWord, this.dest.bits[this.destIndex], 0xFFFFFFFF);
-                } else { // General version using dest masking
-                    var destWord = this.dest.bits[this.destIndex];
-                    var mergeWord = this.mergeFn(skewWord & halftoneWord, destWord & this.destMask, this.destMask);
-                    destWord = (this.destMask & mergeWord) | (destWord & (~this.destMask));
-                    this.dest.bits[this.destIndex] = destWord;
-                }
-                this.destIndex++;
-                if (words === 2) { // is the next word the last word?
-                    this.destMask = this.mask2;
-                    nPix = endBits;
-                } else { // use fullword mask for inner loop
-                    this.destMask = 0xFFFFFFFF;
-                    nPix = this.dest.pixPerWord;
-                }
-            } while (--words);
-            this.sourceIndex += this.sourceDelta;
-            this.destIndex += this.destDelta;
-        }
-    },
-    copyLoopAlphaBlendScaled: function() {
-        // rule 34 is special since it uses the 32-bit source's alpha channel
-        // (normal pixel mapping throws away that alpha before merging)
-        if (this.dest.depth === 32) return this.copyLoopAlphaBlendScaled32();
-        if (this.dest.depth === 16) return this.copyLoopAlphaBlendScaled16();
-        // others not implemented yet
-        console.warn("copyLoopAlphaBlendScaled8() not implemented yet");
-    },
-    copyLoopAlphaBlendScaled16: function() {
-        var srcY = this.sy,
-            dstY = this.dy,
-            srcShift = (this.dx & 1) * 16;
-        if (this.dest.msb) srcShift = 16 - srcShift;
-        var mask1 = 0xFFFF << (16 - srcShift);
-        for (var y = 0; y < this.bbH; y++) {
-            var srcIndex = srcY * this.source.pitch + this.sx,
-                dstIndex = dstY * this.dest.pitch + (this.dx / 2 | 0),
-                dstMask = mask1;
-            srcShift = dstMask == 0xFFFF ? 16  : 0;
-            for (var x = 0; x < this.bbW; x++) {
-                var sourceWord = this.source.bits[srcIndex],
-                    srcAlpha = sourceWord >>> 24;
-                if (srcAlpha >= 0xF8) { // opaque
-                    sourceWord = this.rgbMap32To16(sourceWord); // todo: implement dithering
-                    sourceWord = (sourceWord == 0 ? 1 : sourceWord) << srcShift;
-                    this.dest.bits[dstIndex] = this.dest.bits[dstIndex] & dstMask | sourceWord;
-                } else {
-                    if (srcAlpha > 8) { // not transparent
-                        var destWord = (this.dest.bits[dstIndex] & ~dstMask) >> srcShift;
-                        destWord = this.rgbMap16To32(destWord) | 0xFF000000; 
-                        sourceWord = this.alphaBlendScaled(sourceWord, destWord);
-                        sourceWord = this.rgbMap32To16(sourceWord); // todo: implement dithering
-                        sourceWord = (sourceWord == 0 ? 1 : sourceWord) << srcShift;
-                        this.dest.bits[dstIndex] = this.dest.bits[dstIndex] & dstMask | sourceWord;
-                    }
-                }
-                srcIndex++;
-                if (this.dest.msb == (srcShift == 0)) dstIndex++;
-                srcShift = srcShift ^ 16; // Toggle between 0 and 16
-                dstMask = ~dstMask;       // Mask other half word
-            }
-            srcY++;
-            dstY++;
-        }
-    },
-    copyLoopAlphaBlendScaled32: function() {
-        var srcIndex = this.sy * this.source.pitch + this.sx,
-            dstIndex = this.dy * this.dest.pitch + this.dx,
-            srcDelta = this.source.pitch - this.bbW,
-            dstDelta = this.destDelta;
-        for (var y = 0; y < this.bbH; y++) {
-            for (var x = 0; x < this.bbW; x++) {
-                var srcWord = this.source.bits[srcIndex],
-                    dstWord = this.dest.bits[dstIndex];
-                this.dest.bits[dstIndex] = this.alphaBlendScaled(srcWord, dstWord);
-                srcIndex++;
-                dstIndex++;
-            }
-            srcIndex += srcDelta;
-            dstIndex += dstDelta;
-        }
-	},
-    sourceSkewAndPointerInit: function() {
-        var pixPerM1 = this.dest.pixPerWord - 1;  //Pix per word is power of two, so this makes a mask
-        var sxLowBits = this.sx & pixPerM1;
-        var dxLowBits = this.dx & pixPerM1;
-        // check if need to preload buffer
-        // (i.e., two words of source needed for first word of destination)
-        var dWid;
-        if (this.hDir > 0) {
-            dWid = ((this.bbW < (this.dest.pixPerWord - dxLowBits)) ? this.bbW : (this.dest.pixPerWord - dxLowBits));
-            this.preload = (sxLowBits + dWid) > pixPerM1;
-        } else {
-            dWid = ((this.bbW < (dxLowBits + 1)) ? this.bbW : (dxLowBits + 1));
-            this.preload = ((sxLowBits - dWid) + 1) < 0;
-        }
-        this.skew = (this.source.msb) ? (sxLowBits - dxLowBits) * this.dest.depth
-            : (dxLowBits - sxLowBits) * this.dest.depth;
-        if (this.preload) {
-            if (this.skew < 0) this.skew += 32;
-            else this.skew -= 32;
-        }
-        /* calculate increments from end of one line to start of next */
-        this.sourceIndex = (this.sy * this.source.pitch) + (this.sx / (32 / this.source.depth) |0);
-        this.sourceDelta = (this.source.pitch * this.vDir) - (this.nWords * this.hDir);
-        if (this.preload) this.sourceDelta -= this.hDir;
-    },
-    destMaskAndPointerInit: function() {
-        var pixPerM1 = this.dest.pixPerWord - 1;  //Pix per word is power of two, so this makes a mask
-        var startBits = this.dest.pixPerWord - (this.dx & pixPerM1); //how many pixels in first word
-        var endBits = (((this.dx + this.bbW) - 1) & pixPerM1) + 1;
-        this.mask1 = this.dest.msb ? 0xFFFFFFFF >>> (32 - (startBits * this.dest.depth))
-            : 0xFFFFFFFF << (32 - (startBits * this.dest.depth));
-        this.mask2 = this.dest.msb ? 0xFFFFFFFF << (32 - (endBits * this.dest.depth))
-            : 0xFFFFFFFF >>> (32 - (endBits * this.dest.depth));
-        if (this.bbW < startBits) { //start and end in same word, so merge masks
-            this.mask1 = this.mask1 & this.mask2;
-            this.mask2 = 0;
-            this.nWords = 1;
-        } else
-            this.nWords = (((this.bbW - startBits) + pixPerM1) / this.dest.pixPerWord | 0) + 1;
-        this.hDir = this.vDir = 1; //defaults for no overlap with source
-        this.destIndex = (this.dy * this.dest.pitch) + (this.dx / this.dest.pixPerWord | 0); //both these in words, not bytes
-        this.destDelta = (this.dest.pitch * this.vDir) - (this.nWords * this.hDir);
-    },
-    clipRange: function() {
-        // initialize sx,sy, dx,dy, bbW,bbH to the intersection of source, dest, and clip
-        
-        // intersect with destForm bounds
-        if (this.clipX < 0) {this.clipW += this.clipX; this.clipX = 0; }
-        if (this.clipY < 0) {this.clipH += this.clipY; this.clipY = 0; }
-        if ((this.clipX + this.clipW) > this.dest.width) {this.clipW = this.dest.width - this.clipX; }
-        if ((this.clipY + this.clipH) > this.dest.height) {this.clipH = this.dest.height - this.clipY; }
-        // intersect with clipRect
-        var leftOffset = Math.max(this.clipX - this.destX, 0);
-        this.sx = this.sourceX + leftOffset;
-        this.dx = this.destX + leftOffset;
-        this.bbW = this.width - leftOffset;
-        var rightOffset = (this.dx + this.bbW) - (this.clipX + this.clipW);
-        if (rightOffset > 0)
-            this.bbW -= rightOffset;
-        var topOffset = Math.max(this.clipY - this.destY, 0);
-        this.sy = this.sourceY + topOffset;
-        this.dy = this.destY + topOffset;
-        this.bbH = this.height - topOffset;
-        var bottomOffset = (this.dy + this.bbH) - (this.clipY + this.clipH);
-        if (bottomOffset > 0)
-        this.bbH -= bottomOffset;
-        // intersect with sourceForm bounds
-        if (!this.source) return;
-        if (this.sx < 0) {
-            this.dx -= this.sx;
-            this.bbW += this.sx;
-            this.sx = 0;
-        }
-        if ((this.sx + this.bbW) > this.source.width)
-            this.bbW -= (this.sx + this.bbW) - this.source.width;
-        if (this.sy < 0) {
-            this.dy -= this.sy;
-            this.bbH += this.sy;
-            this.sy = 0;
-        }
-        if ((this.sy + this.bbH) > this.source.height)
-            this.bbH -= (this.sy + this.bbH) - this.source.height;
-	},
-    checkSourceOverlap: function() {
-        if (this.sourceForm === this.destForm && this.dy >= this.sy) {
-            if (this.dy > this.sy) {
-                this.vDir = -1;
-                this.sy = (this.sy + this.bbH) - 1;
-                this.dy = (this.dy + this.bbH) - 1;
-            } else {
-                if (this.dy === this.sy && this.dx > this.sx) {
-                    this.hDir = -1;
-                    this.sx = (this.sx + this.bbW) - 1; //start at right
-                    this.dx = (this.dx + this.bbW) - 1;
-                    if (this.nWords > 1) {
-                        var t = this.mask1; //and fix up masks
-                        this.mask1 = this.mask2;
-                        this.mask2 = t;
-                    }
-                }
-            }
-            this.destIndex = (this.dy * this.dest.pitch) + (this.dx / this.dest.pixPerWord | 0); //recompute since dx, dy change
-            this.destDelta = (this.dest.pitch * this.vDir) - (this.nWords * this.hDir);
-		}
-    },
-    warpBits: function() {
-        var source = this.source;
-        if (!source) {this.bbW = this.bbH = 0; return} // so affectedRect() answers correctly
-        this.source = null; // suppresses sourceRect clipping
-        this.clipRange();
-        this.source = source;
-        if (this.bbW <= 0 || this.bbH <= 0) return;
-        this.destMaskAndPointerInit();
-        this.warpLoop();
-    },
-    warpLoop:  function() {
-        // This version of the bitblt loop traverses an arbitrary quadrilateral
-        // source, thus producing a general affine transformation.
-        // The quad vertices are p1 to p4. The outer loop traverses vertically
-        // from p1 to p4, the inner loop horizontally from p1 to p2
-        var ySteps = Math.max(1, this.height-1),
-            deltaP12x = this.warpDelta(this.p1x, this.p2x, ySteps),
-            deltaP12y = this.warpDelta(this.p1y, this.p2y, ySteps),
-            deltaP43x = this.warpDelta(this.p4x, this.p3x, ySteps),
-            deltaP43y = this.warpDelta(this.p4y, this.p3y, ySteps);
-        if (deltaP12x < 0) this.p1x = this.p2x - (ySteps*deltaP12x);
-        if (deltaP12y < 0) this.p1y = this.p2y - (ySteps*deltaP12y);
-        if (deltaP43x < 0) this.p4x = this.p3x - (ySteps*deltaP43x);
-        if (deltaP43y < 0) this.p4y = this.p3y - (ySteps*deltaP43y);
-    
-        var xSteps = Math.max(1, this.width - 1),
-            startBits = this.dest.pixPerWord - (this.dx & this.dest.pixPerWord-1),
-            endBits = ((this.dx + this.bbW - 1) & this.dest.pixPerWord-1) + 1;
-        if (this.bbW < startBits) startBits = this.bbW;
-        // Advance increments if there was clipping in y
-        if (this.destY < this.clipY) {
-            this.p1x += (this.clipY - this.destY) * deltaP12x;
-            this.p1y += (this.clipY - this.destY) * deltaP12y;
-            this.p4x += (this.clipY - this.destY) * deltaP43x;
-            this.p4y += (this.clipY - this.destY) * deltaP43y;
-        }
-        // Setup values for faster pixel fetching
-        this.warpPickSetup();
-        // Setup color mapping if not provided
-        if (this.warpSmoothing > 1 && !this.cmMaskTable) {
-            if (!this.cmLookupTable) {
-                if (this.dest.depth == 16) this.setupColorMasks(8, 5);
-            } else {
-                this.setupColorMasks(8, this.cmBitsPerColor);
-            }
-        }
-
-        var dstShiftInc = this.dest.msb ? -this.dest.depth : this.dest.depth,
-            dstShiftLeft = this.dest.msb ? 32 - this.dest.depth : 0,
-            halftoneWord = this.halftone ? this.halftone[0] : 0xFFFFFFFF,
-            halftoneHeight = this.halftone ? this.halftone.length : 0,
-            destIndex = this.destIndex;
-
-        // here is the vertical loop ...
-        for (var i = 0; i < this.bbH; i++) {
-            var xDelta = this.warpDelta(this.p1x, this.p4x, xSteps),
-                yDelta = this.warpDelta(this.p1y, this.p4y, xSteps);
-            this.sx = xDelta >= 0 ? this.p1x : this.p4x - (xSteps*xDelta),
-            this.sy = yDelta >= 0 ? this.p1y : this.p4y - (xSteps*yDelta);
-            // Advance increments if there was clipping in x
-            if (this.destX < this.clipX) {
-                this.sx += (this.clipX - this.destX) * xDelta;
-                this.sy += (this.clipX - this.destX) * yDelta;
-            }
-            var dstBitShift = this.dest.msb
-                ? (32 - ((this.dx & this.dest.pixPerWord - 1) + 1) * this.dest.depth)
-                : (this.dx & this.dest.pixPerWord - 1) * this.dest.depth;
-            if (halftoneHeight > 1)
-                halftoneWord = this.halftone.words[(this.dy+i) % halftoneHeight];
-            var destMask = this.mask1,
-                nPix = startBits,
-                words = this.nWords;
-            // Here is the inner loop ...
-            do {
-                var skewWord = this.warpSmoothing == 1
-                    ? this.warpPickSourcePixels(nPix, xDelta, yDelta, dstBitShift, dstShiftInc)
-                    : this.warpPickSmoothPixels(nPix, xDelta, yDelta, deltaP12x, deltaP12y, dstBitShift, dstShiftInc);
-                var destWord = this.dest.bits[destIndex],
-                    mergeWord = this.mergeFn(skewWord & halftoneWord, destWord & destMask, destMask);
-                this.dest.bits[destIndex] = (destMask & mergeWord) | (destWord & ~destMask);
-                destIndex++;
-                dstBitShift = dstShiftLeft; // align next word access to left most pixel
-                if (words == 2) { // is the next word the last word?
-                    destMask = this.mask2;
-                    nPix = endBits;
-                } else {
-                    destMask = 0xFFFFFFFF;
-                    nPix = this.dest.pixPerWord;
-                }
-            } while (--words);
-            // end of inner loop ---
-            this.p1x += deltaP12x;
-            this.p1y += deltaP12y;
-            this.p4x += deltaP43x;
-            this.p4y += deltaP43y;
-            destIndex += this.destDelta;
-        }
-	},
-    warpDelta: function(a, b, n) {
-        if (a == b) return 0;
-        return b > a
-            ?  ((b - a + 16384) / (n+1) + 1)
-            : -((a - b + 16384) / (n+1) + 1);
-	},
-},
-'mapping',
-{
-    setupColorMasks: function(srcBits, targetBits) {
-        // Setup color masks for converting an incoming RGB pixel value from srcBits to targetBits per pixel
-        var deltaBits = targetBits - srcBits;
-        if (deltaBits == 0) return;
-        if (deltaBits < 0) { // e.g. from 8 to 5
-            var mask = (1 << targetBits) - 1;
-            this.cmMaskTable = [
-                mask << (srcBits*2 - deltaBits), mask << (srcBits - deltaBits), mask << (0 - deltaBits), 0];
-        } else { // e.g. from 5 to 8
-            var mask = (1 << srcBits) - 1;
-            this.cmMaskTable = [mask << (srcBits*2), mask << srcBits, mask, 0];
-        }
-        this.cmShiftTable = [deltaBits * 3, deltaBits * 2, deltaBits, 0];
-    },
-    mapPixel: function(val) {
-        if (this.cmMaskTable) {
-            var result = 0;
-            for (var i = 0; i < 4; i ++)
-                result |= this.cmShiftTable[i] < 0
-                    ? (val & this.cmMaskTable[i]) >> -this.cmShiftTable[i]
-                    : (val & this.cmMaskTable[i]) << this.cmShiftTable[i];
-            val = result;
-        }
-        if (this.cmLookupTable)
-            val = this.cmLookupTable[val & this.cmMask];
-        return val;
-    },
-    rgbMap16To32: function(pix) {
-        return ((pix & 0x1F) << 3) | ((pix & 0x3E0) << 6) | ((pix & 0x7C00) << 9);
-    },
-    rgbMap32To16: function(pix) { // todo: implement dithering
-        return ((pix & 0xF8) >> 3) | ((pix & 0xF800) >> 6) | ((pix & 0xF80000) >> 9);
-    },
-    pickSourcePixels: function(nPixels, srcMask, dstMask, srcShiftInc, dstShiftInc) {
-        /*	Pick nPix pixels starting at srcBitIndex from the source, map by the
-        color map, and justify them according to dstBitIndex in the resulting destWord. */
-        var sourceWord = this.source.bits[this.sourceIndex];
-        var destWord = 0;
-        var srcShift = this.srcBitShift; // put into temp for speed
-        var dstShift = this.dstBitShift;
-        var nPix = nPixels;
-        // always > 0 so we can use do { } while(--nPix);
-        if (this.cmLookupTable) { // a little optimization for (pretty crucial) blits using indexed lookups only
-            do {
-                var sourcePix = (sourceWord >>> srcShift) & srcMask;
-                var destPix = this.cmLookupTable[sourcePix & this.cmMask];
-                // adjust dest pix index
-                destWord = destWord | ((destPix & dstMask) << dstShift);
-                // adjust source pix index
-                dstShift += dstShiftInc;
-                if ((srcShift += srcShiftInc) & 0xFFFFFFE0) {
-                    if (this.source.msb) { srcShift += 32; }
-                    else { srcShift -= 32; }
-                    sourceWord = this.source.bits[++this.sourceIndex];
-                }
-            } while (--nPix);
-		} else {
-           do {
-                var sourcePix = (sourceWord >>> srcShift) & srcMask;
-                var destPix = this.mapPixel(sourcePix);
-                // adjust dest pix index
-                destWord = destWord | ((destPix & dstMask) << dstShift);
-                // adjust source pix index
-                dstShift += dstShiftInc;
-                if ((srcShift += srcShiftInc) & 0xFFFFFFE0) {
-                    if (this.source.msb) { srcShift += 32; }
-                    else { srcShift -= 32; }
-                    sourceWord = this.source.bits[++this.sourceIndex];
-                }
-            } while (--nPix);
-        }
-        this.srcBitShift = srcShift;  // Store back
-        return destWord;
-    },
-    warpPickSetup: function() {
-        // Setup values for faster pixel fetching
-        var log2 = [0,0,1,1,2,2,2,2,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,5],
-            warpSrcShift = log2[this.source.depth];
-        // Mask for extracting one pixel from source word
-        this.warpSrcMask = this.maskTable[this.source.depth];
-        // Shift for aligning x position to word boundary
-        this.warpAlignShift = 5 - warpSrcShift;
-        // Mask for extracting the pixel position from an x position
-        this.warpAlignMask = (1 << this.warpAlignShift) - 1;
-        // Shifts for each sub-word x value
-        this.warpBitShiftTable = [];
-        for (var i = 0; i <= this.warpAlignMask; i++)
-            this.warpBitShiftTable[i] = this.source.msb
-                ? 32 - ((i + 1) << warpSrcShift)
-                : i << warpSrcShift;
-    },
-    warpPickPixel: function(xx, yy) {
-        // Pick a single pixel from the source for WarpBlt
-        if (xx < 0  || yy < 0) return 0;
-        var x = xx >> 14,
-            y = yy >> 14;
-        if (x >= this.source.width || y >= this.source.height) return 0;
-        var sourceWord = this.source.bits[this.source.pitch * y + (x >> this.warpAlignShift)],
-            srcBitShift = this.warpBitShiftTable[x & this.warpAlignMask];
-        return (sourceWord >> srcBitShift) & this.warpSrcMask;
-	},
-    warpPickSmoothPixels:  function(nPixels, xDeltaH, yDeltaH, xDeltaV, yDeltaV, dstShift, dstShiftInc) {
-        // Pick n (sub-) pixels from the source form, mapped by sourceMap,
-        // average the RGB values, map by colorMap and return the new word;
-        // This version is only called from WarpBlt with smoothingCount > 1
-        var dstMask = this.maskTable[this.dest.depth],
-            painting = this.combinationRule == 25,
-            n = this.warpSmoothing,
-            threshold = painting ? n*n/2 : 0, // number of pixels to be non-transparent
-            xdh = xDeltaH / n, ydh = yDeltaH / n, 
-            xdv = xDeltaV / n, ydv = yDeltaV / n,
-            destWord = 0;
-        for (var i = 0; i < nPixels; i++) {
-            var x = this.sx,
-                y = this.sy,
-                a = 0, r = 0, g = 0, b = 0;
-            // Pick and average n*n subpixels
-            var nPix = 0; // actual number of pixels (not clipped and not transparent)
-            for (var j = 0; j < n; j++) {
-                var xx = x, yy = y;
-                for (var k = 0; k < n; k++) {
-                    // get a single subpixel
-                    var pix = this.warpPickPixel(xx, yy);
-                    xx += xdh;
-                    yy += ydh;
-                    if (painting && pix == 0) continue;
-                    // If not clipped and not transparent, then tally rgb values
-                    nPix++;
-                    var pix32 = this.source.depth < 16 ? this.warpSourceMap[pix] :
-                        this.source.depth == 16 ? this.rgbMap16To32(pix) : 
-                        pix;
-                    r += (pix32 >> 16) & 255;
-                    g += (pix32 >> 8) & 255;
-                    b += pix32 & 255;
-                    a += pix32 >> 24;
-                }
-                x += xdv;
-                y += ydv;
-            }
-            var destPix = 0;
-            if (nPix > threshold) { // if not transparent
-                // normalize rgba sums
-                r /= nPix; g /= nPix; b /= nPix; a /= nPix;
-                var rgb = (a << 24) + (r << 16) + (g << 8) + b;
-                // map the pixel
-                if (rgb == 0 && r + g + b + a > 0) {
-                    // only generate zero if pixel is really transparent
-                    rgb = 1;
-                }
-                destPix = this.mapPixel(rgb);
-            }
-            // Mix it in
-            destWord |= (destPix & dstMask) << dstShift;
-            dstShift += dstShiftInc;
-            this.sx += xDeltaH;
-            this.sy += yDeltaH;
-        }
-        return destWord;
-    },
-    warpPickSourcePixels:  function(nPixels, xDeltaH, yDeltaH, dstShift, dstShiftInc) {
-        // Pick n pixels from the source form,
-        // map by colorMap and return aligned by dstShift
-        // This version is only called from WarpBlt with smoothingCount == 1
-        var dstMask = this.maskTable[this.dest.depth],
-            destWord = 0;
-        while (nPixels--) {
-            var sourcePix = this.warpPickPixel(this.sx, this.sy),
-                destPix = this.mapPixel(sourcePix);
-			destWord |= (destPix & dstMask) << dstShift;
-			dstShift += dstShiftInc;
-			this.sx += xDeltaH;
-			this.sy += yDeltaH;
-        }
-        return destWord;
-    },
-},
-'rules', {
-    makeMergeFn: function(rule) {
-        var self = this;
-        switch(rule) {
-            case 0: return function() { return 0 };
-            case 1: return function(src, dst) { return src & dst };
-            case 2: return function(src, dst) { return src & (~dst) };
-            case 3: return function(src, dst) { return src };
-            case 4: return function(src, dst) { return (~src) & dst };
-            case 5: return function(src, dst) { return dst };
-            case 6: return function(src, dst) { return src ^ dst };
-            case 7: return function(src, dst) { return src | dst };
-            case 8: return function(src, dst) { return (~src) & (~dst) };
-            case 9: return function(src, dst) { return (~src) ^ dst };
-            case 10: return function(src, dst) { return ~dst };
-            case 11: return function(src, dst) { return src | (~dst) };
-            case 12: return function(src, dst) { return ~src };
-            case 13: return function(src, dst) { return (~src) | dst };
-            case 14: return function(src, dst) { return (~src) | (~dst) };
-            case 15: return function(src, dst) { return dst }; 
-            case 16: return function(src, dst) { return dst };
-            case 17: return function(src, dst) { return dst };
-            case 18: return function(src, dst) { return src + dst };
-            case 19: return function(src, dst) { return src - dst };
-            case 20: return function(src, dst) { return self.rgbAdd(src, dst)  };
-            case 24: return function(src, dst) { return self.alphaBlend(src, dst) };
-            case 25: return function(src, dst) { return src === 0 ? dst
-                : src | self.partitionedAND(~src, dst, self.dest.depth, self.dest.pixPerWord) };
-            case 26: return function(src, dst) {
-                return self.partitionedAND(~src, dst, self.dest.depth, self.dest.pixPerWord) };
-            case 30: return function(src, dst, mask) { return self.alphaBlendConst(src, dst, mask, false) };
-            case 31: return function(src, dst, mask) { return self.alphaBlendConst(src, dst, mask, true) };
-            case 32: return function(src, dst, mask) { // accumulate differences, do not modify dst 
-                self.rgbDiff(src, dst, mask, self.dest.depth, self.dest.pixPerWord);
-                return dst; };
-            case 33: return function(src, dst, mask) { return self.tallyIntoMap(src, dst, mask) };
-            case 34: return function(src, dst) { return self.alphaBlendScaled(src, dst) };
-            case 37: return function(src, dst) { return self.rgbMul(src, dst) };
-            case 40: return this.dest.depth < 32 ? function(src, dst) { return dst } // fixAlpha
-                : function(src, dst) { return dst == 0 ? 0 : (dst & 0xFF000000) == 0 ? dst : dst | (src & 0xFF000000)};
-            case 41: return this.success = false;  // Freetype subpixel rendering
-        }
-        console.error("bitblt rule " + rule + " not implemented yet");
-        return function(src, dst) { return dst }; 
-    },
-    rgbMul: function(src, dst) {
-        if (this.dest.depth < 16 ) {
-            // Mul each pixel separately
-            return this.partitionedMul(src, dst, this.dest.depth, this.dest.pixPerWord);
-        } else {
-            if (this.dest.depth == 16) {
-                // Mul RGB components of each pixel separately
-                return this.partitionedMul(src, dst, 5, 3) | (this.partitionedMul(src>>16, dst>>16, 5, 3) << 16);
-            } else {
-                // Mul RGBA components of the pixel separately
-                return this.partitionedMul(src, dst, 8, 4);
-            }
-        }
-    },
-    rgbAdd: function(src, dst) {
-        if (this.dest.depth < 16 ) {
-            // Add each pixel separately
-            return this.partitionedAdd(src, dst, this.dest.depth, this.dest.pixPerWord);
-        } else {
-            if (this.dest.depth == 16) {
-                // Add RGB components of each pixel separately
-                return this.partitionedAdd(src, dst, 5, 3) | (this.partitionedAdd(src>>16, dst>>16, 5, 3) << 16);
-            } else {
-                // Add RGBA components of the pixel separately
-                return this.partitionedAdd(src, dst, 8, 4);
-            }
-        }
-    },
-    rgbDiff: function(src, dst, mask, nBits, nParts) {
-        var pixMask = this.maskTable[nBits],
-            bitsPerColor = nBits == 16 ? 5 : 8,
-            rgbMask = this.maskTable[bitsPerColor];
-        var diff = 0;
-        for (var i = 0; i < nParts; i++) {
-            if (mask & pixMask) { // Only tally pixels within the destination rectangle
-                var dstPix = dst & pixMask,
-                    srcPix = src & pixMask;
-                if (nBits < 16) { // count whether pixel differs
-                    if (dstPix !== srcPix) this.bitCount++;
-                } else { // count rgb difference
-                    var diff = this.partitionedSub(srcPix, dstPix, bitsPerColor, 3);
-                    this.bitCount += (diff & rgbMask)
-                        + ((diff>>bitsPerColor) & rgbMask)
-                        + ((diff>>(bitsPerColor*2)) & rgbMask);
-                }
-            }
-            // shift next pixel into low bits 
-            src = src >>> nBits;
-            dst = dst >>> nBits;
-            mask = mask >>> nBits;
-        }
-    },
-    alphaBlend: function(src, dst) {
-        // Blend sourceWord with destinationWord, assuming both are 32-bit pixels.
-        // The source is assumed to have 255*alpha in the high 8 bits of each pixel,
-        // while the high 8 bits of the destinationWord will be ignored.
-        // The blend produced is alpha*source + (1-alpha)*dest, with
-        // the computation being performed independently on each color
-        // component. 
-        var alpha = src >>> 24;
-        if (alpha === 0) return dst;
-        if (alpha === 255) return src;
-        var unAlpha = 255 - alpha,
-            b = (alpha * ( src         & 255) + unAlpha * ( dst       & 255) + 254) / 255 & 255,
-            g = (alpha * ((src >>>  8) & 255) + unAlpha * ((dst>>> 8) & 255) + 254) / 255 & 255,
-            r = (alpha * ((src >>> 16) & 255) + unAlpha * ((dst>>>16) & 255) + 254) / 255 & 255,
-            a = (alpha * 255                  + unAlpha * ((dst>>>24) & 255) + 254) / 255 & 255;
-        return a << 24 | r << 16 | g << 8 | b;
-	},
-    alphaBlendScaled: function(src, dst) {
-        // 	Blend srcWord with dstWord using the alpha value from srcWord.
-        // 	Alpha is encoded as 0 meaning 0.0, and 255 meaning 1.0.
-        // 	In contrast to alphaBlend() the color produced is
-        // 		srcColor + (1-srcAlpha) * dstColor
-        // 	i.e., it is assumed that the source color is already scaled.
-        var alpha = src >>> 24;
-        if (alpha === 0) return dst;
-        if (alpha === 255) return src;
-        var unAlpha = (255 - alpha) / 255,
-            b = Math.min(255, unAlpha * (dst & 255) + (src & 255)),
-            g = Math.min(255, unAlpha * ((dst>>>8) & 255) + ((src>>>8) & 255)),
-            r = Math.min(255, unAlpha * ((dst>>>16) & 255) + ((src>>>16) & 255)),
-            a = Math.min(255, unAlpha * (dst>>>24) + (src>>>24));
-        return a << 24 | r << 16 | g << 8 | b;
-	},
-    alphaBlendConst: function(sourceWord, destWord, destMask, paintMode) {
-        // Blend sourceWord with destWord using a constant alpha.
-        // Alpha is encoded as 0 meaning 0.0, and 255 meaning 1.0.
-        // The blend produced is alpha*source + (1.0-alpha)*dest, with the
-        // computation being performed independently on each color component.
-        // This function could eventually blend into any depth destination,
-        // using the same color averaging and mapping as warpBlt.
-        // paintMode == true means do nothing if the source pixel value is zero.
-        if (this.dest.depth < 16 || (paintMode && sourceWord == 0))
-            return destWord; // no-op
-        var alpha = this.sourceAlpha,
-            unAlpha = 255 - alpha,
-            pixMask = this.maskTable[this.dest.depth],
-            bitsPerColor = this.dest.depth == 16 ? 5: 8,
-            rgbMask = (1<<bitsPerColor) - 1,
-            maskShifted = destMask,
-            destShifted = destWord,
-            sourceShifted = sourceWord,
-            result = destWord;
-        if (this.dest.depth == 32) { // 32bpp blends include alpha
-            result = 0;
-            for (var shift = 0; shift <= 24; shift += 8) {
-                var blend = ((((sourceWord>>shift) & rgbMask) * alpha
-                    + ((destWord>>shift) & rgbMask) * unAlpha
-                    + 254) / 255) & rgbMask;
-                result |= blend<<shift;
-            };
-        } else { // 16bpp
-            for (var j = 0; j < 2; j++) {
-                var sourcePixVal = sourceShifted & pixMask;
-                // no effect if outside of dest rectangle or painting a transparent pixel
-                if ((maskShifted & pixMask) && (!paintMode || sourcePixVal)) {
-                    var destPixVal = destShifted & pixMask,
-                        pixBlend = 0;
-                    for (var shift = 0; shift <= 10; shift += 5) {
-                        var blend = ((((sourcePixVal>>shift) & rgbMask) * alpha
-                            + ((destPixVal>>shift) & rgbMask) * unAlpha
-                            + 254) / 255) & rgbMask;
-                        pixBlend |= blend<<shift;
-                    }
-                    result = result & ~(pixMask << (j*16)) | (pixBlend << (j*16));
-                }
-                maskShifted = maskShifted >> 16;
-                sourceShifted = sourceShifted >> 16;
-                destShifted = destShifted >> 16;
-            }
-        }
-        return result;
-	},
-    partitionedSub: function(src, dst, nBits, nParts) {
-        var mask = this.maskTable[nBits],
-            result = 0;
-        for (var i = 0; i < nParts; i++) {
-            result |= (dst & mask) - (src & mask);
-        	mask = mask << nBits;
-    	}
-        return result;
-	},
-    partitionedAdd: function(src, dst, nBits, nParts) {
-        var mask = this.maskTable[nBits],
-            result = 0;
-        for (var i = 0; i < nParts; i++) {
-            result |= (dst & mask) + (src & mask);
-        	mask = mask << nBits;
-    	}
-        return result;
-	},
-    partitionedMul: function(word1, word2, nBits, nParts) {
-        var mask = this.maskTable[nBits],
-            result = 0;
-        for (var i = 0, ofs = 0; i < nParts; i++, ofs += nBits) {
-            var product = (((word1>>ofs & mask)+1) * ((word2>>ofs & mask)+1)) - 1;
-            result |= (product>>nBits & mask) << ofs;
-        }
-        return result;
-	},
-    partitionedAND: function(word1, word2, nBits, nParts) {
-        // AND word1 to word2 as nParts partitions of nBits each.
-        // Any field of word1 not all-ones is treated as all-zeroes.
-        // Used for erasing, eg, brush shapes prior to ORing in a color
-        var mask = this.maskTable[nBits],
-            result = 0;
-        for (var i = 0; i < nParts; i++) {
-        	if ((word1 & mask) === mask)
-        		result = result | (word2 & mask);
-        	mask = mask << nBits;
-    	}
-        return result;
-	},
-	tallyIntoMap: function(src, dst, mask) {
-        // Tally pixels into the color map.  Those tallied are exactly those
-        // in the destination rectangle.  Note that the source should be 
-        // specified == destination, in order for the proper color map checks 
-        // to be performed at setup.
-        if (!this.cmTallyTable) return dst;
-        var destDepth = this.dest.depth;
-        if (destDepth == 32) {
-            var mapIndex = this.mapPixel(dst) & this.cmMask;
-            this.cmTallyTable[mapIndex]++;
-        } else {
-            var pixMask = this.maskTable[destDepth],
-                destShifted = dst,
-                maskShifted = mask;
-            while (maskShifted) {
-                if (maskShifted & pixMask) { // Only tally pixels within the destination rectangle
-                    var mapIndex = this.mapPixel(destShifted & pixMask) & this.cmMask;
-                    this.cmTallyTable[mapIndex]++;
-                }
-                maskShifted = maskShifted >>> destDepth;
-                destShifted = destShifted >>> destDepth;
-            }
-        }
-        return dst;  // For no effect on dest
-    },
-},
-'accessing', {
-    affectedRect: function() {
-        if (this.bbW <= 0 || this.bbH <= 0) return null;
-        var affected = {};
-        if (this.hDir < 0) {
-            affected.left = (this.dx - this.bbW) + 1;
-            affected.right = this.dx + 1;
-        } else {
-            affected.left = this.dx;
-            affected.right = this.dx + this.bbW;
-        }
-        if (this.vDir < 0) {
-            affected.top = (this.dy - this.bbH) + 1;
-            affected.bottom = this.dy + 1;
-        } else {
-            affected.top = this.dy;
-            affected.bottom = this.dy + this.bbH;
-        }
-        return affected;
     },
 });
 

@@ -600,7 +600,7 @@ to single-step.
                 this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
                 "   stack[--vm.sp] = a === b ? vm.trueObj : vm.falseObj;\n",
-                "} else if (a === b) {\n",
+                "} else if (a === b && a.float === a.float) {\n",   // NaN check
                 "   stack[--vm.sp] = vm.trueObj;\n",
                 "} else { vm.pc = ", this.pc, "; vm.sendSpecial(6); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
                 return;
@@ -608,7 +608,7 @@ to single-step.
                 this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
                 "   stack[--vm.sp] = a !== b ? vm.trueObj : vm.falseObj;\n",
-                "} else if (a === b) {\n",
+                "} else if (a === b && a.float === a.float) {\n",   // NaN check
                 "   stack[--vm.sp] = vm.falseObj;\n",
                 "} else { vm.pc = ", this.pc, "; vm.sendSpecial(7); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
                 return;

@@ -25,7 +25,8 @@ var fullscreen = navigator.standalone;
 
 window.onload = function() {
     var url = "http://freudenbergs.de/bert/squeakjs/scratch/Scratch.image";
-    runSqueak(url, sqCanvas, {
+    SqueakJS.runSqueak(url, sqCanvas, {
+        appName: "Scratch",
         fullscreen: fullscreen,
         header: sqHeader,
         footer: sqFooter,

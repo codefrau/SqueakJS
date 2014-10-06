@@ -24,7 +24,7 @@
 var fullscreen = navigator.standalone;
 
 window.onload = function() {
-    runSqueak('mini.image', sqCanvas, {
+    SqueakJS.runSqueak('mini.image', sqCanvas, {
         fullscreen: fullscreen,
         swapButtons: true,
         header: sqHeader,

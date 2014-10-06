@@ -1,8 +1,15 @@
 CACHE MANIFEST
-# Sep 30 00:00:06 2014
+# Oct  6 16:31:39 2014
 ../lib/squeak.js
 ../vm.js
 ../jit.js
+../plugins/BitBltPlugin.js
+../plugins/FloatArrayPlugin.js
+../plugins/LargeIntegers.js
+../plugins/Matrix2x3Plugin.js
+../plugins/MiscPrimitivePlugin.js
+../plugins/SoundGenerationPlugin.js
+../plugins/ZipPlugin.js
 benchmark.html
 benchmark.css
 benchmark.js

@@ -2369,8 +2369,10 @@ Object.subclass('Squeak.Primitives',
         this.builtinModules = {
             FilePlugin:            this.findPluginFunctions("",         "primitive(File|Directory)"),
             SoundPlugin:           this.findPluginFunctions("snd_",     "", true),
-            ScratchPlugin:         this.findPluginFunctions("scratch_", ""),
             B2DPlugin:             this.findPluginFunctions("ge",       ""),
+        };
+        this.patchModules = {
+            ScratchPlugin:         this.findPluginFunctions("scratch_", ""),
         };
         this.interpreterProxy = new Squeak.InterpreterProxy(this.vm);
     },
@@ -2793,6 +2795,8 @@ Object.subclass('Squeak.Primitives',
     loadModule: function(modName) {
         var mod = Squeak.externalModules[modName] || this.builtinModules[modName];
         if (!mod) return null;
+        if (this.patchModules[modName])
+            this.patchModule(mod, modName);
         if (mod.setInterpreter) {
             if (!mod.setInterpreter(this.interpreterProxy)) {
                 console.log("Wrong interpreter proxy version: " + modName);
@@ -2813,6 +2817,11 @@ Object.subclass('Squeak.Primitives',
         }
         console.log("Loaded module: " + modName);
         return mod;
+    },
+    patchModule: function(mod, modName) {
+        var patch = this.patchModules[modName];
+        for (var key in patch)
+            mod[key] = patch[key];
     },
     unloadModule: function(modName) {
         var mod = this.loadedModules[modName];
@@ -5137,17 +5146,8 @@ Object.subclass('Squeak.Primitives',
     gePrimitiveRegisterExternalEdge: function(argCount) { return false; },
     gePrimitiveRegisterExternalFill: function(argCount) { return false; },
 },
-'ScratchPlugin', {
-    ScratchPlugin: {
-        initialiseModule: "scratch_initialiseModule",
-        primitiveOpenURL: "scratch_primitiveOpenURL",
-        primitiveGetFolderPath: "scratch_primitiveGetFolderPath",
-        primitiveDoubleSize: "scratch_primitiveDoubleSize",
-        primitiveHueShift: "scratch_primitiveHueShift",
-    },
-    scratch_initialiseModule: function() {
-        return true;
-    },
+'ScratchPluginAdditions', {
+    // methods not handled by generated ScratchPlugin
     scratch_primitiveOpenURL: function(argCount) {
         var url = this.stackNonInteger(0).bytesAsString();
         if (url == "") return false;
@@ -5168,102 +5168,6 @@ Object.subclass('Squeak.Primitives',
         if (!path) return false;
         this.vm.popNandPush(argCount + 1, this.makeStString(this.filenameToSqueak(path)));
         return true;
-    },
-    scratch_primitiveDoubleSize: function(argCount) {
-        var v_in, v_out, v_inOop, v_outOop, v_inW, v_inH, v_outW, v_outH, v_dstX, v_dstY, v_baseIndex, v_pix, v_i;
-        v_inOop = this.stackNonInteger(7);
-        v_inW = this.stackInteger(6);
-        v_inH = this.stackInteger(5);
-        v_outOop = this.stackNonInteger(4);
-        v_outW = this.stackInteger(3);
-        v_outH = this.stackInteger(2);
-        v_dstX = this.stackInteger(1);
-        v_dstY = this.stackInteger(0);
-        if (!this.success) return false;
-        v_in = v_inOop.words;
-        v_out = v_outOop.words;
-        if (!v_in || !v_out) return false;
-        if (!((v_dstX + (2 * v_inW)) < v_outW)) return false;
-        if (!((v_dstY + (2 * v_inH)) < v_outH)) return false;
-        for (var v_y = 0; v_y < v_inH; v_y++) {
-            v_baseIndex = ((v_dstY + (2 * v_y)) * v_outW) + v_dstX;
-            for (var v_x = 0; v_x < v_inW; v_x++) {
-                v_pix = v_in[v_x + (v_y * v_inW)];
-                v_i = v_baseIndex + (2 * v_x);
-                v_out[v_i] = v_pix;
-                v_out[v_i + 1] = v_pix;
-                v_out[v_i + v_outW] = v_pix;
-                v_out[v_i + v_outW + 1] = v_pix;
-            }
-        }
-        this.vm.popN(8);
-        return true;
-    },
-    scratch_primitiveHueShift: function(argCount) {
-        var inOop, outOop, shift, v_in, sz, out, pix, r, g, b, max, min, brightness, saturation, hue;
-        inOop = this.stackNonInteger(2);
-        outOop = this.stackNonInteger(1);
-        shift = this.stackInteger(0);
-        if (!this.success || !inOop.words || !outOop.words) return false;
-        v_in = inOop.words;
-        out = outOop.words;
-        sz = v_in.length;
-        if (sz !== out.length) return false;
-        for (var i = 0 ; i < sz; i++) {
-            pix = v_in[i] & 0xFFFFFF;
-            if (pix !== 0) { // skip pixel values of 0 (transparent)
-                r = (pix >> 16) & 0xFF;
-                g = (pix >> 8) & 0xFF;
-                b = pix & 0xFF;
-                max = Math.max(r, g, b);
-                min = Math.min(r, g, b);
-                // find current brightness (v) and saturation with range 0 to 1000
-                brightness = (max * 1000) / 255 |0;
-                saturation = max === 0 ? 0 : (max - min) * 1000 / max |0;
-                if (brightness < 110) {					// force black to a very dark, saturated gray
-                    brightness = 110;  saturation = 1000;
-                }
-                if (saturation < 90) saturation = 90;   // force a small color change on grays
-                // tint all blacks and grays the same
-                hue = (brightness === 110) || (saturation === 90) ? 0 : this.scratch_hueFromRGBMinMax(r, g, b, min, max);
-                hue = (hue + shift + 360000000) % 360;  // compute new hue
-                this.scratch_bitmapAtPutHSV(out, i, hue, saturation, brightness);
-            }
-        }
-        this.vm.popN(3);  // pop args, leave rcvr on stack
-        return true;
-    },
-    scratch_hueFromRGBMinMax: function(r, g, b, min, max) {
-	    // Answer the hue, an angle between 0 and 360
-	    var span, result;
-    	span = max - min;
-	    if (span === 0) return 0;
-        result = r === max ? (60 * (g - b)) / span :
-            g === max ? 120 + (60 * (b - r) / span) :
-            240 + (60 * (r - g) / span);
-        return result < 0 ? result + 360 : result;
-    },
-    scratch_bitmapAtPutHSV: function(bitmap, i, hue, saturation, brightness) {
-        var hI, hF, p, q, t, v, outPix;
-        hI = hue / 60 | 0;      // integer part of hue (0..5)
-        hF = hue % 60;          // fractional part of hue
-        p = (1000 - saturation) * brightness;
-        q = (1000 - ((saturation * hF) / 60 | 0)) * brightness;
-        t = (1000 - ((saturation * (60 - hF)) / 60 | 0)) * brightness;
-        v = (brightness * 1000) / 3922 | 0;
-        p = p / 3922 | 0;
-        q = q / 3922 | 0;
-        t = t / 3922 | 0;
-        switch (hI) {
-            case 0: outPix = ((v << 16) + (t << 8) + p); break;
-            case 1: outPix = ((q << 16) + (v << 8) + p); break;
-            case 2: outPix = ((p << 16) + (v << 8) + t); break;
-            case 3: outPix = ((p << 16) + (q << 8) + v); break;
-            case 4: outPix = ((t << 16) + (p << 8) + v); break;
-            case 5: outPix = ((v << 16) + (p << 8) + q); break;
-        }
-        if (outPix === 0) outPix = 1;   // convert transparent to 1
-        bitmap[i] = outPix;
     },
 },
 'Obsolete', {
@@ -5361,7 +5265,6 @@ Object.subclass('Squeak.InterpreterProxy',
     VM_PROXY_MINOR: 11,
     initialize: function(vm) {
         this.vm = vm;
-        this.bitblt = new Squeak.BitBlt();
         this.remappableOops = [];
         Object.defineProperty(this, 'successFlag', {
           get: function() { return vm.primHandler.success; },

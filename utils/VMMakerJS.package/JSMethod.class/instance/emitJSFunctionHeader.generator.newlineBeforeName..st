@@ -5,11 +5,11 @@ emitJSFunctionHeader: aStream generator: aCodeGen newlineBeforeName: newlineBefo
 	aStream nextPutAll: 'function'.
 	newlineBeforeName ifTrue: [aStream cr] ifFalse: [aStream space].
 	(returnType last = $)
-	and: [returnType includesSubString: (aCodeGen cFunctionNameFor: self selectorForCodeGeneration)]) ifTrue:
+	and: [returnType includesSubString: (aCodeGen jsFunctionNameFor: self selectorForCodeGeneration)]) ifTrue:
 		["Hack fix for e.g. <returnTypeC: 'void (*setInterruptCheckChain(void (*aFunction)(void)))()'>"
 		 ^self].
 	aStream
-		nextPutAll: (aCodeGen cFunctionNameFor: self selectorForCodeGeneration);
+		nextPutAll: (aCodeGen jsFunctionNameFor: self selectorForCodeGeneration);
 		nextPut: $(.
 	args
 		do: [:arg | aStream nextPutAll: (aCodeGen returnPrefixFromVariable: arg)]

@@ -16,7 +16,7 @@ emitJSConstantsOn: aStream
 			aStream nextPutAll: 'var '.
 			aStream nextPutAll: node name.
 			aStream nextPutAll: ' = '.
-			aStream nextPutAll: (self cLiteralFor: node value).
+			aStream nextPutAll: (self jsLiteralFor: node value).
 			aStream nextPut: $;.
 			aStream cr
 		].

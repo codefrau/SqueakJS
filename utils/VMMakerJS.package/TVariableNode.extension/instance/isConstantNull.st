@@ -1,0 +1,3 @@
+*vmmakerjs
+isConstantNull
+	^ name = 'nil'

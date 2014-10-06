@@ -14,6 +14,7 @@ initializeCTranslationDictionary
 	#+				#generatePlus:on:indent:
 	#-				#generateMinus:on:indent:
 	#negated		#generateNegated:on:indent:
+	#abs			#generateAbs:on:indent:
 	#*				#generateTimes:on:indent:
 	#/				#generateDivide:on:indent:
 	#//				#generateDivide:on:indent:
@@ -114,11 +115,18 @@ initializeCTranslationDictionary
 	#instanceSizeOf:					#generateInstanceSizeOf:on:indent:
 	#is:KindOf: 							#generateIsKindOf:on:indent:
 	#isFloatObject:						#generateIsFloatObject:on:indent:
+	#isWordsOrBytes:					#generateIsWordsOrBytes:on:indent:
 	#cDigitCopyFrom:to:len:				#generateCDigitCopy:on:indent:
 	#sizeOfSTArrayFromCPrimitive:		#generateSizeOfSTArrayFromCPrimitive:on:indent:
 	#asciiValue							#generateIdentityUnary:on:indent:
 	#primitiveFail						#generateInterpreterProxyCall:on:indent:
 	#intAtPointer:						#generateIntAtPointer:on:indent:
+	#byteAtPointer:						#generateByteAtPointer:on:indent:
+	#oopForPointer:					#generateOopForPointer:on:indent:
+	#long32At:							#generateLong32At:on:indent:
+	#srcLongAt:						#generateSrcLongAt:on:indent:
+	#dstLongAt:						#generateDstLongAt:on:indent:
+	#dstLongAt:put:					#generateDstLongAtPut:on:indent:
 	).
 
 	1 to: pairs size by: 2 do: [:i |

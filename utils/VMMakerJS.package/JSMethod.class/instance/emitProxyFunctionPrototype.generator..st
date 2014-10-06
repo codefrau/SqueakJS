@@ -4,7 +4,7 @@ emitProxyFunctionPrototype: aStream generator: aCodeGen
 
 	| arg |
 	aStream nextPutAll: returnType; space.
-	aStream nextPutAll: '(*', (aCodeGen cFunctionNameFor: self selectorForCodeGeneration), ')('.
+	aStream nextPutAll: '(*', (aCodeGen jsFunctionNameFor: self selectorForCodeGeneration), ')('.
 	args isEmpty ifTrue: [ aStream nextPutAll: 'void' ].
 	1 to: args size do: [ :i |
 		arg := args at: i.

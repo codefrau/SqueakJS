@@ -8,7 +8,9 @@ generateFirstIndexableField: msgNode on: aStream indent: level
 			ifTrue: [self typeOfVariable: parent receiver variable name] ifFalse: [
 		parent method == (TSendNode>>#emitJSCodeAsFunctionCallOn:level:generator:)
 			ifTrue: [self typeOfArgument: (parent receiver args indexOf: msgNode) in: parent receiver selector] ifFalse: [
-		self halt]].
+		msgNode asString = 'interpreterProxy firstIndexableField: mapOop'
+			ifTrue: ['unsigned int*'] ifFalse: [
+		self halt]]].
 	cType ifNotNil: [
 		cType := cType copyReplaceAll: ' *' with: '* '.
 		accessor := (cType beginsWith: 'unsigned char*') ifTrue: ['.bytes']

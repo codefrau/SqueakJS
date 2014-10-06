@@ -6,5 +6,10 @@
 		"emitJSCodeAsExpressionOn:level:generator:" : "bf 9/30/2014 22:33",
 		"emitJSCodeOn:level:generator:" : "bf 9/30/2014 22:33",
 		"emitJSCommentOn:level:" : "bf 9/30/2014 22:33",
+		"isBitBltPtr" : "bf 10/6/2014 11:40",
+		"isConstantNull" : "bf 10/6/2014 15:13",
+		"isConstantZero" : "bf 10/6/2014 15:12",
+		"isEqualityTest" : "bf 10/6/2014 13:12",
 		"isInterpreterProxyConstant" : "bf 10/5/2014 16:59",
-		"isPlusOne" : "bf 10/4/2014 14:18" } }
+		"isPlusOne" : "bf 10/4/2014 14:18",
+		"isTimesFour" : "bf 10/6/2014 14:41" } }

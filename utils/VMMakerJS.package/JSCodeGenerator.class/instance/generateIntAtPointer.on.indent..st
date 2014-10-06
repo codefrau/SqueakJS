@@ -4,5 +4,3 @@ generateIntAtPointer: msgNode on: aStream indent: level
 		ifTrue: [^aStream nextPutAll: 'argPtr[i]'].
 	self halt
 	
-
-	

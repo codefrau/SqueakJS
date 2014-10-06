@@ -12,6 +12,7 @@ generateCCoercion: msgNode on: aStream indent: level
 		cType = 'float *' ifTrue: [^aStream nextPutAll: '.wordsAsFloat32Array()'].
 		self halt.
 	] ifFalse: [
-		(#('double' 'float') includes: cType) ifFalse: [self halt].
+		((#('double' 'float') includes: cType) or: ['sqInt (*)(*)'match: cType])
+			ifFalse: [self halt].
 		self emitJSExpression: expr on: aStream.
 	]

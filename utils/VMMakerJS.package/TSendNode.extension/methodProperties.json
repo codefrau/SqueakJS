@@ -4,8 +4,10 @@
 	"instance" : {
 		"emitJSCodeAsArgumentOn:level:generator:" : "bf 9/30/2014 22:33",
 		"emitJSCodeAsExpressionOn:level:generator:" : "bf 9/30/2014 22:33",
-		"emitJSCodeAsFunctionCallOn:level:generator:" : "bf 10/1/2014 13:53",
-		"emitJSCodeAsPointerDereferenceOn:level:generator:" : "bf 9/30/2014 22:33",
+		"emitJSCodeAsFunctionCallOn:level:generator:" : "bf 10/6/2014 15:42",
+		"emitJSCodeAsPointerDereferenceOn:level:generator:" : "bf 10/6/2014 15:42",
 		"emitJSCodeOn:level:generator:" : "bf 9/30/2014 22:33",
+		"isEqualityTest" : "bf 10/6/2014 13:13",
 		"isInterpreterProxyConstant" : "bf 10/5/2014 17:00",
-		"isPlusOne" : "bf 10/4/2014 14:19" } }
+		"isPlusOne" : "bf 10/4/2014 14:19",
+		"isTimesFour" : "bf 10/6/2014 14:45" } }

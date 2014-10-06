@@ -1,0 +1,3 @@
+*vmmakerjs
+isConstantNull
+	^false

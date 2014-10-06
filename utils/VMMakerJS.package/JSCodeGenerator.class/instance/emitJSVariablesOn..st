@@ -8,9 +8,16 @@ emitJSVariablesOn: aStream
 			aStream nextPutAll: 'var ', varString.
 			varDecl := variableDeclarations at: varString ifAbsent: [''].
 			(varDecl includes: $=)
-				ifTrue: [aStream nextPutAll: ' =', (varDecl copyAfter: $=)]
-				ifFalse: [(varDecl includes: $*)
-					ifTrue: [aStream nextPutAll: ' = null']
+				ifTrue: [ | const |
+					const := ((varDecl copyAfter: $=) replaceAll: ${ with: $[) replaceAll: $} with: $].
+					aStream nextPutAll: ' =', const]
+				ifFalse: [(varDecl includesAnyOf: '*[')
+					ifTrue: [(varDecl includes: $[)
+						ifTrue: [ | size |
+							size := (varDecl copyAfter: $[) copyUpTo: $].
+							size ifEmpty: [self halt].
+							aStream nextPutAll: ' = new Array(', size, ')']
+						ifFalse: [aStream nextPutAll: ' = null']]
 					ifFalse: [aStream nextPutAll: ' = 0']].
 			aStream nextPutAll: ';'; cr].
 	aStream cr.

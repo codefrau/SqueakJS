@@ -9,8 +9,10 @@ generateSignedBitShift: msgNode on: aStream indent: level
 		"bit shift amount is a constant"
 		self emitJSExpression: rcvr on: aStream.
 		arg value < 0 ifTrue: [
+			arg value < -31 ifTrue: [self error: 'cannot shift by more than 31']. 
 			aStream nextPutAll: ' >> ', arg value negated printString.
 		] ifFalse: [
+			arg value > 31 ifTrue: [self error: 'cannot shift by more than 31']. 
 			aStream nextPutAll: ' << ', arg value printString.
 		].
 	] ifFalse: [

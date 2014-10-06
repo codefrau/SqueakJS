@@ -4,9 +4,11 @@ generateIfFalse: msgNode on: aStream indent: level
 
 	(self nilOrBooleanConstantReceiverOf: msgNode)
 		ifNil:
-			[aStream nextPutAll: 'if (!('.
-			msgNode receiver emitJSCodeAsExpressionOn: aStream level: level + 1 generator: self.
-			aStream nextPutAll: ')) {'; cr.
+			[aStream nextPutAll: 'if ('.
+			self generateNot: (TSendNode new
+					setSelector: #not receiver: msgNode receiver arguments: #())
+				on: aStream indent: level + 1.
+			aStream nextPutAll: ') {'; cr.
 			msgNode args last emitJSCodeOn: aStream level: level + 1 generator: self.
 			level timesRepeat: [aStream tab].
 			aStream nextPut: $}]

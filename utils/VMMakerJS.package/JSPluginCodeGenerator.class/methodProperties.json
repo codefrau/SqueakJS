@@ -4,9 +4,8 @@
 	"instance" : {
 		"doInlining:" : "dtl 8/21/2011 21:16",
 		"emitExportsOn:" : "bf 10/1/2014 13:26",
-		"emitJSHeaderForPrimitivesOn:" : "bf 10/3/2014 13:54",
-		"emitJSHeaderOn:" : "bf 10/5/2014 18:08",
-		"generateCodeStringForPrimitives" : "bf 10/1/2014 11:18",
+		"emitJSHeaderOn:" : "bf 10/6/2014 16:23",
+		"generateCodeStringForPrimitives" : "bf 10/6/2014 15:37",
 		"isGeneratingPluginCode" : "ar 10/7/1998 17:54",
 		"isTypePointerToStruct:" : "eem 11/7/2009 10:03",
 		"localizeGlobalVariables" : "tpr 1/10/2003 16:20",

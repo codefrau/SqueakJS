@@ -2,4 +2,5 @@
 	"class" : {
 		 },
 	"instance" : {
-		"emitJSCodeOn:level:generator:" : "bf 9/30/2014 22:33" } }
+		"emitJSCodeOn:level:generator:" : "bf 10/6/2014 15:40",
+		"isConstantZero" : "bf 10/6/2014 15:15" } }

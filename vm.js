@@ -894,6 +894,10 @@ Object.subclass('Squeak.Object',
         return this.float32Array
             || (this.words && (this.float32Array = new Float32Array(this.words.buffer)));
     },
+    wordsAsFloat64Array: function() {
+        return this.float64Array
+            || (this.words && (this.float64Array = new Float64Array(this.words.buffer)));
+    },
     wordsAsInt32Array: function() {
         return this.int32Array
             || (this.words && (this.int32Array = new Int32Array(this.words.buffer)));

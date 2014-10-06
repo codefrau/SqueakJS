@@ -1,7 +1,7 @@
 *vmmakerjs
 emitJSCodeAsFunctionCallOn: aStream level: level generator: aCodeGen
 
-	"Translate this message send into a C function call"
+	"Translate this message send into a JS function call"
 	"Special case for pluggable modules. Replace messages to interpreterProxy
 	 by interpreterProxy->message(..) if the message is not builtin"
 	(aCodeGen isGeneratingPluginCode
@@ -9,8 +9,8 @@ emitJSCodeAsFunctionCallOn: aStream level: level generator: aCodeGen
 	 and: ['interpreterProxy' = receiver name
 	 and: [self isBuiltinOperator not]]]) ifTrue:
 		[aStream nextPutAll:'interpreterProxy.'].
-	"Translate this message send into a C function call."
-	aStream nextPutAll: (aCodeGen cFunctionNameFor: selector); nextPut: $(.
+	"Translate this message send into a JS function call."
+	aStream nextPutAll: (aCodeGen jsFunctionNameFor: selector); nextPut: $(.
 	"Only include the receiver as the first argument in certain cases.
 	 The receiver is always included if it is an expression.
 	 If it is a variable:

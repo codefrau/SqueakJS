@@ -5,6 +5,7 @@ prepareMethodsInlined: inlineFlag doAssertions: assertionFlag
 	| verbose methodList |
 	"method preparation"
 	verbose := false.
+	self pruneMethods: self ignoredMethods.
 	self prepareMethods.
 	verbose ifTrue: [
 		self printUnboundCallWarnings.

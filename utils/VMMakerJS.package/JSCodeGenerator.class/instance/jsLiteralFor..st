@@ -1,6 +1,6 @@
 JS code generator
-cLiteralFor: anObject
-	"Return a string representing the C literal value for the given object."
+jsLiteralFor: anObject
+	"Return a string representing theJS literal value for the given object."
 	(anObject isKindOf: Integer) ifTrue: [^ anObject printString].
 	(anObject isKindOf: String) ifTrue: [^ '"', anObject, '"' ].
 	(anObject isKindOf: Float) ifTrue: [^ anObject printString ].
@@ -8,5 +8,5 @@ cLiteralFor: anObject
 	anObject == true ifTrue: [^ 'true' ].
 	anObject == false ifTrue: [^ 'false' ].
 	self error:
-		'Warning: A Smalltalk literal could not be translated into a C constant: ', anObject printString.
+		'Warning: A Smalltalk literal could not be translated into a JS constant: ', anObject printString.
 	^'"XXX UNTRANSLATABLE CONSTANT XXX"'

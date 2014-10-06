@@ -1,0 +1,3 @@
+*vmmakerjs
+isBitBltPtr
+	^false

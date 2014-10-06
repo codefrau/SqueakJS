@@ -15,8 +15,7 @@ generateBitShift: msgNode on: aStream indent: level
 		].
 	] ifFalse: [
 		"bit shift amount is an expression"
-		self error: 'need to add BITSHIFT to emitJSHeaderOn:'.
-		aStream nextPutAll: 'BITSHIFT('.
+		aStream nextPutAll: 'SHIFT('.
 		self emitJSExpression: rcvr on: aStream.
 		aStream nextPutAll: ', '.
 		self emitJSExpression: arg on: aStream.

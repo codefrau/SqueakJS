@@ -8,7 +8,7 @@ emitJSCodeAsPointerDereferenceOn: aStream level: level generator: aCodeGen
 	aStream nextPut: $(.
 	receiver  emitJSCodeAsExpressionOn: aStream level: 0 generator: aCodeGen.
 	aStream nextPut: $-; nextPut: $>.
-	aStream nextPutAll: (aCodeGen cFunctionNameFor: selector).
+	aStream nextPutAll: (aCodeGen jsFunctionNameFor: selector).
 	arguments isEmpty ifFalse:
 		[self assert: arguments size = 1.
 		 aStream nextPutAll: ' = '.

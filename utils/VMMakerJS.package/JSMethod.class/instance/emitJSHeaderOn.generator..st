@@ -6,7 +6,18 @@ emitJSHeaderOn: aStream generator: aCodeGen
 	self emitJSFunctionHeader: aStream generator: aCodeGen.
 	aStream nextPutAll: ' {'; cr.
 	self emitGlobalStructReferenceOn: aStream.
-	locals do: [ :var |
-		aStream nextPutAll: '	var ', (aCodeGen returnPrefixFromVariable: var), ';'; cr.
+	locals do: [ :var | | varDecl |
+		aStream nextPutAll: '	var ', (aCodeGen returnPrefixFromVariable: var).
+		varDecl := declarations at: var asString ifAbsent: [''].
+		(varDecl includes: $=)
+			ifTrue: [ | const |
+				const := ((varDecl copyAfter: $=) replaceAll: ${ with: $[) replaceAll: $} with: $].
+				aStream nextPutAll: ' =', const]
+			ifFalse: [(varDecl includes: $[)
+					ifTrue: [ | size |
+						size := (varDecl copyAfter: $[) copyUpTo: $].
+						size ifEmpty: [self halt].
+						aStream nextPutAll: ' = new Array(', size, ')']].
+		aStream nextPutAll: ';'; cr
 	].
 	locals isEmpty ifFalse: [ aStream cr ].

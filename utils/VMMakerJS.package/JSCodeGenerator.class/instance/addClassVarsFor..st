@@ -4,7 +4,7 @@ addClassVarsFor: aClass
 	| val node |
 	aClass classPool associationsDo: [:assoc | 
 		val := assoc value.
-		(useSymbolicConstants and:[self isCLiteral: val])
+		(useSymbolicConstants and:[self isJSLiteral: val])
 			ifTrue:[node := TDefineNode new setName: assoc key asString value: assoc value]
 			ifFalse:[node := TConstantNode new setValue: assoc value].
 		constants at: assoc key asString put: node].

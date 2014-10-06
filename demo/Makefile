@@ -17,7 +17,7 @@ $(MANIFEST): Makefile $(TARGET)
 	@for f in $(FILES) $(EXTRA); do echo $$f >> $@ ; done
 
 $(TARGET): $(FILES)
-	mkdir -pv $@ $@/../lib $@/../plugins
+	@mkdir -pv $@ $@/../lib $@/../plugins
 	@for f in $^ ; do install -pvm 444 $$f $@/$$f ; done
 	@touch $@
 

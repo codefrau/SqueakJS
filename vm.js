@@ -2807,15 +2807,14 @@ Object.subclass('Squeak.Primitives',
                 return null;
             }
         }
-        var success = true,
-            initFunc = mod.initialiseModule;
+        var initFunc = mod.initialiseModule;
         if (typeof initFunc === 'function') {
-            success = mod.initialiseModule();
+            mod.initialiseModule();
         } else if (typeof initFunc === 'string') {
             // allow late binding for built-ins
-            success = this[initFunc]();
+            this[initFunc]();
         }
-        if (!success) {
+        if (this.interpreterProxy.failed()) {
             console.log("Module initialization failed: " + modName);
             return null;
         }
@@ -4623,7 +4622,6 @@ Object.subclass('Squeak.Primitives',
         this.b2d_state = {
             form: null,
         };
-        return true;
     },
     geReset: function(bitbltObj) {
         if (this.b2d_debug) console.log("-- reset");

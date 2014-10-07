@@ -5377,6 +5377,9 @@ Object.subclass('Squeak.InterpreterProxy',
     isWords: function(obj) {
         return typeof obj !== "number" && obj.isWords();
     },
+    isWordsOrBytes: function(obj) {
+        return typeof obj !== "number" && obj.isWordsOrBytes();
+    },
     isPointers: function(obj) {
         return typeof obj !== "number" && obj.isPointers();
     },

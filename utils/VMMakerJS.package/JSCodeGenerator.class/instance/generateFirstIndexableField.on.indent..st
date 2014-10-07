@@ -10,7 +10,9 @@ generateFirstIndexableField: msgNode on: aStream indent: level
 			ifTrue: [self typeOfArgument: (parent receiver args indexOf: msgNode) in: parent receiver selector] ifFalse: [
 		msgNode asString = 'interpreterProxy firstIndexableField: mapOop'
 			ifTrue: ['unsigned int*'] ifFalse: [
-		self halt]]].
+		msgNode asString = 'interpreterProxy firstIndexableField: blockOop'
+			ifTrue: ['int*'] ifFalse: [
+		self halt]]]].
 	cType ifNotNil: [
 		cType := cType copyReplaceAll: ' *' with: '* '.
 		accessor := (cType beginsWith: 'unsigned char*') ifTrue: ['.bytes']

@@ -1336,7 +1336,7 @@ Object.subclass('Squeak.Interpreter',
             case 0xBA: this.success = true;
                 if(!this.pop2AndPushIntResult(this.mod(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // MOD \
             case 0xBB: this.success = true;
-                if(!this.primHandler.primitiveMakePoint(1)) this.sendSpecial(b&0xF); return;  // MakePt int@int
+                if(!this.primHandler.primitiveMakePoint(1, true)) this.sendSpecial(b&0xF); return;  // MakePt int@int
             case 0xBC: this.success = true;
                 if(!this.pop2AndPushIntResult(this.safeShift(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return; // bitShift:
             case 0xBD: this.success = true;
@@ -2474,7 +2474,7 @@ Object.subclass('Squeak.Primitives',
             case 15: return this.popNandPushIfOK(2,this.doBitOr());  // SmallInt.bitOr
             case 16: return this.popNandPushIfOK(2,this.doBitXor());  // SmallInt.bitXor
             case 17: return this.popNandPushIfOK(2,this.doBitShift());  // SmallInt.bitShift
-            case 18: return this.primitiveMakePoint(argCount);
+            case 18: return this.primitiveMakePoint(argCount, false);
             case 19: return false;                                 // Guard primitive for simulation -- *must* fail
             // LargeInteger Primitives (20-39)
             // 32-bit logic is aliased to Integer prims above
@@ -3354,9 +3354,14 @@ Object.subclass('Squeak.Primitives',
         var bytes = this.vm.image.bytesLeft();
         return this.popNandPushIfOK(1, this.makeLargeIfNeeded(bytes));
     },
-    primitiveMakePoint: function(argCount) {
+    primitiveMakePoint: function(argCount, checkNumbers) {
         var x = this.vm.stackValue(1);
         var y = this.vm.stackValue(0);
+        if (checkNumbers) {
+            this.checkFloat(x);
+            this.checkFloat(y);
+            if (!this.success) return false;
+        }
         this.vm.popNandPush(1+argCount, this.makePointWithXandY(x, y));
         return true;
     },

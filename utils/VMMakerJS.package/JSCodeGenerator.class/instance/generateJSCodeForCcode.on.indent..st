@@ -2,6 +2,8 @@ JS translation
 generateJSCodeForCcode: cCode on: aStream indent: level
 	cCode = '' ifTrue: [^self].
 	aStream nextPutAll: (cCodeTranslationDict at: cCode ifAbsent: [
+		(#('sqrt' 'sin' 'cos' 'tan' 'atan' 'atan2' 'log' 'min' 'max' 'floor') anySatisfy: [:fn | fn,'(*)' match: cCode])
+			ifTrue: ['Math.', cCode] ifFalse: [
 		('opTable[*] = (void *)*' match: cCode)
 			ifTrue: [cCode copyReplaceAll: '(void *)' with: ''] ifFalse: [
 		('fn(*Handle, &*Pitch, *)' match: cCode)
@@ -14,4 +16,4 @@ generateJSCodeForCcode: cCode on: aStream indent: level
 			'fn(sourceHandle, 0, 0, 0, 0)') includes: cCode)
 			ifTrue: [cCode] ifFalse: [
 		"See initializeCTranslationDictionary"
-		self error: 'C: ' , cCode]]]]]])
+		self error: 'C: ' , cCode]]]]]]])

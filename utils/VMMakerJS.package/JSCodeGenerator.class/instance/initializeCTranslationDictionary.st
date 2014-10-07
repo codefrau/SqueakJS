@@ -118,6 +118,7 @@ initializeCTranslationDictionary
 	#instanceSizeOf:					#generateInstanceSizeOf:on:indent:
 	#is:KindOf: 							#generateIsKindOf:on:indent:
 	#isFloatObject:						#generateIsFloatObject:on:indent:
+	#isWords:							#generateIsWords:on:indent:
 	#isWordsOrBytes:					#generateIsWordsOrBytes:on:indent:
 	#cDigitCopyFrom:to:len:				#generateCDigitCopy:on:indent:
 	#sizeOfSTArrayFromCPrimitive:		#generateSizeOfSTArrayFromCPrimitive:on:indent:
@@ -153,15 +154,13 @@ initializeCTranslationDictionary
 		'fprintf(stderr, "\n%s: %s", moduleName, s)'					'console.log(moduleName + ": " + s)'
 		'interpreterProxy->majorVersion() == VM_PROXY_MAJOR'	'interpreterProxy.majorVersion() == VM_PROXY_MAJOR'
 		'interpreterProxy->minorVersion() >= VM_PROXY_MINOR'	'interpreterProxy.minorVersion() >= VM_PROXY_MINOR'
-		'sqrt(result)'												'Math.sqrt(result)'
-		'sqrt(len)'													'Math.sqrt(len)'
-		'atan2(dy,dx)'												'Math.atan2(dy, dx)'
 		'rand()'														'Math.random()'
 		'*src++'													'src[_src++]' 	
 		'*dst++ = max'												'dst[_dst++] = max'
 		'src++'		 												'_src++'
 		'*dst++ = *src; src += 2'									'dst[_dst++] = src[_src]; _src += 2'
-
+		'tX'															'tX'
+		'tY'															'tY'
 	).
 	1 to: pairs size by: 2 do: [:i |
 		cCodeTranslationDict at: (pairs at: i) put: (pairs at: i + 1)].

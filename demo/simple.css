@@ -49,6 +49,5 @@ div#sqSpinner > div {
     width: 90px; 
     height: 10px;
     border-radius: 5px;
-    background: #000;
     box-shadow: 0 0 5px 5px #F90;
 }

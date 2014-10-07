@@ -3925,6 +3925,7 @@ Object.subclass('Squeak.Primitives',
     },
     primitiveQuit: function(argCount) {
         Squeak.flushAllFiles();
+        this.display.quitFlag = true;
         this.vm.breakNow("quit"); 
         return true;
     },

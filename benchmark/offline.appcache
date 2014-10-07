@@ -1,15 +1,24 @@
 CACHE MANIFEST
-# Oct  7 14:05:14 2014
+# Oct  7 16:52:26 2014
 ../lib/squeak.js
 ../vm.js
 ../jit.js
+../plugins/ADPCMCodecPlugin.js
+../plugins/BMPReadWriterPlugin.js
 ../plugins/BitBltPlugin.js
+../plugins/DSAPrims.js
+../plugins/FFTPlugin.js
 ../plugins/FloatArrayPlugin.js
+../plugins/JPEGReaderPlugin.js
+../plugins/KedamaPlugin.js
+../plugins/KedamaPlugin2.js
+../plugins/Klatt.js
 ../plugins/LargeIntegers.js
 ../plugins/Matrix2x3Plugin.js
 ../plugins/MiscPrimitivePlugin.js
 ../plugins/ScratchPlugin.js
 ../plugins/SoundGenerationPlugin.js
+../plugins/StarSqueakPlugin.js
 ../plugins/ZipPlugin.js
 benchmark.html
 benchmark.css

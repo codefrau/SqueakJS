@@ -33,7 +33,7 @@ window.onload = function() {
         r.innerHTML = "Your machine: " + navigator.userAgent + "<br>" +
             "Your results:<br>" + contents.replace(/\r/g, "<br>") + "<br>"
         saveToLively(contents);
-        window.stopVM = true;
+        SqueakJS.quitSqueak();
         return origFileClose.apply(this, arguments);
     });
 
@@ -63,33 +63,10 @@ window.onload = function() {
         oReq.send();
     };
 
-    var canvas = document.getElementsByTagName("canvas")[0],
-        display = createSqueakDisplay(canvas);
-
-    function loadAndRunImage(url) {
-        var rq = new XMLHttpRequest();
-        rq.open('GET', url);
-        rq.responseType = 'arraybuffer';
-        rq.onload = function(e) {
-            var image = new Squeak.Image(rq.response, url);
-            var vm = new Squeak.Interpreter(image, display);
-            var run = function() {
-                try {
-                    vm.interpret(200, function(ms) {
-                        if (!window.stopVM && (typeof ms === 'number')) { // continue running
-                            window.setTimeout(run, ms);
-                        } else { // quit
-                            canvas.style.display = 'none';
-                        }
-                    });
-                } catch(error) {
-                    console.error(error);
-                    alert(error);
-                }
-            };
-            run();
-        };
-        rq.send();
-    };
-    loadAndRunImage('benchmark.image');
+    SqueakJS.runSqueak('benchmark.image', sqCanvas, {
+        spinner: sqSpinner,
+        onQuit: function() {
+            sqCanvas.style.display = "none";
+        },
+    });
 };

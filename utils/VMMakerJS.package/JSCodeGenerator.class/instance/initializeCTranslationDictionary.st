@@ -118,8 +118,6 @@ initializeCTranslationDictionary
 	#instanceSizeOf:					#generateInstanceSizeOf:on:indent:
 	#is:KindOf: 							#generateIsKindOf:on:indent:
 	#isFloatObject:						#generateIsFloatObject:on:indent:
-	#isWords:							#generateIsWords:on:indent:
-	#isWordsOrBytes:					#generateIsWordsOrBytes:on:indent:
 	#cDigitCopyFrom:to:len:				#generateCDigitCopy:on:indent:
 	#sizeOfSTArrayFromCPrimitive:		#generateSizeOfSTArrayFromCPrimitive:on:indent:
 	#asciiValue							#generateIdentityUnary:on:indent:

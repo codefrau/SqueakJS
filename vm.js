@@ -90,6 +90,7 @@ Object.extend(Squeak, {
     splOb_ClassExternalFunction: 46,
     splOb_ClassExternalLibrary: 47,
     splOb_SelectorAboutToReturn: 48,
+    splOb_SelectorRunWithIn: 49,
     
     // Class layout:
     Class_superclass: 0,
@@ -868,6 +869,9 @@ Object.subclass('Squeak.Object',
     isPointers: function() {
         return this.format <= 4;
     },
+    isMethod: function() {
+        return this.format >= 12;
+    },
     pointersSize: function() {
     	return this.pointers ? this.pointers.length : 0;
     },
@@ -1592,11 +1596,6 @@ Object.subclass('Squeak.Interpreter',
             lookupClass = lookupClass.pointers[Squeak.Class_superclass];
         }
         var entry = this.findSelectorInClass(selector, argCount, lookupClass);
-        if (entry.primIndex) {
-            //note details for verification of at/atput primitives
-            this.verifyAtSelector = selector;
-            this.verifyAtClass = lookupClass;
-        }
         this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
     },
     findSelectorInClass: function(selector, argCount, startingClass) {
@@ -1616,9 +1615,11 @@ Object.subclass('Squeak.Interpreter',
             }
             var newMethod = this.lookupSelectorInDict(mDict, selector);
             if (!newMethod.isNil) {
-                //load cache entry here and return
+                this.currentSelector = selector;
+                this.currentLookupClass = startingClass;
+                //if method is not actually a CompiledMethod, invoke primitiveInvokeObjectAsMethod (248) instead
                 cacheEntry.method = newMethod;
-                cacheEntry.primIndex = newMethod.methodPrimitiveIndex();
+                cacheEntry.primIndex = newMethod.isMethod() ? newMethod.methodPrimitiveIndex() : 248;
                 cacheEntry.argCount = argCount;
                 cacheEntry.mClass = currentClass;
                 return cacheEntry;
@@ -1825,6 +1826,22 @@ Object.subclass('Squeak.Interpreter',
         this.sp += trueArgCount - argCount; //pop selector and array then push args
         var entry = this.findSelectorInClass(selector, trueArgCount, lookupClass);
         this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
+        return true;
+    },
+    primitiveInvokeObjectAsMethod: function(argCount, method) {
+        // invoked from VM if non-method found in lookup
+        var orgArgs = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassArray], argCount);
+        for (var i = 0; i < argCount; i++)
+            orgArgs.pointers[argCount - i - 1] = this.pop();
+        var orgReceiver = this.pop(),
+            orgSelector = this.currentSelector;
+        // send run:with:in: to non-method object
+        var runWithIn = this.specialObjects[Squeak.splOb_SelectorRunWithIn];
+        this.push(method);       // not actually a method
+        this.push(orgSelector);
+        this.push(orgArgs);
+        this.push(orgReceiver);
+        this.send(runWithIn, 3, false);
         return true;
     },
     findMethodCacheEntry: function(selector, lkupClass) {
@@ -2724,7 +2741,8 @@ Object.subclass('Squeak.Primitives',
             case 244: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindFirstInString' , argCount);
             case 245: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveIndexOfAsciiInString', argCount);
             case 246: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount);
-            // 247, 248: unused
+            // 247: unused
+            case 248: return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod); // see findSelectorInClass()
             case 249: return this.primitiveArrayBecome(argCount, false); // one way, opt. copy hash
             case 254: return this.primitiveVMParameter(argCount);
     	} else switch (index) { // Chrome only optimized up to 128 cases
@@ -3302,8 +3320,8 @@ Object.subclass('Squeak.Primitives',
         //a zero ivarOffset, and a size that includes the extra instVars
         var info;
         var cacheable =
-            (this.vm.verifyAtSelector === atOrPutSelector)         //is at or atPut
-            && (this.vm.verifyAtClass === array.sqClass)           //not a super send
+            (this.vm.currentSelector === atOrPutSelector)          //is at or atPut
+            && (this.vm.currentLookupClass === array.sqClass)      //not a super send
             && !(array.format === 3 && this.vm.isContext(array));  //not a context (size can change)
         info = cacheable ? atOrPutCache[array.hash & this.atCacheMask] : this.nonCachedInfo;
         info.array = array;

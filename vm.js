@@ -1606,12 +1606,12 @@ Object.subclass('Squeak.Interpreter',
         while (!currentClass.isNil) {
             mDict = currentClass.pointers[Squeak.Class_mdict];
             if (mDict.isNil) {
-//                ["MethodDict pointer is nil (hopefully due a swapped out stub)
-//                        -- raise exception #cannotInterpret:."
-//                self createActualMessageTo: class.
-//                messageSelector _ self splObj: SelectorCannotInterpret.
-//                ^ self lookupMethodInClass: (self superclassOf: currentClass)]
-                throw Error("cannotInterpret");
+                // MethodDict pointer is nil (hopefully due a swapped out stub)
+                //        -- send #cannotInterpret:
+                var cantInterpSel = this.specialObjects[Squeak.splOb_SelectorCannotInterpret],
+                    cantInterpMsg = this.createActualMessage(selector, argCount, startingClass);
+                this.popNandPush(argCount, cantInterpMsg);
+                return this.findSelectorInClass(cantInterpSel, 1, currentClass.superclass());
             }
             var newMethod = this.lookupSelectorInDict(mDict, selector);
             if (!newMethod.isNil) {
@@ -1624,7 +1624,7 @@ Object.subclass('Squeak.Interpreter',
                 cacheEntry.mClass = currentClass;
                 return cacheEntry;
             }  
-            currentClass = currentClass.pointers[Squeak.Class_superclass];
+            currentClass = currentClass.superclass();
         }
         //Cound not find a normal message -- send #doesNotUnderstand:
         var dnuSel = this.specialObjects[Squeak.splOb_SelectorDoesNotUnderstand];

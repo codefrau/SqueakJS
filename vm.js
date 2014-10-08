@@ -1754,6 +1754,7 @@ Object.subclass('Squeak.Interpreter',
     	this.send(aboutToReturnSel, 2);
     },
     cannotReturn: function(resultObj) {
+        this.reclaimableContextCount = 0;
     	this.push(this.activeContext);
     	this.push(resultObj);
     	var cannotReturnSel = this.specialObjects[Squeak.splOb_SelectorCannotReturn];

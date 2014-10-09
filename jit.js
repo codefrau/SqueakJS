@@ -474,14 +474,15 @@ to single-step.
         var destination = this.pc + distance;
         if (this.debug) this.generateDebugCode("jump to " + destination);
         this.generateLabel();
-        this.source.push("vm.pc = ", destination, ";\n");
+        this.source.push("vm.pc = ", destination, "; ");
+        if (distance < 0) this.source.push("bytecodes += ", -distance, ";\n");
+        else this.source.push("bytecodes -= ", distance, ";\n");
         if (distance < 0) this.source.push(
             "if (vm.interruptCheckCounter-- <= 0) {\n",
             "   vm.checkForInterrupts();\n",
-            "   if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, ";\n",
-            "}\nbytecodes += ", -distance, ";\n");
-        else this.source.push("bytecodes -= ", distance, ";\n"); 
-        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", this.pc,"; // single-step\n");
+            "   if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", destination, ";\n",
+            "}\n");
+        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", destination, ";\n");
         this.source.push("continue;\n");
         this.needsBreak = false; // already checked
         this.needsLabel[destination] = true;
@@ -493,10 +494,9 @@ to single-step.
         this.generateLabel();
         this.source.push(
             "var cond = stack[vm.sp--]; if (cond === vm.", condition, "Obj) {vm.pc = ", destination, "; bytecodes -= ", distance, "; ");
-        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", this.pc,"; /* single-step */ else ");
+        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", destination,"; else ");
         this.source.push("continue}\n",
             "else if (cond !== vm.", !condition, "Obj) {vm.sp++; vm.pc = ", this.pc, "; vm.send(vm.specialObjects[25], 1, false); return bytecodes + ", this.pc, "}\n");
-        this.needsBreak = false; // already inserted above
         this.needsLabel[this.pc] = true; // for coming back after #mustBeBoolean send
         this.needsLabel[destination] = true; // obviously
         if (destination > this.endPC) this.endPC = destination;
@@ -682,7 +682,7 @@ to single-step.
         }
         this.source.push("vm.pc = ", to, ";\n");
         this.source.push("bytecodes -= ", blockSize, ";\n"); 
-        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", this.pc,"; // single-step\n");
+        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", to,";\n");
         this.source.push("continue;\n");
         this.needsBreak = false; // already checked
         this.needsLabel[from] = true;   // initial pc when activated
@@ -698,7 +698,7 @@ to single-step.
     generateDebugCode: function(comment) {
         // single-step for previous instructiuon
         if (this.needsBreak) {
-             this.source.push("if (vm.breakOutOfInterpreter) {vm.pc = ", this.prevPC, "; return bytecodes + ", this.prevPC, "} // single-step\n");
+             this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + (vm.pc = ", this.prevPC, ");\n");
              this.needsLabel[this.prevPC] = true;
         }
         // comment for this instructiuon

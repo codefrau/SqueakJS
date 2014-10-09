@@ -26,7 +26,7 @@ window.Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.5.7",
+    vmVersion: "SqueakJS 0.5.8",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -90,6 +90,7 @@ Object.extend(Squeak, {
     splOb_ClassExternalFunction: 46,
     splOb_ClassExternalLibrary: 47,
     splOb_SelectorAboutToReturn: 48,
+    splOb_SelectorRunWithIn: 49,
     
     // Class layout:
     Class_superclass: 0,
@@ -868,6 +869,9 @@ Object.subclass('Squeak.Object',
     isPointers: function() {
         return this.format <= 4;
     },
+    isMethod: function() {
+        return this.format >= 12;
+    },
     pointersSize: function() {
     	return this.pointers ? this.pointers.length : 0;
     },
@@ -1607,23 +1611,25 @@ Object.subclass('Squeak.Interpreter',
         while (!currentClass.isNil) {
             mDict = currentClass.pointers[Squeak.Class_mdict];
             if (mDict.isNil) {
-//                ["MethodDict pointer is nil (hopefully due a swapped out stub)
-//                        -- raise exception #cannotInterpret:."
-//                self createActualMessageTo: class.
-//                messageSelector _ self splObj: SelectorCannotInterpret.
-//                ^ self lookupMethodInClass: (self superclassOf: currentClass)]
-                throw Error("cannotInterpret");
+                // MethodDict pointer is nil (hopefully due a swapped out stub)
+                //        -- send #cannotInterpret:
+                var cantInterpSel = this.specialObjects[Squeak.splOb_SelectorCannotInterpret],
+                    cantInterpMsg = this.createActualMessage(selector, argCount, startingClass);
+                this.popNandPush(argCount, cantInterpMsg);
+                return this.findSelectorInClass(cantInterpSel, 1, currentClass.superclass());
             }
             var newMethod = this.lookupSelectorInDict(mDict, selector);
             if (!newMethod.isNil) {
-                //load cache entry here and return
+                this.currentSelector = selector;
+                this.currentLookupClass = startingClass;
+                //if method is not actually a CompiledMethod, invoke primitiveInvokeObjectAsMethod (248) instead
                 cacheEntry.method = newMethod;
-                cacheEntry.primIndex = newMethod.methodPrimitiveIndex();
+                cacheEntry.primIndex = newMethod.isMethod() ? newMethod.methodPrimitiveIndex() : 248;
                 cacheEntry.argCount = argCount;
                 cacheEntry.mClass = currentClass;
                 return cacheEntry;
             }  
-            currentClass = currentClass.pointers[Squeak.Class_superclass];
+            currentClass = currentClass.superclass();
         }
         //Cound not find a normal message -- send #doesNotUnderstand:
         var dnuSel = this.specialObjects[Squeak.splOb_SelectorDoesNotUnderstand];
@@ -1753,6 +1759,7 @@ Object.subclass('Squeak.Interpreter',
     	this.send(aboutToReturnSel, 2);
     },
     cannotReturn: function(resultObj) {
+        this.reclaimableContextCount = 0;
     	this.push(this.activeContext);
     	this.push(resultObj);
     	var cannotReturnSel = this.specialObjects[Squeak.splOb_SelectorCannotReturn];
@@ -1825,6 +1832,22 @@ Object.subclass('Squeak.Interpreter',
         this.sp += trueArgCount - argCount; //pop selector and array then push args
         var entry = this.findSelectorInClass(selector, trueArgCount, lookupClass);
         this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
+        return true;
+    },
+    primitiveInvokeObjectAsMethod: function(argCount, method) {
+        // invoked from VM if non-method found in lookup
+        var orgArgs = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassArray], argCount);
+        for (var i = 0; i < argCount; i++)
+            orgArgs.pointers[argCount - i - 1] = this.pop();
+        var orgReceiver = this.pop(),
+            orgSelector = this.currentSelector;
+        // send run:with:in: to non-method object
+        var runWithIn = this.specialObjects[Squeak.splOb_SelectorRunWithIn];
+        this.push(method);       // not actually a method
+        this.push(orgSelector);
+        this.push(orgArgs);
+        this.push(orgReceiver);
+        this.send(runWithIn, 3, false);
         return true;
     },
     findMethodCacheEntry: function(selector, lkupClass) {
@@ -2151,8 +2174,24 @@ Object.subclass('Squeak.Interpreter',
         }
         return "?>>?";
     },
-    allMethodsDo: function(callback) {
-        // callback(classObj, methodObj, selectorObj) should return true to break out of iteration
+    allInstancesOf: function(classObj, callback) {
+        if (typeof classObj === "string") classObj = this.globalNamed(classObj);
+        var instances = [],
+            inst = this.image.someInstanceOf(classObj);
+        while (inst) {
+            if (callback) callback(inst);
+            else instances.push(inst);
+            inst = this.image.nextInstanceAfter(inst);
+        }
+        return instances;
+    },
+    globalNamed: function(name) {
+        return this.allGlobalsDo(function(nameObj, globalObj){
+            if (nameObj.bytesAsString() === name) return globalObj;
+        });
+    },
+    allGlobalsDo: function(callback) {
+        // callback(globalNameObj, globalObj) should return true to break out of iteration
         var smalltalk = this.specialObjects[Squeak.splOb_SmalltalkDictionary].pointers,
             systemDict = smalltalk.length == 1 ? smalltalk[0].pointers[2].pointers : // very new: an environment
                 typeof smalltalk[0] == "number" ? smalltalk : // regular: just the system dict
@@ -2161,24 +2200,31 @@ Object.subclass('Squeak.Interpreter',
         for (var i = 0; i < globals.length; i++) {
             var assn = globals[i];
             if (!assn.isNil) {
-                var assnVal = assn.pointers[1];
-                if (assnVal.pointers && assnVal.pointers.length >= 9) {
-                    var clsAndMeta = [assnVal, assnVal.sqClass];
-                    for (var c = 0; c < clsAndMeta.length; c++) {
-                        var cls = clsAndMeta[c];
-                        var mdict = cls.pointers[1];
-                        if (!mdict.pointers || !mdict.pointers[1]) continue;
-                        var methods = mdict.pointers[1].pointers;
-                        if (!methods) continue;
-                        var selectors = mdict.pointers;
-                        for (var j = 0; j < methods.length; j++) {
-                            if (callback.call(this, cls, methods[j], selectors[2+j]))
-                                return;
-                        }
+                var result = callback(assn.pointers[0], assn.pointers[1]);
+                if (result) return result;
+            }
+        }
+    },
+    allMethodsDo: function(callback) {
+        // callback(classObj, methodObj, selectorObj) should return true to break out of iteration
+        var self = this;
+        this.allGlobalsDo(function(globalNameObj, globalObj) {
+            if (globalObj.pointers && globalObj.pointers.length >= 9) {
+                var clsAndMeta = [globalObj, globalObj.sqClass];
+                for (var c = 0; c < clsAndMeta.length; c++) {
+                    var cls = clsAndMeta[c];
+                    var mdict = cls.pointers[1];
+                    if (!mdict.pointers || !mdict.pointers[1]) continue;
+                    var methods = mdict.pointers[1].pointers;
+                    if (!methods) continue;
+                    var selectors = mdict.pointers;
+                    for (var j = 0; j < methods.length; j++) {
+                        if (callback.call(this, cls, methods[j], selectors[2+j]))
+                            return true;
                     }
                 }
             }
-        }
+        });
     },
     printStack: function(ctx, limit) {
         // both args are optional
@@ -2724,7 +2770,8 @@ Object.subclass('Squeak.Primitives',
             case 244: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindFirstInString' , argCount);
             case 245: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveIndexOfAsciiInString', argCount);
             case 246: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount);
-            // 247, 248: unused
+            // 247: unused
+            case 248: return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod); // see findSelectorInClass()
             case 249: return this.primitiveArrayBecome(argCount, false); // one way, opt. copy hash
             case 254: return this.primitiveVMParameter(argCount);
     	} else switch (index) { // Chrome only optimized up to 128 cases

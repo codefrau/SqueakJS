@@ -373,11 +373,11 @@ to single-step.
         	    return;
         	// dup
         	case 0x88:
-        	    this.generateInstruction("dup", "var dup = stack[vm.sp]; stack[++vm.sp] = dup;");
+        	    this.generateInstruction("dup", "var dup = stack[vm.sp]; stack[++vm.sp] = dup");
         	    return;
         	// thisContext
         	case 0x89:
-        	    this.generateInstruction("thisContext", "stack[++vm.sp] = context;\nvm.reclaimableContextCount = 0");
+        	    this.generateInstruction("thisContext", "stack[++vm.sp] = context; vm.reclaimableContextCount = 0");
         	    return;
             // closures
             case 0x8A:
@@ -458,7 +458,7 @@ to single-step.
         if (this.debug) this.generateDebugCode("return");
         this.generateLabel();
         this.source.push(
-            "vm.pc = ", this.pc, ";\nvm.doReturn(", what, ");\nreturn bytecodes + ", this.pc, ";\n");
+            "vm.pc = ", this.pc, "; vm.doReturn(", what, "); return bytecodes + ", this.pc, ";\n");
         this.needsBreak = false; // returning anyway
         this.done = this.pc > this.endPC;
     },
@@ -467,21 +467,22 @@ to single-step.
         this.generateLabel();
         // actually stack === context.pointers but that would look weird
         this.source.push(
-            "vm.pc = ", this.pc, ";\nvm.doReturn(stack[vm.sp--], context.pointers[0]);\nreturn bytecodes + ", this.pc, ";\n");
+            "vm.pc = ", this.pc, "; vm.doReturn(stack[vm.sp--], context.pointers[0]); return bytecodes + ", this.pc, ";\n");
         this.needsBreak = false; // returning anyway
     },
     generateJump: function(distance) {
         var destination = this.pc + distance;
         if (this.debug) this.generateDebugCode("jump to " + destination);
         this.generateLabel();
-        this.source.push("vm.pc = ", destination, ";\n");
+        this.source.push("vm.pc = ", destination, "; ");
+        if (distance < 0) this.source.push("bytecodes += ", -distance, "; ");
+        else this.source.push("bytecodes -= ", distance, "; ");
         if (distance < 0) this.source.push(
-            "if (vm.interruptCheckCounter-- <= 0) {\n",
+            "\nif (vm.interruptCheckCounter-- <= 0) {\n",
             "   vm.checkForInterrupts();\n",
-            "   if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, ";\n",
-            "}\nbytecodes += ", -distance, ";\n");
-        else this.source.push("bytecodes -= ", distance, ";\n"); 
-        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", this.pc,"; // single-step\n");
+            "   if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", destination, ";\n",
+            "}\n");
+        if (this.singleStep) this.source.push("\nif (vm.breakOutOfInterpreter) return bytecodes + ", destination, ";\n");
         this.source.push("continue;\n");
         this.needsBreak = false; // already checked
         this.needsLabel[destination] = true;
@@ -493,10 +494,9 @@ to single-step.
         this.generateLabel();
         this.source.push(
             "var cond = stack[vm.sp--]; if (cond === vm.", condition, "Obj) {vm.pc = ", destination, "; bytecodes -= ", distance, "; ");
-        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", this.pc,"; /* single-step */ else ");
+        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", destination,"; else ");
         this.source.push("continue}\n",
             "else if (cond !== vm.", !condition, "Obj) {vm.sp++; vm.pc = ", this.pc, "; vm.send(vm.specialObjects[25], 1, false); return bytecodes + ", this.pc, "}\n");
-        this.needsBreak = false; // already inserted above
         this.needsLabel[this.pc] = true; // for coming back after #mustBeBoolean send
         this.needsLabel[destination] = true; // obviously
         if (destination > this.endPC) this.endPC = destination;
@@ -644,8 +644,7 @@ to single-step.
         // set pc, activate new method, and return to main loop
         // unless the method was a successfull primitive call (no context change)
         this.source.push(
-            "vm.pc = ", this.pc, ";\n",
-            "vm.send(", prefix, num, suffix, ", ", numArgs, ", ", superSend, ");\n",
+            "vm.pc = ", this.pc, "; vm.send(", prefix, num, suffix, ", ", numArgs, ", ", superSend, "); ",
             "if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, ";\n");
         this.needsBreak = false; // already checked
         // need a label for coming back after send
@@ -682,7 +681,7 @@ to single-step.
         }
         this.source.push("vm.pc = ", to, ";\n");
         this.source.push("bytecodes -= ", blockSize, ";\n"); 
-        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", this.pc,"; // single-step\n");
+        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", to,";\n");
         this.source.push("continue;\n");
         this.needsBreak = false; // already checked
         this.needsLabel[from] = true;   // initial pc when activated
@@ -698,7 +697,7 @@ to single-step.
     generateDebugCode: function(comment) {
         // single-step for previous instructiuon
         if (this.needsBreak) {
-             this.source.push("if (vm.breakOutOfInterpreter) {vm.pc = ", this.prevPC, "; return bytecodes + ", this.prevPC, "} // single-step\n");
+             this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + (vm.pc = ", this.prevPC, ");\n");
              this.needsLabel[this.prevPC] = true;
         }
         // comment for this instructiuon

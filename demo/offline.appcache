@@ -1,10 +1,9 @@
 CACHE MANIFEST
-# Oct  7 16:52:26 2014
+# Oct  9 15:31:18 2014
 ../lib/squeak.js
 ../vm.js
 ../jit.js
 ../plugins/ADPCMCodecPlugin.js
-../plugins/BMPReadWriterPlugin.js
 ../plugins/BitBltPlugin.js
 ../plugins/DSAPrims.js
 ../plugins/FFTPlugin.js

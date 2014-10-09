@@ -2169,8 +2169,24 @@ Object.subclass('Squeak.Interpreter',
         }
         return "?>>?";
     },
-    allMethodsDo: function(callback) {
-        // callback(classObj, methodObj, selectorObj) should return true to break out of iteration
+    allInstancesOf: function(classObj, callback) {
+        if (typeof classObj === "string") classObj = this.globalNamed(classObj);
+        var instances = [],
+            inst = this.image.someInstanceOf(classObj);
+        while (inst) {
+            if (callback) callback(inst);
+            else instances.push(inst);
+            inst = this.image.nextInstanceAfter(inst);
+        }
+        return instances;
+    },
+    globalNamed: function(name) {
+        return this.allGlobalsDo(function(nameObj, globalObj){
+            if (nameObj.bytesAsString() === name) return globalObj;
+        });
+    },
+    allGlobalsDo: function(callback) {
+        // callback(globalNameObj, globalObj) should return true to break out of iteration
         var smalltalk = this.specialObjects[Squeak.splOb_SmalltalkDictionary].pointers,
             systemDict = smalltalk.length == 1 ? smalltalk[0].pointers[2].pointers : // very new: an environment
                 typeof smalltalk[0] == "number" ? smalltalk : // regular: just the system dict
@@ -2179,24 +2195,31 @@ Object.subclass('Squeak.Interpreter',
         for (var i = 0; i < globals.length; i++) {
             var assn = globals[i];
             if (!assn.isNil) {
-                var assnVal = assn.pointers[1];
-                if (assnVal.pointers && assnVal.pointers.length >= 9) {
-                    var clsAndMeta = [assnVal, assnVal.sqClass];
-                    for (var c = 0; c < clsAndMeta.length; c++) {
-                        var cls = clsAndMeta[c];
-                        var mdict = cls.pointers[1];
-                        if (!mdict.pointers || !mdict.pointers[1]) continue;
-                        var methods = mdict.pointers[1].pointers;
-                        if (!methods) continue;
-                        var selectors = mdict.pointers;
-                        for (var j = 0; j < methods.length; j++) {
-                            if (callback.call(this, cls, methods[j], selectors[2+j]))
-                                return;
-                        }
+                var result = callback(assn.pointers[0], assn.pointers[1]);
+                if (result) return result;
+            }
+        }
+    },
+    allMethodsDo: function(callback) {
+        // callback(classObj, methodObj, selectorObj) should return true to break out of iteration
+        var self = this;
+        this.allGlobalsDo(function(globalNameObj, globalObj) {
+            if (globalObj.pointers && globalObj.pointers.length >= 9) {
+                var clsAndMeta = [globalObj, globalObj.sqClass];
+                for (var c = 0; c < clsAndMeta.length; c++) {
+                    var cls = clsAndMeta[c];
+                    var mdict = cls.pointers[1];
+                    if (!mdict.pointers || !mdict.pointers[1]) continue;
+                    var methods = mdict.pointers[1].pointers;
+                    if (!methods) continue;
+                    var selectors = mdict.pointers;
+                    for (var j = 0; j < methods.length; j++) {
+                        if (callback.call(this, cls, methods[j], selectors[2+j]))
+                            return true;
                     }
                 }
             }
-        }
+        });
     },
     printStack: function(ctx, limit) {
         // both args are optional

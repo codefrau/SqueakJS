@@ -1596,6 +1596,11 @@ Object.subclass('Squeak.Interpreter',
             lookupClass = lookupClass.pointers[Squeak.Class_superclass];
         }
         var entry = this.findSelectorInClass(selector, argCount, lookupClass);
+        if (entry.primIndex) {
+            //note details for verification of at/atput primitives
+            this.verifyAtSelector = selector;
+            this.verifyAtClass = lookupClass;
+        }
         this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
     },
     findSelectorInClass: function(selector, argCount, startingClass) {
@@ -3344,8 +3349,8 @@ Object.subclass('Squeak.Primitives',
         //a zero ivarOffset, and a size that includes the extra instVars
         var info;
         var cacheable =
-            (this.vm.currentSelector === atOrPutSelector)          //is at or atPut
-            && (this.vm.currentLookupClass === array.sqClass)      //not a super send
+            (this.vm.verifyAtSelector === atOrPutSelector)         //is at or atPut
+            && (this.vm.verifyAtClass === array.sqClass)           //not a super send
             && !(array.format === 3 && this.vm.isContext(array));  //not a context (size can change)
         info = cacheable ? atOrPutCache[array.hash & this.atCacheMask] : this.nonCachedInfo;
         info.array = array;

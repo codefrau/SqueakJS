@@ -1,10 +1,11 @@
 {
 	"class" : {
+		"beActiveDuring:" : "bf 10/10/2014 14:22",
 		"initialize" : "jm 8/19/1998 10:03",
 		"isActive" : "bf 9/30/2014 14:43",
 		"isActive:" : "bf 9/30/2014 14:45",
 		"monticelloDescriptionFor:" : "eem 2/9/2009 22:44",
-		"removeCompilerMethods" : "jm 5/16/1998 10:26" },
+		"translateAllPluginsIn:" : "bf 10/10/2014 14:32" },
 	"instance" : {
 		"addAllClassVarsFor:" : "TPR 3/2/2000 11:22",
 		"addClass:" : "dtl 3/23/2013 15:46",

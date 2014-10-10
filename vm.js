@@ -4586,39 +4586,48 @@ Object.subclass('Squeak.Primitives',
         }
         this.audioContext.sampleRate = samplesPerSec;
         this.audioSema = semaIndex; // signal when ready to accept another buffer of samples
-        this.audioBuffers = [];
+        this.audioNextTimeSlot = 0;
+        this.audioBuffersReady = [];
         this.audioBuffersUnused = [
             this.audioContext.createBuffer(stereoFlag ? 2 : 1, bufFrames, samplesPerSec),
             this.audioContext.createBuffer(stereoFlag ? 2 : 1, bufFrames, samplesPerSec),
         ];
+        console.log("sound: started");
         return this.popNIfOK(argCount);
     },
     snd_playNextBuffer: function() {
-        if (!this.audioContext) return;
-        if (!this.audioBuffers.length) {
-            // console.log("audio buffer underrun " + this.audioBuffersUnused.length);
-            // if (this.audioBuffersUnused.length < 5) {
-            //     var buf = this.audioBuffersUnused[0];
-            //     this.audioContext.createBuffer(buf.numberOfChannels, buf.length, buf.sampleRate),
-            //     this.audioBuffersUnused.push(buf);
-            // }
+        if (!this.audioContext || this.audioBuffersReady.length === 0)
             return;
-        }
         var source = this.audioContext.createBufferSource();
-        source.buffer = this.audioBuffers[0];
+        source.buffer = this.audioBuffersReady.shift();
         source.connect(this.audioContext.destination);
-        source.onended = function() {
+        if (this.audioNextTimeSlot < this.audioContext.currentTime) {
+            if (this.audioNextTimeSlot > 0)
+                console.warn("sound " + this.audioContext.currentTime.toFixed(3) + 
+                    ": buffer underrun by " + (this.audioContext.currentTime - this.audioNextTimeSlot).toFixed(3) + " s");
+            this.audioNextTimeSlot = this.audioContext.currentTime;
+        }
+        source.start(this.audioNextTimeSlot);
+        //console.log("sound " + this.audioContext.currentTime.toFixed(3) + 
+        //    ": scheduling from " + this.audioNextTimeSlot.toFixed(3) + 
+        //    " to " + (this.audioNextTimeSlot + source.buffer.duration).toFixed(3));
+        this.audioNextTimeSlot += source.buffer.duration;
+        // source.onended is unreliable, using a timeout instead
+        window.setTimeout(function() {
             if (!this.audioContext) return;
-            this.audioBuffersUnused.push(this.audioBuffers.shift());
+            // console.log("sound " + this.audioContext.currentTime.toFixed(3) + 
+            //    ": done, next time slot " + this.audioNextTimeSlot.toFixed(3));
+            this.audioBuffersUnused.push(source.buffer);
             if (this.audioSema) this.signalSemaphoreWithIndex(this.audioSema);
             this.vm.forceInterruptCheck();
-            this.snd_playNextBuffer();
-        }.bind(this);
-        source.start(0);
-        this.audioSource = source;
+        }.bind(this), (this.audioNextTimeSlot - this.audioContext.currentTime) * 1000);
+        this.snd_playNextBuffer();
     },
     snd_primitiveSoundAvailableSpace: function(argCount) {
-        if (!this.audioContext) return false;
+        if (!this.audioContext) {
+            console.log("sound: no audio context");
+            return false;
+        }
         var available = 0;
         if (this.audioBuffersUnused.length > 0) {
             var buf = this.audioBuffersUnused[0];
@@ -4627,35 +4636,36 @@ Object.subclass('Squeak.Primitives',
         return this.popNandPushIfOK(argCount + 1, available);
     },
     snd_primitiveSoundPlaySamples: function(argCount) {
-        if (!this.audioContext || !this.audioBuffersUnused.length) return false;
+        if (!this.audioContext || this.audioBuffersUnused.length === 0) {
+            console.log("sound: play but no free buffers");
+            return false;
+        }
         var count = this.stackInteger(2),
-            int16Array = this.stackNonInteger(1).wordsAsInt16Array(),
+            sqSamples = this.stackNonInteger(1).wordsAsInt16Array(),
             startIndex = this.stackInteger(0) - 1;
-        if (!this.success || !int16Array) return false;
+        if (!this.success || !sqSamples) return false;
         var buffer = this.audioBuffersUnused.shift(),
             channels = buffer.numberOfChannels;
         for (var channel = 0; channel < channels; channel++) {
-            var float32Array = buffer.getChannelData(channel),
+            var jsSamples = buffer.getChannelData(channel),
                 index = startIndex + channel;
             for (var i = 0; i < count; i++) {
-                float32Array[i] = int16Array[index] / 32768;
+                jsSamples[i] = sqSamples[index] / 32768;    // int16 -> float32
                 index += channels;
             }
         }
-        this.audioBuffers.push(buffer);
-        if (this.audioBuffers.length === 1)
-            this.snd_playNextBuffer();
+        this.audioBuffersReady.push(buffer);
+        this.snd_playNextBuffer();
         return this.popNIfOK(argCount);
     },
     snd_primitiveSoundStop: function(argCount) {
         if (this.audioContext) {
-            if (this.audioSource)
-                this.audioSource.stop(this.audioContext.currentTime + 0.1);
             this.audioContext = null;
-            this.audioBuffers = null;
+            this.audioBuffersReady = null;
             this.audioBuffersUnused = null;
-            this.audioSource = null;
+            this.audioNextTimeSlot = 0;
             this.audioSema = 0;
+            console.log("sound: stopped");
         }
         return this.popNIfOK(argCount);
     },

@@ -246,7 +246,7 @@ Object.subclass('Squeak.Image',
     }
 },
 'initializing', {
-    initialize: function(arraybuffer, name) {
+    initialize: function(name) {
         this.totalMemory = 100000000; 
         this.name = name;
         this.gcCount = 0;
@@ -257,9 +257,8 @@ Object.subclass('Squeak.Image',
         this.oldSpaceCount = 0;
         this.newSpaceCount = 0;
         this.hasNewInstances = {};
-        this.readFromBuffer(arraybuffer);
     },
-    readFromBuffer: function(arraybuffer) {
+    readFromBuffer: function(arraybuffer, thenDo, progressDo) {
         var data = new DataView(arraybuffer),
             littleEndian = false,
             pos = 0;
@@ -347,18 +346,45 @@ Object.subclass('Squeak.Image',
             //oopMap is from old oops to new objects
             oopMap[oldBaseAddr + oop] = object;
         }
+        this.firstOldObject = oopMap[oldBaseAddr+4];
+        this.lastOldObject = prevObj;
+        this.oldSpaceBytes = endOfMemory;
         //create proper objects
         var splObs         = oopMap[specialObjectsOopInt];
         var compactClasses = oopMap[splObs.bits[Squeak.splOb_CompactClasses]].bits;
         var floatClass     = oopMap[splObs.bits[Squeak.splOb_ClassFloat]];
         console.log('squeak: mapping oops');
-        for (var oop in oopMap)
-            oopMap[oop].installFromImage(oopMap, compactClasses, floatClass, littleEndian, nativeFloats);
-        this.specialObjectsArray = splObs;
-        this.decorateKnownObjects();
-        this.firstOldObject = oopMap[oldBaseAddr+4];
-        this.lastOldObject = prevObj;
-        this.oldSpaceBytes = endOfMemory;
+        var obj = this.firstOldObject,
+            done = 0,
+            self = this;
+        function mapSomeObjects() {
+            if (obj) {
+                var stop = done + (self.oldSpaceCount / 10 | 0);    // do it in 10 chunks
+                while (obj && done < stop) {
+                    obj.installFromImage(oopMap, compactClasses, floatClass, littleEndian, nativeFloats);
+                    obj = obj.nextObject;
+                    done++;
+                }
+                if (progressDo) progressDo(done / self.oldSpaceCount);
+                return true;    // do more
+            } else { // done
+                self.specialObjectsArray = splObs;
+                self.decorateKnownObjects();
+                return false;   // don't do more
+            }
+        };
+        if (!thenDo) {
+            while (mapSomeObjects());   // do it synchronously
+        } else {
+            function mapSomeObjectsAsync(){
+                if (mapSomeObjects()) {
+                    window.setTimeout(mapSomeObjectsAsync, 0);
+                } else {
+                    thenDo();
+                }
+            };
+            window.setTimeout(mapSomeObjectsAsync, 0);
+        }
      },
     decorateKnownObjects: function() {
         var splObjs = this.specialObjectsArray.pointers;
@@ -4704,12 +4730,12 @@ Object.subclass('Squeak.Primitives',
                 self.audioInSource.connect(self.audioInProcessor);
                 self.audioInProcessor.connect(audioContext.destination);
                 self.vm.popN(argCount);
-                unfreeze();
+                window.setTimeout(unfreeze, 0);
             },
             function onError(msg) {
                 console.warn(msg);
                 self.vm.sendAsPrimitiveFailure(rcvr, method, argCount);
-                unfreeze();
+                window.setTimeout(unfreeze, 0);
             });
         return true;
     },

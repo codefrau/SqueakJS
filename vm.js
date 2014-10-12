@@ -1602,6 +1602,9 @@ Object.subclass('Squeak.Interpreter',
         }
         this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
     },
+    sendAsPrimitiveFailure: function(rcvr, method, argCount) {
+        this.executeNewMethod(rcvr, method, argCount, 0);
+    },
     findSelectorInClass: function(selector, argCount, startingClass) {
         var cacheEntry = this.findMethodCacheEntry(selector, startingClass);
         if (cacheEntry.method) return cacheEntry; // Found it in the method cache
@@ -2626,7 +2629,7 @@ Object.subclass('Squeak.Primitives',
             case 114: return this.primitiveExitToDebugger(argCount);
             case 115: return this.primitiveChangeClass(argCount);
             case 116: return this.vm.flushMethodCacheForMethod(this.vm.top());  // after Squeak 2.2 uses 119
-            case 117: return this.doNamedPrimitive(primMethod, argCount); // named prims
+            case 117: return this.doNamedPrimitive(argCount, primMethod); // named prims
             case 118: return this.primitiveDoPrimitiveWithArgs(argCount);
             case 119: return this.vm.flushMethodCacheForSelector(this.vm.top()); // before Squeak 2.3 uses 116
             // Miscellaneous Primitives (120-149)
@@ -2823,10 +2826,11 @@ Object.subclass('Squeak.Primitives',
         if (result === true || result === false) return result;
         return this.success;
     },
-    doNamedPrimitive: function(primMethod, argCount) {
+    doNamedPrimitive: function(argCount, primMethod) {
         if (primMethod.pointersSize() < 2) return false;
         var firstLiteral = primMethod.pointers[1]; // skip method header
         if (firstLiteral.pointersSize() !== 4) return false;
+        this.primMethod = primMethod;
         var moduleName = firstLiteral.pointers[0].bytesAsString();
         var functionName = firstLiteral.pointers[1].bytesAsString();
         return this.namedPrimitive(moduleName, functionName, argCount);

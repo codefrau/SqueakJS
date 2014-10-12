@@ -4680,13 +4680,13 @@ Object.subclass('Squeak.Primitives',
             unfreeze = this.vm.freeze(),
             self = this;
         Squeak.startAudioIn(
-            function onSuccess(audioContext, stream) {
+            function onSuccess(audioContext, source) {
                 console.log("sound: recording started")
                 self.audioInContext = audioContext;
+                self.audioInSource = source;
                 self.audioInSema = semaIndex;
                 self.audioInBuffers = [];
                 self.audioInBufferIndex = 0;
-                self.audioInSource = audioContext.createMediaStreamSource(stream);
                 // try to set sampling rate
                 self.audioInContext.sampleRate = samplesPerSec;
                 self.audioInOverSample = 1;
@@ -4730,7 +4730,6 @@ Object.subclass('Squeak.Primitives',
        return this.popNandPushIfOK(argCount + 1, actualRate);
     },
     snd_primitiveSoundRecordSamples: function(argCount) {
-        debugger;
         var sqSamples = this.stackNonInteger(1).wordsAsInt16Array(),
             sqStartIndex = this.stackInteger(0) - 1;
         if (!this.success) return false;
@@ -5939,7 +5938,10 @@ Object.extend(Squeak, {
         return this.audioOutContext;
     },
     startAudioIn: function(thenDo, errorDo) {
-        if (this.audioInContext) return thenDo(this.audioInContext, this.audioInStream);
+        if (this.audioInContext) {
+            this.audioInSource.disconnect();
+            return thenDo(this.audioInContext, this.audioInSource);
+        }
         navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia
             || navigator.mozGetUserMedia || navigator.msGetUserMedia;
         if (!navigator.getUserMedia) return errorDo("test: audio input not supported");
@@ -5948,12 +5950,16 @@ Object.extend(Squeak, {
                 var ctxProto = window.AudioContext || window.webkitAudioContext
                     || window.mozAudioContext || window.msAudioContext;
                 this.audioInContext = ctxProto && new ctxProto();
-                this.audioInStream = stream;
-                thenDo(this.audioInContext, this.audioInStream);
+                this.audioInSource = this.audioInContext.createMediaStreamSource(stream);
+                thenDo(this.audioInContext, this.audioInSource);
             },
             function onError() {
                 errorDo("cannot access microphone");
             });
+    },
+    stopAudio: function() {
+        if (this.audioInSource)
+            this.audioInSource.disconnect();
     },
 });
 

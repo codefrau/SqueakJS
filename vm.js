@@ -4666,7 +4666,7 @@ Object.subclass('Squeak.Primitives',
         return this.popNIfOK(argCount);
     },
     snd_primitiveSoundStopRecording: function(argCount) {
-        return this.fakePrimitive('SoundPlugin.primitiveSoundStopRecording', undefined, argCount);
+        if (this.audioInContext) {
     },
 },
 'B2DPlugin', {
@@ -4751,7 +4751,7 @@ Object.subclass('Squeak.Primitives',
         } else {
             this.vm.warnOnce("B2D: drawing to " + form.depth + " bit forms not supported yet");
         }
-        this.displayDirty(form.obj, state.minX, state.minY, state.maxX - state.minX, state.maxY - state.minY);
+        this.displayDirty(form.obj, {left: state.minX, top: state.minY, right: state.maxX, bottom: state.maxY});
     },
     geBlendOverForm1: function() {
         // since we have 32 pixels per word, round to 32 pixels

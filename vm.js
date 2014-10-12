@@ -4216,7 +4216,7 @@ Object.subclass('Squeak.Primitives',
         // this.display.context.drawImage(this.cursorCanvas, this.cursorX, this.cursorY);
     },
     primitiveBeep: function(argCount) {
-        var ctx = Squeak.startAudio();
+        var ctx = Squeak.startAudioOut();
         if (ctx) {
             var beep = ctx.createOscillator();
             beep.connect(ctx.destination);
@@ -4579,7 +4579,7 @@ Object.subclass('Squeak.Primitives',
             stereoFlag = this.stackBoolean(argCount-3),
             semaIndex = argCount > 3 ? this.stackInteger(argCount-4) : 0;
         if (!this.success) return false;
-        this.audioContext = Squeak.startAudio();
+        this.audioContext = Squeak.startAudioOut();
         if (!this.audioContext) {
             this.vm.warnOnce("could not initialize audio");
             return false;
@@ -4669,8 +4669,117 @@ Object.subclass('Squeak.Primitives',
         }
         return this.popNIfOK(argCount);
     },
+    snd_primitiveSoundStartRecording: function(argCount) {
+        if (argCount !== 3) return false;
+        var rcvr = this.stackNonInteger(3),
+            samplesPerSec = this.stackInteger(2),
+            stereoFlag = this.stackBoolean(1),
+            semaIndex = this.stackInteger(0);
+        if (!this.success) return false;
+        var method = this.primMethod,
+            unfreeze = this.vm.freeze(),
+            self = this;
+        Squeak.startAudioIn(
+            function onSuccess(audioContext, stream) {
+                console.log("sound: recording started")
+                self.audioInContext = audioContext;
+                self.audioInSema = semaIndex;
+                self.audioInBuffers = [];
+                self.audioInBufferIndex = 0;
+                self.audioInSource = audioContext.createMediaStreamSource(stream);
+                // try to set sampling rate
+                self.audioInContext.sampleRate = samplesPerSec;
+                self.audioInOverSample = 1;
+                // if sample rate is still too high, adjust oversampling
+                while (samplesPerSec * self.audioInOverSample < self.audioInContext.sampleRate)
+                    self.audioInOverSample *= 2;
+                // make a buffer of at least 100 ms
+                var bufferSize = self.audioInOverSample * 1024;
+                while (bufferSize / self.audioInContext.sampleRate < 0.1)
+                    bufferSize *= 2;
+                self.audioInProcessor = audioContext.createScriptProcessor(bufferSize, stereoFlag ? 2 : 1, stereoFlag ? 2 : 1);
+                self.audioInProcessor.onaudioprocess = function(event) {
+                    self.snd_recordNextBuffer(event.inputBuffer);
+                };
+                self.audioInSource.connect(self.audioInProcessor);
+                self.audioInProcessor.connect(audioContext.destination);
+                self.vm.popN(argCount);
+                unfreeze();
+            },
+            function onError(msg) {
+                console.warn(msg);
+                self.vm.sendAsPrimitiveFailure(rcvr, method, argCount);
+                unfreeze();
+            });
+        return true;
+    },
+    snd_recordNextBuffer: function(audioBuffer) {
+        if (!this.audioInContext) return;
+        // console.log("sound " + this.audioInContext.currentTime.toFixed(3) +
+        //    ": recorded " + audioBuffer.duration.toFixed(3) + " s");
+        if (this.audioInBuffers.length > 5)
+            this.audioInBuffers.shift();
+        this.audioInBuffers.push(audioBuffer);
+        if (this.audioInSema) this.signalSemaphoreWithIndex(this.audioInSema);
+        this.vm.forceInterruptCheck();
+    },
+    snd_primitiveSoundGetRecordingSampleRate: function(argCount) {
+       if (!this.audioInContext) return false;
+       var actualRate = this.audioInContext.sampleRate / this.audioInOverSample | 0;
+       console.log("sound: actual recording rate " + actualRate + "x" + this.audioInOverSample);
+       return this.popNandPushIfOK(argCount + 1, actualRate);
+    },
+    snd_primitiveSoundRecordSamples: function(argCount) {
+        debugger;
+        var sqSamples = this.stackNonInteger(1).wordsAsInt16Array(),
+            sqStartIndex = this.stackInteger(0) - 1;
+        if (!this.success) return false;
+        var sampleCount = 0;
+        while (sqStartIndex < sqSamples.length) {
+            if (this.audioInBuffers.length === 0) break;
+            var buffer = this.audioInBuffers[0],
+                channels = buffer.numberOfChannels,
+                sqStep = channels,
+                jsStep = this.audioInOverSample,
+                sqCount = (sqSamples.length - sqStartIndex) / sqStep,
+                jsCount = (buffer.length - this.audioInBufferIndex) / jsStep,
+                count = Math.min(jsCount, sqCount);
+            for (var channel = 0; channel < channels; channel++) {
+                var jsSamples = buffer.getChannelData(channel),
+                    jsIndex = this.audioInBufferIndex,
+                    sqIndex = sqStartIndex + channel;
+                for (var i = 0; i < count; i++) {
+                    sqSamples[sqIndex] = jsSamples[jsIndex] * 32768 & 0xFFFF; // float32 -> int16
+                    sqIndex += sqStep;
+                    jsIndex += jsStep;
+                }
+            }
+            sampleCount += count * channels;
+            sqStartIndex += count * channels;
+            if (jsIndex < buffer.length) {
+                this.audioInBufferIndex = jsIndex;
+            } else {
+                this.audioInBufferIndex = 0;
+                this.audioInBuffers.shift();
+            }
+        }
+        return this.popNandPushIfOK(argCount + 1, sampleCount);
+    },
     snd_primitiveSoundStopRecording: function(argCount) {
         if (this.audioInContext) {
+            this.audioInSource.disconnect();
+            this.audioInProcessor.disconnect();
+            this.audioInContext = null;
+            this.audioInSema = 0;
+            this.audioInBuffers = null;
+            this.audioInSource = null;
+            this.audioInProcessor = null;
+            console.log("sound recording stopped")
+        }
+        return true;
+    },
+    snd_primitiveSoundSetRecordLevel: function(argCount) {
+        return true;
     },
 },
 'B2DPlugin', {
@@ -5821,12 +5930,30 @@ Object.extend(Squeak, {
         // seconds since 1901-01-01, local time
         return Math.floor(Date.now()/1000) - Squeak.Epoch;
     },
-    startAudio: function() {
-        if (!this.audioContext) {
-            var ctxProto = window.AudioContext || window.webkitAudioContext;
-            this.audioContext = ctxProto && new ctxProto();
+    startAudioOut: function() {
+        if (!this.audioOutContext) {
+            var ctxProto = window.AudioContext || window.webkitAudioContext
+                || window.mozAudioContext || window.msAudioContext;
+            this.audioOutContext = ctxProto && new ctxProto();
         }
-        return this.audioContext;
+        return this.audioOutContext;
+    },
+    startAudioIn: function(thenDo, errorDo) {
+        if (this.audioInContext) return thenDo(this.audioInContext, this.audioInStream);
+        navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia
+            || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+        if (!navigator.getUserMedia) return errorDo("test: audio input not supported");
+        navigator.getUserMedia({audio: true, toString: function() {return "audio"}},
+            function onSuccess(stream) {
+                var ctxProto = window.AudioContext || window.webkitAudioContext
+                    || window.mozAudioContext || window.msAudioContext;
+                this.audioInContext = ctxProto && new ctxProto();
+                this.audioInStream = stream;
+                thenDo(this.audioInContext, this.audioInStream);
+            },
+            function onError() {
+                errorDo("cannot access microphone");
+            });
     },
 });
 

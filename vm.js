@@ -1405,11 +1405,10 @@ Object.subclass('Squeak.Interpreter',
         this.isIdle = hasTimer || !hadTimer;
         this.breakOut();
     },
-    freeze: function(externalContinueFunc) {
+    freeze: function() {
         // Stop the interpreter. Answer a function that can be
         // called to continue interpreting.
-        var continueFunc = externalContinueFunc; // only needed if called from outside the interpreter
-        this.primHandler.displayFlush(); // make sure display is up to date
+        var continueFunc;
         this.frozen = true;
         this.breakOutOfInterpreter = function(thenDo) {
             if (!thenDo) throw Error("need function to restart interpreter");
@@ -4183,9 +4182,6 @@ Object.subclass('Squeak.Primitives',
         if (!this.deferDisplayUpdates
             && form == this.vm.specialObjects[Squeak.splOb_TheDisplay])
                 this.displayUpdate(this.theDisplay(), rect);
-    },
-    displayFlush: function() {
-        // not needed
     },
     displayUpdate: function(form, rect, noCursor) {
         this.display.lastTick = this.vm.lastTick;

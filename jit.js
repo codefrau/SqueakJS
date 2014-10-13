@@ -496,7 +496,7 @@ to single-step.
             "var cond = stack[vm.sp--]; if (cond === vm.", condition, "Obj) {vm.pc = ", destination, "; bytecodes -= ", distance, "; ");
         if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", destination,"; else ");
         this.source.push("continue}\n",
-            "else if (cond !== vm.", !condition, "Obj) {vm.sp++; vm.pc = ", this.pc, "; vm.send(vm.specialObjects[25], 1, false); return bytecodes + ", this.pc, "}\n");
+            "else if (cond !== vm.", !condition, "Obj) {vm.sp++; vm.pc = ", this.pc, "; vm.send(vm.specialObjects[25], 0, false); return bytecodes + ", this.pc, "}\n");
         this.needsLabel[this.pc] = true; // for coming back after #mustBeBoolean send
         this.needsLabel[destination] = true; // obviously
         if (destination > this.endPC) this.endPC = destination;

@@ -1560,14 +1560,14 @@ Object.subclass('Squeak.Interpreter',
         if (top.isTrue) {this.pc += delta; return;}
         if (top.isFalse) return;
         this.push(top); //Uh-oh it's not even a boolean (that we know of ;-).  Restore stack...
-        this.send(this.specialObjects[Squeak.splOb_SelectorMustBeBoolean], 1, false);
+        this.send(this.specialObjects[Squeak.splOb_SelectorMustBeBoolean], 0, false);
     },
     jumpIfFalse: function(delta) {
         var top = this.pop();
         if (top.isFalse) {this.pc += delta; return;}
         if (top.isTrue) return;
         this.push(top); //Uh-oh it's not even a boolean (that we know of ;-).  Restore stack...
-        this.send(this.specialObjects[Squeak.splOb_SelectorMustBeBoolean], 1, false);
+        this.send(this.specialObjects[Squeak.splOb_SelectorMustBeBoolean], 0, false);
     },
     sendSpecial: function(lobits) {
         this.send(this.specialSelectors[lobits*2],

@@ -95,6 +95,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+2014-10-13: 0.5.9, microphone support
 2014-10-09: 0.5.8: fixes
 2014-10-07: 0.5.7: even more plugins generated
 2014-10-07: 0.5.6: add quitSqueak and onQuit

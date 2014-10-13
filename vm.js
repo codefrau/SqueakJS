@@ -26,7 +26,7 @@ window.Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.5.8",
+    vmVersion: "SqueakJS 0.5.9",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -246,7 +246,7 @@ Object.subclass('Squeak.Image',
     }
 },
 'initializing', {
-    initialize: function(arraybuffer, name) {
+    initialize: function(name) {
         this.totalMemory = 100000000; 
         this.name = name;
         this.gcCount = 0;
@@ -257,9 +257,10 @@ Object.subclass('Squeak.Image',
         this.oldSpaceCount = 0;
         this.newSpaceCount = 0;
         this.hasNewInstances = {};
-        this.readFromBuffer(arraybuffer);
     },
-    readFromBuffer: function(arraybuffer) {
+    readFromBuffer: function(arraybuffer, thenDo, progressDo) {
+        console.log('squeak: reading ' + this.name + ' (' + arraybuffer.byteLength + ' bytes)');
+        this.startupTime = Date.now();
         var data = new DataView(arraybuffer),
             littleEndian = false,
             pos = 0;
@@ -305,7 +306,6 @@ Object.subclass('Squeak.Image',
         // read objects
         var prevObj;
         var oopMap = {};
-        console.log('squeak: reading objects');
         for (var ptr = 0; ptr < endOfMemory; ) {
             var nWords = 0;
             var classInt = 0;
@@ -347,18 +347,45 @@ Object.subclass('Squeak.Image',
             //oopMap is from old oops to new objects
             oopMap[oldBaseAddr + oop] = object;
         }
-        //create proper objects
-        var splObs         = oopMap[specialObjectsOopInt];
-        var compactClasses = oopMap[splObs.bits[Squeak.splOb_CompactClasses]].bits;
-        var floatClass     = oopMap[splObs.bits[Squeak.splOb_ClassFloat]];
-        console.log('squeak: mapping oops');
-        for (var oop in oopMap)
-            oopMap[oop].installFromImage(oopMap, compactClasses, floatClass, littleEndian, nativeFloats);
-        this.specialObjectsArray = splObs;
-        this.decorateKnownObjects();
         this.firstOldObject = oopMap[oldBaseAddr+4];
         this.lastOldObject = prevObj;
         this.oldSpaceBytes = endOfMemory;
+        //create proper objects by mapping via oopMap
+        var splObs         = oopMap[specialObjectsOopInt];
+        var compactClasses = oopMap[splObs.bits[Squeak.splOb_CompactClasses]].bits;
+        var floatClass     = oopMap[splObs.bits[Squeak.splOb_ClassFloat]];
+        var obj = this.firstOldObject,
+            done = 0,
+            self = this;
+        function mapSomeObjects() {
+            if (obj) {
+                var stop = done + (self.oldSpaceCount / 10 | 0);    // do it in 10 chunks
+                while (obj && done < stop) {
+                    obj.installFromImage(oopMap, compactClasses, floatClass, littleEndian, nativeFloats);
+                    obj = obj.nextObject;
+                    done++;
+                }
+                if (progressDo) progressDo(done / self.oldSpaceCount);
+                return true;    // do more
+            } else { // done
+                self.specialObjectsArray = splObs;
+                self.decorateKnownObjects();
+                return false;   // don't do more
+            }
+        };
+        if (!progressDo) {
+            while (mapSomeObjects());   // do it synchronously
+            if (thenDo) thenDo();
+        } else {
+            function mapSomeObjectsAsync() {
+                if (mapSomeObjects()) {
+                    window.setTimeout(mapSomeObjectsAsync, 0);
+                } else {
+                    if (thenDo) thenDo();
+                }
+            };
+            window.setTimeout(mapSomeObjectsAsync, 0);
+        }
      },
     decorateKnownObjects: function() {
         var splObjs = this.specialObjectsArray.pointers;
@@ -1160,6 +1187,9 @@ Object.subclass('Squeak.Interpreter',
     initCompiler: function() {
         if (!Squeak.Compiler)
             return console.warn("Squeak.Compiler not loaded, using interpreter only");
+        var kObjPerSec = this.image.oldSpaceCount / (this.startupTime - this.image.startupTime);
+        if (kObjPerSec < 10)
+            return console.warn("Slow machine detected (loaded " + (kObjPerSec*1000|0) + " objects/sec), using interpreter only");
         try {
             // compiler might decide to not handle current image
             console.log("squeak: initializing JIT compiler");
@@ -1405,11 +1435,10 @@ Object.subclass('Squeak.Interpreter',
         this.isIdle = hasTimer || !hadTimer;
         this.breakOut();
     },
-    freeze: function(externalContinueFunc) {
+    freeze: function() {
         // Stop the interpreter. Answer a function that can be
         // called to continue interpreting.
-        var continueFunc = externalContinueFunc; // only needed if called from outside the interpreter
-        this.primHandler.displayFlush(); // make sure display is up to date
+        var continueFunc;
         this.frozen = true;
         this.breakOutOfInterpreter = function(thenDo) {
             if (!thenDo) throw Error("need function to restart interpreter");
@@ -1531,14 +1560,14 @@ Object.subclass('Squeak.Interpreter',
         if (top.isTrue) {this.pc += delta; return;}
         if (top.isFalse) return;
         this.push(top); //Uh-oh it's not even a boolean (that we know of ;-).  Restore stack...
-        this.send(this.specialObjects[Squeak.splOb_SelectorMustBeBoolean], 1, false);
+        this.send(this.specialObjects[Squeak.splOb_SelectorMustBeBoolean], 0, false);
     },
     jumpIfFalse: function(delta) {
         var top = this.pop();
         if (top.isFalse) {this.pc += delta; return;}
         if (top.isTrue) return;
         this.push(top); //Uh-oh it's not even a boolean (that we know of ;-).  Restore stack...
-        this.send(this.specialObjects[Squeak.splOb_SelectorMustBeBoolean], 1, false);
+        this.send(this.specialObjects[Squeak.splOb_SelectorMustBeBoolean], 0, false);
     },
     sendSpecial: function(lobits) {
         this.send(this.specialSelectors[lobits*2],
@@ -1602,6 +1631,9 @@ Object.subclass('Squeak.Interpreter',
             this.verifyAtClass = lookupClass;
         }
         this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
+    },
+    sendAsPrimitiveFailure: function(rcvr, method, argCount) {
+        this.executeNewMethod(rcvr, method, argCount, 0);
     },
     findSelectorInClass: function(selector, argCount, startingClass) {
         var cacheEntry = this.findMethodCacheEntry(selector, startingClass);
@@ -2627,7 +2659,7 @@ Object.subclass('Squeak.Primitives',
             case 114: return this.primitiveExitToDebugger(argCount);
             case 115: return this.primitiveChangeClass(argCount);
             case 116: return this.vm.flushMethodCacheForMethod(this.vm.top());  // after Squeak 2.2 uses 119
-            case 117: return this.doNamedPrimitive(primMethod, argCount); // named prims
+            case 117: return this.doNamedPrimitive(argCount, primMethod); // named prims
             case 118: return this.primitiveDoPrimitiveWithArgs(argCount);
             case 119: return this.vm.flushMethodCacheForSelector(this.vm.top()); // before Squeak 2.3 uses 116
             // Miscellaneous Primitives (120-149)
@@ -2824,10 +2856,11 @@ Object.subclass('Squeak.Primitives',
         if (result === true || result === false) return result;
         return this.success;
     },
-    doNamedPrimitive: function(primMethod, argCount) {
+    doNamedPrimitive: function(argCount, primMethod) {
         if (primMethod.pointersSize() < 2) return false;
         var firstLiteral = primMethod.pointers[1]; // skip method header
         if (firstLiteral.pointersSize() !== 4) return false;
+        this.primMethod = primMethod;
         var moduleName = firstLiteral.pointers[0].bytesAsString();
         var functionName = firstLiteral.pointers[1].bytesAsString();
         return this.namedPrimitive(moduleName, functionName, argCount);
@@ -4184,9 +4217,6 @@ Object.subclass('Squeak.Primitives',
             && form == this.vm.specialObjects[Squeak.splOb_TheDisplay])
                 this.displayUpdate(this.theDisplay(), rect);
     },
-    displayFlush: function() {
-        // not needed
-    },
     displayUpdate: function(form, rect, noCursor) {
         this.display.lastTick = this.vm.lastTick;
         this.display.idle = 0;
@@ -4216,7 +4246,7 @@ Object.subclass('Squeak.Primitives',
         // this.display.context.drawImage(this.cursorCanvas, this.cursorX, this.cursorY);
     },
     primitiveBeep: function(argCount) {
-        var ctx = Squeak.startAudio();
+        var ctx = Squeak.startAudioOut();
         if (ctx) {
             var beep = ctx.createOscillator();
             beep.connect(ctx.destination);
@@ -4579,46 +4609,55 @@ Object.subclass('Squeak.Primitives',
             stereoFlag = this.stackBoolean(argCount-3),
             semaIndex = argCount > 3 ? this.stackInteger(argCount-4) : 0;
         if (!this.success) return false;
-        this.audioContext = Squeak.startAudio();
+        this.audioContext = Squeak.startAudioOut();
         if (!this.audioContext) {
             this.vm.warnOnce("could not initialize audio");
             return false;
         }
         this.audioContext.sampleRate = samplesPerSec;
         this.audioSema = semaIndex; // signal when ready to accept another buffer of samples
-        this.audioBuffers = [];
+        this.audioNextTimeSlot = 0;
+        this.audioBuffersReady = [];
         this.audioBuffersUnused = [
             this.audioContext.createBuffer(stereoFlag ? 2 : 1, bufFrames, samplesPerSec),
             this.audioContext.createBuffer(stereoFlag ? 2 : 1, bufFrames, samplesPerSec),
         ];
+        console.log("sound: started");
         return this.popNIfOK(argCount);
     },
     snd_playNextBuffer: function() {
-        if (!this.audioContext) return;
-        if (!this.audioBuffers.length) {
-            // console.log("audio buffer underrun " + this.audioBuffersUnused.length);
-            // if (this.audioBuffersUnused.length < 5) {
-            //     var buf = this.audioBuffersUnused[0];
-            //     this.audioContext.createBuffer(buf.numberOfChannels, buf.length, buf.sampleRate),
-            //     this.audioBuffersUnused.push(buf);
-            // }
+        if (!this.audioContext || this.audioBuffersReady.length === 0)
             return;
-        }
         var source = this.audioContext.createBufferSource();
-        source.buffer = this.audioBuffers[0];
+        source.buffer = this.audioBuffersReady.shift();
         source.connect(this.audioContext.destination);
-        source.onended = function() {
+        if (this.audioNextTimeSlot < this.audioContext.currentTime) {
+            if (this.audioNextTimeSlot > 0)
+                console.warn("sound " + this.audioContext.currentTime.toFixed(3) + 
+                    ": buffer underrun by " + (this.audioContext.currentTime - this.audioNextTimeSlot).toFixed(3) + " s");
+            this.audioNextTimeSlot = this.audioContext.currentTime;
+        }
+        source.start(this.audioNextTimeSlot);
+        //console.log("sound " + this.audioContext.currentTime.toFixed(3) + 
+        //    ": scheduling from " + this.audioNextTimeSlot.toFixed(3) + 
+        //    " to " + (this.audioNextTimeSlot + source.buffer.duration).toFixed(3));
+        this.audioNextTimeSlot += source.buffer.duration;
+        // source.onended is unreliable, using a timeout instead
+        window.setTimeout(function() {
             if (!this.audioContext) return;
-            this.audioBuffersUnused.push(this.audioBuffers.shift());
+            // console.log("sound " + this.audioContext.currentTime.toFixed(3) + 
+            //    ": done, next time slot " + this.audioNextTimeSlot.toFixed(3));
+            this.audioBuffersUnused.push(source.buffer);
             if (this.audioSema) this.signalSemaphoreWithIndex(this.audioSema);
             this.vm.forceInterruptCheck();
-            this.snd_playNextBuffer();
-        }.bind(this);
-        source.start(0);
-        this.audioSource = source;
+        }.bind(this), (this.audioNextTimeSlot - this.audioContext.currentTime) * 1000);
+        this.snd_playNextBuffer();
     },
     snd_primitiveSoundAvailableSpace: function(argCount) {
-        if (!this.audioContext) return false;
+        if (!this.audioContext) {
+            console.log("sound: no audio context");
+            return false;
+        }
         var available = 0;
         if (this.audioBuffersUnused.length > 0) {
             var buf = this.audioBuffersUnused[0];
@@ -4627,40 +4666,149 @@ Object.subclass('Squeak.Primitives',
         return this.popNandPushIfOK(argCount + 1, available);
     },
     snd_primitiveSoundPlaySamples: function(argCount) {
-        if (!this.audioContext || !this.audioBuffersUnused.length) return false;
+        if (!this.audioContext || this.audioBuffersUnused.length === 0) {
+            console.log("sound: play but no free buffers");
+            return false;
+        }
         var count = this.stackInteger(2),
-            int16Array = this.stackNonInteger(1).wordsAsInt16Array(),
+            sqSamples = this.stackNonInteger(1).wordsAsInt16Array(),
             startIndex = this.stackInteger(0) - 1;
-        if (!this.success || !int16Array) return false;
+        if (!this.success || !sqSamples) return false;
         var buffer = this.audioBuffersUnused.shift(),
             channels = buffer.numberOfChannels;
         for (var channel = 0; channel < channels; channel++) {
-            var float32Array = buffer.getChannelData(channel),
+            var jsSamples = buffer.getChannelData(channel),
                 index = startIndex + channel;
             for (var i = 0; i < count; i++) {
-                float32Array[i] = int16Array[index] / 32768;
+                jsSamples[i] = sqSamples[index] / 32768;    // int16 -> float32
                 index += channels;
             }
         }
-        this.audioBuffers.push(buffer);
-        if (this.audioBuffers.length === 1)
-            this.snd_playNextBuffer();
+        this.audioBuffersReady.push(buffer);
+        this.snd_playNextBuffer();
         return this.popNIfOK(argCount);
     },
     snd_primitiveSoundStop: function(argCount) {
         if (this.audioContext) {
-            if (this.audioSource)
-                this.audioSource.stop(this.audioContext.currentTime + 0.1);
             this.audioContext = null;
-            this.audioBuffers = null;
+            this.audioBuffersReady = null;
             this.audioBuffersUnused = null;
-            this.audioSource = null;
+            this.audioNextTimeSlot = 0;
             this.audioSema = 0;
+            console.log("sound: stopped");
         }
         return this.popNIfOK(argCount);
     },
+    snd_primitiveSoundStartRecording: function(argCount) {
+        if (argCount !== 3) return false;
+        var rcvr = this.stackNonInteger(3),
+            samplesPerSec = this.stackInteger(2),
+            stereoFlag = this.stackBoolean(1),
+            semaIndex = this.stackInteger(0);
+        if (!this.success) return false;
+        var method = this.primMethod,
+            unfreeze = this.vm.freeze(),
+            self = this;
+        Squeak.startAudioIn(
+            function onSuccess(audioContext, source) {
+                console.log("sound: recording started")
+                self.audioInContext = audioContext;
+                self.audioInSource = source;
+                self.audioInSema = semaIndex;
+                self.audioInBuffers = [];
+                self.audioInBufferIndex = 0;
+                // try to set sampling rate
+                self.audioInContext.sampleRate = samplesPerSec;
+                self.audioInOverSample = 1;
+                // if sample rate is still too high, adjust oversampling
+                while (samplesPerSec * self.audioInOverSample < self.audioInContext.sampleRate)
+                    self.audioInOverSample *= 2;
+                // make a buffer of at least 100 ms
+                var bufferSize = self.audioInOverSample * 1024;
+                while (bufferSize / self.audioInContext.sampleRate < 0.1)
+                    bufferSize *= 2;
+                self.audioInProcessor = audioContext.createScriptProcessor(bufferSize, stereoFlag ? 2 : 1, stereoFlag ? 2 : 1);
+                self.audioInProcessor.onaudioprocess = function(event) {
+                    self.snd_recordNextBuffer(event.inputBuffer);
+                };
+                self.audioInSource.connect(self.audioInProcessor);
+                self.audioInProcessor.connect(audioContext.destination);
+                self.vm.popN(argCount);
+                window.setTimeout(unfreeze, 0);
+            },
+            function onError(msg) {
+                console.warn(msg);
+                self.vm.sendAsPrimitiveFailure(rcvr, method, argCount);
+                window.setTimeout(unfreeze, 0);
+            });
+        return true;
+    },
+    snd_recordNextBuffer: function(audioBuffer) {
+        if (!this.audioInContext) return;
+        // console.log("sound " + this.audioInContext.currentTime.toFixed(3) +
+        //    ": recorded " + audioBuffer.duration.toFixed(3) + " s");
+        if (this.audioInBuffers.length > 5)
+            this.audioInBuffers.shift();
+        this.audioInBuffers.push(audioBuffer);
+        if (this.audioInSema) this.signalSemaphoreWithIndex(this.audioInSema);
+        this.vm.forceInterruptCheck();
+    },
+    snd_primitiveSoundGetRecordingSampleRate: function(argCount) {
+       if (!this.audioInContext) return false;
+       var actualRate = this.audioInContext.sampleRate / this.audioInOverSample | 0;
+       console.log("sound: actual recording rate " + actualRate + "x" + this.audioInOverSample);
+       return this.popNandPushIfOK(argCount + 1, actualRate);
+    },
+    snd_primitiveSoundRecordSamples: function(argCount) {
+        var sqSamples = this.stackNonInteger(1).wordsAsInt16Array(),
+            sqStartIndex = this.stackInteger(0) - 1;
+        if (!this.success) return false;
+        var sampleCount = 0;
+        while (sqStartIndex < sqSamples.length) {
+            if (this.audioInBuffers.length === 0) break;
+            var buffer = this.audioInBuffers[0],
+                channels = buffer.numberOfChannels,
+                sqStep = channels,
+                jsStep = this.audioInOverSample,
+                sqCount = (sqSamples.length - sqStartIndex) / sqStep,
+                jsCount = (buffer.length - this.audioInBufferIndex) / jsStep,
+                count = Math.min(jsCount, sqCount);
+            for (var channel = 0; channel < channels; channel++) {
+                var jsSamples = buffer.getChannelData(channel),
+                    jsIndex = this.audioInBufferIndex,
+                    sqIndex = sqStartIndex + channel;
+                for (var i = 0; i < count; i++) {
+                    sqSamples[sqIndex] = jsSamples[jsIndex] * 32768 & 0xFFFF; // float32 -> int16
+                    sqIndex += sqStep;
+                    jsIndex += jsStep;
+                }
+            }
+            sampleCount += count * channels;
+            sqStartIndex += count * channels;
+            if (jsIndex < buffer.length) {
+                this.audioInBufferIndex = jsIndex;
+            } else {
+                this.audioInBufferIndex = 0;
+                this.audioInBuffers.shift();
+            }
+        }
+        return this.popNandPushIfOK(argCount + 1, sampleCount);
+    },
     snd_primitiveSoundStopRecording: function(argCount) {
-        return this.fakePrimitive('SoundPlugin.primitiveSoundStopRecording', undefined, argCount);
+        if (this.audioInContext) {
+            this.audioInSource.disconnect();
+            this.audioInProcessor.disconnect();
+            this.audioInContext = null;
+            this.audioInSema = 0;
+            this.audioInBuffers = null;
+            this.audioInSource = null;
+            this.audioInProcessor = null;
+            console.log("sound recording stopped")
+        }
+        return true;
+    },
+    snd_primitiveSoundSetRecordLevel: function(argCount) {
+        return true;
     },
 },
 'B2DPlugin', {
@@ -4745,7 +4893,7 @@ Object.subclass('Squeak.Primitives',
         } else {
             this.vm.warnOnce("B2D: drawing to " + form.depth + " bit forms not supported yet");
         }
-        this.displayDirty(form.obj, state.minX, state.minY, state.maxX - state.minX, state.maxY - state.minY);
+        this.displayDirty(form.obj, {left: state.minX, top: state.minY, right: state.maxX, bottom: state.maxY});
     },
     geBlendOverForm1: function() {
         // since we have 32 pixels per word, round to 32 pixels
@@ -5790,10 +5938,10 @@ Object.extend(Squeak, {
                 (new Uint8Array(buffer)).set(file.contents.subarray(0, file.size));
             }
             Squeak.filePut(file.name, buffer);
-            if (/SqueakDebug.log/.test(file.name)) {
-                var chars = Squeak.bytesAsString(new Uint8Array(buffer));
-                console.warn(chars.replace(/\r/g, '\n'));
-            }
+            // if (/SqueakDebug.log/.test(file.name)) {
+            //     var chars = Squeak.bytesAsString(new Uint8Array(buffer));
+            //     console.warn(chars.replace(/\r/g, '\n'));
+            // }
             file.modified = false;
         }
     },
@@ -5811,12 +5959,37 @@ Object.extend(Squeak, {
         // seconds since 1901-01-01, local time
         return Math.floor(Date.now()/1000) - Squeak.Epoch;
     },
-    startAudio: function() {
-        if (!this.audioContext) {
-            var ctxProto = window.AudioContext || window.webkitAudioContext;
-            this.audioContext = ctxProto && new ctxProto();
+    startAudioOut: function() {
+        if (!this.audioOutContext) {
+            var ctxProto = window.AudioContext || window.webkitAudioContext
+                || window.mozAudioContext || window.msAudioContext;
+            this.audioOutContext = ctxProto && new ctxProto();
         }
-        return this.audioContext;
+        return this.audioOutContext;
+    },
+    startAudioIn: function(thenDo, errorDo) {
+        if (this.audioInContext) {
+            this.audioInSource.disconnect();
+            return thenDo(this.audioInContext, this.audioInSource);
+        }
+        navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia
+            || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+        if (!navigator.getUserMedia) return errorDo("test: audio input not supported");
+        navigator.getUserMedia({audio: true, toString: function() {return "audio"}},
+            function onSuccess(stream) {
+                var ctxProto = window.AudioContext || window.webkitAudioContext
+                    || window.mozAudioContext || window.msAudioContext;
+                this.audioInContext = ctxProto && new ctxProto();
+                this.audioInSource = this.audioInContext.createMediaStreamSource(stream);
+                thenDo(this.audioInContext, this.audioInSource);
+            },
+            function onError() {
+                errorDo("cannot access microphone");
+            });
+    },
+    stopAudio: function() {
+        if (this.audioInSource)
+            this.audioInSource.disconnect();
     },
 });
 

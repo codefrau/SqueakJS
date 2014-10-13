@@ -259,6 +259,8 @@ Object.subclass('Squeak.Image',
         this.hasNewInstances = {};
     },
     readFromBuffer: function(arraybuffer, thenDo, progressDo) {
+        console.log('squeak: reading ' + this.name + ' (' + arraybuffer.byteLength + ' bytes)');
+        this.startupTime = Date.now();
         var data = new DataView(arraybuffer),
             littleEndian = false,
             pos = 0;
@@ -304,7 +306,6 @@ Object.subclass('Squeak.Image',
         // read objects
         var prevObj;
         var oopMap = {};
-        console.log('squeak: reading objects');
         for (var ptr = 0; ptr < endOfMemory; ) {
             var nWords = 0;
             var classInt = 0;
@@ -349,11 +350,10 @@ Object.subclass('Squeak.Image',
         this.firstOldObject = oopMap[oldBaseAddr+4];
         this.lastOldObject = prevObj;
         this.oldSpaceBytes = endOfMemory;
-        //create proper objects
+        //create proper objects by mapping via oopMap
         var splObs         = oopMap[specialObjectsOopInt];
         var compactClasses = oopMap[splObs.bits[Squeak.splOb_CompactClasses]].bits;
         var floatClass     = oopMap[splObs.bits[Squeak.splOb_ClassFloat]];
-        console.log('squeak: mapping oops');
         var obj = this.firstOldObject,
             done = 0,
             self = this;
@@ -373,14 +373,15 @@ Object.subclass('Squeak.Image',
                 return false;   // don't do more
             }
         };
-        if (!thenDo) {
+        if (!progressDo) {
             while (mapSomeObjects());   // do it synchronously
+            if (thenDo) thenDo();
         } else {
-            function mapSomeObjectsAsync(){
+            function mapSomeObjectsAsync() {
                 if (mapSomeObjects()) {
                     window.setTimeout(mapSomeObjectsAsync, 0);
                 } else {
-                    thenDo();
+                    if (thenDo) thenDo();
                 }
             };
             window.setTimeout(mapSomeObjectsAsync, 0);
@@ -1186,6 +1187,9 @@ Object.subclass('Squeak.Interpreter',
     initCompiler: function() {
         if (!Squeak.Compiler)
             return console.warn("Squeak.Compiler not loaded, using interpreter only");
+        var kObjPerSec = this.image.oldSpaceCount / (this.startupTime - this.image.startupTime);
+        if (kObjPerSec < 10)
+            return console.warn("Slow machine detected (loaded " + (kObjPerSec*1000|0) + " objects/sec), using interpreter only");
         try {
             // compiler might decide to not handle current image
             console.log("squeak: initializing JIT compiler");

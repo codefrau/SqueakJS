@@ -9,5 +9,5 @@ freeVariableReferences
 	].
 	args do: [ :var | refs remove: var asString ifAbsent: [] ].
 	locals do: [ :var | refs remove: var asString ifAbsent: [] ].
-	#('self' 'nil' 'true' 'false') do: [ :var | refs remove: var ifAbsent: [] ].
+	#('self' 'nil' 'true' 'false' 'null') do: [ :var | refs remove: var ifAbsent: [] ].
 	^ refs asSortedCollection

@@ -1,6 +1,6 @@
 {
 	"class" : {
-		"beActiveDuring:" : "bf 10/10/2014 14:22",
+		"beActiveDuring:" : "bf 10/14/2014 13:39",
 		"initialize" : "jm 8/19/1998 10:03",
 		"isActive" : "bf 9/30/2014 14:43",
 		"isActive:" : "bf 9/30/2014 14:45",
@@ -16,7 +16,7 @@
 		"addMacro:for:" : "eem 2/14/2009 09:10",
 		"addMethod:" : "",
 		"addMethodFor:selector:" : "dtl 5/27/2012 17:42",
-		"addMethodsForPrimitives:" : "bf 10/4/2014 12:37",
+		"addMethodsForPrimitives:" : "bf 10/14/2014 15:45",
 		"addPoolVarsFor:" : "bf 10/6/2014 15:38",
 		"builtin:" : "dtl 7/2/2008 16:46",
 		"cCodeForMethod:" : "",

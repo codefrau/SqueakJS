@@ -1784,6 +1784,7 @@ Object.subclass('Squeak.Interpreter',
         }
     },
     aboutToReturnThrough: function(resultObj, aContext) {
+        this.reclaimableContextCount = 0;
     	this.push(this.activeContext);
     	this.push(resultObj);
     	this.push(aContext);

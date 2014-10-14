@@ -355,7 +355,7 @@ to single-step.
         			case 4: this.generatePush("lit[", 1 + byte3, "].pointers[1]"); return;
         			case 5: this.generateStoreInto("inst[", byte3, "]"); return;
         			case 6: this.generatePopInto("inst[", byte3, "]"); return;
-        			case 7: this.generateStoreInto("lit[", 1 + byte3, "]"); return;
+        			case 7: this.generateStoreInto("lit[", 1 + byte3, "].pointers[1]"); return;
     			}
     		// Single extended send to super
     	    case 0x85:

@@ -647,6 +647,11 @@ Object.subclass('Squeak.Image',
     formatVersion: function() {
         return this.hasClosures ? 6504 : 6502;
     },
+    segmentVersion: function() {
+        var dnu = this.specialObjectsArray.pointers[Squeak.splOb_SelectorDoesNotUnderstand],
+            wholeWord = new Uint32Array(dnu.bytes.buffer, 0, 1);
+        return this.formatVersion() | (wholeWord[0] & 0xFF000000);
+    },
 });
 
 Object.subclass('Squeak.Object',
@@ -2641,7 +2646,7 @@ Object.subclass('Squeak.Primitives',
             case 96: return this.namedPrimitive('BitBltPlugin', 'primitiveCopyBits', argCount);
             case 97: return this.primitiveSnapshot(argCount);
             //case 98: return false; // primitiveStoreImageSegment
-            //case 99: return false; // primitiveLoadImageSegment
+            case 99: return this.primitiveLoadImageSegment(argCount);
             case 100: return this.vm.primitivePerformWithArgs(argCount, true); // Object.perform:withArguments:inSuperclass: (Blue Book: primitiveSignalAtTick)
             case 101: return this.primitiveBeCursor(argCount); // Cursor.beCursor
             case 102: return this.primitiveBeDisplay(argCount); // DisplayScreen.beDisplay
@@ -3640,6 +3645,23 @@ Object.subclass('Squeak.Primitives',
             arg.pointers[i] = rcvr.pointers[i];
         this.vm.pop(argCount);
         return true;
+    },
+    primitiveLoadImageSegment: function(argCount) {
+        // loadSegmentFrom: aWordArray outPointers: anArray.
+        var segmentWordArray = this.stackNonInteger(1).words,
+            outPointerArray = this.stackNonInteger(0).pointers;
+        if (!outPointerArray || !segmentWordArray) return false;
+        var data = segmentWordArray[0];
+        if (data & 0xFFFF !== 6502) {
+            console.error("image segment format not recognized (big-endian?)");
+            return false;
+        }
+        debugger;
+        if (data >> 16 !== this.vm.image.segmentVersion() >> 16) {
+            console.error("image segment format not recognized (big-endian?)");
+            return false;
+        }
+        return false;
     },
 },
 'blocks/closures', {

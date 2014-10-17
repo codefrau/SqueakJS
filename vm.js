@@ -294,19 +294,19 @@ Object.subclass('Squeak.Image',
         if (version >= 68000) throw Error("64 bit images not supported yet");
 
         // read header
-        var headerSize = readWord();
-        var endOfMemory = readWord(); //first unused location in heap
+        var imageHeaderSize = readWord();
+        var objectMemorySize = readWord(); //first unused location in heap
         var oldBaseAddr = readWord(); //object memory base address of image
         var specialObjectsOopInt = readWord(); //oop of array of special oops
         this.lastHash = readWord(); //Should be loaded from, and saved to the image header
         var savedWindowSize = readWord();
         var fullScreenFlag = readWord();
         var extraVMMemory = readWord();
-        pos += headerSize - (9 * 4); //skip to end of header
+        pos += imageHeaderSize - (9 * 4); //skip to end of header
         // read objects
         var prevObj;
         var oopMap = {};
-        for (var ptr = 0; ptr < endOfMemory; ) {
+        while (pos < imageHeaderSize + objectMemorySize) {
             var nWords = 0;
             var classInt = 0;
             var header = readWord();
@@ -315,41 +315,37 @@ Object.subclass('Squeak.Image',
                     nWords = header >> 2;
                     classInt = readWord();
                     header = readWord();
-                    ptr += 12;
                     break;
                 case Squeak.HeaderTypeClass:
                     classInt = header - Squeak.HeaderTypeClass;
                     header = readWord();
                     nWords = (header >> 2) & 63;
-                    ptr += 8;
                     break;
                 case Squeak.HeaderTypeShort:
                     nWords = (header >> 2) & 63;
                     classInt = (header >> 12) & 31; //compact class index
                     //Note classInt<32 implies compact class index
-                    ptr += 4;
                     break;
                 case Squeak.HeaderTypeFree:
                     throw Error("Unexpected free block");
             }
             nWords--;  //length includes base header which we have already read
-            var oop = ptr - 4, //0-rel byte oop of this object (base header)
+            var oop = pos - 4 - imageHeaderSize, //0-rel byte oop of this object (base header)
                 format = (header>>8) & 15,
                 hash = (header>>17) & 4095,
                 bits = readBits(nWords, format);
-            ptr += nWords * 4;
 
             var object = new Squeak.Object();
             object.initFromImage(oop, classInt, format, hash, bits);
             if (prevObj) prevObj.nextObject = object;
             this.oldSpaceCount++;
             prevObj = object;
-            //oopMap is from old oops to new objects
+            //oopMap is from old oops to actual objects
             oopMap[oldBaseAddr + oop] = object;
         }
         this.firstOldObject = oopMap[oldBaseAddr+4];
         this.lastOldObject = prevObj;
-        this.oldSpaceBytes = endOfMemory;
+        this.oldSpaceBytes = objectMemorySize;
         //create proper objects by mapping via oopMap
         var splObs         = oopMap[specialObjectsOopInt];
         var compactClasses = oopMap[splObs.bits[Squeak.splOb_CompactClasses]].bits;

@@ -5,7 +5,7 @@
 
 TARGET=../gh-pages/benchmark
 MANIFEST=$(TARGET)/offline.appcache
-FILES=../lib/squeak.js ../vm.js ../jit.js ../plugins/*.js benchmark.html benchmark.css benchmark.js benchmark.image \
+FILES=../squeak.js ../vm.js ../jit.js ../plugins/*.js benchmark.html benchmark.css benchmark.js benchmark.image \
 	../lib/lz-string.js
 EXTRA=
 

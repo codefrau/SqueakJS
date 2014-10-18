@@ -5,7 +5,7 @@
 
 TARGET=../gh-pages/etoys
 MANIFEST=$(TARGET)/offline.appcache
-FILES=../lib/squeak.js ../vm.js ../jit.js ../plugins/*.js index.html etoys.css etoys.js etoys.png \
+FILES=../squeak.js ../vm.js ../jit.js ../plugins/*.js index.html etoys.css etoys.js etoys.png \
 	../lib/lz-string.js ../lib/addtohomescreen.css ../lib/addtohomescreen.js ../lib/gh-fork-ribbon.css
 EXTRA=http://freudenbergs.de/bert/squeakjs/etoys.image
 

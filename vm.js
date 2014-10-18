@@ -337,6 +337,7 @@ Object.subclass('Squeak.Image',
 
             var object = new Squeak.Object();
             object.initFromImage(oop, classInt, format, hash, bits);
+            if (classInt < 32) object.hash |= 0x10000000;    // see fixCompactOops()
             if (prevObj) prevObj.nextObject = object;
             this.oldSpaceCount++;
             prevObj = object;
@@ -366,6 +367,7 @@ Object.subclass('Squeak.Image',
             } else { // done
                 self.specialObjectsArray = splObs;
                 self.decorateKnownObjects();
+                self.fixCompactOops();
                 return false;   // don't do more
             }
         };
@@ -398,8 +400,27 @@ Object.subclass('Squeak.Image',
                 enumerable: false,
                 value: function() { return this.toString() }
             });
-    }
-
+    },
+    fixCompactOops: function() {
+        // instances of compact classes might have been saved with a non-compact header
+        // fix their oops here so validation succeeds later
+        var obj = this.firstOldObject,
+            adjust = 0;
+        while (obj) {
+            var hadCompactHeader = obj.hash > 0x0FFFFFFF,
+                mightBeCompact = !!obj.sqClass.isCompact;
+            if (hadCompactHeader !== mightBeCompact) {
+                var isCompact = obj.snapshotSize().header === 0;
+                if (hadCompactHeader !== isCompact) {
+                    adjust += isCompact ? -4 : 4;
+                }
+            }
+            obj.hash &= 0x0FFFFFFF;
+            obj.oop += adjust;
+            obj = obj.nextObject;
+        }
+        this.oldSpaceBytes += adjust;
+    },
 },
 'garbage collection', {
     partialGC: function() {

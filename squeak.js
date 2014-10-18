@@ -78,7 +78,9 @@ Object.extend = function(obj /* + more args */ ) {
 //////////////////////////////////////////////////////////////////////////////
 
 (function(){
-    var vmDir = window.SqueakJSDir || "../";
+    var scripts = document.getElementsByTagName("script"),
+        squeakjs = scripts[scripts.length - 1],
+        vmDir = squeakjs.src.replace(/[^\/]*$/, "");
     [   "vm.js",
         "jit.js",
         "plugins/ADPCMCodecPlugin.js",

@@ -5923,6 +5923,12 @@ Object.extend(Squeak, {
             }.bind(this));
         return true;
     },
+    fileExists: function(filepath) {
+        var path = this.splitFilePath(filepath); if (!path.basename) return false;
+        var directory = this.dirList(path.dirname); if (!directory) return false;
+        var entry = directory[path.basename]; if (!entry || entry[3]) return false; // not found or is a directory
+        return true;
+    },
     dirCreate: function(dirpath) {
         var path = this.splitFilePath(dirpath); if (!path.basename) return false;
         var directory = this.dirList(path.dirname); if (!directory) return false;

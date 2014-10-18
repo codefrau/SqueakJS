@@ -540,7 +540,7 @@ function createSqueakDisplay(canvas, options) {
         }, 300);
 
         // if no fancy layout, don't bother
-        if (!options.header || !options.footer) {
+        if ((!options.header || !options.footer) && !options.fullscreen) {
             display.width = canvas.width;
             display.height = canvas.height;
             return;

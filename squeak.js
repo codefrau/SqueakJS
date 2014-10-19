@@ -696,6 +696,7 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     var search = window.location.search,
         altImage = search && search.match(/image=(.*\.image)/);
     if (altImage) imageUrl = altImage[1];
+    Squeak.fsck();
     var display = createSqueakDisplay(canvas, options),
         imageData = null,
         baseUrl = imageUrl.replace(/[^\/]*$/, ""),

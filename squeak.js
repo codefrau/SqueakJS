@@ -78,7 +78,9 @@ Object.extend = function(obj /* + more args */ ) {
 //////////////////////////////////////////////////////////////////////////////
 
 (function(){
-    var vmDir = window.SqueakJSDir || "../";
+    var scripts = document.getElementsByTagName("script"),
+        squeakjs = scripts[scripts.length - 1],
+        vmDir = squeakjs.src.replace(/[^\/]*$/, "");
     [   "vm.js",
         "jit.js",
         "plugins/ADPCMCodecPlugin.js",
@@ -538,7 +540,7 @@ function createSqueakDisplay(canvas, options) {
         }, 300);
 
         // if no fancy layout, don't bother
-        if (!options.header || !options.footer) {
+        if ((!options.header || !options.footer) && !options.fullscreen) {
             display.width = canvas.width;
             display.height = canvas.height;
             return;
@@ -653,6 +655,7 @@ SqueakJS.runImage = function(buffer, name, display, options) {
     window.setTimeout(function() {
         var image = new Squeak.Image(name);
         image.readFromBuffer(buffer, function() {
+            display.quitFlag = false;
             var vm = new Squeak.Interpreter(image, display);
             SqueakJS.vm = vm;
             localStorage["squeakImageName"] = name;
@@ -689,28 +692,57 @@ SqueakJS.runImage = function(buffer, name, display, options) {
     }, 0);
 };
 
-SqueakJS.runSqueak = function(url, canvas, options) {
+SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     var search = window.location.search,
         altImage = search && search.match(/image=(.*\.image)/);
-    if (altImage) url = altImage[1];
-    var imageName = Squeak.splitFilePath(url).basename,
-        display = createSqueakDisplay(canvas, options);
-    display.showBanner("Downloading " + imageName);
-    var rq = new XMLHttpRequest();
-    rq.open('GET', url);
-    rq.responseType = 'arraybuffer';
-    rq.onprogress = function(e) {
-        if (e.lengthComputable) display.showProgress(e.loaded / e.total);
+    if (altImage) imageUrl = altImage[1];
+    Squeak.fsck();
+    var display = createSqueakDisplay(canvas, options),
+        imageData = null,
+        baseUrl = imageUrl.replace(/[^\/]*$/, ""),
+        urls = [imageUrl];
+    if (options.files) {
+        options.files.forEach(function(f) { urls.push(baseUrl + f); });
     }
-    rq.onload = function(e) {
-        if (rq.status == 200)
-            SqueakJS.runImage(rq.response, imageName, display, options);
-        else rq.onerror(rq.statusText);
+    var isImage = true;
+    function getNextFile(whenAllDone) {
+        if (urls.length === 0) return whenAllDone(imageData);
+        var url = urls.shift(),
+            fileName = url.slice(baseUrl.length);
+        if (Squeak.fileExists(fileName)) {
+            if (isImage) {
+                isImage = false;
+                Squeak.fileGet(fileName, function(data) {
+                    imageData = data; 
+                    getNextFile(whenAllDone);
+                });
+            } else getNextFile(whenAllDone);
+            return;
+        }
+        display.showBanner("Downloading " + fileName);
+        var rq = new XMLHttpRequest();
+        rq.open('GET', url);
+        rq.responseType = 'arraybuffer';
+        rq.onprogress = function(e) {
+            if (e.lengthComputable) display.showProgress(e.loaded / e.total);
+        }
+        rq.onload = function(e) {
+            if (rq.status == 200) {
+                if (isImage) {isImage = false; imageData = rq.response;}
+                else Squeak.filePut(fileName, rq.response);
+                return getNextFile(whenAllDone);
+            }
+            else rq.onerror(rq.statusText);
+        };
+        rq.onerror = function(e) {
+            alert(url + "\nError: " + e);
+        }
+        rq.send();
     };
-    rq.onerror = function(e) {
-        alert("Image: " + url + "\nError: " + e);
-    }
-    rq.send();
+    getNextFile(function whenAllDone(imageData) {
+        var imageName = Squeak.splitFilePath(imageUrl).basename;
+        SqueakJS.runImage(imageData, imageName, display, options);
+    });
 };
 
 SqueakJS.quitSqueak = function() {

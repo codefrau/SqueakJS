@@ -26,7 +26,7 @@ window.Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.5.9",
+    vmVersion: "SqueakJS 0.6",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -294,19 +294,19 @@ Object.subclass('Squeak.Image',
         if (version >= 68000) throw Error("64 bit images not supported yet");
 
         // read header
-        var headerSize = readWord();
-        var endOfMemory = readWord(); //first unused location in heap
+        var imageHeaderSize = readWord();
+        var objectMemorySize = readWord(); //first unused location in heap
         var oldBaseAddr = readWord(); //object memory base address of image
         var specialObjectsOopInt = readWord(); //oop of array of special oops
         this.lastHash = readWord(); //Should be loaded from, and saved to the image header
         var savedWindowSize = readWord();
         var fullScreenFlag = readWord();
         var extraVMMemory = readWord();
-        pos += headerSize - (9 * 4); //skip to end of header
+        pos += imageHeaderSize - (9 * 4); //skip to end of header
         // read objects
         var prevObj;
         var oopMap = {};
-        for (var ptr = 0; ptr < endOfMemory; ) {
+        while (pos < imageHeaderSize + objectMemorySize) {
             var nWords = 0;
             var classInt = 0;
             var header = readWord();
@@ -315,41 +315,38 @@ Object.subclass('Squeak.Image',
                     nWords = header >> 2;
                     classInt = readWord();
                     header = readWord();
-                    ptr += 12;
                     break;
                 case Squeak.HeaderTypeClass:
                     classInt = header - Squeak.HeaderTypeClass;
                     header = readWord();
                     nWords = (header >> 2) & 63;
-                    ptr += 8;
                     break;
                 case Squeak.HeaderTypeShort:
                     nWords = (header >> 2) & 63;
                     classInt = (header >> 12) & 31; //compact class index
                     //Note classInt<32 implies compact class index
-                    ptr += 4;
                     break;
                 case Squeak.HeaderTypeFree:
                     throw Error("Unexpected free block");
             }
             nWords--;  //length includes base header which we have already read
-            var oop = ptr - 4, //0-rel byte oop of this object (base header)
+            var oop = pos - 4 - imageHeaderSize, //0-rel byte oop of this object (base header)
                 format = (header>>8) & 15,
                 hash = (header>>17) & 4095,
                 bits = readBits(nWords, format);
-            ptr += nWords * 4;
 
             var object = new Squeak.Object();
             object.initFromImage(oop, classInt, format, hash, bits);
+            if (classInt < 32) object.hash |= 0x10000000;    // see fixCompactOops()
             if (prevObj) prevObj.nextObject = object;
             this.oldSpaceCount++;
             prevObj = object;
-            //oopMap is from old oops to new objects
+            //oopMap is from old oops to actual objects
             oopMap[oldBaseAddr + oop] = object;
         }
         this.firstOldObject = oopMap[oldBaseAddr+4];
         this.lastOldObject = prevObj;
-        this.oldSpaceBytes = endOfMemory;
+        this.oldSpaceBytes = objectMemorySize;
         //create proper objects by mapping via oopMap
         var splObs         = oopMap[specialObjectsOopInt];
         var compactClasses = oopMap[splObs.bits[Squeak.splOb_CompactClasses]].bits;
@@ -370,6 +367,7 @@ Object.subclass('Squeak.Image',
             } else { // done
                 self.specialObjectsArray = splObs;
                 self.decorateKnownObjects();
+                self.fixCompactOops();
                 return false;   // don't do more
             }
         };
@@ -402,8 +400,27 @@ Object.subclass('Squeak.Image',
                 enumerable: false,
                 value: function() { return this.toString() }
             });
-    }
-
+    },
+    fixCompactOops: function() {
+        // instances of compact classes might have been saved with a non-compact header
+        // fix their oops here so validation succeeds later
+        var obj = this.firstOldObject,
+            adjust = 0;
+        while (obj) {
+            var hadCompactHeader = obj.hash > 0x0FFFFFFF,
+                mightBeCompact = !!obj.sqClass.isCompact;
+            if (hadCompactHeader !== mightBeCompact) {
+                var isCompact = obj.snapshotSize().header === 0;
+                if (hadCompactHeader !== isCompact) {
+                    adjust += isCompact ? -4 : 4;
+                }
+            }
+            obj.hash &= 0x0FFFFFFF;
+            obj.oop += adjust;
+            obj = obj.nextObject;
+        }
+        this.oldSpaceBytes += adjust;
+    },
 },
 'garbage collection', {
     partialGC: function() {
@@ -646,6 +663,11 @@ Object.subclass('Squeak.Image',
     },
     formatVersion: function() {
         return this.hasClosures ? 6504 : 6502;
+    },
+    segmentVersion: function() {
+        var dnu = this.specialObjectsArray.pointers[Squeak.splOb_SelectorDoesNotUnderstand],
+            wholeWord = new Uint32Array(dnu.bytes.buffer, 0, 1);
+        return this.formatVersion() | (wholeWord[0] & 0xFF000000);
     },
 });
 
@@ -1121,7 +1143,7 @@ Object.subclass('Squeak.Object',
 Object.subclass('Squeak.Interpreter',
 'initialization', {
     initialize: function(image, display) {
-        console.log('squeak: initializing interpreter');
+        console.log('squeak: initializing interpreter ' + Squeak.vmVersion);
         this.Squeak = Squeak;   // store locally to avoid dynamic lookup in Lively
         this.image = image;
         this.image.vm = this;
@@ -1784,6 +1806,7 @@ Object.subclass('Squeak.Interpreter',
         }
     },
     aboutToReturnThrough: function(resultObj, aContext) {
+        this.reclaimableContextCount = 0;
     	this.push(this.activeContext);
     	this.push(resultObj);
     	this.push(aContext);
@@ -2640,7 +2663,7 @@ Object.subclass('Squeak.Primitives',
             case 96: return this.namedPrimitive('BitBltPlugin', 'primitiveCopyBits', argCount);
             case 97: return this.primitiveSnapshot(argCount);
             //case 98: return false; // primitiveStoreImageSegment
-            //case 99: return false; // primitiveLoadImageSegment
+            case 99: return this.primitiveLoadImageSegment(argCount);
             case 100: return this.vm.primitivePerformWithArgs(argCount, true); // Object.perform:withArguments:inSuperclass: (Blue Book: primitiveSignalAtTick)
             case 101: return this.primitiveBeCursor(argCount); // Cursor.beCursor
             case 102: return this.primitiveBeDisplay(argCount); // DisplayScreen.beDisplay
@@ -3639,6 +3662,23 @@ Object.subclass('Squeak.Primitives',
             arg.pointers[i] = rcvr.pointers[i];
         this.vm.pop(argCount);
         return true;
+    },
+    primitiveLoadImageSegment: function(argCount) {
+        // loadSegmentFrom: aWordArray outPointers: anArray.
+        var segmentWordArray = this.stackNonInteger(1).words,
+            outPointerArray = this.stackNonInteger(0).pointers;
+        if (!outPointerArray || !segmentWordArray) return false;
+        var data = segmentWordArray[0];
+        if (data & 0xFFFF !== 6502) {
+            console.error("image segment format not recognized (big-endian?)");
+            return false;
+        }
+        debugger;
+        if (data >> 16 !== this.vm.image.segmentVersion() >> 16) {
+            console.error("image segment format not recognized (big-endian?)");
+            return false;
+        }
+        return false;
     },
 },
 'blocks/closures', {
@@ -5710,6 +5750,23 @@ Object.subclass('Squeak.InterpreterProxy',
 });
 
 Object.extend(Squeak, {
+    fsck: function(dir) {
+        if (typeof indexedDB !== "undefined") return; // only checking localStorage
+        dir = dir || "";
+        var entries = Squeak.dirList(dir);
+        for (var name in entries) {
+            var path = dir + "/" + name,
+                isDir = entries[name][3];
+            if (isDir) Squeak.fsck(path);
+            else {
+                var exists = "squeak-file:" + path in localStorage || "squeak-file.lz:" + path in localStorage;
+                if (!exists) {
+                    console.log("Deleting stale file entry " + path);
+                    Squeak.fileDelete(path, true);
+                }
+            }
+        }
+    },
     dbTransaction: function(mode, transactionFunc) {
         // File contents is stored in the IndexedDB named "squeak" in object store "files"
         // and directory entries in localStorage with prefix "squeak:"
@@ -5758,36 +5815,50 @@ Object.extend(Squeak, {
             if (typeof indexedDB == "undefined")
                 console.warn("IndexedDB not supported by this browser, using localStorage");
             window.SqueakDBFake = {
+                bigFiles: {},
+                bigFileThreshold: 100000,
                 get: function(filename) {
-                    var string = localStorage["squeak-file:" + filename];
-                    if (!string) {
-                        var compressed = localStorage["squeak-file.lz:" + filename];
-                        if (compressed) {
-                            if (typeof LZString == "object") {
-                                string = LZString.decompressFromUTF16(compressed);
-                            } else {
-                                console.error("LZString not loaded: cannot decompress " + filename);
+                    var buffer = SqueakDBFake.bigFiles[filename];
+                    if (!buffer) {
+                        var string = localStorage["squeak-file:" + filename];
+                        if (!string) {
+                            var compressed = localStorage["squeak-file.lz:" + filename];
+                            if (compressed) {
+                                if (typeof LZString == "object") {
+                                    string = LZString.decompressFromUTF16(compressed);
+                                } else {
+                                    console.error("LZString not loaded: cannot decompress " + filename);
+                                }
                             }
                         }
+                        if (string) {
+                            var bytes = new Uint8Array(string.length);
+                            for (var i = 0; i < bytes.length; i++)
+                                bytes[i] = string.charCodeAt(i) & 0xFF;
+                            buffer = bytes.buffer;
+                        }
                     }
-                    var bytes = new Uint8Array(string ? string.length : 0);
-                    for (var i = 0; i < bytes.length; i++)
-                        bytes[i] = string.charCodeAt(i) & 0xFF;
-                    var req = {result: bytes.buffer};
+                    var req = {result: buffer};
                     setTimeout(function(){
-                        if (string && req.onsuccess) req.onsuccess();
-                        if (!string && req.onerror) req.onerror();
+                        if (buffer && req.onsuccess) req.onsuccess();
+                        if (!buffer && req.onerror) req.onerror();
                     }, 0);
                     return req;
                 },
                 put: function(buffer, filename) {
-                    var string = Squeak.bytesAsString(new Uint8Array(buffer));
-                    if (typeof LZString == "object") {
-                        var compressed = LZString.compressToUTF16(string);
-                        localStorage["squeak-file.lz:" + filename] = compressed;
-                        delete localStorage["squeak-file:" + filename];
+                    if (buffer.byteLength > SqueakDBFake.bigFileThreshold) {
+                        if (!SqueakDBFake.bigFiles[filename])
+                            console.log("File " + filename + " (" + buffer.byteLength + " bytes) too large, storing in memory only");
+                        SqueakDBFake.bigFiles[filename] = buffer;
                     } else {
-                        localStorage["squeak-file:" + filename] = string;
+                        var string = Squeak.bytesAsString(new Uint8Array(buffer));
+                        if (typeof LZString == "object") {
+                            var compressed = LZString.compressToUTF16(string);
+                            localStorage["squeak-file.lz:" + filename] = compressed;
+                            delete localStorage["squeak-file:" + filename];
+                        } else {
+                            localStorage["squeak-file:" + filename] = string;
+                        }
                     }
                     var req = {};
                     setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
@@ -5796,6 +5867,7 @@ Object.extend(Squeak, {
                 delete: function(filename) {
                     delete localStorage["squeak-file:" + filename];
                     delete localStorage["squeak-file.lz:" + filename];
+                    delete SqueakDBFake.bigFiles[filename];
                     var req = {};
                     setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
                     return req;
@@ -5805,7 +5877,7 @@ Object.extend(Squeak, {
         return SqueakDBFake;
     },
     fileGet: function(filepath, thenDo, errorDo) {
-        if (!errorDo) errorDo = console.log;
+        if (!errorDo) errorDo = function(err) { console.log(err) };
         var path = this.splitFilePath(filepath);
         if (!path.basename) return errorDo("Invalid path: " + filepath);
         this.dbTransaction("readonly", function(fileStore) {
@@ -5845,13 +5917,14 @@ Object.extend(Squeak, {
         });
         return entry;
     },
-    fileDelete: function(filepath) {
+    fileDelete: function(filepath, entryOnly) {
         var path = this.splitFilePath(filepath); if (!path.basename) return false;
         var directory = this.dirList(path.dirname); if (!directory) return false;
         var entry = directory[path.basename]; if (!entry || entry[3]) return false; // not found or is a directory
         // delete entry from directory
         delete directory[path.basename];
         localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
+        if (entryOnly) return true;
         // delete file contents (async)
         this.dbTransaction("readwrite", function(fileStore) {
             fileStore['delete'](path.fullname);    // workaround for ometa parser
@@ -5881,6 +5954,12 @@ Object.extend(Squeak, {
             function error(msg) {
                 console.log("File rename failed: " + msg);
             }.bind(this));
+        return true;
+    },
+    fileExists: function(filepath) {
+        var path = this.splitFilePath(filepath); if (!path.basename) return false;
+        var directory = this.dirList(path.dirname); if (!directory) return false;
+        var entry = directory[path.basename]; if (!entry || entry[3]) return false; // not found or is a directory
         return true;
     },
     dirCreate: function(dirpath) {

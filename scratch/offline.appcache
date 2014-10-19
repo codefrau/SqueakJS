@@ -1,6 +1,6 @@
 CACHE MANIFEST
-# Oct 13 13:56:06 2014
-../lib/squeak.js
+# Oct 18 17:22:49 2014
+../squeak.js
 ../vm.js
 ../jit.js
 ../plugins/ADPCMCodecPlugin.js

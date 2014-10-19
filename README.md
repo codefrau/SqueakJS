@@ -95,41 +95,42 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
-2014-10-13: 0.5.9, microphone support
-2014-10-09: 0.5.8: fixes
-2014-10-07: 0.5.7: even more plugins generated
-2014-10-07: 0.5.6: add quitSqueak and onQuit
-2014-10-07: 0.5.5: generated ScratchPlugin
-2014-10-06: 0.5.4: replace BitBltPlugin by generated
-2014-10-06: 0.5.3: SoundGenerationPlugin, Matrix2x3Plugin, FloatArrayPlugin
+2014-10-18: 0.6 move squeak.js out of lib dir
+2014-10-13: 0.5.9 microphone support
+2014-10-09: 0.5.8 fixes
+2014-10-07: 0.5.7 even more plugins generated
+2014-10-07: 0.5.6 add quitSqueak and onQuit
+2014-10-07: 0.5.5 generated ScratchPlugin
+2014-10-06: 0.5.4 replace BitBltPlugin by generated
+2014-10-06: 0.5.3 SoundGenerationPlugin, Matrix2x3Plugin, FloatArrayPlugin
 2014-10-05: ZipPlugin
 2014-10-04: MiscPrimitivePlugin
 2014-10-03: VMMakerJS generates LargeIntegersPlugin
-2014-09-30: 0.5.2, more JIT
-2014-09-28: 0.5.1, JIT fixes
-2014-09-26: 0.5, add JIT compiler
+2014-09-30: 0.5.2 more JIT
+2014-09-28: 0.5.1 JIT fixes
+2014-09-26: 0.5 add JIT compiler
 2014-09-22: v8 optimizations
-2014-09-20: 0.4.6, sound output support
-2014-09-13: 0.4.5, clipboartd fixes
-2014-09-12: 0.4.4, cut/copy/paste in stand-alone
-2014-09-09: 0.4.3, some scratch prims
-2014-09-09: 0.4.2, idle fixes
-2014-09-05: 0.4.1, scratch fixes
-2014-09-04: 0.4.0, runs scratch
+2014-09-20: 0.4.6 sound output support
+2014-09-13: 0.4.5 clipboartd fixes
+2014-09-12: 0.4.4 cut/copy/paste in stand-alone
+2014-09-09: 0.4.3 some scratch prims
+2014-09-09: 0.4.2 idle fixes
+2014-09-05: 0.4.1 scratch fixes
+2014-09-04: 0.4.0 runs scratch
 2014-08-31: switch old/new primitives
 2014-08-27: event-based input
 2014-08-21: exception handling
-2014-07-25: 0.3.3, fullscreen support
-2014-07-18: 0.3.2, benchmarking (timfel)
-2014-07-18: 0.3.1, deferred display
-2014-07-16: 0.3.0, closure support
-2014-07-14: 0.2.3, IE optimization (timfel)
-2014-07-11: 0.2.2, drag-n-drop
-2014-07-07: 0.2.1, fixes for IE11 (timfel)
-2014-07-04: 0.2, runs Etoys
+2014-07-25: 0.3.3 fullscreen support
+2014-07-18: 0.3.2 benchmarking (timfel)
+2014-07-18: 0.3.1 deferred display
+2014-07-16: 0.3.0 closure support
+2014-07-14: 0.2.3 IE optimization (timfel)
+2014-07-11: 0.2.2 drag-n-drop
+2014-07-07: 0.2.1 fixes for IE11 (timfel)
+2014-07-04: 0.2 runs Etoys
 2014-06-27: Balloon2D (krono)
 2014-06-03: stand-alone version
-2014-05-29: 0.1, added version number
+2014-05-29: 0.1 added version number
 2014-05-27: WarpBlt
 2014-05-07: image saving
 2014-04-23: file support

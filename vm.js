@@ -2463,6 +2463,7 @@ Object.subclass('Squeak.Primitives',
         this.display = display;
         this.display.vm = this.vm;
         this.oldPrims = !this.vm.image.hasClosures;
+        this.allowAccessBeyondSP = this.oldPrims;
         this.deferDisplayUpdates = false;
         this.semaphoresToSignal = [];
         this.initDisplay();
@@ -3167,8 +3168,8 @@ Object.subclass('Squeak.Primitives',
         if (typeof obj === "number") return -1; // -1 means not indexable
         var fmt = obj.format;
         if (fmt<2) return -1; //not indexable
-        if (fmt===3 && this.vm.isContext(obj))
-            return obj.pointers[Squeak.Context_stackPointer]; // no access beyond top of stack
+        if (fmt===3 && this.vm.isContext(obj) && !this.allowAccessBeyondSP)
+            return obj.pointers[Squeak.Context_stackPointer]; // no access beyond top of stacks
         if (fmt<6) return obj.pointersSize() - obj.instSize(); // pointers
         if (fmt<8) return obj.wordsSize(); // words
         if (fmt<12) return obj.bytesSize(); // bytes

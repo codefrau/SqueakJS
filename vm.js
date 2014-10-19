@@ -5750,6 +5750,23 @@ Object.subclass('Squeak.InterpreterProxy',
 });
 
 Object.extend(Squeak, {
+    fsck: function(dir) {
+        if (typeof indexedDB !== "undefined") return; // only checking localStorage
+        dir = dir || "";
+        var entries = Squeak.dirList(dir);
+        for (var name in entries) {
+            var path = dir + "/" + name,
+                isDir = entries[name][3];
+            if (isDir) Squeak.fsck(path);
+            else {
+                var exists = "squeak-file:" + path in localStorage || "squeak-file.lz:" + path in localStorage;
+                if (!exists) {
+                    console.log("Deleting stale file entry " + path);
+                    Squeak.fileDelete(path, true);
+                }
+            }
+        }
+    },
     dbTransaction: function(mode, transactionFunc) {
         // File contents is stored in the IndexedDB named "squeak" in object store "files"
         // and directory entries in localStorage with prefix "squeak:"
@@ -5798,36 +5815,50 @@ Object.extend(Squeak, {
             if (typeof indexedDB == "undefined")
                 console.warn("IndexedDB not supported by this browser, using localStorage");
             window.SqueakDBFake = {
+                bigFiles: {},
+                bigFileThreshold: 100000,
                 get: function(filename) {
-                    var string = localStorage["squeak-file:" + filename];
-                    if (!string) {
-                        var compressed = localStorage["squeak-file.lz:" + filename];
-                        if (compressed) {
-                            if (typeof LZString == "object") {
-                                string = LZString.decompressFromUTF16(compressed);
-                            } else {
-                                console.error("LZString not loaded: cannot decompress " + filename);
+                    var buffer = SqueakDBFake.bigFiles[filename];
+                    if (!buffer) {
+                        var string = localStorage["squeak-file:" + filename];
+                        if (!string) {
+                            var compressed = localStorage["squeak-file.lz:" + filename];
+                            if (compressed) {
+                                if (typeof LZString == "object") {
+                                    string = LZString.decompressFromUTF16(compressed);
+                                } else {
+                                    console.error("LZString not loaded: cannot decompress " + filename);
+                                }
                             }
                         }
+                        if (string) {
+                            var bytes = new Uint8Array(string.length);
+                            for (var i = 0; i < bytes.length; i++)
+                                bytes[i] = string.charCodeAt(i) & 0xFF;
+                            buffer = bytes.buffer;
+                        }
                     }
-                    var bytes = new Uint8Array(string ? string.length : 0);
-                    for (var i = 0; i < bytes.length; i++)
-                        bytes[i] = string.charCodeAt(i) & 0xFF;
-                    var req = {result: bytes.buffer};
+                    var req = {result: buffer};
                     setTimeout(function(){
-                        if (string && req.onsuccess) req.onsuccess();
-                        if (!string && req.onerror) req.onerror();
+                        if (buffer && req.onsuccess) req.onsuccess();
+                        if (!buffer && req.onerror) req.onerror();
                     }, 0);
                     return req;
                 },
                 put: function(buffer, filename) {
-                    var string = Squeak.bytesAsString(new Uint8Array(buffer));
-                    if (typeof LZString == "object") {
-                        var compressed = LZString.compressToUTF16(string);
-                        localStorage["squeak-file.lz:" + filename] = compressed;
-                        delete localStorage["squeak-file:" + filename];
+                    if (buffer.byteLength > SqueakDBFake.bigFileThreshold) {
+                        if (!SqueakDBFake.bigFiles[filename])
+                            console.log("File " + filename + " (" + buffer.byteLength + " bytes) too large, storing in memory only");
+                        SqueakDBFake.bigFiles[filename] = buffer;
                     } else {
-                        localStorage["squeak-file:" + filename] = string;
+                        var string = Squeak.bytesAsString(new Uint8Array(buffer));
+                        if (typeof LZString == "object") {
+                            var compressed = LZString.compressToUTF16(string);
+                            localStorage["squeak-file.lz:" + filename] = compressed;
+                            delete localStorage["squeak-file:" + filename];
+                        } else {
+                            localStorage["squeak-file:" + filename] = string;
+                        }
                     }
                     var req = {};
                     setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
@@ -5836,6 +5867,7 @@ Object.extend(Squeak, {
                 delete: function(filename) {
                     delete localStorage["squeak-file:" + filename];
                     delete localStorage["squeak-file.lz:" + filename];
+                    delete SqueakDBFake.bigFiles[filename];
                     var req = {};
                     setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
                     return req;
@@ -5845,7 +5877,7 @@ Object.extend(Squeak, {
         return SqueakDBFake;
     },
     fileGet: function(filepath, thenDo, errorDo) {
-        if (!errorDo) errorDo = console.log;
+        if (!errorDo) errorDo = function(err) { console.log(err) };
         var path = this.splitFilePath(filepath);
         if (!path.basename) return errorDo("Invalid path: " + filepath);
         this.dbTransaction("readonly", function(fileStore) {
@@ -5885,13 +5917,14 @@ Object.extend(Squeak, {
         });
         return entry;
     },
-    fileDelete: function(filepath) {
+    fileDelete: function(filepath, entryOnly) {
         var path = this.splitFilePath(filepath); if (!path.basename) return false;
         var directory = this.dirList(path.dirname); if (!directory) return false;
         var entry = directory[path.basename]; if (!entry || entry[3]) return false; // not found or is a directory
         // delete entry from directory
         delete directory[path.basename];
         localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
+        if (entryOnly) return true;
         // delete file contents (async)
         this.dbTransaction("readwrite", function(fileStore) {
             fileStore['delete'](path.fullname);    // workaround for ometa parser

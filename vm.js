@@ -4728,6 +4728,23 @@ Object.subclass('Squeak.Primitives',
         this.snd_playNextBuffer();
         return this.popNIfOK(argCount);
     },
+    snd_primitiveSoundPlaySilence: function(argCount) {
+        if (!this.audioContext || this.audioBuffersUnused.length === 0) {
+            console.log("sound: play but no free buffers");
+            return false;
+        }
+        var buffer = this.audioBuffersUnused.shift(),
+            channels = buffer.numberOfChannels,
+            count = buffer.length;
+        for (var channel = 0; channel < channels; channel++) {
+            var jsSamples = buffer.getChannelData(channel);
+            for (var i = 0; i < count; i++)
+                jsSamples[i] = 0;
+        }
+        this.audioBuffersReady.push(buffer);
+        this.snd_playNextBuffer();
+        return this.popNandPushIfOK(argCount, count);
+    },
     snd_primitiveSoundStop: function(argCount) {
         if (this.audioContext) {
             this.audioContext = null;

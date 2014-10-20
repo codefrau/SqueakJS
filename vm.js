@@ -549,6 +549,8 @@ Object.subclass('Squeak.Image',
 },
 'operations', {
     bulkBecome: function(fromArray, toArray, twoWay, copyHash) {
+        if (!fromArray)
+            return !toArray;
         var n = fromArray.length;
         if (n !== toArray.length)
             return false;

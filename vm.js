@@ -26,7 +26,7 @@ window.Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.6",
+    vmVersion: "SqueakJS 0.6.1",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -529,6 +529,7 @@ Object.subclass('Squeak.Image',
         // We don't actually register the object yet, because that would prevent
         // it from being garbage-collected by the Javascript collector
         obj.oop = -(++this.newSpaceCount); // temp oops are negative. Real oop assigned when surviving GC
+        // Note this is also done in loadImageSegment()
         this.lastHash = (13849 + (27181 * this.lastHash)) & 0xFFFFFFFF;
         return this.lastHash & 0xFFF;
     },
@@ -549,6 +550,8 @@ Object.subclass('Squeak.Image',
 },
 'operations', {
     bulkBecome: function(fromArray, toArray, twoWay, copyHash) {
+        if (!fromArray)
+            return !toArray;
         var n = fromArray.length;
         if (n !== toArray.length)
             return false;
@@ -669,6 +672,103 @@ Object.subclass('Squeak.Image',
             wholeWord = new Uint32Array(dnu.bytes.buffer, 0, 1);
         return this.formatVersion() | (wholeWord[0] & 0xFF000000);
     },
+    loadImageSegment: function(segmentWordArray, outPointerArray) {
+        // The C VM creates real objects from the segment in-place. We need to create
+        // real objects, which we just put in new space.
+        // The code below is almost the same as readFromBuffer() ... should unify
+        var data = new DataView(segmentWordArray.words.buffer),
+            littleEndian = false,
+            nativeFloats = false,
+            pos = 0;
+        var readWord = function() {
+            var int = data.getUint32(pos, littleEndian);
+            pos += 4;
+            return int;
+        };
+        var readBits = function(nWords, format) {
+            if (format < 5) { // pointers (do endian conversion)
+                var oops = [];
+                while (oops.length < nWords)
+                    oops.push(readWord());
+                return oops;
+            } else { // words (no endian conversion yet)
+                var bits = new Uint32Array(data.buffer, pos, nWords);
+                pos += nWords * 4;
+                return bits;
+            }
+        };
+        // check version
+        var version = readWord();
+        if (version & 0xFFFF !== 6502) {
+            littleEndian = true; pos = 0;
+            version = readWord();
+            if (version & 0xFFFF !== 6502) {
+                console.error("image segment format not supported");
+                return null;
+            }
+        }
+        if (version >> 16 !== this.vm.image.segmentVersion() >> 16) {
+            console.error("image segment format not supported");
+            return null;
+        }
+        // read objects
+        var segment = [],
+            oopMap = {};
+        while (pos < data.byteLength) {
+            var nWords = 0,
+                classInt = 0,
+                header = readWord();
+            switch (header & Squeak.HeaderTypeMask) {
+                case Squeak.HeaderTypeSizeAndClass:
+                    nWords = header >> 2;
+                    classInt = readWord();
+                    header = readWord();
+                    break;
+                case Squeak.HeaderTypeClass:
+                    classInt = header - Squeak.HeaderTypeClass;
+                    header = readWord();
+                    nWords = (header >> 2) & 63;
+                    break;
+                case Squeak.HeaderTypeShort:
+                    nWords = (header >> 2) & 63;
+                    classInt = (header >> 12) & 31; //compact class index
+                    //Note classInt<32 implies compact class index
+                    break;
+                case Squeak.HeaderTypeFree:
+                    throw Error("Unexpected free block");
+            }
+            nWords--;  //length includes base header which we have already read
+            var oop = pos, //0-rel byte oop of this object (base header)
+                format = (header>>8) & 15,
+                hash = (header>>17) & 4095,
+                bits = readBits(nWords, format);
+
+            var object = new Squeak.Object();
+            object.initFromImage(oop, classInt, format, hash, bits);
+            segment.push(object);
+            oopMap[oop] = object;
+        }
+        // add outPointers to oopMap
+        for (var i = 0; i < outPointerArray.pointers.length; i++)
+            oopMap[0x80000004 + i * 4] = outPointerArray.pointers[i];
+        // add compactClasses to oopMap
+        var compactClasses = this.specialObjectsArray.pointers[Squeak.splOb_CompactClasses].pointers,
+            fakeClsOop = 0, // make up a compact-classes array with oops, as if loading an image
+            compactClassOops = compactClasses.map(function(cls) {
+                oopMap[--fakeClsOop] = cls; return fakeClsOop; });
+        // map objects using oopMap, and assign new oops
+        var roots = oopMap[8] || oopMap[12] || oopMap[16],      // might be 1/2/3 header words
+            floatClass = this.specialObjectsArray.pointers[Squeak.splOb_ClassFloat],
+            obj = roots;
+        for (var i = 0; i < segment.length; i++) {
+            var obj = segment[i];
+            obj.installFromImage(oopMap, compactClassOops, floatClass, littleEndian, nativeFloats);
+            obj.oop = -(++this.newSpaceCount);  // make this a proper new-space object (see registerObject)
+        }
+        // don't truncate segmentWordArray now like the C VM does. It does not seem to be
+        // worth the trouble of adjusting the following oops
+        return roots;
+    },
 });
 
 Object.subclass('Squeak.Object',
@@ -785,13 +885,18 @@ Object.subclass('Squeak.Object',
     },
     decodePointers: function(nWords, theBits, oopMap) {
         //Convert small ints and look up object pointers in oopMap
-        var ptrs = [];
+        var ptrs = new Array(nWords);
         for (var i = 0; i < nWords; i++) {
-            var oldOop = theBits[i];
-            if ((oldOop&1) == 1)
-                ptrs[i] = oldOop >> 1;      // SmallInteger
-            else
-                ptrs[i] = oopMap[oldOop];   // Object
+            var oop = theBits[i];
+            if ((oop & 1) === 1) {          // SmallInteger
+                ptrs[i] = oop >> 1;
+            } else {                        // Object
+                ptrs[i] = oopMap[oop] || 42424242;
+                // when loading a context from image segment, there is
+                // garbage beyond its stack pointer, resulting in the oop
+                // not being found in oopMap. We just fill in an arbitrary
+                // SmallInteger - it's never accessed anyway
+            }
         }
         return ptrs;        
     },
@@ -2463,6 +2568,7 @@ Object.subclass('Squeak.Primitives',
         this.display = display;
         this.display.vm = this.vm;
         this.oldPrims = !this.vm.image.hasClosures;
+        this.allowAccessBeyondSP = this.oldPrims;
         this.deferDisplayUpdates = false;
         this.semaphoresToSignal = [];
         this.initDisplay();
@@ -3167,8 +3273,8 @@ Object.subclass('Squeak.Primitives',
         if (typeof obj === "number") return -1; // -1 means not indexable
         var fmt = obj.format;
         if (fmt<2) return -1; //not indexable
-        if (fmt===3 && this.vm.isContext(obj))
-            return obj.pointers[Squeak.Context_stackPointer]; // no access beyond top of stack
+        if (fmt===3 && this.vm.isContext(obj) && !this.allowAccessBeyondSP)
+            return obj.pointers[Squeak.Context_stackPointer]; // no access beyond top of stacks
         if (fmt<6) return obj.pointersSize() - obj.instSize(); // pointers
         if (fmt<8) return obj.wordsSize(); // words
         if (fmt<12) return obj.bytesSize(); // bytes
@@ -3664,21 +3770,12 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     primitiveLoadImageSegment: function(argCount) {
-        // loadSegmentFrom: aWordArray outPointers: anArray.
-        var segmentWordArray = this.stackNonInteger(1).words,
-            outPointerArray = this.stackNonInteger(0).pointers;
-        if (!outPointerArray || !segmentWordArray) return false;
-        var data = segmentWordArray[0];
-        if (data & 0xFFFF !== 6502) {
-            console.error("image segment format not recognized (big-endian?)");
-            return false;
-        }
-        debugger;
-        if (data >> 16 !== this.vm.image.segmentVersion() >> 16) {
-            console.error("image segment format not recognized (big-endian?)");
-            return false;
-        }
-        return false;
+        var segmentWordArray = this.stackNonInteger(1),
+            outPointerArray = this.stackNonInteger(0);
+        if (!segmentWordArray.words || !outPointerArray.pointers) return false;
+        var roots = this.vm.image.loadImageSegment(segmentWordArray, outPointerArray);
+        if (!roots) return false;
+        return this.popNandPushIfOK(argCount, roots);
     },
 },
 'blocks/closures', {
@@ -4728,6 +4825,23 @@ Object.subclass('Squeak.Primitives',
         this.snd_playNextBuffer();
         return this.popNIfOK(argCount);
     },
+    snd_primitiveSoundPlaySilence: function(argCount) {
+        if (!this.audioContext || this.audioBuffersUnused.length === 0) {
+            console.log("sound: play but no free buffers");
+            return false;
+        }
+        var buffer = this.audioBuffersUnused.shift(),
+            channels = buffer.numberOfChannels,
+            count = buffer.length;
+        for (var channel = 0; channel < channels; channel++) {
+            var jsSamples = buffer.getChannelData(channel);
+            for (var i = 0; i < count; i++)
+                jsSamples[i] = 0;
+        }
+        this.audioBuffersReady.push(buffer);
+        this.snd_playNextBuffer();
+        return this.popNandPushIfOK(argCount, count);
+    },
     snd_primitiveSoundStop: function(argCount) {
         if (this.audioContext) {
             this.audioContext = null;
@@ -5541,6 +5655,9 @@ Object.subclass('Squeak.InterpreterProxy',
     popthenPush: function(n, obj) {
         this.vm.popNandPush(n, obj);
     },
+    push: function(obj) {
+        this.vm.push(obj);
+    },
     pushBool: function(bool) {
         this.vm.push(bool ? this.vm.trueObj : this.vm.falseObj);
     },
@@ -5617,6 +5734,13 @@ Object.subclass('Squeak.InterpreterProxy',
     },
     isPointers: function(obj) {
         return typeof obj !== "number" && obj.isPointers();
+    },
+    isMemberOf: function(obj, className) {
+        var nameBytes = obj.sqClass.pointers[Squeak.Class_name].bytes;
+        if (className.length !== nameBytes.length) return false;
+        for (var i = 0; i < className.length; i++)
+            if (className.charCodeAt(i) !== nameBytes[i]) return false;
+        return true;
     },
     booleanValueOf: function(obj) {
         if (obj.isTrue) return true;

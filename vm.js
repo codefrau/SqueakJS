@@ -1314,11 +1314,19 @@ Object.subclass('Squeak.Interpreter',
     initCompiler: function() {
         if (!Squeak.Compiler)
             return console.warn("Squeak.Compiler not loaded, using interpreter only");
+        // some JS environments disallow creating functions at runtime (e.g. FireFox OS apps)
+        try {
+            if (new Function("return 42")() !== 42)
+                return console.warn("function constructor not working, disabling JIT");
+        } catch (e) {
+            return console.warn("disabling JIT: " + e);
+        }
+        // disable JIT on slow machines, which are likely memory-limited
         var kObjPerSec = this.image.oldSpaceCount / (this.startupTime - this.image.startupTime);
         if (kObjPerSec < 10)
             return console.warn("Slow machine detected (loaded " + (kObjPerSec*1000|0) + " objects/sec), using interpreter only");
+        // compiler might decide to not handle current image
         try {
-            // compiler might decide to not handle current image
             console.log("squeak: initializing JIT compiler");
             this.compiler = new Squeak.Compiler(this);
         } catch(e) {

@@ -5561,6 +5561,9 @@ Object.subclass('Squeak.InterpreterProxy',
     popthenPush: function(n, obj) {
         this.vm.popNandPush(n, obj);
     },
+    push: function(obj) {
+        this.vm.push(obj);
+    },
     pushBool: function(bool) {
         this.vm.push(bool ? this.vm.trueObj : this.vm.falseObj);
     },
@@ -5637,6 +5640,13 @@ Object.subclass('Squeak.InterpreterProxy',
     },
     isPointers: function(obj) {
         return typeof obj !== "number" && obj.isPointers();
+    },
+    isMemberOf: function(obj, className) {
+        var nameBytes = obj.sqClass.pointers[Squeak.Class_name].bytes;
+        if (className.length !== nameBytes.length) return false;
+        for (var i = 0; i < className.length; i++)
+            if (className.charCodeAt(i) !== nameBytes[i]) return false;
+        return true;
     },
     booleanValueOf: function(obj) {
         if (obj.isTrue) return true;

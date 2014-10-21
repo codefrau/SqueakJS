@@ -4,4 +4,5 @@
 	"instance" : {
 		"emitJSCodeOn:level:generator:" : "bf 10/6/2014 15:40",
 		"isBitBltPtr" : "bf 10/6/2014 11:52",
-		"isConstantNull" : "bf 10/6/2014 15:20" } }
+		"isConstantNull" : "bf 10/6/2014 15:20",
+		"isFloatIn:" : "bf 10/21/2014 11:40" } }

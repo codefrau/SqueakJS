@@ -4103,6 +4103,8 @@ Object.subclass('Squeak.Primitives',
             case 1004: value = Squeak.vmVersion; break;
             case 1005: value = Squeak.windowSystem; break;
             case 1006: value = Squeak.vmBuild; break;
+            case 1007: value = Squeak.platformName; break;
+            case 1009: value = Squeak.platformName; break;
             default: return false;
         }
         this.vm.popNandPush(argCount+1, this.makeStObject(value));
@@ -4200,6 +4202,12 @@ Object.subclass('Squeak.Primitives',
         this.vm.breakNow("debugger primitive");
         debugger;
         return true;
+    },
+    primitiveSetGCBiasToGrow: function(argCount) {
+        return this.fakePrimitive(".primitiveSetGCBiasToGrow", 0, argCount);
+    },
+    primitiveSetGCBiasToGrowGCLimit: function(argCount) {
+        return this.fakePrimitive(".primitiveSetGCBiasToGrowGCLimit", 0, argCount);
     },
 },
 'display', {

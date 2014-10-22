@@ -215,6 +215,7 @@ function setupDragAndDrop(display, options) {
             reader.onload = function () {
                 var buffer = this.result;
                 if (/.*image$/.test(f.name) && confirm("Run " + f.name + " now?\n(cancel to store as file)")) {
+                    SqueakJS.appName = f.name.slice(0, -6);
                     SqueakJS.runImage(buffer, f.name, display, options);
                 } else {
                     Squeak.filePut(f.name, buffer);
@@ -641,8 +642,6 @@ function updateSpinner(spinner, idleMS, vm, display) {
 var loop; // holds timeout for main loop
 
 SqueakJS.runImage = function(buffer, name, display, options) {
-    SqueakJS.appName = options.appName || "SqueakJS";
-    SqueakJS.options = options;
     window.onbeforeunload = function() {
         return SqueakJS.appName + " is still running";
     };
@@ -693,6 +692,8 @@ SqueakJS.runImage = function(buffer, name, display, options) {
 };
 
 SqueakJS.runSqueak = function(imageUrl, canvas, options) {
+    SqueakJS.appName = options.appName || "SqueakJS";
+    SqueakJS.options = options;
     var search = window.location.search,
         altImage = search && search.match(/image=(.*\.image)/);
     if (altImage) imageUrl = altImage[1];

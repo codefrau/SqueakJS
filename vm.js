@@ -1155,7 +1155,8 @@ Object.subclass('Squeak.Object',
         return ((format >> 10) & 0xC0) + ((format >> 1) & 0x3F) - 1;
     },
     instVarNames: function() {
-        var index = this.pointers.length > 9 ? 3 : 4; // index changed in newer images
+        var index = this.pointers.length > 12 ? 4 : 
+            this.pointers.length > 9 ? 3 : 4; // index changed in newer images
         return (this.pointers[index].pointers || []).map(function(each) {
             return each.bytesAsString();
         });
@@ -1171,13 +1172,21 @@ Object.subclass('Squeak.Object',
         return this.pointers[0];
     },
     className: function() {
-        if (!this.pointers) return "?!?";
-        var size = this.pointers.length;
-        var isMeta = size < 9;  // true for all Squeak versions, hopefully
-        var cls = isMeta ? this.pointers[size == 7 ? 6 : 5] : this;
-        var nameObj = cls.pointers && cls.pointers[Squeak.Class_name];
-        var name = nameObj && nameObj.bytes ? nameObj.bytesAsString() : "???";
-        return isMeta ? name + " class" : name;
+        if (!this.pointers) return "_NOTACLASS_";
+        var name = this.pointers[6];
+        if (name && name.bytes) return Squeak.bytesAsString(name.bytes);
+        var name = this.pointers[7];
+        if (name && name.bytes) return Squeak.bytesAsString(name.bytes);
+        // must be meta class
+        for (var clsIndex = 5; clsIndex <= 6; clsIndex++)
+            for (var nameIndex = 6; nameIndex <= 7; nameIndex++) {
+                var cls = this.pointers[clsIndex];
+                if (cls.pointers) {
+                    var name = cls.pointers[nameIndex];
+                    if (name && name.bytes) return Squeak.bytesAsString(name.bytes) + " class";
+                }
+            }
+        return "_SOMECLASS_";
     }
 },
 'as method', {
@@ -1266,7 +1275,8 @@ Object.subclass('Squeak.Interpreter',
         this.nilObj = this.specialObjects[Squeak.splOb_NilObject];
         this.falseObj = this.specialObjects[Squeak.splOb_FalseObject];
         this.trueObj = this.specialObjects[Squeak.splOb_TrueObject];
-        this.hasClosures = this.image.hasClosures; 
+        this.hasClosures = this.image.hasClosures;
+        this.globals = this.findGlobals();
         // hack for old image that does not support Unix files
         if (!this.findMethod("UnixFileDirectory class>>pathNameDelimiter"))
             this.primHandler.emulateMac = true;
@@ -1310,6 +1320,25 @@ Object.subclass('Squeak.Interpreter',
         this.activeContext = proc.pointers[Squeak.Proc_suspendedContext];
         this.fetchContextRegisters(this.activeContext);
         this.reclaimableContextCount = 0;
+    },
+    findGlobals: function() {
+        var smalltalk = this.specialObjects[Squeak.splOb_SmalltalkDictionary],
+            smalltalkClass = smalltalk.sqClass.className();
+        if (smalltalkClass === "Association") {
+            smalltalk = smalltalk.pointers[1];
+            smalltalkClass = smalltalk.sqClass.className();
+        }
+        if (smalltalkClass === "SystemDictionary")
+            return smalltalk.pointers[1].pointers;
+        if (smalltalkClass === "SmalltalkImage") {
+            var globals = smalltalk.pointers[0],
+                globalsClass = globals.sqClass.className();
+            if (globalsClass === "SystemDictionary")
+                return globals.pointers[1].pointers;
+            if (globalsClass === "Environment")
+                return globals.pointers[2].pointers[1].pointers
+        }
+        throw Error("cannot find global dict");
     },
     initCompiler: function() {
         if (!Squeak.Compiler)
@@ -2360,11 +2389,7 @@ Object.subclass('Squeak.Interpreter',
     },
     allGlobalsDo: function(callback) {
         // callback(globalNameObj, globalObj) should return true to break out of iteration
-        var smalltalk = this.specialObjects[Squeak.splOb_SmalltalkDictionary].pointers,
-            systemDict = smalltalk.length == 1 ? smalltalk[0].pointers[2].pointers : // very new: an environment
-                typeof smalltalk[0] == "number" ? smalltalk : // regular: just the system dict
-                smalltalk[1].pointers, // very old: an association
-            globals = systemDict[1].pointers;
+        var globals = this.globals;
         for (var i = 0; i < globals.length; i++) {
             var assn = globals[i];
             if (!assn.isNil) {

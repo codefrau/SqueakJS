@@ -196,7 +196,8 @@ Object.extend(Squeak, {
     MaxSmallInt:  0x3FFFFFFF,
     NonSmallInt: -0x50000000,           // non-small and neg (so non pos32 too)
     MillisecondClockMask: 0x1FFFFFFF,
-    Epoch: Date.UTC(1901,0,1)/1000 + (new Date()).getTimezoneOffset()*60,         // local timezone
+    Epoch: Date.UTC(1901,0,1) + (new Date()).getTimezoneOffset()*60000,        // local timezone
+    EpochUTC: Date.UTC(1901,0,1),
 });
 
 Object.extend(Squeak, {
@@ -2951,19 +2952,21 @@ Object.subclass('Squeak.Primitives',
             case 231: return this.primitiveForceDisplayUpdate(argCount);
             // case 232:  return this.primitiveFormPrint(argCount);
             case 233: return this.primitiveSetFullScreen(argCount);
-            case 234: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveDecompressFromByteArray', argCount);
-            case 235: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompareString', argCount);
-            case 236: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveConvert8BitSigned', argCount);
-            case 237: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompressToByteArray', argCount);
-            case 238: return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortOpen', argCount);
-            case 239: return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortClose', argCount);
-            case 240: return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortWrite', argCount);
-            case 241: return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortRead', argCount);
+            case 234: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveDecompressFromByteArray', argCount);
+            case 235: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompareString', argCount);
+            case 236: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveConvert8BitSigned', argCount);
+            case 237: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompressToByteArray', argCount);
+            case 238: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortOpen', argCount);
+            case 239: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortClose', argCount);
+            case 240: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortWrite', argCount);
+                else return this.popNandPushIfOK(1, this.microsecondClockUTC());
+            case 241: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortRead', argCount);
+                else return this.popNandPushIfOK(1, this.microsecondClockLocal());
             // 242: unused
-            case 243: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveTranslateStringWithTable', argCount);
-            case 244: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindFirstInString' , argCount);
-            case 245: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveIndexOfAsciiInString', argCount);
-            case 246: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount);
+            case 243: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveTranslateStringWithTable', argCount);
+            case 244: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindFirstInString' , argCount);
+            case 245: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveIndexOfAsciiInString', argCount);
+            case 246: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount);
             // 247: unused
             case 248: return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod); // see findSelectorInClass()
             case 249: return this.primitiveArrayBecome(argCount, false); // one way, opt. copy hash
@@ -3148,6 +3151,21 @@ Object.subclass('Squeak.Primitives',
             bytes = lgIntObj.bytes;
         for (var i=0; i<4; i++)
             bytes[i] = (signed32>>>(8*i)) & 255;
+        return lgIntObj;
+    },
+    pos64BitIntFor: function(longlong) {
+        // Return the quantity as an unsigned 64-bit integer
+        if (longlong <= 0xFFFFFFFF) return this.pos32BitIntFor(longlong);
+        var sz = longlong <= 0xFFFFFFFFFF ? 5 :
+                 longlong <= 0xFFFFFFFFFFFF ? 6 :
+                 longlong <= 0xFFFFFFFFFFFFFF ? 7 : 8;
+        var lgIntClass = this.vm.specialObjects[Squeak.splOb_ClassLargePositiveInteger],
+            lgIntObj = this.vm.instantiateClass(lgIntClass, sz),
+            bytes = lgIntObj.bytes;
+        for (var i = 0; i < sz; i++) {
+            bytes[i] = longlong & 255;
+            longlong /= 256;
+        }
         return lgIntObj;
     },
     stackSigned32BitInt: function(nDeep) {
@@ -4510,6 +4528,14 @@ Object.subclass('Squeak.Primitives',
 	},
 	secondClock: function() {
         return this.pos32BitIntFor(Squeak.totalSeconds()); // will overflow 32 bits in 2037
+    },
+    microsecondClockUTC: function() {
+        var millis = Date.now() - Squeak.EpochUTC;
+        return this.pos64BitIntFor(millis * 1000);
+    },
+    microsecondClockLocal: function() {
+        var millis = Date.now() - Squeak.Epoch;
+        return this.pos64BitIntFor(millis * 1000);
     },
 },
 'FilePlugin', {
@@ -6193,7 +6219,7 @@ Object.extend(Squeak, {
     },
     totalSeconds: function() {
         // seconds since 1901-01-01, local time
-        return Math.floor(Date.now()/1000) - Squeak.Epoch;
+        return Math.floor((Date.now() - Squeak.Epoch) / 1000);
     },
     startAudioOut: function() {
         if (!this.audioOutContext) {

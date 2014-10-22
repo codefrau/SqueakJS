@@ -1279,7 +1279,7 @@ Object.subclass('Squeak.Interpreter',
         this.hasClosures = this.image.hasClosures;
         this.globals = this.findGlobals();
         // hack for old image that does not support Unix files
-        if (!this.findMethod("UnixFileDirectory class>>pathNameDelimiter"))
+        if (!this.hasClosures && !this.findMethod("UnixFileDirectory class>>pathNameDelimiter"))
             this.primHandler.emulateMac = true;
     },
     initVMState: function() {

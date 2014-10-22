@@ -1375,10 +1375,8 @@ Object.subclass('Squeak.Interpreter',
             // Remove when we added translation files.
             {method: "String>>translated", primitive: returnSelf},
             {method: "String>>translatedInAllDomains", primitive: returnSelf},
-            // Squeak 4.5: disable syntax highlighting for speed
+            // Squeak: disable syntax highlighting for speed
             {method: "PluggableTextMorphPlus>>useDefaultStyler", primitive: returnSelf},
-            // BitBlt rule not available
-            //{method: "BitBlt class>>subPixelRenderColorFonts", primitive: returnFalse},
             // Cuis needs JPEG plugin
             {method: "PasteUpMorph>>buildMagnifiedBackgroundImage", primitive: returnNil},
         ].forEach(function(each) {

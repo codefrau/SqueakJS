@@ -3658,9 +3658,9 @@ Object.subclass('Squeak.Primitives',
         // Pop primIndex and argArray, then push args in place...
         this.vm.popN(2);
         for (var i = 0; i < arraySize; i++)
-            this.vm.push(argumentArray[i]);
+            this.vm.push(argumentArray.pointers[i]);
         // Run the primitive
-        if (this.doPrimitive(primIdx, arraySize))
+        if (this.vm.tryPrimitive(primIdx, arraySize))
             return true;
         // Primitive failed, restore state for failure code
         this.vm.popN(arraySize);

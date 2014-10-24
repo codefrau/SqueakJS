@@ -95,6 +95,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+2014-10-23: 0.6.2 fixes 
 2014-10-21: 0.6.1 add image segment loading 
 2014-10-18: 0.6 move squeak.js out of lib dir
 2014-10-13: 0.5.9 microphone support

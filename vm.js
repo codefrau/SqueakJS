@@ -26,7 +26,7 @@ window.Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.6.1",
+    vmVersion: "SqueakJS 0.6.2",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -196,7 +196,8 @@ Object.extend(Squeak, {
     MaxSmallInt:  0x3FFFFFFF,
     NonSmallInt: -0x50000000,           // non-small and neg (so non pos32 too)
     MillisecondClockMask: 0x1FFFFFFF,
-    Epoch: Date.UTC(1901,0,1)/1000 + (new Date()).getTimezoneOffset()*60,         // local timezone
+    Epoch: Date.UTC(1901,0,1) + (new Date()).getTimezoneOffset()*60000,        // local timezone
+    EpochUTC: Date.UTC(1901,0,1),
 });
 
 Object.extend(Squeak, {
@@ -1155,7 +1156,8 @@ Object.subclass('Squeak.Object',
         return ((format >> 10) & 0xC0) + ((format >> 1) & 0x3F) - 1;
     },
     instVarNames: function() {
-        var index = this.pointers.length > 9 ? 3 : 4; // index changed in newer images
+        var index = this.pointers.length > 12 ? 4 : 
+            this.pointers.length > 9 ? 3 : 4; // index changed in newer images
         return (this.pointers[index].pointers || []).map(function(each) {
             return each.bytesAsString();
         });
@@ -1171,13 +1173,21 @@ Object.subclass('Squeak.Object',
         return this.pointers[0];
     },
     className: function() {
-        if (!this.pointers) return "?!?";
-        var size = this.pointers.length;
-        var isMeta = size < 9;  // true for all Squeak versions, hopefully
-        var cls = isMeta ? this.pointers[size == 7 ? 6 : 5] : this;
-        var nameObj = cls.pointers && cls.pointers[Squeak.Class_name];
-        var name = nameObj && nameObj.bytes ? nameObj.bytesAsString() : "???";
-        return isMeta ? name + " class" : name;
+        if (!this.pointers) return "_NOTACLASS_";
+        var name = this.pointers[6];
+        if (name && name.bytes) return Squeak.bytesAsString(name.bytes);
+        var name = this.pointers[7];
+        if (name && name.bytes) return Squeak.bytesAsString(name.bytes);
+        // must be meta class
+        for (var clsIndex = 5; clsIndex <= 6; clsIndex++)
+            for (var nameIndex = 6; nameIndex <= 7; nameIndex++) {
+                var cls = this.pointers[clsIndex];
+                if (cls.pointers) {
+                    var name = cls.pointers[nameIndex];
+                    if (name && name.bytes) return Squeak.bytesAsString(name.bytes) + " class";
+                }
+            }
+        return "_SOMECLASS_";
     }
 },
 'as method', {
@@ -1266,9 +1276,10 @@ Object.subclass('Squeak.Interpreter',
         this.nilObj = this.specialObjects[Squeak.splOb_NilObject];
         this.falseObj = this.specialObjects[Squeak.splOb_FalseObject];
         this.trueObj = this.specialObjects[Squeak.splOb_TrueObject];
-        this.hasClosures = this.image.hasClosures; 
+        this.hasClosures = this.image.hasClosures;
+        this.globals = this.findGlobals();
         // hack for old image that does not support Unix files
-        if (!this.findMethod("UnixFileDirectory class>>pathNameDelimiter"))
+        if (!this.hasClosures && !this.findMethod("UnixFileDirectory class>>pathNameDelimiter"))
             this.primHandler.emulateMac = true;
     },
     initVMState: function() {
@@ -1311,14 +1322,41 @@ Object.subclass('Squeak.Interpreter',
         this.fetchContextRegisters(this.activeContext);
         this.reclaimableContextCount = 0;
     },
+    findGlobals: function() {
+        var smalltalk = this.specialObjects[Squeak.splOb_SmalltalkDictionary],
+            smalltalkClass = smalltalk.sqClass.className();
+        if (smalltalkClass === "Association") {
+            smalltalk = smalltalk.pointers[1];
+            smalltalkClass = smalltalk.sqClass.className();
+        }
+        if (smalltalkClass === "SystemDictionary")
+            return smalltalk.pointers[1].pointers;
+        if (smalltalkClass === "SmalltalkImage") {
+            var globals = smalltalk.pointers[0],
+                globalsClass = globals.sqClass.className();
+            if (globalsClass === "SystemDictionary")
+                return globals.pointers[1].pointers;
+            if (globalsClass === "Environment")
+                return globals.pointers[2].pointers[1].pointers
+        }
+        throw Error("cannot find global dict");
+    },
     initCompiler: function() {
         if (!Squeak.Compiler)
             return console.warn("Squeak.Compiler not loaded, using interpreter only");
+        // some JS environments disallow creating functions at runtime (e.g. FireFox OS apps)
+        try {
+            if (new Function("return 42")() !== 42)
+                return console.warn("function constructor not working, disabling JIT");
+        } catch (e) {
+            return console.warn("disabling JIT: " + e);
+        }
+        // disable JIT on slow machines, which are likely memory-limited
         var kObjPerSec = this.image.oldSpaceCount / (this.startupTime - this.image.startupTime);
         if (kObjPerSec < 10)
             return console.warn("Slow machine detected (loaded " + (kObjPerSec*1000|0) + " objects/sec), using interpreter only");
+        // compiler might decide to not handle current image
         try {
-            // compiler might decide to not handle current image
             console.log("squeak: initializing JIT compiler");
             this.compiler = new Squeak.Compiler(this);
         } catch(e) {
@@ -1337,10 +1375,8 @@ Object.subclass('Squeak.Interpreter',
             // Remove when we added translation files.
             {method: "String>>translated", primitive: returnSelf},
             {method: "String>>translatedInAllDomains", primitive: returnSelf},
-            // Squeak 4.5: disable syntax highlighting for speed
+            // Squeak: disable syntax highlighting for speed
             {method: "PluggableTextMorphPlus>>useDefaultStyler", primitive: returnSelf},
-            // BitBlt rule not available
-            //{method: "BitBlt class>>subPixelRenderColorFonts", primitive: returnFalse},
             // Cuis needs JPEG plugin
             {method: "PasteUpMorph>>buildMagnifiedBackgroundImage", primitive: returnNil},
         ].forEach(function(each) {
@@ -2352,11 +2388,7 @@ Object.subclass('Squeak.Interpreter',
     },
     allGlobalsDo: function(callback) {
         // callback(globalNameObj, globalObj) should return true to break out of iteration
-        var smalltalk = this.specialObjects[Squeak.splOb_SmalltalkDictionary].pointers,
-            systemDict = smalltalk.length == 1 ? smalltalk[0].pointers[2].pointers : // very new: an environment
-                typeof smalltalk[0] == "number" ? smalltalk : // regular: just the system dict
-                smalltalk[1].pointers, // very old: an association
-            globals = systemDict[1].pointers;
+        var globals = this.globals;
         for (var i = 0; i < globals.length; i++) {
             var assn = globals[i];
             if (!assn.isNil) {
@@ -2918,19 +2950,21 @@ Object.subclass('Squeak.Primitives',
             case 231: return this.primitiveForceDisplayUpdate(argCount);
             // case 232:  return this.primitiveFormPrint(argCount);
             case 233: return this.primitiveSetFullScreen(argCount);
-            case 234: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveDecompressFromByteArray', argCount);
-            case 235: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompareString', argCount);
-            case 236: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveConvert8BitSigned', argCount);
-            case 237: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompressToByteArray', argCount);
-            case 238: return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortOpen', argCount);
-            case 239: return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortClose', argCount);
-            case 240: return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortWrite', argCount);
-            case 241: return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortRead', argCount);
+            case 234: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveDecompressFromByteArray', argCount);
+            case 235: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompareString', argCount);
+            case 236: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveConvert8BitSigned', argCount);
+            case 237: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompressToByteArray', argCount);
+            case 238: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortOpen', argCount);
+            case 239: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortClose', argCount);
+            case 240: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortWrite', argCount);
+                else return this.popNandPushIfOK(1, this.microsecondClockUTC());
+            case 241: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortRead', argCount);
+                else return this.popNandPushIfOK(1, this.microsecondClockLocal());
             // 242: unused
-            case 243: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveTranslateStringWithTable', argCount);
-            case 244: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindFirstInString' , argCount);
-            case 245: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveIndexOfAsciiInString', argCount);
-            case 246: return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount);
+            case 243: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveTranslateStringWithTable', argCount);
+            case 244: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindFirstInString' , argCount);
+            case 245: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveIndexOfAsciiInString', argCount);
+            case 246: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount);
             // 247: unused
             case 248: return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod); // see findSelectorInClass()
             case 249: return this.primitiveArrayBecome(argCount, false); // one way, opt. copy hash
@@ -3115,6 +3149,21 @@ Object.subclass('Squeak.Primitives',
             bytes = lgIntObj.bytes;
         for (var i=0; i<4; i++)
             bytes[i] = (signed32>>>(8*i)) & 255;
+        return lgIntObj;
+    },
+    pos64BitIntFor: function(longlong) {
+        // Return the quantity as an unsigned 64-bit integer
+        if (longlong <= 0xFFFFFFFF) return this.pos32BitIntFor(longlong);
+        var sz = longlong <= 0xFFFFFFFFFF ? 5 :
+                 longlong <= 0xFFFFFFFFFFFF ? 6 :
+                 longlong <= 0xFFFFFFFFFFFFFF ? 7 : 8;
+        var lgIntClass = this.vm.specialObjects[Squeak.splOb_ClassLargePositiveInteger],
+            lgIntObj = this.vm.instantiateClass(lgIntClass, sz),
+            bytes = lgIntObj.bytes;
+        for (var i = 0; i < sz; i++) {
+            bytes[i] = longlong & 255;
+            longlong /= 256;
+        }
         return lgIntObj;
     },
     stackSigned32BitInt: function(nDeep) {
@@ -3607,9 +3656,9 @@ Object.subclass('Squeak.Primitives',
         // Pop primIndex and argArray, then push args in place...
         this.vm.popN(2);
         for (var i = 0; i < arraySize; i++)
-            this.vm.push(argumentArray[i]);
+            this.vm.push(argumentArray.pointers[i]);
         // Run the primitive
-        if (this.doPrimitive(primIdx, arraySize))
+        if (this.vm.tryPrimitive(primIdx, arraySize))
             return true;
         // Primitive failed, restore state for failure code
         this.vm.popN(arraySize);
@@ -4052,6 +4101,8 @@ Object.subclass('Squeak.Primitives',
             case 1004: value = Squeak.vmVersion; break;
             case 1005: value = Squeak.windowSystem; break;
             case 1006: value = Squeak.vmBuild; break;
+            case 1007: value = Squeak.platformName; break;
+            case 1009: value = Squeak.platformName; break;
             default: return false;
         }
         this.vm.popNandPush(argCount+1, this.makeStObject(value));
@@ -4149,6 +4200,12 @@ Object.subclass('Squeak.Primitives',
         this.vm.breakNow("debugger primitive");
         debugger;
         return true;
+    },
+    primitiveSetGCBiasToGrow: function(argCount) {
+        return this.fakePrimitive(".primitiveSetGCBiasToGrow", 0, argCount);
+    },
+    primitiveSetGCBiasToGrowGCLimit: function(argCount) {
+        return this.fakePrimitive(".primitiveSetGCBiasToGrowGCLimit", 0, argCount);
     },
 },
 'display', {
@@ -4477,6 +4534,14 @@ Object.subclass('Squeak.Primitives',
 	},
 	secondClock: function() {
         return this.pos32BitIntFor(Squeak.totalSeconds()); // will overflow 32 bits in 2037
+    },
+    microsecondClockUTC: function() {
+        var millis = Date.now() - Squeak.EpochUTC;
+        return this.pos64BitIntFor(millis * 1000);
+    },
+    microsecondClockLocal: function() {
+        var millis = Date.now() - Squeak.Epoch;
+        return this.pos64BitIntFor(millis * 1000);
     },
 },
 'FilePlugin', {
@@ -6160,7 +6225,7 @@ Object.extend(Squeak, {
     },
     totalSeconds: function() {
         // seconds since 1901-01-01, local time
-        return Math.floor(Date.now()/1000) - Squeak.Epoch;
+        return Math.floor((Date.now() - Squeak.Epoch) / 1000);
     },
     startAudioOut: function() {
         if (!this.audioOutContext) {

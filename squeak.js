@@ -694,6 +694,7 @@ SqueakJS.runImage = function(buffer, name, display, options) {
 SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     SqueakJS.appName = options.appName || "SqueakJS";
     SqueakJS.options = options;
+    var root = options.root || "/";
     var search = window.location.search,
         altImage = search && search.match(/image=(.*\.image)/);
     if (altImage) imageUrl = altImage[1];
@@ -710,10 +711,10 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
         if (urls.length === 0) return whenAllDone(imageData);
         var url = urls.shift(),
             fileName = url.slice(baseUrl.length);
-        if (Squeak.fileExists(fileName)) {
+        if (Squeak.fileExists(root + fileName)) {
             if (isImage) {
                 isImage = false;
-                Squeak.fileGet(fileName, function(data) {
+                Squeak.fileGet(root + fileName, function(data) {
                     imageData = data; 
                     getNextFile(whenAllDone);
                 });
@@ -730,7 +731,7 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
         rq.onload = function(e) {
             if (rq.status == 200) {
                 if (isImage) {isImage = false; imageData = rq.response;}
-                else Squeak.filePut(fileName, rq.response);
+                else Squeak.filePut(root + fileName, rq.response);
                 return getNextFile(whenAllDone);
             }
             else rq.onerror(rq.statusText);
@@ -742,7 +743,7 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     };
     getNextFile(function whenAllDone(imageData) {
         var imageName = Squeak.splitFilePath(imageUrl).basename;
-        SqueakJS.runImage(imageData, imageName, display, options);
+        SqueakJS.runImage(imageData, root + imageName, display, options);
     });
 };
 

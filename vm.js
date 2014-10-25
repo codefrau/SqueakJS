@@ -4577,7 +4577,7 @@ Object.subclass('Squeak.Primitives',
         if (!this.success) return false;
         var sqDirName = dirNameObj.bytesAsString();
         var dirName = this.filenameFromSqueak(sqDirName);
-        var entries = Squeak.dirList(dirName);
+        var entries = Squeak.dirList(dirName, true);
         if (!entries) {
             var path = Squeak.splitFilePath(dirName);
             console.log("Directory not found: " + path.fullname);
@@ -4739,7 +4739,7 @@ Object.subclass('Squeak.Primitives',
         var path = Squeak.splitFilePath(filename);
         if (!path.basename) return null;    // malformed filename
         // fetch or create directory entry
-        var directory = Squeak.dirList(path.dirname);
+        var directory = Squeak.dirList(path.dirname, true);
         if (!directory) return null;
         var entry = directory[path.basename],
             contents = null;
@@ -6073,14 +6073,16 @@ Object.extend(Squeak, {
             var getReq = fileStore.get(path.fullname);
             getReq.onerror = function(e) { errorDo(this.errorCode) };
             getReq.onsuccess = function(e) {
-                if (this.result == undefined) {
-                    // fall back on fake db, may be file is there
-                    var fakeReq = Squeak.dbFake().get(path.fullname);
-                    fakeReq.onerror = function(e) { errorDo("file not found: " + path.fullname) };
-                    fakeReq.onsuccess = function(e) { thenDo(this.result); }
-                    return;
-                }
-                thenDo(this.result);
+                if (this.result !== undefined) return thenDo(this.result);
+                // might be a template
+                Squeak.fetchTemplateFile(path.fullname,
+                    function gotTemplate(template) {thenDo(template)},
+                    function noTemplate() {
+                        // fall back on fake db, may be file is there
+                        var fakeReq = Squeak.dbFake().get(path.fullname);
+                        fakeReq.onerror = function(e) { errorDo("file not found: " + path.fullname) };
+                        fakeReq.onsuccess = function(e) { thenDo(this.result); }
+                    });
             };
         });
     },
@@ -6176,11 +6178,26 @@ Object.extend(Squeak, {
         delete localStorage["squeak:" + path.fullname];
         return true;
     },
-    dirList: function(dirpath) {
+    dirList: function(dirpath, includeTemplates) {
         // return directory entries or null
         var path = this.splitFilePath(dirpath),
-            entries = localStorage["squeak:" + path.fullname];
-        if (entries) return JSON.parse(entries);
+            localEntries = localStorage["squeak:" + path.fullname],
+            template = includeTemplates && localStorage["squeak-template:" + path.fullname];
+        if (localEntries || template) {
+            var dir = {};
+            function addEntries(entries) {
+                for (var key in entries) {
+                    if (entries.hasOwnProperty(key)) {
+                        var entry = entries[key];
+                        dir[entry[0]] = entry;
+                    }
+                }
+            }
+            // local entries override templates
+            if (template) addEntries(JSON.parse(template).entries);
+            if (localEntries) addEntries(JSON.parse(localEntries));
+            return dir;
+        }
         if (path.fullname == "/") return {};
         return null;
     },
@@ -6222,6 +6239,74 @@ Object.extend(Squeak, {
         // close the files held open in memory
         Squeak.flushAllFiles();
         delete window.SqueakFiles;
+    },
+    fetchTemplateDir: function(path, url) {
+        // Called on app startup. Fetch url/sqindex.json and
+        // cache all subdirectory entries in localStorage.
+        // File contents is only fetched on demand
+        path = Squeak.splitFilePath(path).fullname;
+        function ensureTemplateParent(template) {
+            var path = Squeak.splitFilePath(template);
+            if (path.dirname !== "/") ensureTemplateParent(path.dirname);
+            var template = JSON.parse(localStorage["squeak-template:" + path.dirname] || '{"entries": {}}');
+            if (!template.entries[path.basename]) {
+                var now = Squeak.totalSeconds();
+                template.entries[path.basename] = [path.basename, now, now, true, 0];
+                localStorage["squeak-template:" + path.dirname] = JSON.stringify(template);
+            }
+        }
+        function checkSubTemplates(path, url) {
+            var template = JSON.parse(localStorage["squeak-template:" + path]);
+            template.entries.forEach(function(entry) {
+                if (entry[3]) Squeak.addTemplates(path + "/" + entry[0], url + "/" + entry[0]);
+            });
+        }
+        if (localStorage["squeak-template:" + path]) {
+            checkSubTemplates(path, url);
+        } else  {
+            var index = url + "/sqindex.json";
+            var rq = new XMLHttpRequest();
+            rq.open('GET', index, true);
+            rq.onload = function(e) {
+                if (rq.status == 200) {
+                    console.log("adding template " + path);
+                    ensureTemplateParent(path);
+                    localStorage["squeak-template:" + path] = '{"url": ' + JSON.stringify(url) + ', "entries": ' + rq.response + '}';
+                    checkSubTemplates(path, url);
+                }
+                else rq.onerror(rq.statusText);
+            };
+            rq.onerror = function(e) {
+                console.log("cannot load template index " + index);
+            }
+            rq.send();
+        }
+    },
+    fetchTemplateFile: function(path, ifFound, ifNotFound) {
+        path = Squeak.splitFilePath(path);
+        var template = localStorage["squeak-template:" + path.dirname];
+        if (!template) return ifNotFound();
+        var url = JSON.parse(template).url;
+        if (!url) throw Error("template without url " + path);
+        url += "/" + path.basename;
+        var rq = new XMLHttpRequest();
+        rq.open("get", url, true);
+        rq.responseType = "arraybuffer";
+        rq.timeout = 30000;
+        rq.onreadystatechange = function() {
+            if (this.readyState != this.DONE) return;
+            if (this.status == 200) {
+                var buffer = this.response;
+                console.log("Got " + buffer.byteLength + " bytes from " + url);
+                Squeak.filePut(path.fullname, buffer);
+                ifFound(buffer);
+            } else {
+                alert("Download failed (" + this.status + ") " + url);
+                ifNotFound();
+            }
+        }
+        console.log("Fetching " + url);
+        rq.send();
     },
     totalSeconds: function() {
         // seconds since 1901-01-01, local time

@@ -33,7 +33,12 @@ window.onload = function() {
         header: sqHeader,
         footer: sqFooter,
         spinner: sqSpinner,
-        root: "/Etoys/",
+        root: "/Etoys",
+        templates: {
+            "ExampleEtoys": "http://freudenbergs.de/bert/squeakjs/Etoys/ExampleEtoys",
+            //"fonts":      "http://freudenbergs.de/bert/squeakjs/Etoys/fonts",
+            //"locale":     "http://freudenbergs.de/bert/squeakjs/Etoys/locale",
+        },
     });
 };
 

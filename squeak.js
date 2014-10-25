@@ -694,7 +694,10 @@ SqueakJS.runImage = function(buffer, name, display, options) {
 SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     SqueakJS.appName = options.appName || "SqueakJS";
     SqueakJS.options = options;
-    var root = options.root || "/";
+    var root = Squeak.splitFilePath(options.root || "/").fullname;
+    if (!/\/$/.test(root)) root += "/";
+    for (var path in options.templates)
+        Squeak.fetchTemplateDir(root + path, options.templates[path]);
     var search = window.location.search,
         altImage = search && search.match(/image=(.*\.image)/);
     if (altImage) imageUrl = altImage[1];

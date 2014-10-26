@@ -691,16 +691,35 @@ SqueakJS.runImage = function(buffer, name, display, options) {
     }, 0);
 };
 
-SqueakJS.runSqueak = function(imageUrl, canvas, options) {
-    SqueakJS.appName = options.appName || "SqueakJS";
-    SqueakJS.options = options;
+function getOptions(options) {
+    var search = decodeURIComponent(window.location.search).slice(1),
+        args = search && search.split("&");
+    if (args) for (var i = 0; i < args.length; i++) {
+        var keyAndVal = args[i].split("="),
+            key = keyAndVal[0],
+            val = keyAndVal[1];
+        if (!/^[a-zA-Z]/.test(val)) val = JSON.parse(val);
+        options[key] = val;
+    }
     var root = Squeak.splitFilePath(options.root || "/").fullname;
     if (!/\/$/.test(root)) root += "/";
+    options.root = root;
+    if (!options.appName) options.appName = "SqueakJS";
+    if (options.templates.constructor === Array) {
+        var templates = {};
+        options.templates.forEach(function(path){ templates[path] = path; });
+        options.templates = templates;
+    }
+}
+
+SqueakJS.runSqueak = function(imageUrl, canvas, options) {
+    getOptions(options);
+    SqueakJS.options = options;
+    SqueakJS.appName = options.appName;
+    var root = options.root;
     for (var path in options.templates)
         Squeak.fetchTemplateDir(root + path, options.templates[path]);
-    var search = window.location.search,
-        altImage = search && search.match(/image=(.*\.image)/);
-    if (altImage) imageUrl = altImage[1];
+    if (options.image) imageUrl = options.image;
     Squeak.fsck();
     var display = createSqueakDisplay(canvas, options),
         imageData = null,

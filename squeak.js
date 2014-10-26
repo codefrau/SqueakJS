@@ -702,6 +702,7 @@ function getOptions(options) {
         options[key] = val;
     }
     var root = Squeak.splitFilePath(options.root || "/").fullname;
+    Squeak.dirCreate(root, true);
     if (!/\/$/.test(root)) root += "/";
     options.root = root;
     if (!options.appName) options.appName = "SqueakJS";

@@ -6153,8 +6153,9 @@ Object.extend(Squeak, {
         var entry = directory[path.basename]; if (!entry || entry[3]) return false; // not found or is a directory
         return true;
     },
-    dirCreate: function(dirpath) {
+    dirCreate: function(dirpath, withParents) {
         var path = this.splitFilePath(dirpath); if (!path.basename) return false;
+        if (withParents && !localStorage["squeak:" + path.dirname]) Squeak.dirCreate(path.dirname, true);
         var directory = this.dirList(path.dirname); if (!directory) return false;
         if (directory[path.basename]) return false;
         var now = this.totalSeconds(),
@@ -6258,7 +6259,7 @@ Object.extend(Squeak, {
         function checkSubTemplates(path, url) {
             var template = JSON.parse(localStorage["squeak-template:" + path]);
             template.entries.forEach(function(entry) {
-                if (entry[3]) Squeak.addTemplates(path + "/" + entry[0], url + "/" + entry[0]);
+                if (entry[3]) Squeak.fetchTemplateDir(path + "/" + entry[0], url + "/" + entry[0]);
             });
         }
         if (localStorage["squeak-template:" + path]) {
@@ -6298,6 +6299,7 @@ Object.extend(Squeak, {
             if (this.status == 200) {
                 var buffer = this.response;
                 console.log("Got " + buffer.byteLength + " bytes from " + url);
+                Squeak.dirCreate(path.dirname, true);
                 Squeak.filePut(path.fullname, buffer);
                 ifFound(buffer);
             } else {

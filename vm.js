@@ -5573,6 +5573,12 @@ Object.subclass('Squeak.Primitives',
     scratch_primitiveOpenURL: function(argCount) {
         var url = this.stackNonInteger(0).bytesAsString();
         if (url == "") return false;
+        if (/^\/SqueakJS\//.test(url)) {
+            url = url.slice(10);     // remove file root
+            var path = Squeak.splitFilePath(url),
+                template = localStorage["squeak-template:" + path.dirname];
+            if (template) url = JSON.parse(template).url + "/" + path.basename;
+        }
         window.open(url, "_blank"); // likely blocked as pop-up, but what can we do?
         return this.popNIfOK(argCount);
     },

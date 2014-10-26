@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # walk directory tree and create sqindex.json files
 from __future__ import with_statement
 

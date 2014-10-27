@@ -3097,7 +3097,7 @@ Object.subclass('Squeak.Primitives',
         var	index = this.stackInteger(0) - 1;
         if (!this.success) return false;
         var moduleNames = Object.keys(this.builtinModules);
-    	return this.popNandPushIfOK(argCount, this.makeStObject(moduleNames[index]));
+    	return this.popNandPushIfOK(argCount + 1, this.makeStObject(moduleNames[index]));
     },
     primitiveListLoadedModule: function(argCount) {
         var	index = this.stackInteger(0) - 1;
@@ -3110,7 +3110,7 @@ Object.subclass('Squeak.Primitives',
                 moduleNames.push(moduleName);
             }
         }
-    	return this.popNandPushIfOK(argCount, this.makeStObject(moduleNames[index]));
+    	return this.popNandPushIfOK(argCount + 1, this.makeStObject(moduleNames[index]));
     },
 },
 'stack access', {
@@ -3828,7 +3828,7 @@ Object.subclass('Squeak.Primitives',
         if (!segmentWordArray.words || !outPointerArray.pointers) return false;
         var roots = this.vm.image.loadImageSegment(segmentWordArray, outPointerArray);
         if (!roots) return false;
-        return this.popNandPushIfOK(argCount, roots);
+        return this.popNandPushIfOK(argCount + 1, roots);
     },
 },
 'blocks/closures', {
@@ -4909,7 +4909,7 @@ Object.subclass('Squeak.Primitives',
         }
         this.audioBuffersReady.push(buffer);
         this.snd_playNextBuffer();
-        return this.popNandPushIfOK(argCount, count);
+        return this.popNandPushIfOK(argCount + 1, count);
     },
     snd_primitiveSoundStop: function(argCount) {
         if (this.audioContext) {

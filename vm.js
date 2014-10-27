@@ -1065,6 +1065,10 @@ Object.subclass('Squeak.Object',
         return this.int16Array
             || (this.words && (this.int16Array = new Int16Array(this.words.buffer)));
     },
+    wordsAsUint16Array: function() {
+        return this.uint16Array
+            || (this.words && (this.uint16Array = new Uint16Array(this.words.buffer)));
+    },
     wordsAsUint8Array: function() {
         return this.uint8Array
             || (this.words && (this.uint8Array = new Uint8Array(this.words.buffer)));
@@ -5754,7 +5758,7 @@ Object.subclass('Squeak.InterpreterProxy',
         this.successFlag = false;
         return 0;
     },
-	stackObjectValue: function(n) {
+    stackObjectValue: function(n) {
         var obj = this.vm.stackValue(n);
         if (typeof obj !== "number") return obj;
         this.successFlag = false;

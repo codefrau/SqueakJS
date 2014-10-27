@@ -691,7 +691,7 @@ SqueakJS.runImage = function(buffer, name, display, options) {
     }, 0);
 };
 
-function getOptions(options) {
+function processOptions(options) {
     var search = decodeURIComponent(window.location.search).slice(1),
         args = search && search.split("&");
     if (args) for (var i = 0; i < args.length; i++) {
@@ -711,15 +711,14 @@ function getOptions(options) {
         options.templates.forEach(function(path){ templates[path] = path; });
         options.templates = templates;
     }
+    for (var path in options.templates)
+        Squeak.fetchTemplateDir(options.root + path, options.templates[path]);
 }
 
 SqueakJS.runSqueak = function(imageUrl, canvas, options) {
-    getOptions(options);
+    processOptions(options);
     SqueakJS.options = options;
     SqueakJS.appName = options.appName;
-    var root = options.root;
-    for (var path in options.templates)
-        Squeak.fetchTemplateDir(root + path, options.templates[path]);
     if (options.image) imageUrl = options.image;
     Squeak.fsck();
     var display = createSqueakDisplay(canvas, options),
@@ -734,10 +733,10 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
         if (urls.length === 0) return whenAllDone(imageData);
         var url = urls.shift(),
             fileName = url.slice(baseUrl.length);
-        if (Squeak.fileExists(root + fileName)) {
+        if (Squeak.fileExists(options.root + fileName)) {
             if (isImage) {
                 isImage = false;
-                Squeak.fileGet(root + fileName, function(data) {
+                Squeak.fileGet(options.root + fileName, function(data) {
                     imageData = data; 
                     getNextFile(whenAllDone);
                 });
@@ -754,7 +753,7 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
         rq.onload = function(e) {
             if (rq.status == 200) {
                 if (isImage) {isImage = false; imageData = rq.response;}
-                else Squeak.filePut(root + fileName, rq.response);
+                else Squeak.filePut(options.root + fileName, rq.response);
                 return getNextFile(whenAllDone);
             }
             else rq.onerror(rq.statusText);
@@ -766,7 +765,7 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     };
     getNextFile(function whenAllDone(imageData) {
         var imageName = Squeak.splitFilePath(imageUrl).basename;
-        SqueakJS.runImage(imageData, root + imageName, display, options);
+        SqueakJS.runImage(imageData, options.root + imageName, display, options);
     });
 };
 

@@ -706,13 +706,15 @@ function processOptions(options) {
     if (!/\/$/.test(root)) root += "/";
     options.root = root;
     if (!options.appName) options.appName = "SqueakJS";
-    if (options.templates.constructor === Array) {
-        var templates = {};
-        options.templates.forEach(function(path){ templates[path] = path; });
-        options.templates = templates;
+    if (options.templates) {
+        if (options.templates.constructor === Array) {
+            var templates = {};
+            options.templates.forEach(function(path){ templates[path] = path; });
+            options.templates = templates;
+        }
+        for (var path in options.templates)
+            Squeak.fetchTemplateDir(options.root + path, options.templates[path]);
     }
-    for (var path in options.templates)
-        Squeak.fetchTemplateDir(options.root + path, options.templates[path]);
 }
 
 SqueakJS.runSqueak = function(imageUrl, canvas, options) {

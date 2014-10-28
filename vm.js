@@ -5877,6 +5877,12 @@ Object.subclass('Squeak.InterpreterProxy',
 	    this.successFlag = false;
 	    return 0;
     },
+    fetchLong32ofObject: function(n, obj) {
+        return obj.words[n];
+    },
+    fetchFloatofObject: function(n, obj) {
+        return this.floatValueOf(obj.pointers[n]);
+    },
     storeIntegerofObjectwithValue: function(n, obj, value) {
         if (typeof value === "number")
             obj.pointers[n] = value;

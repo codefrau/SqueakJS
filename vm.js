@@ -1381,8 +1381,6 @@ Object.subclass('Squeak.Interpreter',
             {method: "String>>translatedInAllDomains", primitive: returnSelf},
             // Squeak: disable syntax highlighting for speed
             {method: "PluggableTextMorphPlus>>useDefaultStyler", primitive: returnSelf},
-            // Cuis needs JPEG plugin
-            {method: "PasteUpMorph>>buildMagnifiedBackgroundImage", primitive: returnNil},
         ].forEach(function(each) {
             var m = this.findMethod(each.method);
             if (m) {

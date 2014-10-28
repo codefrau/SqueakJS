@@ -6118,18 +6118,27 @@ Object.subclass('Squeak.InterpreterProxy',
 
 Object.extend(Squeak, {
     fsck: function(dir) {
-        if (typeof indexedDB !== "undefined") return; // only checking localStorage
         dir = dir || "";
         var entries = Squeak.dirList(dir);
         for (var name in entries) {
             var path = dir + "/" + name,
                 isDir = entries[name][3];
-            if (isDir) Squeak.fsck(path);
-            else {
-                var exists = "squeak-file:" + path in localStorage || "squeak-file.lz:" + path in localStorage;
-                if (!exists) {
-                    console.log("Deleting stale file entry " + path);
-                    Squeak.fileDelete(path, true);
+            if (isDir) {
+                var exists = "squeak:" + path in localStorage;
+                if (exists) Squeak.fsck(path);
+                else {
+                    console.log("Deleting stale directory " + path);
+                    Squeak.dirDelete(path);
+                }
+            } else {
+                if (typeof indexedDB !== "undefined") {
+                    // need to figure out a way to check file existence in indexedDB without loading the whole file
+                } else {
+                    var exists = "squeak-file:" + path in localStorage || "squeak-file.lz:" + path in localStorage;
+                    if (!exists) {
+                        console.log("Deleting stale file entry " + path);
+                        Squeak.fileDelete(path, true);
+                    }
                 }
             }
         }

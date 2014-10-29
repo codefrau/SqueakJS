@@ -95,6 +95,9 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+2014-10-28: 0.6.3 pass options via URL
+2014-10-27: add JPEG plugin 
+2014-10-25: add template files
 2014-10-23: 0.6.2 fixes 
 2014-10-21: 0.6.1 add image segment loading 
 2014-10-18: 0.6 move squeak.js out of lib dir

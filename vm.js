@@ -5979,6 +5979,9 @@ Object.subclass('Squeak.InterpreterProxy',
     isPointers: function(obj) {
         return typeof obj !== "number" && obj.isPointers();
     },
+    isIntegerValue: function(obj) {
+        return typeof obj === "number" && obj >= -0x40000000 && obj <= 0x3FFFFFFF;
+    },
     isMemberOf: function(obj, className) {
         var nameBytes = obj.sqClass.pointers[Squeak.Class_name].bytes;
         if (className.length !== nameBytes.length) return false;
@@ -6088,6 +6091,9 @@ Object.subclass('Squeak.InterpreterProxy',
     classPoint: function() {
         return this.vm.specialObjects[Squeak.splOb_ClassPoint];
     },
+    classString: function() {
+        return this.vm.specialObjects[Squeak.splOb_ClassString];
+    },
     nilObject: function() {
         return this.vm.nilObj;
     },
@@ -6120,6 +6126,9 @@ Object.subclass('Squeak.InterpreterProxy',
             var rect = {left: left, top: top, right: right, bottom: bottom};
             this.vm.primHandler.displayDirty(form, rect);
         }
+    },
+    ioLoadFunctionFrom: function(funcName, pluginName) {
+        return null;
     },
 });
 

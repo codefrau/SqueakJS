@@ -691,38 +691,69 @@ SqueakJS.runImage = function(buffer, name, display, options) {
     }, 0);
 };
 
+function processOptions(options) {
+    var search = decodeURIComponent(window.location.search).slice(1),
+        args = search && search.split("&");
+    if (args) for (var i = 0; i < args.length; i++) {
+        var keyAndVal = args[i].split("="),
+            key = keyAndVal[0],
+            val = keyAndVal[1];
+        if (!/^[a-zA-Z]/.test(val)) val = JSON.parse(val);
+        options[key] = val;
+    }
+    var root = Squeak.splitFilePath(options.root || "/").fullname;
+    Squeak.dirCreate(root, true);
+    if (!/\/$/.test(root)) root += "/";
+    options.root = root;
+    if (!options.appName) options.appName = "SqueakJS";
+    if (options.templates) {
+        if (options.templates.constructor === Array) {
+            var templates = {};
+            options.templates.forEach(function(path){ templates[path] = path; });
+            options.templates = templates;
+        }
+        for (var path in options.templates)
+            Squeak.fetchTemplateDir(options.root + path, options.templates[path]);
+    }
+}
+
 SqueakJS.runSqueak = function(imageUrl, canvas, options) {
-    SqueakJS.appName = options.appName || "SqueakJS";
+    processOptions(options);
     SqueakJS.options = options;
-    var search = window.location.search,
-        altImage = search && search.match(/image=(.*\.image)/);
-    if (altImage) imageUrl = altImage[1];
+    SqueakJS.appName = options.appName;
+    if (options.image) imageUrl = options.image;
+    else options.image = imageUrl;
     Squeak.fsck();
     var display = createSqueakDisplay(canvas, options),
+        imageName = Squeak.splitFilePath(imageUrl).basename,
         imageData = null,
         baseUrl = imageUrl.replace(/[^\/]*$/, ""),
-        urls = [imageUrl];
+        files = [{url: imageUrl, name: imageName}];
     if (options.files) {
-        options.files.forEach(function(f) { urls.push(baseUrl + f); });
+        options.files.forEach(function(f) { files.push({url: baseUrl + f, name: f}); });
+    }
+    if (options.document) {
+        var docName = Squeak.splitFilePath(options.document).basename;
+        files.push({url: options.document, name: docName});
+        display.documentName = options.root + docName;
     }
     var isImage = true;
     function getNextFile(whenAllDone) {
-        if (urls.length === 0) return whenAllDone(imageData);
-        var url = urls.shift(),
-            fileName = url.slice(baseUrl.length);
-        if (Squeak.fileExists(fileName)) {
+        if (files.length === 0) return whenAllDone(imageData);
+        var file = files.shift();
+        if (Squeak.fileExists(options.root + file.name)) {
             if (isImage) {
                 isImage = false;
-                Squeak.fileGet(fileName, function(data) {
+                Squeak.fileGet(options.root + file.name, function(data) {
                     imageData = data; 
                     getNextFile(whenAllDone);
                 });
             } else getNextFile(whenAllDone);
             return;
         }
-        display.showBanner("Downloading " + fileName);
+        display.showBanner("Downloading " + file.name);
         var rq = new XMLHttpRequest();
-        rq.open('GET', url);
+        rq.open('GET', file.url);
         rq.responseType = 'arraybuffer';
         rq.onprogress = function(e) {
             if (e.lengthComputable) display.showProgress(e.loaded / e.total);
@@ -730,19 +761,18 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
         rq.onload = function(e) {
             if (rq.status == 200) {
                 if (isImage) {isImage = false; imageData = rq.response;}
-                else Squeak.filePut(fileName, rq.response);
+                else Squeak.filePut(options.root + file.name, rq.response);
                 return getNextFile(whenAllDone);
             }
             else rq.onerror(rq.statusText);
         };
         rq.onerror = function(e) {
-            alert(url + "\nError: " + e);
+            alert("Failed to download:\n" + file.url);
         }
         rq.send();
     };
     getNextFile(function whenAllDone(imageData) {
-        var imageName = Squeak.splitFilePath(imageUrl).basename;
-        SqueakJS.runImage(imageData, imageName, display, options);
+        SqueakJS.runImage(imageData, options.root + imageName, display, options);
     });
 };
 

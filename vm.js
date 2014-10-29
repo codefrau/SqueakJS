@@ -26,7 +26,7 @@ window.Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.6.2",
+    vmVersion: "SqueakJS 0.6.3",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -1065,6 +1065,10 @@ Object.subclass('Squeak.Object',
         return this.int16Array
             || (this.words && (this.int16Array = new Int16Array(this.words.buffer)));
     },
+    wordsAsUint16Array: function() {
+        return this.uint16Array
+            || (this.words && (this.uint16Array = new Uint16Array(this.words.buffer)));
+    },
     wordsAsUint8Array: function() {
         return this.uint8Array
             || (this.words && (this.uint8Array = new Uint8Array(this.words.buffer)));
@@ -1377,8 +1381,6 @@ Object.subclass('Squeak.Interpreter',
             {method: "String>>translatedInAllDomains", primitive: returnSelf},
             // Squeak: disable syntax highlighting for speed
             {method: "PluggableTextMorphPlus>>useDefaultStyler", primitive: returnSelf},
-            // Cuis needs JPEG plugin
-            {method: "PasteUpMorph>>buildMagnifiedBackgroundImage", primitive: returnNil},
         ].forEach(function(each) {
             var m = this.findMethod(each.method);
             if (m) {
@@ -2610,17 +2612,21 @@ Object.subclass('Squeak.Primitives',
     initModules: function() {
         this.loadedModules = {};
         this.builtinModules = {
-            FilePlugin:            this.findPluginFunctions("",         "primitive(File|Directory)"),
-            SoundPlugin:           this.findPluginFunctions("snd_",     "", true),
-            B2DPlugin:             this.findPluginFunctions("ge",       ""),
+            FilePlugin:             this.findPluginFunctions("", "primitive(Disable)?(File|Directory)"),
+            SoundPlugin:            this.findPluginFunctions("snd_"),
+            B2DPlugin:              this.findPluginFunctions("ge"),
+            JPEGReadWriter2Plugin:  this.findPluginFunctions("jpeg2_"),
+            SecurityPlugin: {
+                primitiveDisableImageWrite: this.fakePrimitive.bind(this, "SecurityPlugin.primitiveDisableImageWrite", 0), 
+            },
         };
         this.patchModules = {
-            ScratchPlugin:         this.findPluginFunctions("scratch_", ""),
+            ScratchPlugin:          this.findPluginFunctions("scratch_"),
         };
         this.interpreterProxy = new Squeak.InterpreterProxy(this.vm);
     },
     findPluginFunctions: function(prefix, match, bindLate) {
-        match = match || "(initialise|shutdown|primitive)";
+        match = match || "(initialise|shutdown|prim)";
         var plugin = {},
             regex = new RegExp("^" + prefix + match, "i");
         for (var funcName in this)
@@ -3093,7 +3099,7 @@ Object.subclass('Squeak.Primitives',
         var	index = this.stackInteger(0) - 1;
         if (!this.success) return false;
         var moduleNames = Object.keys(this.builtinModules);
-    	return this.popNandPushIfOK(argCount, this.makeStObject(moduleNames[index]));
+    	return this.popNandPushIfOK(argCount + 1, this.makeStObject(moduleNames[index]));
     },
     primitiveListLoadedModule: function(argCount) {
         var	index = this.stackInteger(0) - 1;
@@ -3106,7 +3112,7 @@ Object.subclass('Squeak.Primitives',
                 moduleNames.push(moduleName);
             }
         }
-    	return this.popNandPushIfOK(argCount, this.makeStObject(moduleNames[index]));
+    	return this.popNandPushIfOK(argCount + 1, this.makeStObject(moduleNames[index]));
     },
 },
 'stack access', {
@@ -3824,7 +3830,7 @@ Object.subclass('Squeak.Primitives',
         if (!segmentWordArray.words || !outPointerArray.pointers) return false;
         var roots = this.vm.image.loadImageSegment(segmentWordArray, outPointerArray);
         if (!roots) return false;
-        return this.popNandPushIfOK(argCount, roots);
+        return this.popNandPushIfOK(argCount + 1, roots);
     },
 },
 'blocks/closures', {
@@ -4093,16 +4099,17 @@ Object.subclass('Squeak.Primitives',
         var value;
         switch (attr) {
             case 0: value = this.filenameToSqueak(Squeak.vmPath + Squeak.vmFile); break;
-            case 1: value = null; break; // 1.x images want document here
-            case 2: value = null; break; // later images want document here
+            case 1: value = this.display.documentName || null; break; // 1.x images want document here
+            case 2: value = this.display.documentName || null; break; // later images want document here
             case 1001: value = Squeak.platformName; break;
             case 1002: value = Squeak.osVersion; break;
             case 1003: value = Squeak.platformSubtype; break;
             case 1004: value = Squeak.vmVersion; break;
             case 1005: value = Squeak.windowSystem; break;
             case 1006: value = Squeak.vmBuild; break;
-            case 1007: value = Squeak.platformName; break;
-            case 1009: value = Squeak.platformName; break;
+            case 1007: value = Squeak.vmVersion; break; // Interpreter class
+            // case 1008: Cogit class
+            case 1009: value = Squeak.vmVersion; break; // Platform source version
             default: return false;
         }
         this.vm.popNandPush(argCount+1, this.makeStObject(value));
@@ -4577,7 +4584,7 @@ Object.subclass('Squeak.Primitives',
         if (!this.success) return false;
         var sqDirName = dirNameObj.bytesAsString();
         var dirName = this.filenameFromSqueak(sqDirName);
-        var entries = Squeak.dirList(dirName);
+        var entries = Squeak.dirList(dirName, true);
         if (!entries) {
             var path = Squeak.splitFilePath(dirName);
             console.log("Directory not found: " + path.fullname);
@@ -4702,6 +4709,9 @@ Object.subclass('Squeak.Primitives',
         console.warn("Not yet implemented: primitiveFileTruncate");
         return false;
     },
+    primitiveDisableFileAccess: function(argCount) {
+        return this.fakePrimitive("FilePlugin.primitiveDisableFileAccess", 0, argCount);
+    },
     primitiveFileWrite: function(argCount) {
         var count = this.stackInteger(0),
             startIndex = this.stackInteger(1) - 1, // make zero based
@@ -4739,7 +4749,7 @@ Object.subclass('Squeak.Primitives',
         var path = Squeak.splitFilePath(filename);
         if (!path.basename) return null;    // malformed filename
         // fetch or create directory entry
-        var directory = Squeak.dirList(path.dirname);
+        var directory = Squeak.dirList(path.dirname, true);
         if (!directory) return null;
         var entry = directory[path.basename],
             contents = null;
@@ -4905,7 +4915,7 @@ Object.subclass('Squeak.Primitives',
         }
         this.audioBuffersReady.push(buffer);
         this.snd_playNextBuffer();
-        return this.popNandPushIfOK(argCount, count);
+        return this.popNandPushIfOK(argCount + 1, count);
     },
     snd_primitiveSoundStop: function(argCount) {
         if (this.audioContext) {
@@ -5568,11 +5578,180 @@ Object.subclass('Squeak.Primitives',
     gePrimitiveRegisterExternalEdge: function(argCount) { return false; },
     gePrimitiveRegisterExternalFill: function(argCount) { return false; },
 },
+'JPEGReadWriter2Plugin', {
+    jpeg2_primJPEGPluginIsPresent: function(argCount) {
+        return this.popNandPushIfOK(argCount + 1, this.vm.trueObj);
+    },
+    jpeg2_primImageHeight: function(argCount) {
+        var decompressStruct = this.stackNonInteger(0).wordsOrBytes();
+        if (!decompressStruct) return false;
+        var height = decompressStruct[1];
+        return this.popNandPushIfOK(argCount + 1, height);
+    },
+    jpeg2_primImageWidth: function(argCount) {
+        var decompressStruct = this.stackNonInteger(0).wordsOrBytes();
+        if (!decompressStruct) return false;
+        var width = decompressStruct[0];
+        return this.popNandPushIfOK(argCount + 1, width);
+    },
+    jpeg2_primJPEGCompressStructSize: function(argCount) {
+        // no struct needed
+        return this.popNandPushIfOK(argCount + 1, 0);
+    },
+    jpeg2_primJPEGDecompressStructSize: function(argCount) {
+        // width, height, 32 bits each
+        return this.popNandPushIfOK(argCount + 1, 8);
+    },
+    jpeg2_primJPEGErrorMgr2StructSize: function(argCount) {
+        // no struct needed
+        return this.popNandPushIfOK(argCount + 1, 0);
+    },
+    jpeg2_primJPEGReadHeaderfromByteArrayerrorMgr: function(argCount) {
+        var decompressStruct = this.stackNonInteger(2).wordsOrBytes(),
+            source = this.stackNonInteger(1).bytes;
+        if (!decompressStruct || !source) return false;
+        var unfreeze = this.vm.freeze();
+        this.jpeg2_readImageFromBytes(source,
+            function success(image) {
+                this.jpeg2state = {src: source, img: image};
+                decompressStruct[0] = image.width;
+                decompressStruct[1] = image.height;
+                unfreeze();
+            }.bind(this),
+            function error() {
+                decompressStruct[0] = 0;
+                decompressStruct[1] = 0;
+                unfreeze();
+            }.bind(this));
+        return this.popNIfOK(argCount);
+    },
+    jpeg2_primJPEGReadImagefromByteArrayonFormdoDitheringerrorMgr: function(argCount) {
+        var source = this.stackNonInteger(3).bytes,
+            form = this.stackNonInteger(2).pointers,
+            ditherFlag = this.stackBoolean(1);
+        if (!this.success || !source || !form) return false;
+        var state = this.jpeg2state;
+        if (!state || state.src !== source) {
+            console.error("jpeg read did not match header info");
+            return false;
+        }
+        var depth = form[Squeak.Form_depth],
+            image = this.jpeg2_getPixelsFromImage(state.img),
+            formBits = form[Squeak.Form_bits].words;
+        if (depth === 32) {
+            this.jpeg2_copyPixelsToForm32(image, formBits);
+        } else if (depth === 16) {
+            if (ditherFlag) this.jpeg2_ditherPixelsToForm16(image, formBits);
+            else this.jpeg2_copyPixelsToForm16(image, formBits);
+        } else return false;
+        return this.popNIfOK(argCount);
+    },
+    jpeg2_primJPEGWriteImageonByteArrayformqualityprogressiveJPEGerrorMgr: function(argCount) {
+        this.vm.warnOnce("JPEGReadWritePlugin2: writing not implemented yet");
+        return false;
+    },
+    jpeg2_readImageFromBytes: function(bytes, thenDo, errorDo) {
+        var blob = new Blob([bytes], {type: "image/jpeg"}),
+            image = new Image();
+        image.onload = function() {
+            thenDo(image);
+        };
+        image.onerror = function() {
+            console.warn("could not render JPEG");
+            errorDo();
+        };
+        image.src = (window.URL || window.webkitURL).createObjectURL(blob);
+    },
+    jpeg2_getPixelsFromImage: function(image) {
+        var canvas = document.createElement("canvas"),
+            context = canvas.getContext("2d");
+        canvas.width = image.width;
+        canvas.height = image.height;
+        context.drawImage(image, 0, 0);
+        return context.getImageData(0, 0, image.width, image.height);
+    },
+    jpeg2_copyPixelsToForm32: function(image, formBits) {
+        var pixels = image.data;
+        for (var i = 0; i < formBits.length; i++) {
+            var r = pixels[i*4 + 0],
+                g = pixels[i*4 + 1],
+                b = pixels[i*4 + 2];
+            formBits[i] = 0xFF000000 | (r << 16) | (g << 8) | b;
+        }
+    },
+    jpeg2_copyPixelsToForm16: function(image, formBits) {
+        var width = image.width,
+            height = image.height,
+            pixels = image.data;
+        for (var y = 0; y < height; y++)    
+            for (var x = 0; x < width; x += 2) {
+                var i = y * height + x,
+                    r1 = pixels[i*4 + 0] >> 3,
+                    g1 = pixels[i*4 + 1] >> 3,
+                    b1 = pixels[i*4 + 2] >> 3,
+                    r2 = pixels[i*4 + 4] >> 3,
+                    g2 = pixels[i*4 + 5] >> 3,
+                    b2 = pixels[i*4 + 6] >> 3,
+                    formPix = (r1 << 10) | (g1 << 5) | b1;
+                if (formPix === 0) formPix = 1;
+                formPix = (formPix << 16) | (r2 << 10) | (g2 << 5) | b2;
+                if ((formPix & 65535) === 0) formPix = formPix | 1;
+                formBits[i >> 1] = formPix;
+            }
+    },
+    jpeg2_ditherPixelsToForm16: function(image, formBits) {
+        var width = image.width >> 1,   // 2 pix a time
+            height = image.height,
+            pixels = image.data,
+            ditherMatrix1 = [2, 0, 14, 12, 1, 3, 13, 15],
+			ditherMatrix2 = [10, 8, 6, 4, 9, 11, 5, 7];
+        for (var y = 0; y < height; y++)    
+            for (var x = 0; x < width; x++) {
+                var i = (y * height + 2 * x) << 2,
+                    r1 = pixels[i + 0],
+                    g1 = pixels[i + 1],
+                    b1 = pixels[i + 2],
+                    r2 = pixels[i + 4],
+                    g2 = pixels[i + 5],
+                    b2 = pixels[i + 6];
+                /* Do 4x4 ordered dithering. Taken from Form>>orderedDither32To16 */
+                var v = ((y & 3) << 1) | (x & 1),
+                    dmv1 = ditherMatrix1[v],
+                    dmv2 = ditherMatrix2[v],
+                    di, dmi, dmo;
+                di = (r1 * 496) >> 8, dmi = di & 15, dmo = di >> 4;
+                if (dmv1 < dmi) { r1 = dmo+1; } else { r1 = dmo; };
+                di = (g1 * 496) >> 8; dmi = di & 15; dmo = di >> 4;
+                if (dmv1 < dmi) { g1 = dmo+1; } else { g1 = dmo; };
+                di = (b1 * 496) >> 8; dmi = di & 15; dmo = di >> 4;
+                if (dmv1 < dmi) { b1 = dmo+1; } else { b1 = dmo; };
+                
+                di = (r2 * 496) >> 8; dmi = di & 15; dmo = di >> 4;
+                if (dmv2 < dmi) { r2 = dmo+1; } else { r2 = dmo; };
+                di = (g2 * 496) >> 8; dmi = di & 15; dmo = di >> 4;
+                if (dmv2 < dmi) { g2 = dmo+1; } else { g2 = dmo; };
+                di = (b2 * 496) >> 8; dmi = di & 15; dmo = di >> 4;
+                if (dmv2 < dmi) { b2 = dmo+1; } else { b2 = dmo; };
+
+                var formPix = (r1 << 10) | (g1 << 5) | b1;
+                if (formPix === 0) formPix = 1;
+                formPix = (formPix << 16) | (r2 << 10) | (g2 << 5) | b2;
+                if ((formPix & 65535) === 0) formPix = formPix | 1;
+                formBits[i >> 3] = formPix;
+            }
+    },
+},
 'ScratchPluginAdditions', {
     // methods not handled by generated ScratchPlugin
     scratch_primitiveOpenURL: function(argCount) {
         var url = this.stackNonInteger(0).bytesAsString();
         if (url == "") return false;
+        if (/^\/SqueakJS\//.test(url)) {
+            url = url.slice(10);     // remove file root
+            var path = Squeak.splitFilePath(url),
+                template = localStorage["squeak-template:" + path.dirname];
+            if (template) url = JSON.parse(template).url + "/" + path.basename;
+        }
         window.open(url, "_blank"); // likely blocked as pop-up, but what can we do?
         return this.popNIfOK(argCount);
     },
@@ -5748,7 +5927,7 @@ Object.subclass('Squeak.InterpreterProxy',
         this.successFlag = false;
         return 0;
     },
-	stackObjectValue: function(n) {
+    stackObjectValue: function(n) {
         var obj = this.vm.stackValue(n);
         if (typeof obj !== "number") return obj;
         this.successFlag = false;
@@ -5867,6 +6046,12 @@ Object.subclass('Squeak.InterpreterProxy',
 	    this.successFlag = false;
 	    return 0;
     },
+    fetchLong32ofObject: function(n, obj) {
+        return obj.words[n];
+    },
+    fetchFloatofObject: function(n, obj) {
+        return this.floatValueOf(obj.pointers[n]);
+    },
     storeIntegerofObjectwithValue: function(n, obj, value) {
         if (typeof value === "number")
             obj.pointers[n] = value;
@@ -5940,18 +6125,27 @@ Object.subclass('Squeak.InterpreterProxy',
 
 Object.extend(Squeak, {
     fsck: function(dir) {
-        if (typeof indexedDB !== "undefined") return; // only checking localStorage
         dir = dir || "";
         var entries = Squeak.dirList(dir);
         for (var name in entries) {
             var path = dir + "/" + name,
                 isDir = entries[name][3];
-            if (isDir) Squeak.fsck(path);
-            else {
-                var exists = "squeak-file:" + path in localStorage || "squeak-file.lz:" + path in localStorage;
-                if (!exists) {
-                    console.log("Deleting stale file entry " + path);
-                    Squeak.fileDelete(path, true);
+            if (isDir) {
+                var exists = "squeak:" + path in localStorage;
+                if (exists) Squeak.fsck(path);
+                else {
+                    console.log("Deleting stale directory " + path);
+                    Squeak.dirDelete(path);
+                }
+            } else {
+                if (typeof indexedDB !== "undefined") {
+                    // need to figure out a way to check file existence in indexedDB without loading the whole file
+                } else {
+                    var exists = "squeak-file:" + path in localStorage || "squeak-file.lz:" + path in localStorage;
+                    if (!exists) {
+                        console.log("Deleting stale file entry " + path);
+                        Squeak.fileDelete(path, true);
+                    }
                 }
             }
         }
@@ -6073,14 +6267,16 @@ Object.extend(Squeak, {
             var getReq = fileStore.get(path.fullname);
             getReq.onerror = function(e) { errorDo(this.errorCode) };
             getReq.onsuccess = function(e) {
-                if (this.result == undefined) {
-                    // fall back on fake db, may be file is there
-                    var fakeReq = Squeak.dbFake().get(path.fullname);
-                    fakeReq.onerror = function(e) { errorDo("file not found: " + path.fullname) };
-                    fakeReq.onsuccess = function(e) { thenDo(this.result); }
-                    return;
-                }
-                thenDo(this.result);
+                if (this.result !== undefined) return thenDo(this.result);
+                // might be a template
+                Squeak.fetchTemplateFile(path.fullname,
+                    function gotTemplate(template) {thenDo(template)},
+                    function noTemplate() {
+                        // fall back on fake db, may be file is there
+                        var fakeReq = Squeak.dbFake().get(path.fullname);
+                        fakeReq.onerror = function(e) { errorDo("file not found: " + path.fullname) };
+                        fakeReq.onsuccess = function(e) { thenDo(this.result); }
+                    });
             };
         });
     },
@@ -6151,8 +6347,9 @@ Object.extend(Squeak, {
         var entry = directory[path.basename]; if (!entry || entry[3]) return false; // not found or is a directory
         return true;
     },
-    dirCreate: function(dirpath) {
+    dirCreate: function(dirpath, withParents) {
         var path = this.splitFilePath(dirpath); if (!path.basename) return false;
+        if (withParents && !localStorage["squeak:" + path.dirname]) Squeak.dirCreate(path.dirname, true);
         var directory = this.dirList(path.dirname); if (!directory) return false;
         if (directory[path.basename]) return false;
         var now = this.totalSeconds(),
@@ -6176,11 +6373,26 @@ Object.extend(Squeak, {
         delete localStorage["squeak:" + path.fullname];
         return true;
     },
-    dirList: function(dirpath) {
+    dirList: function(dirpath, includeTemplates) {
         // return directory entries or null
         var path = this.splitFilePath(dirpath),
-            entries = localStorage["squeak:" + path.fullname];
-        if (entries) return JSON.parse(entries);
+            localEntries = localStorage["squeak:" + path.fullname],
+            template = includeTemplates && localStorage["squeak-template:" + path.fullname];
+        if (localEntries || template) {
+            var dir = {};
+            function addEntries(entries) {
+                for (var key in entries) {
+                    if (entries.hasOwnProperty(key)) {
+                        var entry = entries[key];
+                        dir[entry[0]] = entry;
+                    }
+                }
+            }
+            // local entries override templates
+            if (template) addEntries(JSON.parse(template).entries);
+            if (localEntries) addEntries(JSON.parse(localEntries));
+            return dir;
+        }
         if (path.fullname == "/") return {};
         return null;
     },
@@ -6222,6 +6434,75 @@ Object.extend(Squeak, {
         // close the files held open in memory
         Squeak.flushAllFiles();
         delete window.SqueakFiles;
+    },
+    fetchTemplateDir: function(path, url) {
+        // Called on app startup. Fetch url/sqindex.json and
+        // cache all subdirectory entries in localStorage.
+        // File contents is only fetched on demand
+        path = Squeak.splitFilePath(path).fullname;
+        function ensureTemplateParent(template) {
+            var path = Squeak.splitFilePath(template);
+            if (path.dirname !== "/") ensureTemplateParent(path.dirname);
+            var template = JSON.parse(localStorage["squeak-template:" + path.dirname] || '{"entries": {}}');
+            if (!template.entries[path.basename]) {
+                var now = Squeak.totalSeconds();
+                template.entries[path.basename] = [path.basename, now, now, true, 0];
+                localStorage["squeak-template:" + path.dirname] = JSON.stringify(template);
+            }
+        }
+        function checkSubTemplates(path, url) {
+            var template = JSON.parse(localStorage["squeak-template:" + path]);
+            template.entries.forEach(function(entry) {
+                if (entry[3]) Squeak.fetchTemplateDir(path + "/" + entry[0], url + "/" + entry[0]);
+            });
+        }
+        if (localStorage["squeak-template:" + path]) {
+            checkSubTemplates(path, url);
+        } else  {
+            var index = url + "/sqindex.json";
+            var rq = new XMLHttpRequest();
+            rq.open('GET', index, true);
+            rq.onload = function(e) {
+                if (rq.status == 200) {
+                    console.log("adding template " + path);
+                    ensureTemplateParent(path);
+                    localStorage["squeak-template:" + path] = '{"url": ' + JSON.stringify(url) + ', "entries": ' + rq.response + '}';
+                    checkSubTemplates(path, url);
+                }
+                else rq.onerror(rq.statusText);
+            };
+            rq.onerror = function(e) {
+                console.log("cannot load template index " + index);
+            }
+            rq.send();
+        }
+    },
+    fetchTemplateFile: function(path, ifFound, ifNotFound) {
+        path = Squeak.splitFilePath(path);
+        var template = localStorage["squeak-template:" + path.dirname];
+        if (!template) return ifNotFound();
+        var url = JSON.parse(template).url;
+        if (!url) throw Error("template without url " + path);
+        url += "/" + path.basename;
+        var rq = new XMLHttpRequest();
+        rq.open("get", url, true);
+        rq.responseType = "arraybuffer";
+        rq.timeout = 30000;
+        rq.onreadystatechange = function() {
+            if (this.readyState != this.DONE) return;
+            if (this.status == 200) {
+                var buffer = this.response;
+                console.log("Got " + buffer.byteLength + " bytes from " + url);
+                Squeak.dirCreate(path.dirname, true);
+                Squeak.filePut(path.fullname, buffer);
+                ifFound(buffer);
+            } else {
+                alert("Download failed (" + this.status + ") " + url);
+                ifNotFound();
+            }
+        }
+        console.log("Fetching " + url);
+        rq.send();
     },
     totalSeconds: function() {
         // seconds since 1901-01-01, local time

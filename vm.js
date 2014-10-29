@@ -4099,16 +4099,17 @@ Object.subclass('Squeak.Primitives',
         var value;
         switch (attr) {
             case 0: value = this.filenameToSqueak(Squeak.vmPath + Squeak.vmFile); break;
-            case 1: value = null; break; // 1.x images want document here
-            case 2: value = null; break; // later images want document here
+            case 1: value = this.display.documentName || null; break; // 1.x images want document here
+            case 2: value = this.display.documentName || null; break; // later images want document here
             case 1001: value = Squeak.platformName; break;
             case 1002: value = Squeak.osVersion; break;
             case 1003: value = Squeak.platformSubtype; break;
             case 1004: value = Squeak.vmVersion; break;
             case 1005: value = Squeak.windowSystem; break;
             case 1006: value = Squeak.vmBuild; break;
-            case 1007: value = Squeak.platformName; break;
-            case 1009: value = Squeak.platformName; break;
+            case 1007: value = Squeak.vmVersion; break; // Interpreter class
+            // case 1008: Cogit class
+            case 1009: value = Squeak.vmVersion; break; // Platform source version
             default: return false;
         }
         this.vm.popNandPush(argCount+1, this.makeStObject(value));

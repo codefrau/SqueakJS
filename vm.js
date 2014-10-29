@@ -2612,10 +2612,13 @@ Object.subclass('Squeak.Primitives',
     initModules: function() {
         this.loadedModules = {};
         this.builtinModules = {
-            FilePlugin:             this.findPluginFunctions("", "primitive(File|Directory)"),
+            FilePlugin:             this.findPluginFunctions("", "primitive(Disable)?(File|Directory)"),
             SoundPlugin:            this.findPluginFunctions("snd_"),
             B2DPlugin:              this.findPluginFunctions("ge"),
             JPEGReadWriter2Plugin:  this.findPluginFunctions("jpeg2_"),
+            SecurityPlugin: {
+                primitiveDisableImageWrite: this.fakePrimitive.bind(this, "SecurityPlugin.primitiveDisableImageWrite", 0), 
+            },
         };
         this.patchModules = {
             ScratchPlugin:          this.findPluginFunctions("scratch_"),
@@ -4704,6 +4707,9 @@ Object.subclass('Squeak.Primitives',
     primitiveFileTruncate: function(argCount) {
         console.warn("Not yet implemented: primitiveFileTruncate");
         return false;
+    },
+    primitiveDisableFileAccess: function(argCount) {
+        return this.fakePrimitive("FilePlugin.primitiveDisableFileAccess", 0, argCount);
     },
     primitiveFileWrite: function(argCount) {
         var count = this.stackInteger(0),

@@ -116,8 +116,6 @@ module("SqueakJS").requires("users.bert.SqueakJS.vm").toRun(function() {
 //////////////////////////////////////////////////////////////////////////////
 
 function setupFullscreen(display, canvas, options) {
-    if (options.fullscreen) return function alwaysFullscreen(){};
-    
     // Fullscreen can only be enabled in an event handler. So we check the
     // fullscreen flag on every mouse down/up and keyboard event.        
 

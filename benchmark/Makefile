@@ -11,9 +11,11 @@ EXTRA=
 
 $(MANIFEST): Makefile $(TARGET)
 	@rm -f $@
-	@echo "CACHE MANIFEST" > $@
-	@stat -f '# %Sm' `ls -t $(FILES) | head -n1` | tee -a $@
+	@echo 'CACHE MANIFEST' > $@
+	@stat -f '# %Sm' `ls -t Makefile $(FILES) | head -n1` | tee -a $@
 	@for f in $(FILES) $(EXTRA); do echo $$f >> $@ ; done
+	@echo 'NETWORK:' >> $@
+	@echo '*' >> $@
 
 $(TARGET): $(FILES)
 	@mkdir -pv $@ $@/../lib $@/../plugins

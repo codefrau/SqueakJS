@@ -8,18 +8,14 @@ MANIFEST=$(TARGET)/offline.appcache
 FILES=../squeak.js ../vm.js ../jit.js ../plugins/*.js index.html scratch.css scratch.js scratch.png \
 	../lib/lz-string.js ../lib/addtohomescreen.css ../lib/addtohomescreen.js ../lib/gh-fork-ribbon.css
 EXTRA=http://freudenbergs.de/bert/squeakjs/scratch/Scratch.image
-NETWORK=http://freudenbergs.de/bert/squeakjs/scratch/Projects \
-	http://freudenbergs.de/bert/squeakjs/scratch/Media \
-	http://freudenbergs.de/bert/squeakjs/scratch/Help \
-	http://freudenbergs.de/bert/squeakjs/scratch/locale
 
 $(MANIFEST): Makefile $(TARGET)
 	@rm -f $@
-	@echo "CACHE MANIFEST" > $@
+	@echo 'CACHE MANIFEST' > $@
 	@stat -f '# %Sm' `ls -t Makefile $(FILES) | head -n1` | tee -a $@
 	@for f in $(FILES) $(EXTRA); do echo $$f >> $@ ; done
-	@echo NETWORK: >> $@
-	@for f in $(NETWORK); do echo $$f >> $@ ; done
+	@echo 'NETWORK:' >> $@
+	@echo '*' >> $@
 
 $(TARGET): $(FILES)
 	@mkdir -pv $@ $@/../lib $@/../plugins

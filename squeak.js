@@ -692,7 +692,7 @@ SqueakJS.runImage = function(buffer, name, display, options) {
 };
 
 function processOptions(options) {
-    var search = decodeURIComponent(window.location.search).slice(1),
+    var search = decodeURIComponent(window.location.hash).slice(1),
         args = search && search.split("&");
     if (args) for (var i = 0; i < args.length; i++) {
         var keyAndVal = args[i].split("="),

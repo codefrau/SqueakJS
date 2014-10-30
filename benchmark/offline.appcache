@@ -1,5 +1,5 @@
 CACHE MANIFEST
-# Oct 29 00:28:35 2014
+# Oct 30 08:07:36 2014
 ../squeak.js
 ../vm.js
 ../jit.js
@@ -24,3 +24,5 @@ benchmark.css
 benchmark.js
 benchmark.image
 ../lib/lz-string.js
+NETWORK:
+*

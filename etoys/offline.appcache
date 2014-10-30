@@ -1,5 +1,5 @@
 CACHE MANIFEST
-# Oct 29 00:28:35 2014
+# Oct 30 08:02:23 2014
 ../squeak.js
 ../vm.js
 ../jit.js
@@ -29,6 +29,4 @@ etoys.png
 ../lib/gh-fork-ribbon.css
 http://freudenbergs.de/bert/squeakjs/etoys.image
 NETWORK:
-http://freudenbergs.de/bert/squeakjs/Etoys/ExampleEtoys
-http://freudenbergs.de/bert/squeakjs/Etoys/fonts
-http://freudenbergs.de/bert/squeakjs/Etoys/locale
+*

@@ -743,7 +743,11 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
             if (isImage) {
                 isImage = false;
                 Squeak.fileGet(options.root + file.name, function(data) {
-                    imageData = data; 
+                    imageData = data;
+                    getNextFile(whenAllDone);
+                }, function onError() {
+                    Squeak.fileDelete(options.root + file.name);
+                    files.unshift(file);
                     getNextFile(whenAllDone);
                 });
             } else getNextFile(whenAllDone);

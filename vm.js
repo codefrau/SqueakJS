@@ -6491,7 +6491,7 @@ Object.extend(Squeak, {
         var template = localStorage["squeak-template:" + path.dirname];
         if (!template) return ifNotFound();
         var url = JSON.parse(template).url;
-        if (!url) throw Error("template without url " + path);
+        if (!url) return ifNotFound();
         url += "/" + path.basename;
         var rq = new XMLHttpRequest();
         rq.open("get", url, true);

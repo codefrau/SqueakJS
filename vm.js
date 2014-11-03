@@ -6281,6 +6281,8 @@ Object.extend(Squeak, {
                 Squeak.fetchTemplateFile(path.fullname,
                     function gotTemplate(template) {thenDo(template)},
                     function noTemplate() {
+                        // if no indexedDB then we have checked fake db already
+                        if (typeof indexedDB == "undefined") return errorDo("file not found: " + path.fullname);
                         // fall back on fake db, may be file is there
                         var fakeReq = Squeak.dbFake().get(path.fullname);
                         fakeReq.onerror = function(e) { errorDo("file not found: " + path.fullname) };

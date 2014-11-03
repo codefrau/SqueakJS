@@ -14,10 +14,14 @@ initializeCTranslationDictionary
 	#+				#generatePlus:on:indent:
 	#-				#generateMinus:on:indent:
 	#negated		#generateNegated:on:indent:
-	#abs			#generateAbs:on:indent:
-	#sqrt			#generateSqrt:on:indent:
-	#sin			#generateSin:on:indent:
-	#cos			#generateCos:on:indent:
+	#abs			#generateMath:on:indent:
+	#sqrt			#generateMath:on:indent:
+	#sin			#generateMath:on:indent:
+	#cos			#generateMath:on:indent:
+	#tan			#generateMath:on:indent:
+	#atan			#generateMath:on:indent:
+	#exp			#generateMath:on:indent:
+	#log			#generateMath:on:indent:
 	#*				#generateTimes:on:indent:
 	#/				#generateDivide:on:indent:
 	#//				#generateDivide:on:indent:

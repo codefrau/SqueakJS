@@ -11,5 +11,6 @@
 		"isConstantZero" : "bf 10/6/2014 15:12",
 		"isEqualityTest" : "bf 10/6/2014 13:12",
 		"isInterpreterProxyConstant" : "bf 10/5/2014 16:59",
+		"isLeafOrFunc" : "bf 11/3/2014 13:22",
 		"isPlusOne" : "bf 10/4/2014 14:18",
 		"isTimesFour" : "bf 10/6/2014 14:41" } }

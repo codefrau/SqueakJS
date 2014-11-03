@@ -1,0 +1,3 @@
+*vmmakerjs
+isLeafOrFunc
+	^self isLeaf

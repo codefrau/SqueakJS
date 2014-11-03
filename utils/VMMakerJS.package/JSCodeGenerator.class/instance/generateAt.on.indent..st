@@ -9,7 +9,7 @@ generateAt: msgNode on: aStream indent: level
 		subtractOne := false.
 		indexNode := indexNode receiver.	"remove + 1"
 	].
-	complex := subtractOne and: [indexNode isLeaf not].
+	complex := subtractOne and: [indexNode isLeafOrFunc not].
 	self emitJSExpression: arrayNode on: aStream.
 	aStream nextPut: $[.
 	complex ifTrue: [aStream nextPut: $(].

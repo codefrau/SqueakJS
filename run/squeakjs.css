@@ -1,0 +1,29 @@
+body {
+    background-color: #eae6d1;
+    font-family: sans-serif;
+}
+canvas {
+    position: absolute;
+    background: #000;
+    display: none;
+}
+div#sqSpinner {
+    position: absolute;
+    margin: auto; top: 0; left: 0; bottom: 0; right: 0;
+    width: 100px;
+    height: 100px;
+    border-radius: 50px;
+    background: rgba(0, 0, 0, 0.3);
+    box-shadow: 0 0 5px 5px #F90;
+    display: none;
+    transform: rotate(30deg);
+}
+div#sqSpinner > div {
+    position: absolute;
+    top: 45px;
+    left: 5px;
+    width: 90px; 
+    height: 10px;
+    border-radius: 5px;
+    box-shadow: 0 0 5px 5px #F90;
+}

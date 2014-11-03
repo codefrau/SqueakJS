@@ -6307,7 +6307,8 @@ Object.extend(Squeak, {
         localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
         // put file contents (async)
         this.dbTransaction("readwrite", function(fileStore) {
-            fileStore.put(contents, path.fullname);
+            var putReq = fileStore.put(contents, path.fullname);
+            putReq.onerror = function(e) { debugger; console.error(e) };
         });
         return entry;
     },

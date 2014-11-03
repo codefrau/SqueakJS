@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html manifest="offline.appcache">
+<head>
+<meta charset="utf-8">
+<title>SqueakJS</title>
+<link rel="icon" type="image/png" href="squeakjs.png">
+<link rel="stylesheet" href="../lib/gh-fork-ribbon.css">
+<link rel="stylesheet" href="squeakjs.css">
+<script src="../squeak.js"></script>
+<script>
+    window.onhashchange = function() {
+        window.location.reload();
+    }
+    window.onload = function() {
+        // if we have a hash then we just run Squeak
+        if (location.hash) {
+            sqText.style.display = "none";
+            sqCanvas.style.display = "block";
+            SqueakJS.runSqueak("../demo/mini.image", sqCanvas, {
+                fullscreen: true,
+                spinner: sqSpinner,
+            });
+            return;
+        }
+        // otherwise, we generate the text to display
+        var links = document.getElementsByTagName("a");
+        for (var i = 0; i < links.length; i++) {
+            var link = links[i],
+                href = link.getAttribute("href");
+            if (href[0] === "#") {
+                link.innerHTML = href;
+                link.onclick = (function(href) {
+                    return function onclick() { window.location = href; }
+                })(href);
+            }
+        }
+    }
+</script>
+</head>
+<body>
+    <div id="sqText">
+        <h1>SqueakJS</h1>
+        <div class="github-fork-ribbon-wrapper right">
+            <div class="github-fork-ribbon">
+                <a href="https://github.com/bertfreudenberg/SqueakJS" target="_blank">Fork me on GitHub</a>
+            </div>
+        </div>
+        SqueakJS is an HTML5 runtime engine for <a href="http://squeak.org/">Squeak</a> Smalltalk written in pure JavaScript by Bert Freudenberg.
+        <h3>Run Squeak images from your local machine</h3>
+        Use drag-and-drop to run a Squeak image from your machine: drop the image (perhaps together with a changes and sources file) into this page.
+        <h3>Run Squeak images from the internet</h3>
+        Construct a URL linking to this page and pass the image and options.
+        <em>Beware that the server needs to allow script access via <a href="http://enable-cors.org/" target="_blank">CORS</a>.</em>
+        <br>Here are a few examples with images I copied to my own web server:
+        <ul>
+        <li>Squeak 1.13 (1996) <a href="#url=http://freudenbergs.de/bert/squeakjs&files=[Squeak1.13u.image,Squeak1.13u.changes,SqueakV1.sources]&swapButtons=true">link</a></li>
+        <li>Squeak 2.8 (2000) <a href="#url=http://freudenbergs.de/bert/squeakjs&files=[Squeak2.8.image,Squeak2.8.changes,SqueakV2.sources]&swapButtons=true">link</a></li>
+        <li>Squeak 3.8 (2006) <a href="#url=http://freudenbergs.de/bert/squeakjs&files=[Squeak3.8.1-6747full.image,Squeak3.8.1-6747full.changes,SqueakV3.sources]&swapButtons=true">link</a></li>
+        <li>Squeak 3.9 (2008) <a href="#url=http://freudenbergs.de/bert/squeakjs&files=[Squeak3.9.1-final-7075.image,Squeak3.9.1-final-7075.changes,SqueakV39.sources]&swapButtons=true">link</a></li>
+        <li>Squeak 4.5 (2014) <a href="#url=http://freudenbergs.de/bert/squeakjs&files=[Squeak4.5-13680.image,Squeak4.5-13680.changes,SqueakV41.sources]">link</a></li>
+        </ul>
+        <h3>Use SqueakJS on your own website</h3>
+        You can <a href="https://github.com/bertfreudenberg/SqueakJS">download SqueakJS</a> from GitHub and use it on your own page like this:
+        <pre>
+        &lt;html&gt;
+            &lt;head&gt;
+                &lt;script src=&quot;squeak.js&quot;&gt;&lt;/script&gt;
+                &lt;script&gt;
+                    window.onload = function() {
+                        SqueakJS.runSqueak(&quot;my.image&quot;, sqCanvas, {option: &quot;value&quot;});
+                    }
+                &lt;/script&gt;
+            &lt;/head&gt;
+            &lt;body&gt;
+                &lt;canvas id=&quot;sqCanvas&quot;&gt;&lt;/canvas&gt;
+            &lt;/body&gt;
+        &lt;/html&gt;
+        </pre>
+        For more options take a look at the source code of this page, or the demo pages included in the GitHb repo
+        (<a href="http://bertfreudenberg.github.io/SqueakJS/etoys/">Etoys</a>, 
+        <a href="http://bertfreudenberg.github.io/SqueakJS/scratch/">Scratch</a>, etc).
+    </div>
+    <canvas id="sqCanvas"></canvas>
+    <div id="sqSpinner"><div></div></div>
+</body>
+</html>

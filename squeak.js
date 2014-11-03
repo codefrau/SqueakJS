@@ -696,7 +696,10 @@ function processOptions(options) {
         var keyAndVal = args[i].split("="),
             key = keyAndVal[0],
             val = keyAndVal[1];
-        try { val = JSON.parse(val); } catch(e) {}; // if not JSON use string itself
+        try { val = JSON.parse(val); } catch(e) {
+            if (val[0] === "[") val = val.slice(1,-1).split(","); // handle string arrays
+            // if not JSON use string itself
+         };
         options[key] = val;
     }
     var root = Squeak.splitFilePath(options.root || "/").fullname;

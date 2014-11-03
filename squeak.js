@@ -707,6 +707,8 @@ function processOptions(options) {
     if (!/\/$/.test(root)) root += "/";
     options.root = root;
     if (!options.appName) options.appName = "SqueakJS";
+    if (options.url && options.files && !options.image)
+        options.image = options.url + "/" + options.files[0];
     if (options.templates) {
         if (options.templates.constructor === Array) {
             var templates = {};

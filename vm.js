@@ -6189,7 +6189,7 @@ Object.extend(Squeak, {
                 total++;
                 if (files[path]) orphaned.push(path); // not marked visited
             }
-            if (orphaned.length > 0 && confirm("Found " + orphaned.length + " inaccessible files (of " + total + " total).\nDelete to recover disk space?")) {
+            if (orphaned.length > 0) {
                 for (var i = 0; i < orphaned.length; i++) {
                     console.log("Deleting orphaned file " + orphaned[i]);
                     delete localStorage["squeak-file:" + orphaned[i]];

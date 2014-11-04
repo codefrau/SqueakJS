@@ -6133,28 +6133,74 @@ Object.subclass('Squeak.InterpreterProxy',
 });
 
 Object.extend(Squeak, {
-    fsck: function(dir) {
+    fsck: function(dir, files) {
         dir = dir || "";
+        if (!files) {
+            // find existing files
+            files = {};
+            for (var key in localStorage) {
+                var match = key.match(/squeak-file(\.lz)?:(.*)$/);
+                if (match) {files[match[2]] = true};
+            }
+            if (typeof indexedDB !== "undefined") {
+                return this.dbTransaction("readonly", function(fileStore) {
+                    var cursorReq = fileStore.openCursor();
+                    cursorReq.onsuccess = function(e) {
+                        var cursor = e.target.result;
+                        if (cursor) {
+                            files[cursor.key] = true;
+                            cursor.continue();
+                        } else { // done
+                            Squeak.fsck(dir, files);
+                        }
+                    }
+                    cursorReq.onerror = function(e) {
+                        console.error("fsck failed");
+                    }
+                });
+            }
+        }
+        // check directories
         var entries = Squeak.dirList(dir);
         for (var name in entries) {
             var path = dir + "/" + name,
                 isDir = entries[name][3];
             if (isDir) {
                 var exists = "squeak:" + path in localStorage;
-                if (exists) Squeak.fsck(path);
+                if (exists) Squeak.fsck(path, files);
                 else {
                     console.log("Deleting stale directory " + path);
                     Squeak.dirDelete(path);
                 }
             } else {
-                if (typeof indexedDB !== "undefined") {
-                    // need to figure out a way to check file existence in indexedDB without loading the whole file
+                if (!files[path]) {
+                    console.log("Deleting stale file entry " + path);
+                    Squeak.fileDelete(path, true);
                 } else {
-                    var exists = "squeak-file:" + path in localStorage || "squeak-file.lz:" + path in localStorage;
-                    if (!exists) {
-                        console.log("Deleting stale file entry " + path);
-                        Squeak.fileDelete(path, true);
-                    }
+                    files[path] = false; // mark as visited
+                }
+            }
+        }
+        // check orphaned files
+        if (dir === "") {
+            var orphaned = [],
+                total = 0;
+            for (var path in files) {
+                total++;
+                if (files[path]) orphaned.push(path); // not marked visited
+            }
+            if (orphaned.length > 0 && confirm("Found " + orphaned.length + " inaccessible files (of " + total + " total).\nDelete to recover disk space?")) {
+                for (var i = 0; i < orphaned.length; i++) {
+                    console.log("Deleting orphaned file " + orphaned[i]);
+                    delete localStorage["squeak-file:" + orphaned[i]];
+                    delete localStorage["squeak-file.lz:" + orphaned[i]];
+                }
+                if (typeof indexedDB !== "undefined") {
+                    this.dbTransaction("readwrite", function(fileStore) {
+                        for (var i = 0; i < orphaned.length; i++) {
+                            fileStore.delete(orphaned[i]);
+                        };
+                    });
                 }
             }
         }
@@ -6324,7 +6370,7 @@ Object.extend(Squeak, {
         if (entryOnly) return true;
         // delete file contents (async)
         this.dbTransaction("readwrite", function(fileStore) {
-            fileStore['delete'](path.fullname);    // workaround for ometa parser
+            fileStore.delete(path.fullname);
         });
         return true;
     },

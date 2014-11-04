@@ -8,19 +8,22 @@
 <link rel="stylesheet" href="squeakjs.css">
 <script src="../squeak.js"></script>
 <script>
+    function runSqueak(imageName) {
+        sqText.style.display = "none";
+        sqCanvas.style.display = "block";
+        SqueakJS.runSqueak(imageName, sqCanvas,{
+            fullscreen: true,
+            spinner: sqSpinner,
+            appName: imageName && imageName.replace(/\.image$/, ""),
+        });
+    }
     window.onhashchange = function() {
         window.location.reload();
     }
     window.onload = function() {
         // if we have a hash then we just run Squeak
         if (location.hash) {
-            sqText.style.display = "none";
-            sqCanvas.style.display = "block";
-            SqueakJS.runSqueak("../demo/mini.image", sqCanvas, {
-                fullscreen: true,
-                spinner: sqSpinner,
-            });
-            return;
+            return runSqueak();
         }
         // otherwise, we generate the text to display
         var links = document.getElementsByTagName("a");
@@ -34,6 +37,36 @@
                 })(href);
             }
         }
+        // also, enable drag-and-drop
+        document.body.ondragover = function(evt) {
+            evt.stopPropagation();
+            evt.preventDefault();
+            evt.dataTransfer.dropEffect = 'copy';
+            return false;
+        };
+        document.body.ondrop = function(evt) {
+            evt.stopPropagation();
+            evt.preventDefault();
+            var files = [].slice.call(evt.dataTransfer.files),
+                todo = files.length,
+                imageName = null;
+            files.forEach(function(f) {
+                var reader = new FileReader();
+                reader.onload = function () {
+                    var buffer = this.result;
+                    console.log("Storing " + f.name + " (" + buffer.byteLength + " bytes)");
+                    if (/.*image$/.test(f.name)) imageName = f.name;
+                    Squeak.filePut(f.name, buffer, function success() {
+                        if (--todo > 0) return;
+                        if (!imageName) alert("SqueakJS: stored " + files.length + " files");
+                        else runSqueak(imageName);
+                    });
+                }
+                reader.onerror = function() { alert("Failed to read " + f.name); }
+                reader.readAsArrayBuffer(f);
+            });
+            return false;
+        };
     }
 </script>
 </head>
@@ -46,8 +79,10 @@
             </div>
         </div>
         SqueakJS is an HTML5 runtime engine for <a href="http://squeak.org/">Squeak</a> Smalltalk written in pure JavaScript by Bert Freudenberg.
+        
         <h3>Run Squeak images from your local machine</h3>
         Use drag-and-drop to run a Squeak image from your machine: drop the image (perhaps together with a changes and sources file) into this page.
+
         <h3>Run Squeak images from the internet</h3>
         Construct a URL linking to this page and pass the image and options.
         <em>Beware that the server needs to allow script access via <a href="http://enable-cors.org/" target="_blank">CORS</a>.</em>
@@ -59,6 +94,7 @@
         <li>Squeak 3.9 (2008) <a href="#url=http://freudenbergs.de/bert/squeakjs&files=[Squeak3.9.1-final-7075.image,Squeak3.9.1-final-7075.changes,SqueakV39.sources]&swapButtons=true">link</a></li>
         <li>Squeak 4.5 (2014) <a href="#url=http://freudenbergs.de/bert/squeakjs&files=[Squeak4.5-13680.image,Squeak4.5-13680.changes,SqueakV41.sources]">link</a></li>
         </ul>
+
         <h3>Use SqueakJS on your own website</h3>
         You can <a href="https://github.com/bertfreudenberg/SqueakJS">download SqueakJS</a> from GitHub and use it on your own page like this:
         <pre>

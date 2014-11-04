@@ -706,9 +706,10 @@ function processOptions(options) {
     Squeak.dirCreate(root, true);
     if (!/\/$/.test(root)) root += "/";
     options.root = root;
-    if (!options.appName) options.appName = "SqueakJS";
     if (options.url && options.files && !options.image)
         options.image = options.url + "/" + options.files[0];
+    if (!options.appName) options.appName = options.image ? 
+        options.image.replace(/.*\//, "").replace(/\.image$/, "") : "SqueakJS";
     if (options.templates) {
         if (options.templates.constructor === Array) {
             var templates = {};

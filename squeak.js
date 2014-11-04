@@ -735,20 +735,18 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
         baseUrl = imageUrl.replace(/[^\/]*$/, ""),
         files = [{url: imageUrl, name: imageName}];
     if (options.files) {
-        options.files.forEach(function(f) { files.push({url: baseUrl + f, name: f}); });
+        options.files.forEach(function(f) { if (f !== imageName) files.push({url: baseUrl + f, name: f}); });
     }
     if (options.document) {
         var docName = Squeak.splitFilePath(options.document).basename;
         files.push({url: options.document, name: docName});
         display.documentName = options.root + docName;
     }
-    var isImage = true;
     function getNextFile(whenAllDone) {
         if (files.length === 0) return whenAllDone(imageData);
         var file = files.shift();
         if (Squeak.fileExists(options.root + file.name)) {
-            if (isImage) {
-                isImage = false;
+            if (file.name == imageName) {
                 Squeak.fileGet(options.root + file.name, function(data) {
                     imageData = data;
                     getNextFile(whenAllDone);
@@ -769,9 +767,10 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
         }
         rq.onload = function(e) {
             if (rq.status == 200) {
-                if (isImage) {isImage = false; imageData = rq.response;}
-                else Squeak.filePut(options.root + file.name, rq.response);
-                return getNextFile(whenAllDone);
+                if (file.name == imageName) {imageData = rq.response;}
+                Squeak.filePut(options.root + file.name, rq.response, function() {
+                    getNextFile(whenAllDone);
+                });
             }
             else rq.onerror(rq.statusText);
         };

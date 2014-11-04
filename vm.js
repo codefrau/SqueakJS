@@ -6218,6 +6218,8 @@ Object.extend(Squeak, {
             var trans = SqueakDB.transaction("files", mode),
                 fileStore = trans.objectStore("files");
             trans.oncomplete = function(e) { if (completionFunc) completionFunc(); }
+            trans.onerror = function(e) { console.error("transaction error:" + e.target.error.name); }
+            trans.onabort = function(e) { console.error("transaction aborted: " + e.target.error.name); }
             transactionFunc(fileStore);
         };
 
@@ -6231,6 +6233,9 @@ Object.extend(Squeak, {
             SqueakDB.onversionchange = function(e) {
                 delete window.SqueakDB;
                 this.close();
+            };
+            SqueakDB.onerror = function(e) {
+                console.log("Error accessing database: " + e.target.errorCode);
             };
             startTransaction();
         };

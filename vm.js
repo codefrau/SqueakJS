@@ -6205,15 +6205,19 @@ Object.extend(Squeak, {
             }
         }
     },
-    dbTransaction: function(mode, transactionFunc) {
+    dbTransaction: function(mode, transactionFunc, completionFunc) {
         // File contents is stored in the IndexedDB named "squeak" in object store "files"
         // and directory entries in localStorage with prefix "squeak:"
-        if (typeof indexedDB == "undefined")
-            return transactionFunc(this.dbFake());
+        if (typeof indexedDB == "undefined") {
+            transactionFunc(this.dbFake());
+            if (completionFunc) completionFunc();
+            return;
+        }
 
         var startTransaction = function() {
             var trans = SqueakDB.transaction("files", mode),
                 fileStore = trans.objectStore("files");
+            trans.oncomplete = function(e) { if (completionFunc) completionFunc(); }
             transactionFunc(fileStore);
         };
 
@@ -6337,7 +6341,7 @@ Object.extend(Squeak, {
             };
         });
     },
-    filePut: function(filepath, contents) {
+    filePut: function(filepath, contents, optSuccess) {
         // store file, return dir entry if successful
         var path = this.splitFilePath(filepath); if (!path.basename) return null;
         var directory = this.dirList(path.dirname); if (!directory) return null;
@@ -6354,10 +6358,13 @@ Object.extend(Squeak, {
         entry[4] = contents.byteLength || contents.length || 0;
         localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
         // put file contents (async)
-        this.dbTransaction("readwrite", function(fileStore) {
-            var putReq = fileStore.put(contents, path.fullname);
-            putReq.onerror = function(e) { debugger; console.error(e) };
-        });
+        this.dbTransaction("readwrite",
+            function(fileStore) {
+                fileStore.put(contents, path.fullname);
+            },
+            function transactionComplete() {
+                if (optSuccess) optSuccess();
+            });
         return entry;
     },
     fileDelete: function(filepath, entryOnly) {

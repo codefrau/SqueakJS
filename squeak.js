@@ -199,30 +199,31 @@ function setupSwapButtons(options) {
 }
 
 function setupDragAndDrop(display, options) {
-    document.body.addEventListener('dragover', function(evt) {
+    // do not use addEventListener, we want to replace any previous drop handler
+    document.body.ondragover = function(evt) {
         evt.stopPropagation();
         evt.preventDefault();
         evt.dataTransfer.dropEffect = 'copy';
         return false;
-    });
-    document.body.addEventListener('drop', function(evt) {
+    };
+    document.body.ondrop = function(evt) {
         evt.stopPropagation();
         evt.preventDefault();
         [].slice.call(evt.dataTransfer.files).forEach(function(f) {
             var reader = new FileReader();
             reader.onload = function () {
                 var buffer = this.result;
-                if (/.*image$/.test(f.name) && confirm("Run " + f.name + " now?\n(cancel to store as file)")) {
+                Squeak.filePut(f.name, buffer);
+                if (/.*image$/.test(f.name) && confirm("Run " + f.name + " now?\n(cancel to use as file)")) {
                     SqueakJS.appName = f.name.slice(0, -6);
                     SqueakJS.runImage(buffer, f.name, display, options);
                 } else {
-                    Squeak.filePut(f.name, buffer);
                 }
             };
             reader.readAsArrayBuffer(f);
         });
         return false;
-    });
+    };
 }
 
 function recordModifiers(evt, display) {

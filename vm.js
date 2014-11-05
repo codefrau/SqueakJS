@@ -6176,7 +6176,7 @@ Object.extend(Squeak, {
                 if (match) {files[match[2]] = true};
             }
             if (typeof indexedDB !== "undefined") {
-                return this.dbTransaction("readonly", function(fileStore) {
+                return this.dbTransaction("readonly", "fsck cursor", function(fileStore) {
                     var cursorReq = fileStore.openCursor();
                     cursorReq.onsuccess = function(e) {
                         var cursor = e.target.result;
@@ -6229,7 +6229,7 @@ Object.extend(Squeak, {
                     delete localStorage["squeak-file.lz:" + orphaned[i]];
                 }
                 if (typeof indexedDB !== "undefined") {
-                    this.dbTransaction("readwrite", function(fileStore) {
+                    this.dbTransaction("readwrite", "fsck delete", function(fileStore) {
                         for (var i = 0; i < orphaned.length; i++) {
                             fileStore.delete(orphaned[i]);
                         };
@@ -6238,7 +6238,7 @@ Object.extend(Squeak, {
             }
         }
     },
-    dbTransaction: function(mode, transactionFunc, completionFunc) {
+    dbTransaction: function(mode, description, transactionFunc, completionFunc) {
         // File contents is stored in the IndexedDB named "squeak" in object store "files"
         // and directory entries in localStorage with prefix "squeak:"
         if (typeof indexedDB == "undefined") {
@@ -6251,8 +6251,8 @@ Object.extend(Squeak, {
             var trans = SqueakDB.transaction("files", mode),
                 fileStore = trans.objectStore("files");
             trans.oncomplete = function(e) { if (completionFunc) completionFunc(); }
-            trans.onerror = function(e) { console.error("transaction error:" + e.target.error.name); }
-            trans.onabort = function(e) { console.error("transaction aborted: " + e.target.error.name); }
+            trans.onerror = function(e) { console.error("transaction error:" + e.target.error.name + " (" + description + ")"); }
+            trans.onabort = function(e) { console.error("transaction aborted: " + e.target.error.name + " (" + description + ")"); }
             transactionFunc(fileStore);
         };
 
@@ -6360,7 +6360,7 @@ Object.extend(Squeak, {
         if (!errorDo) errorDo = function(err) { console.log(err) };
         var path = this.splitFilePath(filepath);
         if (!path.basename) return errorDo("Invalid path: " + filepath);
-        this.dbTransaction("readonly", function(fileStore) {
+        this.dbTransaction("readonly", "get " + filepath, function(fileStore) {
             var getReq = fileStore.get(path.fullname);
             getReq.onerror = function(e) { errorDo(this.errorCode) };
             getReq.onsuccess = function(e) {
@@ -6396,7 +6396,7 @@ Object.extend(Squeak, {
         entry[4] = contents.byteLength || contents.length || 0;
         localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
         // put file contents (async)
-        this.dbTransaction("readwrite",
+        this.dbTransaction("readwrite", "put " + filepath,
             function(fileStore) {
                 fileStore.put(contents, path.fullname);
             },
@@ -6414,7 +6414,7 @@ Object.extend(Squeak, {
         localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
         if (entryOnly) return true;
         // delete file contents (async)
-        this.dbTransaction("readwrite", function(fileStore) {
+        this.dbTransaction("readwrite", "delete " + filepath, function(fileStore) {
             fileStore.delete(path.fullname);
         });
         return true;
@@ -6435,7 +6435,8 @@ Object.extend(Squeak, {
         // move file contents (async)
         this.fileGet(oldpath.fullname,
             function success(contents) {
-                this.dbTransaction("readwrite", function(fileStore) {
+                this.dbTransaction("readwrite", "rename " + oldpath.fullname + " to " + newpath.fullname, function(fileStore) {
+                    fileStore.delete(oldpath.fullname);
                     fileStore.put(contents, newpath.fullname);
                 });
             }.bind(this),

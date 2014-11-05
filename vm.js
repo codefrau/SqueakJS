@@ -5054,6 +5054,7 @@ Object.subclass('Squeak.Primitives',
         if (!state.form || state.form.obj !== formObj)
             state.form = this.loadForm(formObj);
         this.geSetupCanvas();
+        state.didRender = false;
         state.needsFlush = false;
         state.hasFill = false;
         state.hasStroke = false;
@@ -5084,25 +5085,30 @@ Object.subclass('Squeak.Primitives',
         canvas.height = form.height;
         canvas.style.visibility = this.b2d_debug ? "visible" : "hidden";
     },
+    geFlush: function() {
+        if (this.b2d_debug) console.log("-- flush");
+        var state = this.b2d_state;
+        // fill and stroke path
+        if (state.hasFill) {
+            state.context.closePath();
+            state.context.fill();
+            state.didRender = true;
+            if (this.b2d_debug) console.log("==> filling");
+        }
+        if (state.hasStroke) {
+            state.context.stroke();
+            state.didRender = true;
+            if (this.b2d_debug) console.log("==> stroking");
+        }
+        // if (this.b2d_debug) this.vm.breakNow("b2d_debug");
+        state.context.beginPath();
+        state.flushNeeded = false;
+    },
     geRender: function() {
         if (this.b2d_debug) console.log("-- render");
         var state = this.b2d_state;
-        if (state.flushNeeded) {
-            // fill and stroke path
-            if (state.hasFill) {
-                state.context.closePath();
-                state.context.fill();
-                if (this.b2d_debug) console.log("==> filling");
-            }
-            if (state.hasStroke) {
-                state.context.stroke();
-                if (this.b2d_debug) console.log("==> stroking");
-            }
-            state.context.beginPath();
-            state.flushNeeded = false;
-            this.geBlendOverForm();
-            // if (this.b2d_debug) this.vm.breakNow("b2d_debug");
-        }
+        if (state.flushNeeded) this.geFlush();
+        if (state.didRender) this.geBlendOverForm();
         return 0; // answer stop reason
     },
     geBlendOverForm: function() {
@@ -5495,7 +5501,34 @@ Object.subclass('Squeak.Primitives',
     },
     gePrimitiveAddCompressedShape: function(argCount) {
         if (this.b2d_debug) console.log("b2d: gePrimitiveAddCompressedShape");
-        this.vm.warnOnce("B2D: compressed shapes not implemented yet");
+        var points = this.stackNonInteger(6),
+            nSegments = this.stackInteger(5),
+            leftFills = this.stackNonInteger(4).wordsAsInt16Array(),
+            rightFills = this.stackNonInteger(3).wordsAsInt16Array(),
+            lineWidths = this.stackNonInteger(2).wordsAsInt16Array(),
+            lineFills = this.stackNonInteger(1).wordsAsInt16Array(),
+            fillIndexList = this.stackNonInteger(0).words;
+        if (!this.success) return false;
+        // fills and widths are ShortRunArrays
+        if (leftFills.length !== 2 || rightFills.length !== 2 || lineWidths.length !== 2 || lineFills.length !== 2 ||
+            leftFills[1] !== nSegments || rightFills[1] !== nSegments || lineWidths[1] !== nSegments || lineFills[1] !== nSegments ||
+            leftFills[0] !== 0) {
+            this.vm.warnOnce("B2D: complex compressed shapes not implemented yet");
+            debugger;
+        }
+        var fillIndex = rightFills[0] ? fillIndexList[rightFills[0] - 1] : 0,
+            borderIndex = lineFills[0] ? fillIndexList[lineFills[0] - 1] : 0,
+            borderWidth = lineWidths[0];
+        if (this.geSetStyle(fillIndex, borderIndex, borderWidth)) {
+            var p = this.gePointsFrom(points, nSegments * 3);
+            if (!p) return false;
+            var ctx = this.b2d_state.context;
+            ctx.moveTo(p[0], p[1]);
+            for (var i = 0; i < p.length; i += 6)
+                ctx.quadraticCurveTo(p[i+2], p[i+3], p[i+4], p[i+5]);
+            if (this.b2d_debug) console.log("==> beziershape");
+            this.geFlush();
+        }
         this.vm.popN(argCount);
         return true;
     },

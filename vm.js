@@ -26,7 +26,7 @@ window.Squeak = users.bert.SqueakJS.vm;
 
 Object.extend(Squeak, {
     // system attributes
-    vmVersion: "SqueakJS 0.6.3",
+    vmVersion: "SqueakJS 0.6.4",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -5054,6 +5054,7 @@ Object.subclass('Squeak.Primitives',
         if (!state.form || state.form.obj !== formObj)
             state.form = this.loadForm(formObj);
         this.geSetupCanvas();
+        state.didRender = false;
         state.needsFlush = false;
         state.hasFill = false;
         state.hasStroke = false;
@@ -5084,25 +5085,30 @@ Object.subclass('Squeak.Primitives',
         canvas.height = form.height;
         canvas.style.visibility = this.b2d_debug ? "visible" : "hidden";
     },
+    geFlush: function() {
+        if (this.b2d_debug) console.log("-- flush");
+        var state = this.b2d_state;
+        // fill and stroke path
+        if (state.hasFill) {
+            state.context.closePath();
+            state.context.fill();
+            state.didRender = true;
+            if (this.b2d_debug) console.log("==> filling");
+        }
+        if (state.hasStroke) {
+            state.context.stroke();
+            state.didRender = true;
+            if (this.b2d_debug) console.log("==> stroking");
+        }
+        // if (this.b2d_debug) this.vm.breakNow("b2d_debug");
+        state.context.beginPath();
+        state.flushNeeded = false;
+    },
     geRender: function() {
         if (this.b2d_debug) console.log("-- render");
         var state = this.b2d_state;
-        if (state.flushNeeded) {
-            // fill and stroke path
-            if (state.hasFill) {
-                state.context.closePath();
-                state.context.fill();
-                if (this.b2d_debug) console.log("==> filling");
-            }
-            if (state.hasStroke) {
-                state.context.stroke();
-                if (this.b2d_debug) console.log("==> stroking");
-            }
-            state.context.beginPath();
-            state.flushNeeded = false;
-            this.geBlendOverForm();
-            // if (this.b2d_debug) this.vm.breakNow("b2d_debug");
-        }
+        if (state.flushNeeded) this.geFlush();
+        if (state.didRender) this.geBlendOverForm();
         return 0; // answer stop reason
     },
     geBlendOverForm: function() {
@@ -5495,7 +5501,34 @@ Object.subclass('Squeak.Primitives',
     },
     gePrimitiveAddCompressedShape: function(argCount) {
         if (this.b2d_debug) console.log("b2d: gePrimitiveAddCompressedShape");
-        this.vm.warnOnce("B2D: compressed shapes not implemented yet");
+        var points = this.stackNonInteger(6),
+            nSegments = this.stackInteger(5),
+            leftFills = this.stackNonInteger(4).wordsAsInt16Array(),
+            rightFills = this.stackNonInteger(3).wordsAsInt16Array(),
+            lineWidths = this.stackNonInteger(2).wordsAsInt16Array(),
+            lineFills = this.stackNonInteger(1).wordsAsInt16Array(),
+            fillIndexList = this.stackNonInteger(0).words;
+        if (!this.success) return false;
+        // fills and widths are ShortRunArrays
+        if (leftFills.length !== 2 || rightFills.length !== 2 || lineWidths.length !== 2 || lineFills.length !== 2 ||
+            leftFills[1] !== nSegments || rightFills[1] !== nSegments || lineWidths[1] !== nSegments || lineFills[1] !== nSegments ||
+            leftFills[0] !== 0) {
+            this.vm.warnOnce("B2D: complex compressed shapes not implemented yet");
+            debugger;
+        }
+        var fillIndex = rightFills[0] ? fillIndexList[rightFills[0] - 1] : 0,
+            borderIndex = lineFills[0] ? fillIndexList[lineFills[0] - 1] : 0,
+            borderWidth = lineWidths[0];
+        if (this.geSetStyle(fillIndex, borderIndex, borderWidth)) {
+            var p = this.gePointsFrom(points, nSegments * 3);
+            if (!p) return false;
+            var ctx = this.b2d_state.context;
+            ctx.moveTo(p[0], p[1]);
+            for (var i = 0; i < p.length; i += 6)
+                ctx.quadraticCurveTo(p[i+2], p[i+3], p[i+4], p[i+5]);
+            if (this.b2d_debug) console.log("==> beziershape");
+            this.geFlush();
+        }
         this.vm.popN(argCount);
         return true;
     },
@@ -6133,41 +6166,93 @@ Object.subclass('Squeak.InterpreterProxy',
 });
 
 Object.extend(Squeak, {
-    fsck: function(dir) {
+    fsck: function(dir, files) {
         dir = dir || "";
+        if (!files) {
+            // find existing files
+            files = {};
+            for (var key in localStorage) {
+                var match = key.match(/squeak-file(\.lz)?:(.*)$/);
+                if (match) {files[match[2]] = true};
+            }
+            if (typeof indexedDB !== "undefined") {
+                return this.dbTransaction("readonly", "fsck cursor", function(fileStore) {
+                    var cursorReq = fileStore.openCursor();
+                    cursorReq.onsuccess = function(e) {
+                        var cursor = e.target.result;
+                        if (cursor) {
+                            files[cursor.key] = true;
+                            cursor.continue();
+                        } else { // done
+                            Squeak.fsck(dir, files);
+                        }
+                    }
+                    cursorReq.onerror = function(e) {
+                        console.error("fsck failed");
+                    }
+                });
+            }
+        }
+        // check directories
         var entries = Squeak.dirList(dir);
         for (var name in entries) {
             var path = dir + "/" + name,
                 isDir = entries[name][3];
             if (isDir) {
                 var exists = "squeak:" + path in localStorage;
-                if (exists) Squeak.fsck(path);
+                if (exists) Squeak.fsck(path, files);
                 else {
                     console.log("Deleting stale directory " + path);
                     Squeak.dirDelete(path);
                 }
             } else {
-                if (typeof indexedDB !== "undefined") {
-                    // need to figure out a way to check file existence in indexedDB without loading the whole file
+                if (!files[path]) {
+                    console.log("Deleting stale file entry " + path);
+                    Squeak.fileDelete(path, true);
                 } else {
-                    var exists = "squeak-file:" + path in localStorage || "squeak-file.lz:" + path in localStorage;
-                    if (!exists) {
-                        console.log("Deleting stale file entry " + path);
-                        Squeak.fileDelete(path, true);
-                    }
+                    files[path] = false; // mark as visited
+                }
+            }
+        }
+        // check orphaned files
+        if (dir === "") {
+            var orphaned = [],
+                total = 0;
+            for (var path in files) {
+                total++;
+                if (files[path]) orphaned.push(path); // not marked visited
+            }
+            if (orphaned.length > 0) {
+                for (var i = 0; i < orphaned.length; i++) {
+                    console.log("Deleting orphaned file " + orphaned[i]);
+                    delete localStorage["squeak-file:" + orphaned[i]];
+                    delete localStorage["squeak-file.lz:" + orphaned[i]];
+                }
+                if (typeof indexedDB !== "undefined") {
+                    this.dbTransaction("readwrite", "fsck delete", function(fileStore) {
+                        for (var i = 0; i < orphaned.length; i++) {
+                            fileStore.delete(orphaned[i]);
+                        };
+                    });
                 }
             }
         }
     },
-    dbTransaction: function(mode, transactionFunc) {
+    dbTransaction: function(mode, description, transactionFunc, completionFunc) {
         // File contents is stored in the IndexedDB named "squeak" in object store "files"
         // and directory entries in localStorage with prefix "squeak:"
-        if (typeof indexedDB == "undefined")
-            return transactionFunc(this.dbFake());
+        if (typeof indexedDB == "undefined") {
+            transactionFunc(this.dbFake());
+            if (completionFunc) completionFunc();
+            return;
+        }
 
         var startTransaction = function() {
             var trans = SqueakDB.transaction("files", mode),
                 fileStore = trans.objectStore("files");
+            trans.oncomplete = function(e) { if (completionFunc) completionFunc(); }
+            trans.onerror = function(e) { console.error("transaction error:" + e.target.error.name + " (" + description + ")"); }
+            trans.onabort = function(e) { console.error("transaction aborted: " + e.target.error.name + " (" + description + ")"); }
             transactionFunc(fileStore);
         };
 
@@ -6181,6 +6266,9 @@ Object.extend(Squeak, {
             SqueakDB.onversionchange = function(e) {
                 delete window.SqueakDB;
                 this.close();
+            };
+            SqueakDB.onerror = function(e) {
+                console.log("Error accessing database: " + e.target.errorCode);
             };
             startTransaction();
         };
@@ -6272,7 +6360,7 @@ Object.extend(Squeak, {
         if (!errorDo) errorDo = function(err) { console.log(err) };
         var path = this.splitFilePath(filepath);
         if (!path.basename) return errorDo("Invalid path: " + filepath);
-        this.dbTransaction("readonly", function(fileStore) {
+        this.dbTransaction("readonly", "get " + filepath, function(fileStore) {
             var getReq = fileStore.get(path.fullname);
             getReq.onerror = function(e) { errorDo(this.errorCode) };
             getReq.onsuccess = function(e) {
@@ -6281,6 +6369,8 @@ Object.extend(Squeak, {
                 Squeak.fetchTemplateFile(path.fullname,
                     function gotTemplate(template) {thenDo(template)},
                     function noTemplate() {
+                        // if no indexedDB then we have checked fake db already
+                        if (typeof indexedDB == "undefined") return errorDo("file not found: " + path.fullname);
                         // fall back on fake db, may be file is there
                         var fakeReq = Squeak.dbFake().get(path.fullname);
                         fakeReq.onerror = function(e) { errorDo("file not found: " + path.fullname) };
@@ -6289,7 +6379,7 @@ Object.extend(Squeak, {
             };
         });
     },
-    filePut: function(filepath, contents) {
+    filePut: function(filepath, contents, optSuccess) {
         // store file, return dir entry if successful
         var path = this.splitFilePath(filepath); if (!path.basename) return null;
         var directory = this.dirList(path.dirname); if (!directory) return null;
@@ -6306,9 +6396,13 @@ Object.extend(Squeak, {
         entry[4] = contents.byteLength || contents.length || 0;
         localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
         // put file contents (async)
-        this.dbTransaction("readwrite", function(fileStore) {
-            fileStore.put(contents, path.fullname);
-        });
+        this.dbTransaction("readwrite", "put " + filepath,
+            function(fileStore) {
+                fileStore.put(contents, path.fullname);
+            },
+            function transactionComplete() {
+                if (optSuccess) optSuccess();
+            });
         return entry;
     },
     fileDelete: function(filepath, entryOnly) {
@@ -6320,8 +6414,8 @@ Object.extend(Squeak, {
         localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
         if (entryOnly) return true;
         // delete file contents (async)
-        this.dbTransaction("readwrite", function(fileStore) {
-            fileStore['delete'](path.fullname);    // workaround for ometa parser
+        this.dbTransaction("readwrite", "delete " + filepath, function(fileStore) {
+            fileStore.delete(path.fullname);
         });
         return true;
     },
@@ -6341,7 +6435,8 @@ Object.extend(Squeak, {
         // move file contents (async)
         this.fileGet(oldpath.fullname,
             function success(contents) {
-                this.dbTransaction("readwrite", function(fileStore) {
+                this.dbTransaction("readwrite", "rename " + oldpath.fullname + " to " + newpath.fullname, function(fileStore) {
+                    fileStore.delete(oldpath.fullname);
                     fileStore.put(contents, newpath.fullname);
                 });
             }.bind(this),
@@ -6491,7 +6586,7 @@ Object.extend(Squeak, {
         var template = localStorage["squeak-template:" + path.dirname];
         if (!template) return ifNotFound();
         var url = JSON.parse(template).url;
-        if (!url) throw Error("template without url " + path);
+        if (!url) return ifNotFound();
         url += "/" + path.basename;
         var rq = new XMLHttpRequest();
         rq.open("get", url, true);

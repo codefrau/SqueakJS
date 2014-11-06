@@ -116,8 +116,6 @@ module("SqueakJS").requires("users.bert.SqueakJS.vm").toRun(function() {
 //////////////////////////////////////////////////////////////////////////////
 
 function setupFullscreen(display, canvas, options) {
-    if (options.fullscreen) return function alwaysFullscreen(){};
-    
     // Fullscreen can only be enabled in an event handler. So we check the
     // fullscreen flag on every mouse down/up and keyboard event.        
 
@@ -201,30 +199,31 @@ function setupSwapButtons(options) {
 }
 
 function setupDragAndDrop(display, options) {
-    document.body.addEventListener('dragover', function(evt) {
+    // do not use addEventListener, we want to replace any previous drop handler
+    document.body.ondragover = function(evt) {
         evt.stopPropagation();
         evt.preventDefault();
         evt.dataTransfer.dropEffect = 'copy';
         return false;
-    });
-    document.body.addEventListener('drop', function(evt) {
+    };
+    document.body.ondrop = function(evt) {
         evt.stopPropagation();
         evt.preventDefault();
         [].slice.call(evt.dataTransfer.files).forEach(function(f) {
             var reader = new FileReader();
             reader.onload = function () {
                 var buffer = this.result;
-                if (/.*image$/.test(f.name) && confirm("Run " + f.name + " now?\n(cancel to store as file)")) {
+                Squeak.filePut(f.name, buffer);
+                if (/.*image$/.test(f.name) && confirm("Run " + f.name + " now?\n(cancel to use as file)")) {
                     SqueakJS.appName = f.name.slice(0, -6);
                     SqueakJS.runImage(buffer, f.name, display, options);
                 } else {
-                    Squeak.filePut(f.name, buffer);
                 }
             };
             reader.readAsArrayBuffer(f);
         });
         return false;
-    });
+    };
 }
 
 function recordModifiers(evt, display) {
@@ -692,20 +691,26 @@ SqueakJS.runImage = function(buffer, name, display, options) {
 };
 
 function processOptions(options) {
-    var search = decodeURIComponent(window.location.search).slice(1),
+    var search = decodeURIComponent(window.location.hash).slice(1),
         args = search && search.split("&");
     if (args) for (var i = 0; i < args.length; i++) {
         var keyAndVal = args[i].split("="),
             key = keyAndVal[0],
             val = keyAndVal[1];
-        if (!/^[a-zA-Z]/.test(val)) val = JSON.parse(val);
+        try { val = JSON.parse(val); } catch(e) {
+            if (val[0] === "[") val = val.slice(1,-1).split(","); // handle string arrays
+            // if not JSON use string itself
+         };
         options[key] = val;
     }
     var root = Squeak.splitFilePath(options.root || "/").fullname;
     Squeak.dirCreate(root, true);
     if (!/\/$/.test(root)) root += "/";
     options.root = root;
-    if (!options.appName) options.appName = "SqueakJS";
+    if (options.url && options.files && !options.image)
+        options.image = options.url + "/" + options.files[0];
+    if (!options.appName) options.appName = options.image ? 
+        options.image.replace(/.*\//, "").replace(/\.image$/, "") : "SqueakJS";
     if (options.templates) {
         if (options.templates.constructor === Array) {
             var templates = {};
@@ -730,22 +735,24 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
         baseUrl = imageUrl.replace(/[^\/]*$/, ""),
         files = [{url: imageUrl, name: imageName}];
     if (options.files) {
-        options.files.forEach(function(f) { files.push({url: baseUrl + f, name: f}); });
+        options.files.forEach(function(f) { if (f !== imageName) files.push({url: baseUrl + f, name: f}); });
     }
     if (options.document) {
         var docName = Squeak.splitFilePath(options.document).basename;
         files.push({url: options.document, name: docName});
         display.documentName = options.root + docName;
     }
-    var isImage = true;
     function getNextFile(whenAllDone) {
         if (files.length === 0) return whenAllDone(imageData);
         var file = files.shift();
         if (Squeak.fileExists(options.root + file.name)) {
-            if (isImage) {
-                isImage = false;
+            if (file.name == imageName) {
                 Squeak.fileGet(options.root + file.name, function(data) {
-                    imageData = data; 
+                    imageData = data;
+                    getNextFile(whenAllDone);
+                }, function onError() {
+                    Squeak.fileDelete(options.root + file.name);
+                    files.unshift(file);
                     getNextFile(whenAllDone);
                 });
             } else getNextFile(whenAllDone);
@@ -760,9 +767,10 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
         }
         rq.onload = function(e) {
             if (rq.status == 200) {
-                if (isImage) {isImage = false; imageData = rq.response;}
-                else Squeak.filePut(options.root + file.name, rq.response);
-                return getNextFile(whenAllDone);
+                if (file.name == imageName) {imageData = rq.response;}
+                Squeak.filePut(options.root + file.name, rq.response, function() {
+                    getNextFile(whenAllDone);
+                });
             }
             else rq.onerror(rq.statusText);
         };

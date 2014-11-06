@@ -16,14 +16,16 @@ CPFILES=squeakjs.css squeakjs.png
 
 OS=$(shell uname)
 ifeq ($(OS),Darwin)
-	STAT=stat -f '\# %Sm'
+	STAT=stat -f '%Sm'
 else
-	STAT=stat -c '\# %z'
+	STAT=stat -c '%z'
 endif
+NEWEST=$(shell ls -t $(ORGFILES) $(CPFILES) | head -n1)
+DATE=$(shell $(STAT) $(NEWEST))
 
 $(MANIFEST): Makefile $(TARGET) $(GENFILES) $(CPFILES)
-	@echo 'CACHE MANIFEST' > $@
-	@$(STAT) `ls -t Makefile $(ORGFILES) | head -n1` | tee -a $@
+	@echo generate: $@
+	@echo 'CACHE MANIFEST\n# $(DATE)' > $@
 	@for f in $(GENFILES) $(CPFILES); do F=`basename $$f`; echo $$F >> $@ ; install -pvm 444 $$f $(TARGET); done
 	@echo 'NETWORK:' >> $@
 	@echo '*' >> $@

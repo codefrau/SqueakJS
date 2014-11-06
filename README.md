@@ -95,6 +95,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+2014-11-06: 0.6.4 add generic run page
 2014-10-28: 0.6.3 pass options via URL
 2014-10-27: add JPEG plugin 
 2014-10-25: add template files

@@ -23,12 +23,18 @@ endif
 NEWEST=$(shell ls -t $(ORGFILES) $(CPFILES) | head -n1)
 DATE=$(shell $(STAT) $(NEWEST))
 
+VERSION=$(shell grep 'vmVersion:.*".*"' ../vm.js | sed 's/^[^"]*"//;s/".*//')
+
 $(MANIFEST): Makefile $(TARGET) $(GENFILES) $(CPFILES)
 	@echo generate: $@
-	@echo 'CACHE MANIFEST\n# $(DATE)' > $@
+	@# generate unique header from date
+	@echo 'CACHE MANIFEST\n#' $(DATE) > $@
+	@# append file name to manifest, and copy file to target
 	@for f in $(GENFILES) $(CPFILES); do F=`basename $$f`; echo $$F >> $@ ; install -pvm 444 $$f $(TARGET); done
+	@# allow accessing all URLs
 	@echo 'NETWORK:' >> $@
 	@echo '*' >> $@
+	@# remove temp files
 	@rm -rf $(BUILD)
 
 $(TARGET):
@@ -38,10 +44,19 @@ $(BUILD):
 	@mkdir -pv $@
 
 $(BUILD)/squeak-all.js: $(BUILD) Makefile $(SQUEAKJS) $(SQUEAKJSLIBS)
-	@sed 's|"\(.*\.js\)",|/* \1 (squeak-all.js) */|' $(SQUEAKJS) > $@
-	@for f in $(SQUEAKJSLIBS); do (echo; echo "/***** including $$f *****/"; echo ; cat $$f) >> $@ ; done
+	@# generate header comment
+	@echo "/* $(VERSION)" > $@
+	@echo " *" >> $@
+	@echo " * squeak-all.js assembled from:" >> $@
+	@for f in $(SQUEAKJS) $(SQUEAKJSLIBS); do echo " *   $$f" >> $@ ; done
+	@echo " */\n" >> $@
+	@# append squeak.js, replacing .js includes with comments
+	@sed 's|"\(.*\.js\)",|/* \1 (squeak-all.js) */|' $(SQUEAKJS) >> $@
+	@# append all .js files
+	@for f in $(SQUEAKJSLIBS); do (echo "\n/***** including $$f *****/\n"; cat $$f) >> $@ ; done
 
 $(BUILD)/index.html: $(BUILD) index.html
+	@# replace ../squeak.js with squeak-all.js
 	@sed 's|../squeak.js|squeak-all.js|' $^ > $@
 
 .SECONDARY: $(BUILD) $(GENFILES)

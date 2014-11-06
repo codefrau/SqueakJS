@@ -709,8 +709,6 @@ function processOptions(options) {
     options.root = root;
     if (options.url && options.files && !options.image)
         options.image = options.url + "/" + options.files[0];
-    if (!options.appName) options.appName = options.image ? 
-        options.image.replace(/.*\//, "").replace(/\.image$/, "") : "SqueakJS";
     if (options.templates) {
         if (options.templates.constructor === Array) {
             var templates = {};
@@ -724,10 +722,10 @@ function processOptions(options) {
 
 SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     processOptions(options);
-    SqueakJS.options = options;
-    SqueakJS.appName = options.appName;
     if (options.image) imageUrl = options.image;
     else options.image = imageUrl;
+    SqueakJS.options = options;
+    SqueakJS.appName = options.appName || imageUrl.replace(/.*\//, "").replace(/\.image$/, "");
     Squeak.fsck();
     var display = createSqueakDisplay(canvas, options),
         imageName = Squeak.splitFilePath(imageUrl).basename,
@@ -803,7 +801,8 @@ SqueakJS.onQuit = function(vm, display, options) {
 
 if (window.applicationCache) {
     applicationCache.addEventListener('updateready', function() {
-        var appName = SqueakJS && SqueakJS.appName || "SqueakJS";
+        // use original appName from options
+        var appName = window.SqueakJS && SqueakJS.options && SqueakJS.options.appName || "SqueakJS";
         if (confirm(appName + ' has been updated. Restart now?')) {
             window.onbeforeunload = null;
             window.location.reload();

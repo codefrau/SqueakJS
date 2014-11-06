@@ -803,7 +803,6 @@ SqueakJS.onQuit = function(vm, display, options) {
 
 if (window.applicationCache) {
     applicationCache.addEventListener('updateready', function() {
-        applicationCache.swapCache();
         var appName = SqueakJS && SqueakJS.appName || "SqueakJS";
         if (confirm(appName + ' has been updated. Restart now?')) {
             window.onbeforeunload = null;

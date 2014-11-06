@@ -12,6 +12,7 @@ SQUEAKJS=../squeak.js
 SQUEAKJSLIBS=../vm.js ../jit.js ../plugins/*.js ../lib/lz-string.js
 ORGFILES=$(SQUEAKJS) $(SQUEAKJSLIBS) index.html
 GENFILES=$(BUILD)/squeak-all.js $(BUILD)/index.html
+CPFILES=squeakjs.css squeakjs.png
 
 OS=$(shell uname)
 ifeq ($(OS),Darwin)
@@ -20,10 +21,10 @@ else
 	STAT=stat -c '\# %z'
 endif
 
-$(MANIFEST): Makefile $(TARGET) $(GENFILES)
+$(MANIFEST): Makefile $(TARGET) $(GENFILES) $(CPFILES)
 	@echo 'CACHE MANIFEST' > $@
 	@$(STAT) `ls -t Makefile $(ORGFILES) | head -n1` | tee -a $@
-	@for f in $(GENFILES); do F=`basename $$f`; echo $$F >> $@ ; install -pvm 444 $$f $(TARGET); done
+	@for f in $(GENFILES) $(CPFILES); do F=`basename $$f`; echo $$F >> $@ ; install -pvm 444 $$f $(TARGET); done
 	@echo 'NETWORK:' >> $@
 	@echo '*' >> $@
 	@rm -rf $(BUILD)

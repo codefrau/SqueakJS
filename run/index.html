@@ -37,6 +37,7 @@
                 })(href);
             }
         }
+        setTimeout(Squeak.fsck.bind(Squeak), 0);
         // also, enable drag-and-drop even if no image loaded yet
         // (squeak.js will replace these when an image is running)
         document.body.ondragover = function(evt) {

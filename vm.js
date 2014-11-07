@@ -284,17 +284,20 @@ Object.subclass('Squeak.Image',
         };
         // read version and determine endianness
         var versions = [6502, 6504, 6505, 68000, 68002, 68003],
+            version = 0,
+            fileHeaderSize = 0;
+        while (true) {  // try all four endianness + header combos
+            littleEndian = !littleEndian;
+            pos = fileHeaderSize;
             version = readWord();
-        if (versions.indexOf(version) < 0) {
-            littleEndian = true; pos = 0;
-            version = readWord();
-            if (versions.indexOf(version) < 0) throw Error("bad image version");
-        }
+            if (versions.indexOf(version) >= 0) break;
+            if (!littleEndian) fileHeaderSize += 512;
+            if (fileHeaderSize > 512) throw Error("bad image version");
+        };
         var nativeFloats = (version & 1) != 0;
         this.hasClosures = version == 6504 || version == 68002 || nativeFloats;
         if (version >= 68000) throw Error("64 bit images not supported yet");
-
-        // read header
+        // parse image header
         var imageHeaderSize = readWord();
         var objectMemorySize = readWord(); //first unused location in heap
         var oldBaseAddr = readWord(); //object memory base address of image
@@ -307,7 +310,8 @@ Object.subclass('Squeak.Image',
         // read objects
         var prevObj;
         var oopMap = {};
-        while (pos < imageHeaderSize + objectMemorySize) {
+        var headerSize = fileHeaderSize + imageHeaderSize;
+        while (pos < headerSize + objectMemorySize) {
             var nWords = 0;
             var classInt = 0;
             var header = readWord();
@@ -331,7 +335,7 @@ Object.subclass('Squeak.Image',
                     throw Error("Unexpected free block");
             }
             nWords--;  //length includes base header which we have already read
-            var oop = pos - 4 - imageHeaderSize, //0-rel byte oop of this object (base header)
+            var oop = pos - 4 - headerSize, //0-rel byte oop of this object (base header)
                 format = (header>>8) & 15,
                 hash = (header>>17) & 4095,
                 bits = readBits(nWords, format);

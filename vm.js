@@ -6247,7 +6247,7 @@ Object.extend(Squeak, {
         // File contents is stored in the IndexedDB named "squeak" in object store "files"
         // and directory entries in localStorage with prefix "squeak:"
         if (typeof indexedDB == "undefined") {
-            transactionFunc(this.dbFake());
+            transactionFunc(Squeak.dbFake());
             if (completionFunc) completionFunc();
             return;
         }
@@ -6256,8 +6256,13 @@ Object.extend(Squeak, {
             var trans = SqueakDB.transaction("files", mode),
                 fileStore = trans.objectStore("files");
             trans.oncomplete = function(e) { if (completionFunc) completionFunc(); }
-            trans.onerror = function(e) { alert(e.target.error.name + ": " + description) }
-            trans.onabort = function(e) { alert(e.target.error.name + ": aborting " + description) }
+            trans.onerror = function(e) { console.error(e.target.error.name + ": " + description) }
+            trans.onabort = function(e) {
+                console.error(e.target.error.name + ": aborting " + description);
+                // fall back to local/memory storage
+                transactionFunc(Squeak.dbFake());
+                if (completionFunc) completionFunc();
+            }
             transactionFunc(fileStore);
         };
 

@@ -6251,8 +6251,8 @@ Object.extend(Squeak, {
             var trans = SqueakDB.transaction("files", mode),
                 fileStore = trans.objectStore("files");
             trans.oncomplete = function(e) { if (completionFunc) completionFunc(); }
-            trans.onerror = function(e) { console.error("transaction error:" + e.target.error.name + " (" + description + ")"); }
-            trans.onabort = function(e) { console.error("transaction aborted: " + e.target.error.name + " (" + description + ")"); }
+            trans.onerror = function(e) { alert(e.target.error.name + ": " + description) }
+            trans.onabort = function(e) { alert(e.target.error.name + ": aborting " + description) }
             transactionFunc(fileStore);
         };
 

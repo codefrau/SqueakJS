@@ -24,7 +24,8 @@ module('users.bert.SqueakJS.vm').requires().toRun(function() {
 // shorter name for convenience
 window.Squeak = users.bert.SqueakJS.vm;
 
-Object.extend(Squeak, {
+Object.extend(Squeak,
+"version", {
     // system attributes
     vmVersion: "SqueakJS 0.6.4",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
@@ -34,7 +35,8 @@ Object.extend(Squeak, {
     platformSubtype: "unknown",
     osVersion: navigator.userAgent,     // might want to parse
     windowSystem: "HTML",
-
+},
+"constants", {
     // object headers
     HeaderTypeMask: 3,
     HeaderTypeSizeAndClass: 0, //3-word header
@@ -196,11 +198,8 @@ Object.extend(Squeak, {
     MaxSmallInt:  0x3FFFFFFF,
     NonSmallInt: -0x50000000,           // non-small and neg (so non pos32 too)
     MillisecondClockMask: 0x1FFFFFFF,
-    Epoch: Date.UTC(1901,0,1) + (new Date()).getTimezoneOffset()*60000,        // local timezone
-    EpochUTC: Date.UTC(1901,0,1),
-});
-
-Object.extend(Squeak, {
+},
+"modules", {
     // don't clobber registered modules
     externalModules: Squeak.externalModules || {},
     registerExternalModule: function(name, module) {
@@ -6169,7 +6168,8 @@ Object.subclass('Squeak.InterpreterProxy',
     },
 });
 
-Object.extend(Squeak, {
+Object.extend(Squeak,
+"files", {
     fsck: function(dir, files, stats) {
         dir = dir || "";
         stats = stats || {dirs: 0, files: 0, bytes: 0};
@@ -6522,12 +6522,6 @@ Object.extend(Squeak, {
             basename = matches[2].length ? matches[2] : null;
         return {fullname: filepath, dirname: dirname, basename: basename};
     },
-    bytesAsString: function(bytes) {
-    var chars = [];
-        for (var i = 0; i < bytes.length; i++)
-            chars.push(String.fromCharCode(bytes[i]));
-    return chars.join('');
-    },
     flushFile: function(file) {
         if (file.modified) {
             var buffer = file.contents.buffer;
@@ -6622,10 +6616,8 @@ Object.extend(Squeak, {
         console.log("Fetching " + url);
         rq.send();
     },
-    totalSeconds: function() {
-        // seconds since 1901-01-01, local time
-        return Math.floor((Date.now() - Squeak.Epoch) / 1000);
-    },
+},
+"audio", {
     startAudioOut: function() {
         if (!this.audioOutContext) {
             var ctxProto = window.AudioContext || window.webkitAudioContext
@@ -6658,7 +6650,24 @@ Object.extend(Squeak, {
         if (this.audioInSource)
             this.audioInSource.disconnect();
     },
+},
+"time", {
+    Epoch: Date.UTC(1901,0,1) + (new Date()).getTimezoneOffset()*60000,        // local timezone
+    EpochUTC: Date.UTC(1901,0,1),
+    totalSeconds: function() {
+        // seconds since 1901-01-01, local time
+        return Math.floor((Date.now() - Squeak.Epoch) / 1000);
+    },
+},
+"utils", {
+    bytesAsString: function(bytes) {
+        var chars = [];
+            for (var i = 0; i < bytes.length; i++)
+                chars.push(String.fromCharCode(bytes[i]));
+        return chars.join('');
+    },
 });
+
 
 Object.subclass('Squeak.InstructionPrinter',
 'initialization', {

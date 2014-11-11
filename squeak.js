@@ -112,12 +112,12 @@ module("SqueakJS").requires("users.bert.SqueakJS.vm").toRun(function() {
 
 
 //////////////////////////////////////////////////////////////////////////////
-// display & event setup 
+// display & event setup
 //////////////////////////////////////////////////////////////////////////////
 
 function setupFullscreen(display, canvas, options) {
     // Fullscreen can only be enabled in an event handler. So we check the
-    // fullscreen flag on every mouse down/up and keyboard event.        
+    // fullscreen flag on every mouse down/up and keyboard event.
 
     // If the user canceled fullscreen, turn off the fullscreen flag so
     // we don't try to enable it again in the next event
@@ -175,7 +175,7 @@ function setupFullscreen(display, canvas, options) {
             }
         }
     }
-    
+
     if (options.fullscreenCheckbox) options.fullscreenCheckbox.onclick = function() {
         display.fullscreen = options.fullscreenCheckbox.checked;
         checkFullscreen();
@@ -251,7 +251,7 @@ function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
                 case 0: buttons = Squeak.Mouse_Red; break;      // left
                 case 1: buttons = Squeak.Mouse_Yellow; break;   // middle
                 case 2: buttons = Squeak.Mouse_Blue; break;     // right
-            }; 
+            };
             if (options.swapButtons)
                 if (buttons == Squeak.Mouse_Yellow) buttons = Squeak.Mouse_Blue;
                 else if (buttons == Squeak.Mouse_Blue) buttons = Squeak.Mouse_Yellow;
@@ -295,8 +295,8 @@ function recordKeyboardEvent(key, timestamp, display, eventQueue) {
             timestamp,  // converted to Squeak time in makeSqueakEvent()
             key, // MacRoman
             Squeak.EventKeyChar,
-            display.buttons >> 3, 
-            0,  // Unicode 
+            display.buttons >> 3,
+            0,  // Unicode
         ]);
         if (display.signalInputEvent)
             display.signalInputEvent();
@@ -619,7 +619,7 @@ var spinnerAngle = 0,
     becameBusy = 0;
 function updateSpinner(spinner, idleMS, vm, display) {
     var busy = idleMS === 0,
-        animating = vm.lastTick - display.lastTick < 500; 
+        animating = vm.lastTick - display.lastTick < 500;
     if (!busy || animating) {
         spinner.display = "none";
         becameBusy = 0;
@@ -635,7 +635,7 @@ function updateSpinner(spinner, idleMS, vm, display) {
 }
 
 //////////////////////////////////////////////////////////////////////////////
-// main loop 
+// main loop
 //////////////////////////////////////////////////////////////////////////////
 
 var loop; // holds timeout for main loop
@@ -796,7 +796,7 @@ SqueakJS.onQuit = function(vm, display, options) {
 }); // end module
 
 //////////////////////////////////////////////////////////////////////////////
-// browser stuff 
+// browser stuff
 //////////////////////////////////////////////////////////////////////////////
 
 if (window.applicationCache) {

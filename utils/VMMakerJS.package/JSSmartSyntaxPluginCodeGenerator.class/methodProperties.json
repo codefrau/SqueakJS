@@ -62,7 +62,7 @@
 		"generateStAtPut:on:indent:" : "bf 10/1/2014 18:02",
 		"generateStSize:on:indent:" : "acg 1/1/2000 22:41",
 		"initialize" : "bf 10/3/2014 01:27",
-		"initializeCTranslationDictionary" : "tpr 12/21/2005 17:25",
+		"initializeJSTranslationDictionary" : "bf 11/12/2014 15:16",
 		"jscgLoad:expr:asBooleanValueFrom:" : "acg 12/17/1999 07:32",
 		"jscgLoad:expr:asCharPtrFrom:" : "acg 12/17/1999 07:29",
 		"jscgLoad:expr:asCharPtrFrom:andThen:" : "acg 12/17/1999 07:29",

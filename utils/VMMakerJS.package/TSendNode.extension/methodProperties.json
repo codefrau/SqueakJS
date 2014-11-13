@@ -7,6 +7,7 @@
 		"emitJSCodeAsFunctionCallOn:level:generator:" : "bf 10/6/2014 15:42",
 		"emitJSCodeAsPointerDereferenceOn:level:generator:" : "bf 10/6/2014 15:42",
 		"emitJSCodeOn:level:generator:" : "bf 9/30/2014 22:33",
+		"emitJSPointerArithmetic:on:level:generator:type:top:" : "bf 11/13/2014 15:54",
 		"isEqualityTest" : "bf 10/6/2014 13:13",
 		"isFloatIn:" : "bf 10/21/2014 11:18",
 		"isInterpreterProxyConstant" : "bf 10/5/2014 17:00",

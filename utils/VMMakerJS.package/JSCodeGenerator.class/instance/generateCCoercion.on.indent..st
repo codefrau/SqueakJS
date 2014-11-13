@@ -15,11 +15,16 @@ generateCCoercion: msgNode on: aStream indent: level
 		cType = 'double *' ifTrue: [^aStream nextPutAll: '.wordsAsFloat64Array()'].
 		self halt.
 	] ifFalse: [
-		(#('int' 'unsigned int') includes: cType) ifTrue: [
+		(#('int') includes: cType) ifTrue: [
 			aStream nextPutAll: '('.
 			self emitJSExpression: expr on: aStream.
 			^aStream nextPutAll: '|0)'].
-		((#('double' 'float') includes: cType) or: ['sqInt (*)(*)'match: cType])
+		(#('unsigned int' 'unsigned' ) includes: cType) ifTrue: [
+				aStream nextPutAll: '('.
+				self emitJSExpression: expr on: aStream.
+				^ aStream nextPutAll: '>>>0)'].
+		((#('double' 'float') includes: cType) or: [('sqInt (*)(*)'match: cType)
+			or: [#(transformPoint:into:) includes: currentMethod selector]])
 			ifFalse: [self halt].
 		self emitJSExpression: expr on: aStream.
 	]

@@ -1,6 +1,6 @@
 JS translation
-initializeCTranslationDictionary 
-	"Initialize the dictionary mapping message names to actions for C code generation."
+initializeJSTranslationDictionary 
+	"Initialize the dictionary mapping message names to actions for JS code generation."
 
 	| pairs |
 	translationDict := Dictionary new: 200.
@@ -163,6 +163,8 @@ initializeCTranslationDictionary
 		'*dst++ = *src; src += 2'									'dst[_dst++] = src[_src]; _src += 2'
 		'tX'															'tX'
 		'tY'															'tY'
+		'((sqInt (*)(sqInt, sqInt, sqInt))copyBitsFn)(x0, x1, yValue)'	'copyBitsFn(x0, x1, yValue)'
+		'((sqInt (*)(sqInt))loadBBFn)(bbObj)'							'loadBBFn(bbObj)'
 	).
 	1 to: pairs size by: 2 do: [:i |
 		cCodeTranslationDict at: (pairs at: i) put: (pairs at: i + 1)].

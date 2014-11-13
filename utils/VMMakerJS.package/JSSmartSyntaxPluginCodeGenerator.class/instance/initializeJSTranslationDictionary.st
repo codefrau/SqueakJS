@@ -1,9 +1,9 @@
 translating builtins
-initializeCTranslationDictionary 
+initializeJSTranslationDictionary 
 	"Initialize the dictionary mapping message names to actions for C code generation."
 
 	| pairs |
-	super initializeCTranslationDictionary.
+	super initializeJSTranslationDictionary.
 	pairs := #(
 		#asCInt						#generateAsCInt:on:indent:
 		#asCUnsigned				#generateAsCUnsigned:on:indent:

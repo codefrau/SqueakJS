@@ -2,7 +2,7 @@
 emitJSCodeOn: aStream level: level generator: aCodeGen
 	expression isSwitch ifTrue:
 		[^expression emitJSCodeOn: aStream addToEndOfCases: self level: level generator: aCodeGen].
-	self isVariableUpdatingAssignment
+	(self isVariableUpdatingAssignment and: [(aCodeGen isPointer: variable) not])
 		ifTrue:
 			[(expression args first isConstant and: [expression args first value = 1])
 				ifTrue: [aStream nextPutAll: expression selector, expression selector.

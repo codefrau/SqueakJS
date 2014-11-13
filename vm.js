@@ -3504,6 +3504,7 @@ Object.subclass('Squeak.Primitives',
         return false;
     },
     namedPrimitive: function(modName, functionName, argCount) {
+        // duplicated in loadFunctionFrom()
         var mod = modName === "" ? this : this.loadedModules[modName];
         if (mod === undefined) { // null if earlier load failed
             mod = this.loadModule(modName);
@@ -3590,6 +3591,23 @@ Object.subclass('Squeak.Primitives',
         }
         console.log("Unloaded module: " + modName);
         return mod;
+    },
+    loadFunctionFrom: function(functionName, modName) {
+        // copy of namedPrimitive() returning the bound function instead of calling it
+        var mod = modName === "" ? this : this.loadedModules[modName];
+        if (mod === undefined) { // null if earlier load failed
+            mod = this.loadModule(modName);
+            this.loadedModules[modName] = mod;
+        }
+        if (!mod) return null;
+        var func = mod[functionName];
+        if (typeof func === "function") {
+            return func.bind(mod);
+        } else if (typeof func === "string") {
+            return (this[func]).bind(this);
+        }
+        this.vm.warnOnce("missing primitive: " + modName + "." + functionName);
+        return null;
     },
     primitiveUnloadModule: function(argCount) {
         var moduleName = this.stackNonInteger(0).bytesAsString();
@@ -6422,6 +6440,9 @@ Object.subclass('Squeak.InterpreterProxy',
     primitiveFail: function() {
         this.successFlag = false;
     },
+    primitiveFailFor: function(reasonCode) {
+        this.successFlag = false;
+    },
     success: function(boolean) {
         if (!boolean) this.successFlag = false;
     },
@@ -6516,6 +6537,9 @@ Object.subclass('Squeak.InterpreterProxy',
     },
     isIntegerValue: function(obj) {
         return typeof obj === "number" && obj >= -0x40000000 && obj <= 0x3FFFFFFF;
+    },
+    isArray: function(obj) {
+        return obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassArray];
     },
     isMemberOf: function(obj, className) {
         var nameBytes = obj.sqClass.pointers[Squeak.Class_name].bytes;
@@ -6614,6 +6638,9 @@ Object.subclass('Squeak.InterpreterProxy',
     classArray: function() {
         return this.vm.specialObjects[Squeak.splOb_ClassArray];
     },
+    classBitmap: function() {
+        return this.vm.specialObjects[Squeak.splOb_ClassBitmap];
+    },
     classSmallInteger: function() {
         return this.vm.specialObjects[Squeak.splOb_ClassInteger];
     },
@@ -6663,7 +6690,7 @@ Object.subclass('Squeak.InterpreterProxy',
         }
     },
     ioLoadFunctionFrom: function(funcName, pluginName) {
-        return null;
+        return this.vm.primHandler.loadFunctionFrom(funcName, pluginName);
     },
 });
 

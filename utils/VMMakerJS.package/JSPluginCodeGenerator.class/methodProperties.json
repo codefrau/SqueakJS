@@ -4,7 +4,7 @@
 	"instance" : {
 		"doInlining:" : "dtl 8/21/2011 21:16",
 		"emitExportsOn:" : "bf 10/1/2014 13:26",
-		"emitJSHeaderOn:" : "bf 10/6/2014 18:57",
+		"emitJSHeaderOn:" : "bf 11/14/2014 00:15",
 		"generateCodeStringForPrimitives" : "bf 10/6/2014 15:37",
 		"ignoredMethods" : "bf 11/12/2014 17:49",
 		"isGeneratingPluginCode" : "ar 10/7/1998 17:54",

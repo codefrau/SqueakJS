@@ -3116,7 +3116,6 @@ Object.subclass('Squeak.Primitives',
         this.builtinModules = {
             FilePlugin:             this.findPluginFunctions("", "primitive(Disable)?(File|Directory)"),
             SoundPlugin:            this.findPluginFunctions("snd_"),
-            B2DPlugin:              this.findPluginFunctions("ge"),
             JPEGReadWriter2Plugin:  this.findPluginFunctions("jpeg2_"),
             SecurityPlugin: {
                 primitiveDisableImageWrite: this.fakePrimitive.bind(this, "SecurityPlugin.primitiveDisableImageWrite", 0),
@@ -5560,577 +5559,6 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
 },
-'B2DPlugin', {
-    geInitialiseModule: function() {
-        this.b2d_debug = false;
-        this.b2d_state = {
-            form: null,
-        };
-    },
-    geReset: function(bitbltObj) {
-        if (this.b2d_debug) console.log("-- reset");
-        var state = this.b2d_state,
-            formObj = bitbltObj.pointers[Squeak.BitBlt_dest];
-        if (!state.form || state.form.obj !== formObj)
-            state.form = this.loadForm(formObj);
-        this.geSetupCanvas();
-        state.didRender = false;
-        state.needsFlush = false;
-        state.hasFill = false;
-        state.hasStroke = false;
-        state.fills = [];
-        state.minX = 0;
-        state.minY = 0;
-        state.maxX = state.form.width;
-        state.maxY = state.form.height;
-    },
-    geSetupCanvas: function() {
-        var state = this.b2d_state;
-        // create canvas and drawing context
-        if (!state.context) {
-            var canvas = document.getElementById("SqueakB2DCanvas");
-            if (!canvas) {
-                canvas = document.createElement("canvas");
-                canvas.id = "SqueakB2DCanvas";
-                canvas.setAttribute("style", "position:fixed;top:20px;left:950px;background:rgba(255,255,255,0.5)");
-                document.body.appendChild(canvas);
-            }
-            state.context = canvas.getContext("2d");
-            if (!state.context) alert("B2D: cannot create context");
-        };
-        // set canvas size, which also clears it
-        var form = state.form,
-            canvas = state.context.canvas;
-        canvas.width = form.width;
-        canvas.height = form.height;
-        canvas.style.visibility = this.b2d_debug ? "visible" : "hidden";
-    },
-    geFlush: function() {
-        if (this.b2d_debug) console.log("-- flush");
-        var state = this.b2d_state;
-        // fill and stroke path
-        if (state.hasFill) {
-            state.context.closePath();
-            state.context.fill();
-            state.didRender = true;
-            if (this.b2d_debug) console.log("==> filling");
-        }
-        if (state.hasStroke) {
-            state.context.stroke();
-            state.didRender = true;
-            if (this.b2d_debug) console.log("==> stroking");
-        }
-        // if (this.b2d_debug) this.vm.breakNow("b2d_debug");
-        state.context.beginPath();
-        state.flushNeeded = false;
-    },
-    geRender: function() {
-        if (this.b2d_debug) console.log("-- render");
-        var state = this.b2d_state;
-        if (state.flushNeeded) this.geFlush();
-        if (state.didRender) this.geBlendOverForm();
-        return 0; // answer stop reason
-    },
-    geBlendOverForm: function() {
-        var state = this.b2d_state,
-            form = state.form;
-        if (this.b2d_debug) console.log("==> read into " + form.width + "x" + form.height + "@" + form.depth);
-        if (!form.width || !form.height || state.maxX <= state.minX || state.maxY <= state.minY) return;
-        if (!form.msb) return this.vm.warnOnce("B2D: drawing to little-endian forms not implemented yet");
-        if (form.depth == 32) {
-            this.geBlendOverForm32();
-        } else if (form.depth == 16) {
-            this.geBlendOverForm16();
-        } else if (form.depth == 8) {
-            this.geBlendOverForm8();
-        } else if (form.depth == 1) {
-            this.geBlendOverForm1();
-        } else {
-            this.vm.warnOnce("B2D: drawing to " + form.depth + " bit forms not supported yet");
-        }
-        this.displayDirty(form.obj, {left: state.minX, top: state.minY, right: state.maxX, bottom: state.maxY});
-    },
-    geBlendOverForm1: function() {
-        // since we have 32 pixels per word, round to 32 pixels
-        var state = this.b2d_state,
-            form = state.form,
-            minX = state.minX & ~31,
-            minY = state.minY,
-            maxX = (state.maxX + 31) & ~31,
-            maxY = state.maxY,
-            width = maxX - minX,
-            height = maxY - minY,
-            canvasBytes = state.context.getImageData(minX, minY, width, height).data,
-            srcIndex = 0;
-        if (this.b2d_debug) console.log("==> clipped to " + width + "x" + height);
-        for (var y = minY; y < maxY; y++) {
-            var dstIndex = y * form.pitch + (minX / 32);
-            for (var x = minX; x < maxX; x += 32*4) {
-                var dstPixels = form.bits[dstIndex],  // 32 one-bit pixels
-                    dstShift = 31,
-                    result = 0;
-                for (var i = 0; i < 32; i++) {
-                    var alpha = canvasBytes[srcIndex+3],
-                        pix = alpha > 0.5 ? 0 : dstPixels;  // assume we're drawing in black
-                    result = result | (pix & (1 << dstShift));
-                    dstShift--;
-                    srcIndex += 4;
-                }
-                form.bits[dstIndex] = result;
-                dstIndex++;
-            }
-        }
-    },
-    geBlendOverForm8: function() {
-        // since we have four pixels per word, round to 4 pixels
-        var state = this.b2d_state,
-            form = state.form,
-            minX = state.minX & ~3,
-            minY = state.minY,
-            maxX = (state.maxX + 3) & ~3,
-            maxY = state.maxY,
-            width = maxX - minX,
-            height = maxY - minY,
-            canvasBytes = state.context.getImageData(minX, minY, width, height).data,
-            srcIndex = 0;
-        if (this.b2d_debug) console.log("==> clipped to " + width + "x" + height);
-        for (var y = minY; y < maxY; y++) {
-            var dstIndex = y * form.pitch + (minX / 4);
-            for (var x = minX; x < maxX; x += 4) {
-                if (!(canvasBytes[srcIndex+3] | canvasBytes[srcIndex+7] | canvasBytes[srcIndex+11] | canvasBytes[srcIndex+15])) {
-                    srcIndex += 16; dstIndex++; // skip pixels if fully transparent
-                    continue;
-                }
-                var dstPixels = form.bits[dstIndex],  // four 8-bit pixels
-                    dstShift = 24,
-                    result = 0;
-                for (var i = 0; i < 4; i++) {
-                    var alpha = canvasBytes[srcIndex+3] / 255;
-                    if (alpha < 0.1) {
-                        result = result | (dstPixels & (0xFF << dstShift)); // keep dst
-                    } else {
-                        var oneMinusAlpha = 1 - alpha,
-                            pix = this.indexedColors[(dstPixels >> dstShift) & 0xFF],
-                            r = alpha * canvasBytes[srcIndex  ] + oneMinusAlpha * ((pix >> 16) & 0xFF),
-                            g = alpha * canvasBytes[srcIndex+1] + oneMinusAlpha * ((pix >>  8) & 0xFF),
-                            b = alpha * canvasBytes[srcIndex+2] + oneMinusAlpha * ( pix        & 0xFF),
-                            res = 40 + (r / 255 * 5.5|0) * 36 + (b / 255 * 5.5|0) * 6 + (g / 255 * 5.5|0);  // 6x6x6 RGB cube
-                        result = result | (res << dstShift);
-                    }
-                    dstShift -= 8;
-                    srcIndex += 4;
-                }
-                form.bits[dstIndex] = result;
-                dstIndex++;
-            }
-        }
-    },
-    geBlendOverForm16: function() {
-        // since we have two pixels per word, grab from even positions
-        var state = this.b2d_state,
-            form = state.form,
-            minX = state.minX & ~1,
-            minY = state.minY,
-            maxX = (state.maxX + 1) & ~1,
-            maxY = state.maxY,
-            width = maxX - minX,
-            height = maxY - minY,
-            canvasBytes = state.context.getImageData(minX, minY, width, height).data,
-            srcIndex = 0;
-        if (this.b2d_debug) console.log("==> clipped to " + width + "x" + height);
-        for (var y = minY; y < maxY; y++) {
-            var dstIndex = y * form.pitch + (minX / 2);
-            for (var x = minX; x < maxX; x += 2) {
-                if (!(canvasBytes[srcIndex+3] | canvasBytes[srcIndex+7])) {
-                    srcIndex += 8; dstIndex++; // skip pixels if fully transparent
-                    continue;
-                }
-                var dstPixels = form.bits[dstIndex],  // two 16-bit pixels
-                    dstShift = 16,
-                    result = 0;
-                for (var i = 0; i < 2; i++) {
-                    var alpha = canvasBytes[srcIndex+3] / 255,
-                        oneMinusAlpha = 1 - alpha,
-                        pix = dstPixels >> dstShift,
-                        r = alpha * canvasBytes[srcIndex  ] + oneMinusAlpha * ((pix >> 7) & 0xF8),
-                        g = alpha * canvasBytes[srcIndex+1] + oneMinusAlpha * ((pix >> 2) & 0xF8),
-                        b = alpha * canvasBytes[srcIndex+2] + oneMinusAlpha * ((pix << 3) & 0xF8),
-                        res = (r & 0xF8) << 7 | (g & 0xF8) << 2 | (b & 0xF8) >> 3;
-                    result = result | (res << dstShift);
-                    dstShift -= 16;
-                    srcIndex += 4;
-                }
-                form.bits[dstIndex] = result;
-                dstIndex++;
-            }
-        }
-    },
-    geBlendOverForm32: function() {
-        var state = this.b2d_state,
-            minX = state.minX,
-            minY = state.minY,
-            maxX = state.maxX,
-            maxY = state.maxY,
-            width = maxX - minX,
-            height = maxY - minY,
-            canvasBytes = state.context.getImageData(minX, minY, width, height).data,
-            form = state.form,
-            srcIndex = 0;
-        if (this.b2d_debug) console.log("==> reading " + width + "x" + height + " pixels");
-        for (var y = minY; y < maxY; y++) {
-            var dstIndex = y * form.pitch + minX;
-            for (var x = minX; x < maxX; x++) {
-                var srcAlpha = canvasBytes[srcIndex+3];
-                if (srcAlpha !== 0) { // skip pixel if fully transparent
-                    var alpha = srcAlpha / 255,
-                        oneMinusAlpha = 1 - alpha,
-                        pix = form.bits[dstIndex],
-                        a =                        srcAlpha + oneMinusAlpha * ((pix >> 24) & 0xFF),
-                        r = alpha * canvasBytes[srcIndex  ] + oneMinusAlpha * ((pix >> 16) & 0xFF),
-                        g = alpha * canvasBytes[srcIndex+1] + oneMinusAlpha * ((pix >>  8) & 0xFF),
-                        b = alpha * canvasBytes[srcIndex+2] + oneMinusAlpha * ( pix        & 0xFF);
-                    form.bits[dstIndex] = (a << 24) | (r << 16) | (g << 8) | b;
-                }
-                srcIndex+= 4;
-                dstIndex++;
-            }
-        }
-    },
-    gePointsFrom: function(arrayObj, nPoints) {
-        var words = arrayObj.words;
-        if (words) {
-            if (words.length == nPoints) return arrayObj.wordsAsInt16Array();       // ShortPointArray
-            if (words.length == nPoints * 2) return arrayObj.wordsAsInt32Array();   // PointArray
-            return null;
-        }
-        // Array of Points
-        var points = arrayObj.pointers;
-        if (!points || points.length != nPoints)
-            return null;
-        var array = [];
-        for (var i = 0; i < nPoints; i++) {
-            var p = points[i].pointers;         // Point
-            array.push(this.floatOrInt(p[0]));  // x
-            array.push(this.floatOrInt(p[1]));  // y
-        }
-        return array;
-    },
-    geSetClip: function(minX, minY, maxX, maxY) {
-        if (this.b2d_debug) console.log("==> clip " + minX + "," + minY + "," + maxX + "," + maxY);
-        var state = this.b2d_state;
-        if (state.minX < minX) state.minX = minX;
-        if (state.minY < minY) state.minY = minY;
-        if (state.maxX > maxX) state.maxX = maxX;
-        if (state.maxY > maxY) state.maxY = maxY;
-    },
-    geSetOffset: function(x, y) {
-        // TODO: make offset work together with transform
-        this.b2d_state.context.setTransform(1, 0, 0, 1, x, y);
-        if (this.b2d_debug) console.log("==> translate " + x +"," + y);
-    },
-    geSetTransform: function(t) {
-        /* Transform is a matrix:
-                ⎛a₁₁ a₁₂ a₁₃⎞
-                ⎝a₂₁ a₂₂ a₂₃⎠
-            Squeak Matrix2x3Transform stores as
-                [a₁₁, a₁₂, a₁₃, a₂₁, a₂₂, a₂₃]
-            but canvas expects
-                [a₁₁, a₂₁, a₁₂, a₂₂, a₁₃, a₂₃]
-        */
-        this.b2d_state.context.setTransform(t[0], t[3], t[1], t[4], t[2], t[5]);
-        if (this.b2d_debug) console.log("==> transform: " + [t[0], t[3], t[1], t[4], t[2], t[5]].join(','));
-    },
-    geSetStyle: function(fillIndex, borderIndex, borderWidth) {
-        var hasFill = fillIndex !== 0,
-            hasStroke = borderIndex !== 0 && borderWidth > 0,
-            state = this.b2d_state;
-        state.hasFill = hasFill;
-        state.hasStroke = hasStroke;
-        if (hasFill) {
-            state.context.fillStyle = this.geStyleFrom(fillIndex);
-            if (this.b2d_debug) console.log("==> fill style: " + state.context.fillStyle);
-        }
-        if (hasStroke) {
-            state.context.strokeStyle = this.geStyleFrom(borderIndex);
-            state.context.lineWidth = borderWidth;
-            if (this.b2d_debug) console.log("==> stroke style: " + state.context.strokeStyle + '@' + borderWidth);
-        }
-        return hasFill || hasStroke;
-    },
-    geColorFrom: function(word) {
-        var b = word & 0xFF,
-            g = (word & 0xFF00) >>> 8,
-            r = (word & 0xFF0000) >>> 16,
-            a = ((word & 0xFF000000) >>> 24) / 255;
-        if (a > 0) { // undo pre-multiplication of alpha
-            b = b / a & 0xFF;
-            g = g / a & 0xFF;
-            r = r / a & 0xFF;
-        }
-        return "rgba(" + [r, g, b, a].join(",") + ")";
-    },
-    geStyleFrom: function(index) {
-        if (index === 0) return null;
-        var fills = this.b2d_state.fills;
-        if (index <= fills.length) return fills[index - 1];
-        return this.geColorFrom(index);
-    },
-    gePrimitiveSetEdgeTransform: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveSetEdgeTransform");
-        var transform = this.stackNonInteger(0);
-        if (!this.success) return false;
-        if (transform.words) this.geSetTransform(transform.wordsAsFloat32Array());
-        this.vm.popN(argCount);
-        return true;
-    },
-    gePrimitiveSetClipRect: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveSetClipRect");
-        var rect = this.stackNonInteger(0);
-        if (!this.success) return false;
-        var origin = rect.pointers[0].pointers,
-            corner = rect.pointers[1].pointers;
-        this.geSetClip(origin[0], origin[1], corner[0], corner[1]);
-        this.vm.popN(argCount);
-        return true;
-    },
-    gePrimitiveRenderImage: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveRenderImage");
-        var stopReason = this.geRender();
-        this.vm.popNandPush(argCount + 1, stopReason);
-        return true;
-    },
-    gePrimitiveRenderScanline: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveRenderScanline");
-        var stopReason = this.geRender();
-        this.vm.popNandPush(argCount + 1, stopReason);
-        return true;
-    },
-    gePrimitiveFinishedProcessing: function(argCount) {
-        var finished = !this.b2d_state.flushNeeded;
-        if (this.b2d_debug) console.log("b2d: gePrimitiveFinishedProcessing => " + finished);
-        this.vm.popNandPush(argCount+1, this.makeStObject(finished));
-        return true;
-    },
-    gePrimitiveNeedsFlushPut: function(argCount) {
-        var needsFlush = this.stackBoolean(0);
-        if (!this.success) return false;
-        this.b2d_state.needsFlush = needsFlush;
-        if (this.b2d_debug) console.log("b2d: gePrimitiveNeedsFlushPut: " + needsFlush);
-        this.vm.popN(argCount);
-        return true;
-    },
-    gePrimitiveInitializeBuffer: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveInitializeBuffer");
-        var engine = this.stackNonInteger(argCount),
-            bitblt = engine.pointers[2]; // BEBitBltIndex
-        this.geReset(bitblt);
-        this.vm.popN(argCount);
-        return true;
-    },
-    gePrimitiveAddOval: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveAddOval");
-        var origin      = this.stackNonInteger(4).pointers,
-            corner      = this.stackNonInteger(3).pointers,
-            fillIndex   = this.stackPos32BitInt(2),
-            borderWidth = this.stackInteger(1),
-            borderIndex = this.stackPos32BitInt(0);
-        if (!this.success) return false;
-        if (this.geSetStyle(fillIndex, borderIndex, borderWidth)) {
-            var ctx = this.b2d_state.context,
-                x = this.floatOrInt(origin[0]),
-                y = this.floatOrInt(origin[1]),
-                w = this.floatOrInt(corner[0]) - x,
-                h = this.floatOrInt(corner[1]) - y;
-            ctx.save();
-            ctx.translate(x, y);
-            ctx.scale(w, h);
-            ctx.arc(0.5, 0.5, 0.5, 0, Math.PI * 2);
-            ctx.restore();
-            if (this.b2d_debug) console.log("==> oval " + [x, y, w, h].join(','));
-            this.b2d_state.flushNeeded = true;
-        }
-        this.vm.popN(argCount);
-        return true;
-    },
-    gePrimitiveAddBezierShape: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveAddBezierShape");
-        var points      = this.stackNonInteger(4),
-            nSegments   = this.stackInteger(3),
-            fillIndex   = this.stackPos32BitInt(2),
-            borderWidth = this.stackInteger(1),
-            borderIndex = this.stackPos32BitInt(0);
-        if (!this.success) return false;
-        if (this.geSetStyle(fillIndex, borderIndex, borderWidth)) {
-            var p = this.gePointsFrom(points, nSegments * 3);
-            if (!p) return false;
-            var ctx = this.b2d_state.context;
-            ctx.moveTo(p[0], p[1]);
-            for (var i = 0; i < p.length; i += 6)
-                ctx.quadraticCurveTo(p[i+2], p[i+3], p[i+4], p[i+5]);
-            if (this.b2d_debug) console.log("==> beziershape");
-            this.b2d_state.flushNeeded = true;
-        }
-        this.vm.popN(argCount);
-        return true;
-    },
-    gePrimitiveAddPolygon: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveAddPolygon");
-        var points      = this.stackNonInteger(4),
-            nPoints     = this.stackInteger(3),
-            fillIndex   = this.stackPos32BitInt(2),
-            borderWidth = this.stackInteger(1),
-            borderIndex = this.stackPos32BitInt(0);
-        if (!this.success) return false;
-        if (this.geSetStyle(fillIndex, borderIndex, borderWidth)) {
-            var p = this.gePointsFrom(points, nPoints);
-            if (!p) return false;
-            var ctx = this.b2d_state.context;
-            ctx.moveTo(p[0], p[1]);
-            for (var i = 2; i < p.length; i += 2)
-                ctx.lineTo(p[i], p[i+1]);
-            if (this.b2d_debug) console.log("==> polygon");
-            this.b2d_state.flushNeeded = true;
-        }
-        return true;
-    },
-    gePrimitiveAddRect: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveAddRect");
-        var origin      = this.stackNonInteger(4).pointers,
-            corner      = this.stackNonInteger(3).pointers,
-            fillIndex   = this.stackPos32BitInt(2),
-            borderWidth = this.stackInteger(1),
-            borderIndex = this.stackPos32BitInt(0);
-        if (!this.success) return false;
-        if (this.geSetStyle(fillIndex, borderIndex, borderWidth)) {
-            var x = this.floatOrInt(origin[0]),
-                y = this.floatOrInt(origin[1]),
-                w = this.floatOrInt(corner[0]) - x,
-                h = this.floatOrInt(corner[1]) - y;
-            this.b2d_state.context.rect(x, y, w, h);
-            if (this.b2d_debug) console.log("==> rect " + [x, y, w, h].join(','));
-            this.b2d_state.flushNeeded = true;
-        }
-        this.vm.popNandPush(argCount+1, 0);
-        return true;
-    },
-    gePrimitiveAddBezier: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveAddBezier");
-        this.vm.warnOnce("B2D: beziers not implemented yet");
-        this.vm.popN(argCount);
-        return true;
-    },
-    gePrimitiveAddCompressedShape: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveAddCompressedShape");
-        var points = this.stackNonInteger(6),
-            nSegments = this.stackInteger(5),
-            leftFills = this.stackNonInteger(4).wordsAsInt16Array(),
-            rightFills = this.stackNonInteger(3).wordsAsInt16Array(),
-            lineWidths = this.stackNonInteger(2).wordsAsInt16Array(),
-            lineFills = this.stackNonInteger(1).wordsAsInt16Array(),
-            fillIndexList = this.stackNonInteger(0).words;
-        if (!this.success) return false;
-        // fills and widths are ShortRunArrays
-        if (leftFills.length !== 2 || rightFills.length !== 2 || lineWidths.length !== 2 || lineFills.length !== 2 ||
-            leftFills[1] !== nSegments || rightFills[1] !== nSegments || lineWidths[1] !== nSegments || lineFills[1] !== nSegments ||
-            leftFills[0] !== 0) {
-            this.vm.warnOnce("B2D: complex compressed shapes not implemented yet");
-            debugger;
-        }
-        var fillIndex = rightFills[0] ? fillIndexList[rightFills[0] - 1] : 0,
-            borderIndex = lineFills[0] ? fillIndexList[lineFills[0] - 1] : 0,
-            borderWidth = lineWidths[0];
-        if (this.geSetStyle(fillIndex, borderIndex, borderWidth)) {
-            var p = this.gePointsFrom(points, nSegments * 3);
-            if (!p) return false;
-            var ctx = this.b2d_state.context;
-            ctx.moveTo(p[0], p[1]);
-            for (var i = 0; i < p.length; i += 6)
-                ctx.quadraticCurveTo(p[i+2], p[i+3], p[i+4], p[i+5]);
-            if (this.b2d_debug) console.log("==> beziershape");
-            this.geFlush();
-        }
-        this.vm.popN(argCount);
-        return true;
-    },
-    gePrimitiveAddLine: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveAddLine");
-        this.vm.warnOnce("B2D: lines not implemented yet");
-        this.vm.popN(argCount);
-        return true;
-    },
-    gePrimitiveAddBitmapFill: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveAddBitmapFill");
-        this.vm.warnOnce("B2D: bitmap fills not implemented yet");
-        var fills = this.b2d_state.fills;
-        fills.push('red');
-        this.vm.popNandPush(argCount+1, fills.length);
-        return true;
-    },
-    gePrimitiveAddGradientFill: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveAddGradientFill");
-        var ramp = this.stackNonInteger(4).words,
-            origin = this.stackNonInteger(3).pointers,
-            direction = this.stackNonInteger(2).pointers,
-            //normal = this.stackNonInteger(1).pointers,
-            isRadial = this.stackBoolean(0);
-        if (!this.success) return false;
-        var x = this.floatOrInt(origin[0]),
-            y = this.floatOrInt(origin[1]),
-            dx = this.floatOrInt(direction[0]),
-            dy = this.floatOrInt(direction[1]),
-            state = this.b2d_state,
-            ctx = state.context,
-            gradient = isRadial
-                ? ctx.createRadialGradient(x, y, 0, x, y, Math.sqrt(dx*dx + dy*dy))
-                : ctx.createLinearGradient(x, y, x + dx, y + dy);
-        // we get a 512-step color ramp here. Going to assume it's made from only two colors.
-        gradient.addColorStop(0, this.geColorFrom(ramp[0]));
-        gradient.addColorStop(1, this.geColorFrom(ramp[ramp.length - 1]));
-        // TODO: use more than two stops
-        // IDEA: the original gradient is likely in a temp at this.vm.stackValue(7)
-        //       so we could get the original color stops from it
-        state.fills.push(gradient);
-        this.vm.popNandPush(argCount+1, state.fills.length);
-        return true;
-    },
-    gePrimitiveNeedsFlush: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveNeedsFlush => " + this.b2d_state.needsFlush);
-        this.vm.popNandPush(argCount, this.makeStObject(this.b2d_state.needsFlush));
-        return true;
-    },
-    gePrimitiveSetOffset: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveSetOffset");
-        var offset = this.stackNonInteger(0).pointers;
-        if (!offset) return false;
-        this.geSetOffset(this.floatOrInt(offset[0]), this.floatOrInt(offset[1]));
-        this.vm.popN(argCount);
-        return true;
-    },
-    gePrimitiveGetFailureReason: function(argCount) { this.vm.popN(argCount+1, 0); return true; },
-    gePrimitiveSetColorTransform: function(argCount) {this.vm.popN(argCount); return true;},
-    gePrimitiveSetAALevel: function(argCount) { this.vm.popN(argCount); return true; },
-    gePrimitiveGetAALevel: function(argCount) { return false; },
-    gePrimitiveSetDepth: function(argCount) {this.vm.popN(argCount); return true; },
-    gePrimitiveGetDepth: function(argCount) {this.vm.popNandPush(argCount+1, 0); return true; },
-    gePrimitiveGetClipRect: function(argCount) { return false; },
-    gePrimitiveGetOffset: function(argCount) { return false; },
-    gePrimitiveSetBitBltPlugin: function(argCount) { this.vm.popN(argCount); return true; },
-    gePrimitiveDoProfileStats: function(argCount) { this.vm.popN(argCount); return true; },
-    gePrimitiveGetBezierStats: function(argCount) { this.vm.popN(argCount); return true; },
-    gePrimitiveGetCounts: function(argCount) { this.vm.popN(argCount); return true; },
-    gePrimitiveGetTimes: function(argCount) { this.vm.popN(argCount); return true; },
-    gePrimitiveInitializeProcessing: function(argCount) { return false; },
-    gePrimitiveAddActiveEdgeEntry: function(argCount) { return false; },
-    gePrimitiveChangedActiveEdgeEntry: function(argCount) { return false; },
-    gePrimitiveNextActiveEdgeEntry: function(argCount) { return false; },
-    gePrimitiveNextGlobalEdgeEntry: function(argCount) { return false; },
-    gePrimitiveDisplaySpanBuffer: function(argCount) { return false; },
-    gePrimitiveCopyBuffer: function(argCount) { return false; },
-    gePrimitiveNextFillEntry: function(argCount) { return false; },
-    gePrimitiveMergeFillFrom: function(argCount) { return false; },
-    gePrimitiveRegisterExternalEdge: function(argCount) { return false; },
-    gePrimitiveRegisterExternalFill: function(argCount) { return false; },
-},
 'JPEGReadWriter2Plugin', {
     jpeg2_primJPEGPluginIsPresent: function(argCount) {
         return this.popNandPushIfOK(argCount + 1, this.vm.trueObj);
@@ -6409,6 +5837,135 @@ Object.subclass('Squeak.Primitives',
     primitiveFFTPermuteData: function(argCount) {
         return this.namedPrimitive("FFTPlugin", "primitiveFFTPermuteData", argCount);
     },
+	gePrimitiveMergeFillFrom: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveMergeFillFrom", argCount);
+	},
+	gePrimitiveCopyBuffer: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveCopyBuffer", argCount);
+	},
+	gePrimitiveAddRect: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAddRect", argCount);
+	},
+	gePrimitiveAddGradientFill: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAddGradientFill", argCount);
+	},
+	gePrimitiveSetClipRect: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveSetClipRect", argCount);
+	},
+	gePrimitiveSetBitBltPlugin: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveSetBitBltPlugin", argCount);
+	},
+	gePrimitiveRegisterExternalEdge: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveRegisterExternalEdge", argCount);
+	},
+	gePrimitiveGetClipRect: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveGetClipRect", argCount);
+	},
+	gePrimitiveAddBezier: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAddBezier", argCount);
+	},
+	gePrimitiveInitializeProcessing: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveInitializeProcessing", argCount);
+	},
+	gePrimitiveRenderImage: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveRenderImage", argCount);
+	},
+	gePrimitiveGetOffset: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveGetOffset", argCount);
+	},
+	gePrimitiveSetDepth: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveSetDepth", argCount);
+	},
+	gePrimitiveAddBezierShape: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAddBezierShape", argCount);
+	},
+	gePrimitiveSetEdgeTransform: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveSetEdgeTransform", argCount);
+	},
+	gePrimitiveGetTimes: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveGetTimes", argCount);
+	},
+	gePrimitiveNextActiveEdgeEntry: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveNextActiveEdgeEntry", argCount);
+	},
+	gePrimitiveAddBitmapFill: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAddBitmapFill", argCount);
+	},
+	gePrimitiveGetDepth: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveGetDepth", argCount);
+	},
+	gePrimitiveAbortProcessing: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAbortProcessing", argCount);
+	},
+	gePrimitiveNextGlobalEdgeEntry: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveNextGlobalEdgeEntry", argCount);
+	},
+	gePrimitiveGetFailureReason: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveGetFailureReason", argCount);
+	},
+	gePrimitiveDisplaySpanBuffer: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveDisplaySpanBuffer", argCount);
+	},
+	gePrimitiveGetCounts: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveGetCounts", argCount);
+	},
+	gePrimitiveChangedActiveEdgeEntry: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveChangedActiveEdgeEntry", argCount);
+	},
+	gePrimitiveRenderScanline: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveRenderScanline", argCount);
+	},
+	gePrimitiveGetBezierStats: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveGetBezierStats", argCount);
+	},
+	gePrimitiveFinishedProcessing: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveFinishedProcessing", argCount);
+	},
+	gePrimitiveNeedsFlush: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveNeedsFlush", argCount);
+	},
+	gePrimitiveAddLine: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAddLine", argCount);
+	},
+	gePrimitiveSetOffset: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveSetOffset", argCount);
+	},
+	gePrimitiveNextFillEntry: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveNextFillEntry", argCount);
+	},
+	gePrimitiveInitializeBuffer: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveInitializeBuffer", argCount);
+	},
+	gePrimitiveDoProfileStats: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveDoProfileStats", argCount);
+	},
+	gePrimitiveAddActiveEdgeEntry: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAddActiveEdgeEntry", argCount);
+	},
+	gePrimitiveSetAALevel: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveSetAALevel", argCount);
+	},
+	gePrimitiveNeedsFlushPut: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveNeedsFlushPut", argCount);
+	},
+	gePrimitiveAddCompressedShape: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAddCompressedShape", argCount);
+	},
+	gePrimitiveSetColorTransform: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveSetColorTransform", argCount);
+	},
+	gePrimitiveAddOval: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAddOval", argCount);
+	},
+	gePrimitiveRegisterExternalFill: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveRegisterExternalFill", argCount);
+	},
+	gePrimitiveAddPolygon: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAddPolygon", argCount);
+	},
+	gePrimitiveGetAALevel: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveGetAALevel", argCount);
+	},
 });
 
 Object.subclass('Squeak.InterpreterProxy',

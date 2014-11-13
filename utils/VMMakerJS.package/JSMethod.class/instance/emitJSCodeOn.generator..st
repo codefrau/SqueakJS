@@ -5,5 +5,6 @@ emitJSCodeOn: aStream generator: aCodeGen
 	aCodeGen pushScope: declarations while: [
 		self emitJSCommentOn: aStream.	"place method comment before function"
 		self emitJSHeaderOn: aStream generator: aCodeGen.
-		parseTree emitJSCodeOn: aStream level: 1 generator: aCodeGen.
+		(self emitJSSpecialOn:  aStream level: 1 generator: aCodeGen)
+			ifFalse: [parseTree emitJSCodeOn: aStream level: 1 generator: aCodeGen].
 		aStream nextPutAll: '}'; cr]

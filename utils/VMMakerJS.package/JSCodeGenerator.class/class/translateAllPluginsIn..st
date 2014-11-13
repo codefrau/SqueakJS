@@ -2,13 +2,14 @@ utilities
 translateAllPluginsIn: aDirectory
 	self beActiveDuring: [
 		#(	ADPCMCodecPlugin
+			BalloonEnginePlugin
 			"BMPReadWriterPlugin	-- not working yet"
 			BitBltSimulation
-			DSAPlugin
+			"DSAPlugin			--not working yet"
 			DeflatePlugin
 			FFTPlugin
 			FloatArrayPlugin
-			"GeniePlugin		-- not working yet"
+			GeniePlugin		"-- not working yet"
 			JPEGReaderPlugin
 			KedamaPlugin
 			KedamaPlugin2

@@ -2,6 +2,9 @@ JS translation
 generateAtPut: msgNode on: aStream indent: level
 	"Generate the JS code for this message onto the given stream."
 	| putExpr incExpr |
+	(msgNode receiver isSend and: [msgNode receiver selector = #cCoerce:to:]) ifTrue: [
+		msgNode receiver args asString =  '{deltaST . ''int *''}'
+			ifTrue: [msgNode receiver: msgNode receiver args first]].	"HACK!"
 	self generateAt: msgNode on: aStream indent: level.
 
 	(putExpr := msgNode args last) isPlusOne ifTrue: [

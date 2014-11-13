@@ -12,7 +12,9 @@ generateFirstIndexableField: msgNode on: aStream indent: level
 			ifTrue: ['unsigned int*'] ifFalse: [
 		msgNode asString = 'interpreterProxy firstIndexableField: blockOop'
 			ifTrue: ['int*'] ifFalse: [
-		self halt]]]].
+		parent method == (TReturnNode>>#emitJSCodeOn:level:generator:)
+			ifTrue: [currentMethod returnType] ifFalse: [
+		self halt]]]]].
 	cType ifNotNil: [
 		cType := cType copyReplaceAll: ' *' with: '* '.
 		accessor := (cType beginsWith: 'unsigned char*') ifTrue: ['.bytes']

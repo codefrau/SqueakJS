@@ -6,7 +6,7 @@ generateDivide: msgNode on: aStream indent: level
 	rcvr := msgNode receiver.
 	arg := msgNode args first.
 	msgNode selector == #/ ifTrue: [
-		(#('Matrix2x3Plugin' 'ScratchPlugin' 'FloatArrayPlugin' 'KedamaPlugin' 'KedamaPlugin2' 'FFTPlugin' 'Klatt') includes: self pluginName) ifFalse: [self halt].
+		(#('Matrix2x3Plugin' 'ScratchPlugin' 'FloatArrayPlugin' 'KedamaPlugin' 'KedamaPlugin2' 'FFTPlugin' 'Klatt' 'B2DPlugin') includes: self pluginName) ifFalse: [self halt: msgNode].
 		self emitJSExpression: rcvr on: aStream.
 		aStream nextPutAll: ' / '.
 		^self emitJSExpression: arg on: aStream].

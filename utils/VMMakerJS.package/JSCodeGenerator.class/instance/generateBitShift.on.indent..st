@@ -7,10 +7,14 @@ generateBitShift: msgNode on: aStream indent: level
 	rcvr := msgNode receiver.
 	arg isConstant ifTrue: [
 		"bit shift amount is a constant"
-		self emitJSExpression: rcvr on: aStream.
 		arg value < 0 ifTrue: [
+			"skip unneeded coercion to unsigned"
+			(rcvr isSend and: [rcvr selector = #cCoerce:to: and: [rcvr args second value = 'unsigned']])
+				ifTrue: [self emitJSExpression: rcvr args first on: aStream]
+				ifFalse: [self emitJSExpression: rcvr on: aStream].
 			aStream nextPutAll: ' >>> ', arg value negated printString.
 		] ifFalse: [
+			self emitJSExpression: rcvr on: aStream.
 			aStream nextPutAll: ' << ', arg value printString.
 		].
 	] ifFalse: [

@@ -1,5 +1,4 @@
 private
 isPointer: node
-	node isVariable ifFalse: [^false].
-	(self typeOfVariable: node name) ifNotNil: [:type | ^type includes: $*].
+	self ifPointerVar: node then: [:type | ^true].
 	^false

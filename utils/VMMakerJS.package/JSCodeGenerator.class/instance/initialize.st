@@ -7,7 +7,7 @@ initialize
 	variableDeclarations := Dictionary new: 100.
 	methods := Dictionary new: 500.
 	macros := Dictionary new.
-	self initializeCTranslationDictionary.
+	self initializeJSTranslationDictionary.
 	receiverDict := Dictionary new.
 	headerFiles := OrderedCollection new.
 	globalVariableUsage := Dictionary new.

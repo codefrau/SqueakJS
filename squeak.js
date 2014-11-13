@@ -86,7 +86,6 @@ Object.extend = function(obj /* + more args */ ) {
         "plugins/ADPCMCodecPlugin.js",
         "plugins/B2DPlugin.js",
         "plugins/BitBltPlugin.js",
-        "plugins/DSAPrims.js",
         "plugins/FFTPlugin.js",
         "plugins/FloatArrayPlugin.js",
         "plugins/GeniePlugin.js",

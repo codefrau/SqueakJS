@@ -207,7 +207,7 @@ Object.extend(Squeak,
     },
 },
 "files", {
-    fsck: function(dir, files, stats) {
+    fsck: function(whenDone, dir, files, stats) {
         dir = dir || "";
         stats = stats || {dirs: 0, files: 0, bytes: 0};
         if (!files) {
@@ -226,7 +226,7 @@ Object.extend(Squeak,
                             files[cursor.key] = true;
                             cursor.continue();
                         } else { // done
-                            Squeak.fsck(dir, files, stats);
+                            Squeak.fsck(whenDone, dir, files, stats);
                         }
                     }
                     cursorReq.onerror = function(e) {
@@ -243,7 +243,7 @@ Object.extend(Squeak,
                 isDir = entries[name][3];
             if (isDir) {
                 var exists = "squeak:" + path in localStorage;
-                if (exists) Squeak.fsck(path, files, stats);
+                if (exists) Squeak.fsck(null, path, files, stats);
                 else {
                     console.log("Deleting stale directory " + path);
                     Squeak.dirDelete(path);
@@ -282,6 +282,7 @@ Object.extend(Squeak,
                     });
                 }
             }
+            if (whenDone) whenDone(stats);
         }
     },
     dbTransaction: function(mode, description, transactionFunc, completionFunc) {

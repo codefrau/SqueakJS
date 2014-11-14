@@ -7,6 +7,14 @@ canvas {
     background: #000;
     display: none;
 }
+h1 {
+    color: #F90;
+}
+#logo {
+    border-radius: 20px;
+    box-shadow: 0 0 5px 5px #F90;
+    margin-right: 20px;
+}
 div#sqSpinner {
     position: absolute;
     margin: auto; top: 0; left: 0; bottom: 0; right: 0;

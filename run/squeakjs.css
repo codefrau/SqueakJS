@@ -35,3 +35,11 @@ div#sqSpinner > div {
     border-radius: 5px;
     box-shadow: 0 0 5px 5px #F90;
 }
+#drop {
+    color: #9b988a;
+    border: 6px dashed #9b988a;
+    min-height: 50px;
+    max-width: 600px;
+    margin: 10px 0;
+    padding: 10px;
+}

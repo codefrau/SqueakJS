@@ -1,3 +1,29 @@
+/* SqueakJS 0.6.5
+ *
+ * squeak-all.js assembled from:
+ *   ../squeak.js
+ *   ../vm.js
+ *   ../jit.js
+ *   ../plugins/ADPCMCodecPlugin.js
+ *   ../plugins/B2DPlugin.js
+ *   ../plugins/BitBltPlugin.js
+ *   ../plugins/FFTPlugin.js
+ *   ../plugins/FloatArrayPlugin.js
+ *   ../plugins/GeniePlugin.js
+ *   ../plugins/JPEGReaderPlugin.js
+ *   ../plugins/KedamaPlugin.js
+ *   ../plugins/KedamaPlugin2.js
+ *   ../plugins/Klatt.js
+ *   ../plugins/LargeIntegers.js
+ *   ../plugins/Matrix2x3Plugin.js
+ *   ../plugins/MiscPrimitivePlugin.js
+ *   ../plugins/ScratchPlugin.js
+ *   ../plugins/SoundGenerationPlugin.js
+ *   ../plugins/StarSqueakPlugin.js
+ *   ../plugins/ZipPlugin.js
+ *   ../lib/lz-string.js
+ */
+
 /*
  * Copyright (c) 2013,2014 Bert Freudenberg
  *
@@ -84,10 +110,11 @@ Object.extend = function(obj /* + more args */ ) {
     [   /* vm.js (squeak-all.js) */
         /* jit.js (squeak-all.js) */
         /* plugins/ADPCMCodecPlugin.js (squeak-all.js) */
+        /* plugins/B2DPlugin.js (squeak-all.js) */
         /* plugins/BitBltPlugin.js (squeak-all.js) */
-        /* plugins/DSAPrims.js (squeak-all.js) */
         /* plugins/FFTPlugin.js (squeak-all.js) */
         /* plugins/FloatArrayPlugin.js (squeak-all.js) */
+        /* plugins/GeniePlugin.js (squeak-all.js) */
         /* plugins/JPEGReaderPlugin.js (squeak-all.js) */
         /* plugins/KedamaPlugin.js (squeak-all.js) */
         /* plugins/KedamaPlugin2.js (squeak-all.js) */
@@ -112,12 +139,12 @@ module("SqueakJS").requires("users.bert.SqueakJS.vm").toRun(function() {
 
 
 //////////////////////////////////////////////////////////////////////////////
-// display & event setup 
+// display & event setup
 //////////////////////////////////////////////////////////////////////////////
 
 function setupFullscreen(display, canvas, options) {
     // Fullscreen can only be enabled in an event handler. So we check the
-    // fullscreen flag on every mouse down/up and keyboard event.        
+    // fullscreen flag on every mouse down/up and keyboard event.
 
     // If the user canceled fullscreen, turn off the fullscreen flag so
     // we don't try to enable it again in the next event
@@ -175,7 +202,7 @@ function setupFullscreen(display, canvas, options) {
             }
         }
     }
-    
+
     if (options.fullscreenCheckbox) options.fullscreenCheckbox.onclick = function() {
         display.fullscreen = options.fullscreenCheckbox.checked;
         checkFullscreen();
@@ -251,7 +278,7 @@ function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
                 case 0: buttons = Squeak.Mouse_Red; break;      // left
                 case 1: buttons = Squeak.Mouse_Yellow; break;   // middle
                 case 2: buttons = Squeak.Mouse_Blue; break;     // right
-            }; 
+            };
             if (options.swapButtons)
                 if (buttons == Squeak.Mouse_Yellow) buttons = Squeak.Mouse_Blue;
                 else if (buttons == Squeak.Mouse_Blue) buttons = Squeak.Mouse_Yellow;
@@ -295,8 +322,8 @@ function recordKeyboardEvent(key, timestamp, display, eventQueue) {
             timestamp,  // converted to Squeak time in makeSqueakEvent()
             key, // MacRoman
             Squeak.EventKeyChar,
-            display.buttons >> 3, 
-            0,  // Unicode 
+            display.buttons >> 3,
+            0,  // Unicode
         ]);
         if (display.signalInputEvent)
             display.signalInputEvent();
@@ -619,7 +646,7 @@ var spinnerAngle = 0,
     becameBusy = 0;
 function updateSpinner(spinner, idleMS, vm, display) {
     var busy = idleMS === 0,
-        animating = vm.lastTick - display.lastTick < 500; 
+        animating = vm.lastTick - display.lastTick < 500;
     if (!busy || animating) {
         spinner.display = "none";
         becameBusy = 0;
@@ -635,7 +662,7 @@ function updateSpinner(spinner, idleMS, vm, display) {
 }
 
 //////////////////////////////////////////////////////////////////////////////
-// main loop 
+// main loop
 //////////////////////////////////////////////////////////////////////////////
 
 var loop; // holds timeout for main loop
@@ -709,8 +736,6 @@ function processOptions(options) {
     options.root = root;
     if (options.url && options.files && !options.image)
         options.image = options.url + "/" + options.files[0];
-    if (!options.appName) options.appName = options.image ? 
-        options.image.replace(/.*\//, "").replace(/\.image$/, "") : "SqueakJS";
     if (options.templates) {
         if (options.templates.constructor === Array) {
             var templates = {};
@@ -724,10 +749,10 @@ function processOptions(options) {
 
 SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     processOptions(options);
-    SqueakJS.options = options;
-    SqueakJS.appName = options.appName;
     if (options.image) imageUrl = options.image;
     else options.image = imageUrl;
+    SqueakJS.options = options;
+    SqueakJS.appName = options.appName || imageUrl.replace(/.*\//, "").replace(/\.image$/, "");
     Squeak.fsck();
     var display = createSqueakDisplay(canvas, options),
         imageName = Squeak.splitFilePath(imageUrl).basename,
@@ -798,13 +823,13 @@ SqueakJS.onQuit = function(vm, display, options) {
 }); // end module
 
 //////////////////////////////////////////////////////////////////////////////
-// browser stuff 
+// browser stuff
 //////////////////////////////////////////////////////////////////////////////
 
 if (window.applicationCache) {
     applicationCache.addEventListener('updateready', function() {
-        applicationCache.swapCache();
-        var appName = SqueakJS && SqueakJS.appName || "SqueakJS";
+        // use original appName from options
+        var appName = window.SqueakJS && SqueakJS.options && SqueakJS.options.appName || "SqueakJS";
         if (confirm(appName + ' has been updated. Restart now?')) {
             window.onbeforeunload = null;
             window.location.reload();
@@ -836,13 +861,14 @@ module('users.bert.SqueakJS.vm').requires().toRun(function() {
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
- 
+
 // shorter name for convenience
 window.Squeak = users.bert.SqueakJS.vm;
 
-Object.extend(Squeak, {
+Object.extend(Squeak,
+"version", {
     // system attributes
-    vmVersion: "SqueakJS 0.6.4",
+    vmVersion: "SqueakJS 0.6.5",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -850,14 +876,15 @@ Object.extend(Squeak, {
     platformSubtype: "unknown",
     osVersion: navigator.userAgent,     // might want to parse
     windowSystem: "HTML",
-
+},
+"constants", {
     // object headers
     HeaderTypeMask: 3,
     HeaderTypeSizeAndClass: 0, //3-word header
     HeaderTypeClass: 1,        //2-word header
     HeaderTypeFree: 2,         //free block
     HeaderTypeShort: 3,        //1-word header
-    
+
     // Indices into SpecialObjects array
     splOb_NilObject: 0,
     splOb_FalseObject: 1,
@@ -907,7 +934,7 @@ Object.extend(Squeak, {
     splOb_ClassExternalLibrary: 47,
     splOb_SelectorAboutToReturn: 48,
     splOb_SelectorRunWithIn: 49,
-    
+
     // Class layout:
     Class_superclass: 0,
     Class_mdict: 1,
@@ -930,9 +957,9 @@ Object.extend(Squeak, {
     BlockContext_home: 5,
     // Closure layout:
     Closure_outerContext: 0,
-	Closure_startpc: 1,
-	Closure_numArgs: 2,
-	Closure_firstCopiedValue: 3,
+    Closure_startpc: 1,
+    Closure_numArgs: 2,
+    Closure_firstCopiedValue: 3,
     // Stream layout:
     Stream_array: 0,
     Stream_position: 1,
@@ -950,7 +977,7 @@ Object.extend(Squeak, {
     //Process layout:
     Proc_suspendedContext: 1,
     Proc_priority: 2,
-    Proc_myList: 3,	
+    Proc_myList: 3,
     // Association layout:
     Assn_key: 0,
     Assn_value: 1,
@@ -989,7 +1016,7 @@ Object.extend(Squeak, {
     Form_width: 1,
     Form_height: 2,
     Form_depth: 3,
-    
+
     // Event constants
     Mouse_Blue: 1,
     Mouse_Yellow: 2,
@@ -1012,17 +1039,514 @@ Object.extend(Squeak, {
     MaxSmallInt:  0x3FFFFFFF,
     NonSmallInt: -0x50000000,           // non-small and neg (so non pos32 too)
     MillisecondClockMask: 0x1FFFFFFF,
-    Epoch: Date.UTC(1901,0,1) + (new Date()).getTimezoneOffset()*60000,        // local timezone
-    EpochUTC: Date.UTC(1901,0,1),
-});
-
-Object.extend(Squeak, {
+},
+"modules", {
     // don't clobber registered modules
     externalModules: Squeak.externalModules || {},
     registerExternalModule: function(name, module) {
         this.externalModules[name] = module;
     },
+},
+"files", {
+    fsck: function(whenDone, dir, files, stats) {
+        dir = dir || "";
+        stats = stats || {dirs: 0, files: 0, bytes: 0};
+        if (!files) {
+            // find existing files
+            files = {};
+            for (var key in localStorage) {
+                var match = key.match(/squeak-file(\.lz)?:(.*)$/);
+                if (match) {files[match[2]] = true};
+            }
+            if (typeof indexedDB !== "undefined") {
+                return this.dbTransaction("readonly", "fsck cursor", function(fileStore) {
+                    var cursorReq = fileStore.openCursor();
+                    cursorReq.onsuccess = function(e) {
+                        var cursor = e.target.result;
+                        if (cursor) {
+                            files[cursor.key] = true;
+                            cursor.continue();
+                        } else { // done
+                            Squeak.fsck(whenDone, dir, files, stats);
+                        }
+                    }
+                    cursorReq.onerror = function(e) {
+                        console.error("fsck failed");
+                    }
+                });
+            }
+        }
+        stats.dirs++;
+        // check directories
+        var entries = Squeak.dirList(dir);
+        for (var name in entries) {
+            var path = dir + "/" + name,
+                isDir = entries[name][3];
+            if (isDir) {
+                var exists = "squeak:" + path in localStorage;
+                if (exists) Squeak.fsck(null, path, files, stats);
+                else {
+                    console.log("Deleting stale directory " + path);
+                    Squeak.dirDelete(path);
+                }
+            } else {
+                if (!files[path]) {
+                    console.log("Deleting stale file entry " + path);
+                    Squeak.fileDelete(path, true);
+                } else {
+                    files[path] = false; // mark as visited
+                    stats.files++;
+                    stats.bytes += entries[name][4];
+                }
+            }
+        }
+        // check orphaned files
+        if (dir === "") {
+            console.log("squeak fsck: " + stats.dirs + " directories, " + stats.files + " files, " + (stats.bytes/1000000).toFixed(1) + " MBytes");
+            var orphaned = [],
+                total = 0;
+            for (var path in files) {
+                total++;
+                if (files[path]) orphaned.push(path); // not marked visited
+            }
+            if (orphaned.length > 0) {
+                for (var i = 0; i < orphaned.length; i++) {
+                    console.log("Deleting orphaned file " + orphaned[i]);
+                    delete localStorage["squeak-file:" + orphaned[i]];
+                    delete localStorage["squeak-file.lz:" + orphaned[i]];
+                }
+                if (typeof indexedDB !== "undefined") {
+                    this.dbTransaction("readwrite", "fsck delete", function(fileStore) {
+                        for (var i = 0; i < orphaned.length; i++) {
+                            fileStore.delete(orphaned[i]);
+                        };
+                    });
+                }
+            }
+            if (whenDone) whenDone(stats);
+        }
+    },
+    dbTransaction: function(mode, description, transactionFunc, completionFunc) {
+        // File contents is stored in the IndexedDB named "squeak" in object store "files"
+        // and directory entries in localStorage with prefix "squeak:"
+        if (typeof indexedDB == "undefined") {
+            transactionFunc(Squeak.dbFake());
+            if (completionFunc) completionFunc();
+            return;
+        }
+
+        var startTransaction = function() {
+            var trans = SqueakDB.transaction("files", mode),
+                fileStore = trans.objectStore("files");
+            trans.oncomplete = function(e) { if (completionFunc) completionFunc(); }
+            trans.onerror = function(e) { console.error(e.target.error.name + ": " + description) }
+            trans.onabort = function(e) {
+                console.error(e.target.error.name + ": aborting " + description);
+                // fall back to local/memory storage
+                transactionFunc(Squeak.dbFake());
+                if (completionFunc) completionFunc();
+            }
+            transactionFunc(fileStore);
+        };
+
+        // if database connection already opened, just do transaction
+        if (window.SqueakDB) return startTransaction();
+
+        // otherwise, open SqueakDB first
+        var openReq = indexedDB.open("squeak");
+        openReq.onsuccess = function(e) {
+            window.SqueakDB = this.result;
+            SqueakDB.onversionchange = function(e) {
+                delete window.SqueakDB;
+                this.close();
+            };
+            SqueakDB.onerror = function(e) {
+                console.log("Error accessing database: " + e.target.errorCode);
+            };
+            startTransaction();
+        };
+        openReq.onupgradeneeded = function (e) {
+            // run only first time, or when version changed
+            console.log("Creating database version " + e.newVersion);
+            var db = e.target.result;
+            db.createObjectStore("files");
+        };
+        openReq.onerror = function(e) {
+            console.log("Error opening database: " + e.target.errorCode);
+        };
+        openReq.onblocked = function(e) {
+            // If some other tab is loaded with the database, then it needs to be closed
+            // before we can proceed upgrading the database.
+            alert("Database upgrade needed. Please close all other tabs with this site open!");
+        };
+    },
+    dbFake: function() {
+        // indexedDB is not supported by this browser, fake it using localStorage
+        // since localStorage space is severly limited, use LZString if loaded
+        // see https://github.com/pieroxy/lz-string
+        if (typeof SqueakDBFake == "undefined") {
+            if (typeof indexedDB == "undefined")
+                console.warn("IndexedDB not supported by this browser, using localStorage");
+            window.SqueakDBFake = {
+                bigFiles: {},
+                bigFileThreshold: 100000,
+                get: function(filename) {
+                    var buffer = SqueakDBFake.bigFiles[filename];
+                    if (!buffer) {
+                        var string = localStorage["squeak-file:" + filename];
+                        if (!string) {
+                            var compressed = localStorage["squeak-file.lz:" + filename];
+                            if (compressed) {
+                                if (typeof LZString == "object") {
+                                    string = LZString.decompressFromUTF16(compressed);
+                                } else {
+                                    console.error("LZString not loaded: cannot decompress " + filename);
+                                }
+                            }
+                        }
+                        if (string) {
+                            var bytes = new Uint8Array(string.length);
+                            for (var i = 0; i < bytes.length; i++)
+                                bytes[i] = string.charCodeAt(i) & 0xFF;
+                            buffer = bytes.buffer;
+                        }
+                    }
+                    var req = {result: buffer};
+                    setTimeout(function(){
+                        if (buffer && req.onsuccess) req.onsuccess();
+                        if (!buffer && req.onerror) req.onerror();
+                    }, 0);
+                    return req;
+                },
+                put: function(buffer, filename) {
+                    if (buffer.byteLength > SqueakDBFake.bigFileThreshold) {
+                        if (!SqueakDBFake.bigFiles[filename])
+                            console.log("File " + filename + " (" + buffer.byteLength + " bytes) too large, storing in memory only");
+                        SqueakDBFake.bigFiles[filename] = buffer;
+                    } else {
+                        var string = Squeak.bytesAsString(new Uint8Array(buffer));
+                        if (typeof LZString == "object") {
+                            var compressed = LZString.compressToUTF16(string);
+                            localStorage["squeak-file.lz:" + filename] = compressed;
+                            delete localStorage["squeak-file:" + filename];
+                        } else {
+                            localStorage["squeak-file:" + filename] = string;
+                        }
+                    }
+                    var req = {};
+                    setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
+                    return req;
+                },
+                delete: function(filename) {
+                    delete localStorage["squeak-file:" + filename];
+                    delete localStorage["squeak-file.lz:" + filename];
+                    delete SqueakDBFake.bigFiles[filename];
+                    var req = {};
+                    setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
+                    return req;
+                },
+            }
+        }
+        return SqueakDBFake;
+    },
+    fileGet: function(filepath, thenDo, errorDo) {
+        if (!errorDo) errorDo = function(err) { console.log(err) };
+        var path = this.splitFilePath(filepath);
+        if (!path.basename) return errorDo("Invalid path: " + filepath);
+        this.dbTransaction("readonly", "get " + filepath, function(fileStore) {
+            var getReq = fileStore.get(path.fullname);
+            getReq.onerror = function(e) { errorDo(this.errorCode) };
+            getReq.onsuccess = function(e) {
+                if (this.result !== undefined) return thenDo(this.result);
+                // might be a template
+                Squeak.fetchTemplateFile(path.fullname,
+                    function gotTemplate(template) {thenDo(template)},
+                    function noTemplate() {
+                        // if no indexedDB then we have checked fake db already
+                        if (typeof indexedDB == "undefined") return errorDo("file not found: " + path.fullname);
+                        // fall back on fake db, may be file is there
+                        var fakeReq = Squeak.dbFake().get(path.fullname);
+                        fakeReq.onerror = function(e) { errorDo("file not found: " + path.fullname) };
+                        fakeReq.onsuccess = function(e) { thenDo(this.result); }
+                    });
+            };
+        });
+    },
+    filePut: function(filepath, contents, optSuccess) {
+        // store file, return dir entry if successful
+        var path = this.splitFilePath(filepath); if (!path.basename) return null;
+        var directory = this.dirList(path.dirname); if (!directory) return null;
+        // get or create entry
+        var entry = directory[path.basename],
+            now = this.totalSeconds();
+        if (!entry) { // new file
+            entry = [/*name*/ path.basename, /*ctime*/ now, /*mtime*/ 0, /*dir*/ false, /*size*/ 0];
+            directory[path.basename] = entry;
+        } else if (entry[3]) // is a directory
+            return null;
+        // update directory entry
+        entry[2] = now; // modification time
+        entry[4] = contents.byteLength || contents.length || 0;
+        localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
+        // put file contents (async)
+        this.dbTransaction("readwrite", "put " + filepath,
+            function(fileStore) {
+                fileStore.put(contents, path.fullname);
+            },
+            function transactionComplete() {
+                if (optSuccess) optSuccess();
+            });
+        return entry;
+    },
+    fileDelete: function(filepath, entryOnly) {
+        var path = this.splitFilePath(filepath); if (!path.basename) return false;
+        var directory = this.dirList(path.dirname); if (!directory) return false;
+        var entry = directory[path.basename]; if (!entry || entry[3]) return false; // not found or is a directory
+        // delete entry from directory
+        delete directory[path.basename];
+        localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
+        if (entryOnly) return true;
+        // delete file contents (async)
+        this.dbTransaction("readwrite", "delete " + filepath, function(fileStore) {
+            fileStore.delete(path.fullname);
+        });
+        return true;
+    },
+    fileRename: function(from, to) {
+        var oldpath = this.splitFilePath(from); if (!oldpath.basename) return false;
+        var newpath = this.splitFilePath(to); if (!newpath.basename) return false;
+        var olddir = this.dirList(oldpath.dirname); if (!olddir) return false;
+        var entry = olddir[oldpath.basename]; if (!entry || entry[3]) return false; // not found or is a directory
+        var samedir = oldpath.dirname == newpath.dirname;
+        var newdir = samedir ? olddir : this.dirList(newpath.dirname); if (!newdir) return false;
+        if (newdir[newpath.basename]) return false; // exists already
+        delete olddir[oldpath.basename];            // delete old entry
+        entry[0] = newpath.basename;                // rename entry
+        newdir[newpath.basename] = entry;           // add new entry
+        localStorage["squeak:" + newpath.dirname] = JSON.stringify(newdir);
+        if (!samedir) localStorage["squeak:" + oldpath.dirname] = JSON.stringify(olddir);
+        // move file contents (async)
+        this.fileGet(oldpath.fullname,
+            function success(contents) {
+                this.dbTransaction("readwrite", "rename " + oldpath.fullname + " to " + newpath.fullname, function(fileStore) {
+                    fileStore.delete(oldpath.fullname);
+                    fileStore.put(contents, newpath.fullname);
+                });
+            }.bind(this),
+            function error(msg) {
+                console.log("File rename failed: " + msg);
+            }.bind(this));
+        return true;
+    },
+    fileExists: function(filepath) {
+        var path = this.splitFilePath(filepath); if (!path.basename) return false;
+        var directory = this.dirList(path.dirname); if (!directory) return false;
+        var entry = directory[path.basename]; if (!entry || entry[3]) return false; // not found or is a directory
+        return true;
+    },
+    dirCreate: function(dirpath, withParents) {
+        var path = this.splitFilePath(dirpath); if (!path.basename) return false;
+        if (withParents && !localStorage["squeak:" + path.dirname]) Squeak.dirCreate(path.dirname, true);
+        var directory = this.dirList(path.dirname); if (!directory) return false;
+        if (directory[path.basename]) return false;
+        var now = this.totalSeconds(),
+            entry = [/*name*/ path.basename, /*ctime*/ now, /*mtime*/ now, /*dir*/ true, /*size*/ 0];
+        directory[path.basename] = entry;
+        localStorage["squeak:" + path.fullname] = JSON.stringify({});
+        localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
+        return true;
+    },
+    dirDelete: function(dirpath) {
+        var path = this.splitFilePath(dirpath); if (!path.basename) return false;
+        var directory = this.dirList(path.dirname); if (!directory) return false;
+        if (!directory[path.basename]) return false;
+        var children = this.dirList(path.fullname);
+        if (!children) return false;
+        for (var child in children) return false; // not empty
+        // delete from parent
+        delete directory[path.basename];
+        localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
+        // delete itself
+        delete localStorage["squeak:" + path.fullname];
+        return true;
+    },
+    dirList: function(dirpath, includeTemplates) {
+        // return directory entries or null
+        var path = this.splitFilePath(dirpath),
+            localEntries = localStorage["squeak:" + path.fullname],
+            template = includeTemplates && localStorage["squeak-template:" + path.fullname];
+        if (localEntries || template) {
+            var dir = {};
+            function addEntries(entries) {
+                for (var key in entries) {
+                    if (entries.hasOwnProperty(key)) {
+                        var entry = entries[key];
+                        dir[entry[0]] = entry;
+                    }
+                }
+            }
+            // local entries override templates
+            if (template) addEntries(JSON.parse(template).entries);
+            if (localEntries) addEntries(JSON.parse(localEntries));
+            return dir;
+        }
+        if (path.fullname == "/") return {};
+        return null;
+    },
+    splitFilePath: function(filepath) {
+        if (filepath[0] !== '/') filepath = '/' + filepath;
+        filepath = filepath.replace(/\/\//ig, '/');      // replace double-slashes
+        var matches = filepath.match(/(.*)\/(.*)/),
+            dirname = matches[1].length ? matches[1] : '/',
+            basename = matches[2].length ? matches[2] : null;
+        return {fullname: filepath, dirname: dirname, basename: basename};
+    },
+    flushFile: function(file) {
+        if (file.modified) {
+            var buffer = file.contents.buffer;
+            if (buffer.byteLength !== file.size) {
+                buffer = new ArrayBuffer(file.size);
+                (new Uint8Array(buffer)).set(file.contents.subarray(0, file.size));
+            }
+            Squeak.filePut(file.name, buffer);
+            // if (/SqueakDebug.log/.test(file.name)) {
+            //     var chars = Squeak.bytesAsString(new Uint8Array(buffer));
+            //     console.warn(chars.replace(/\r/g, '\n'));
+            // }
+            file.modified = false;
+        }
+    },
+    flushAllFiles: function() {
+        if (typeof SqueakFiles == 'undefined') return;
+        for (var name in SqueakFiles)
+            this.flushFile(SqueakFiles[name]);
+    },
+    closeAllFiles: function() {
+        // close the files held open in memory
+        Squeak.flushAllFiles();
+        delete window.SqueakFiles;
+    },
+    fetchTemplateDir: function(path, url) {
+        // Called on app startup. Fetch url/sqindex.json and
+        // cache all subdirectory entries in localStorage.
+        // File contents is only fetched on demand
+        path = Squeak.splitFilePath(path).fullname;
+        function ensureTemplateParent(template) {
+            var path = Squeak.splitFilePath(template);
+            if (path.dirname !== "/") ensureTemplateParent(path.dirname);
+            var template = JSON.parse(localStorage["squeak-template:" + path.dirname] || '{"entries": {}}');
+            if (!template.entries[path.basename]) {
+                var now = Squeak.totalSeconds();
+                template.entries[path.basename] = [path.basename, now, now, true, 0];
+                localStorage["squeak-template:" + path.dirname] = JSON.stringify(template);
+            }
+        }
+        function checkSubTemplates(path, url) {
+            var template = JSON.parse(localStorage["squeak-template:" + path]);
+            template.entries.forEach(function(entry) {
+                if (entry[3]) Squeak.fetchTemplateDir(path + "/" + entry[0], url + "/" + entry[0]);
+            });
+        }
+        if (localStorage["squeak-template:" + path]) {
+            checkSubTemplates(path, url);
+        } else  {
+            var index = url + "/sqindex.json";
+            var rq = new XMLHttpRequest();
+            rq.open('GET', index, true);
+            rq.onload = function(e) {
+                if (rq.status == 200) {
+                    console.log("adding template " + path);
+                    ensureTemplateParent(path);
+                    localStorage["squeak-template:" + path] = '{"url": ' + JSON.stringify(url) + ', "entries": ' + rq.response + '}';
+                    checkSubTemplates(path, url);
+                }
+                else rq.onerror(rq.statusText);
+            };
+            rq.onerror = function(e) {
+                console.log("cannot load template index " + index);
+            }
+            rq.send();
+        }
+    },
+    fetchTemplateFile: function(path, ifFound, ifNotFound) {
+        path = Squeak.splitFilePath(path);
+        var template = localStorage["squeak-template:" + path.dirname];
+        if (!template) return ifNotFound();
+        var url = JSON.parse(template).url;
+        if (!url) return ifNotFound();
+        url += "/" + path.basename;
+        var rq = new XMLHttpRequest();
+        rq.open("get", url, true);
+        rq.responseType = "arraybuffer";
+        rq.timeout = 30000;
+        rq.onreadystatechange = function() {
+            if (this.readyState != this.DONE) return;
+            if (this.status == 200) {
+                var buffer = this.response;
+                console.log("Got " + buffer.byteLength + " bytes from " + url);
+                Squeak.dirCreate(path.dirname, true);
+                Squeak.filePut(path.fullname, buffer);
+                ifFound(buffer);
+            } else {
+                alert("Download failed (" + this.status + ") " + url);
+                ifNotFound();
+            }
+        }
+        console.log("Fetching " + url);
+        rq.send();
+    },
+},
+"audio", {
+    startAudioOut: function() {
+        if (!this.audioOutContext) {
+            var ctxProto = window.AudioContext || window.webkitAudioContext
+                || window.mozAudioContext || window.msAudioContext;
+            this.audioOutContext = ctxProto && new ctxProto();
+        }
+        return this.audioOutContext;
+    },
+    startAudioIn: function(thenDo, errorDo) {
+        if (this.audioInContext) {
+            this.audioInSource.disconnect();
+            return thenDo(this.audioInContext, this.audioInSource);
+        }
+        navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia
+            || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+        if (!navigator.getUserMedia) return errorDo("test: audio input not supported");
+        navigator.getUserMedia({audio: true, toString: function() {return "audio"}},
+            function onSuccess(stream) {
+                var ctxProto = window.AudioContext || window.webkitAudioContext
+                    || window.mozAudioContext || window.msAudioContext;
+                this.audioInContext = ctxProto && new ctxProto();
+                this.audioInSource = this.audioInContext.createMediaStreamSource(stream);
+                thenDo(this.audioInContext, this.audioInSource);
+            },
+            function onError() {
+                errorDo("cannot access microphone");
+            });
+    },
+    stopAudio: function() {
+        if (this.audioInSource)
+            this.audioInSource.disconnect();
+    },
+},
+"time", {
+    Epoch: Date.UTC(1901,0,1) + (new Date()).getTimezoneOffset()*60000,        // local timezone
+    EpochUTC: Date.UTC(1901,0,1),
+    totalSeconds: function() {
+        // seconds since 1901-01-01, local time
+        return Math.floor((Date.now() - Squeak.Epoch) / 1000);
+    },
+},
+"utils", {
+    bytesAsString: function(bytes) {
+        var chars = [];
+            for (var i = 0; i < bytes.length; i++)
+                chars.push(String.fromCharCode(bytes[i]));
+        return chars.join('');
+    },
 });
+
 
 Object.subclass('Squeak.Image',
 'about', {
@@ -1056,15 +1580,15 @@ Object.subclass('Squeak.Image',
     There is no actual object table. Instead, objects in old space are a linked list.
     New objects are only referenced by other objects' pointers, and thus can be garbage-collected
     at any time by the Javascript GC.
-    
+
     There is no support for weak references yet.
 
-    */    
+    */
     }
 },
 'initializing', {
     initialize: function(name) {
-        this.totalMemory = 100000000; 
+        this.totalMemory = 100000000;
         this.name = name;
         this.gcCount = 0;
         this.gcTenured = 0;
@@ -1100,17 +1624,20 @@ Object.subclass('Squeak.Image',
         };
         // read version and determine endianness
         var versions = [6502, 6504, 6505, 68000, 68002, 68003],
+            version = 0,
+            fileHeaderSize = 0;
+        while (true) {  // try all four endianness + header combos
+            littleEndian = !littleEndian;
+            pos = fileHeaderSize;
             version = readWord();
-        if (versions.indexOf(version) < 0) {
-            littleEndian = true; pos = 0;
-            version = readWord();
-            if (versions.indexOf(version) < 0) throw Error("bad image version");
-        }
+            if (versions.indexOf(version) >= 0) break;
+            if (!littleEndian) fileHeaderSize += 512;
+            if (fileHeaderSize > 512) throw Error("bad image version");
+        };
         var nativeFloats = (version & 1) != 0;
         this.hasClosures = version == 6504 || version == 68002 || nativeFloats;
         if (version >= 68000) throw Error("64 bit images not supported yet");
-
-        // read header
+        // parse image header
         var imageHeaderSize = readWord();
         var objectMemorySize = readWord(); //first unused location in heap
         var oldBaseAddr = readWord(); //object memory base address of image
@@ -1123,7 +1650,8 @@ Object.subclass('Squeak.Image',
         // read objects
         var prevObj;
         var oopMap = {};
-        while (pos < imageHeaderSize + objectMemorySize) {
+        var headerSize = fileHeaderSize + imageHeaderSize;
+        while (pos < headerSize + objectMemorySize) {
             var nWords = 0;
             var classInt = 0;
             var header = readWord();
@@ -1147,7 +1675,7 @@ Object.subclass('Squeak.Image',
                     throw Error("Unexpected free block");
             }
             nWords--;  //length includes base header which we have already read
-            var oop = pos - 4 - imageHeaderSize, //0-rel byte oop of this object (base header)
+            var oop = pos - 4 - headerSize, //0-rel byte oop of this object (base header)
                 format = (header>>8) & 15,
                 hash = (header>>17) & 4095,
                 bits = readBits(nWords, format);
@@ -1249,7 +1777,7 @@ Object.subclass('Squeak.Image',
         // Old space is a linked list of objects - each object has an "nextObject" reference.
         // New space objects do not have that pointer, they are garbage-collected by JavaScript.
         // But they have an allocation id so the survivors can be ordered on tenure.
-        // The "nextObject" references are created by collecting all new objects, 
+        // The "nextObject" references are created by collecting all new objects,
         // sorting them by id, and then linking them into old space.
 
         this.vm.addMessage("fullGC: " + reason);
@@ -1277,7 +1805,7 @@ Object.subclass('Squeak.Image',
         var newObjects = [];
         while (todo.length > 0) {
             var object = todo.pop();
-            if (object.mark) continue;             // objects are added to todo more than once 
+            if (object.mark) continue;             // objects are added to todo more than once
             if (!object.nextObject && object !== this.lastOldObject)       // it's a new object
                 newObjects.push(object);
             object.mark = true;           // mark it
@@ -1291,7 +1819,7 @@ Object.subclass('Squeak.Image',
                 for (var i = 0; i < n; i++)
                     if (typeof body[i] === "object" && !body[i].mark)      // except SmallInts
                         todo.push(body[i]);
-                while (n < body.length)             // clean garbage from contexts 
+                while (n < body.length)             // clean garbage from contexts
                     body[n++] = this.vm.nilObj;
             }
         }
@@ -1320,9 +1848,9 @@ Object.subclass('Squeak.Image',
                 next.oop -= removedBytes;
                 obj = next;
             } else { // otherwise, remove it
-                var corpse = next; 
+                var corpse = next;
                 obj.nextObject = corpse.nextObject; // drop from list
-                removedBytes += corpse.totalBytes(); 
+                removedBytes += corpse.totalBytes();
                 removed.push(corpse);
             }
         }
@@ -1607,7 +2135,7 @@ Object.subclass('Squeak.Object',
                         this.isFloat = true;
                         this.float = 0.0;
                     } else
-                        this.words = new Uint32Array(indexableSize); 
+                        this.words = new Uint32Array(indexableSize);
         } else // Bytes
             if (indexableSize > 0) {
                 // this.format |= -indexableSize & 3;       //deferred to writeTo()
@@ -1691,7 +2219,7 @@ Object.subclass('Squeak.Object',
                     this.float = this.decodeFloat(this.bits, littleEndian, nativeFloats);
                     if (this.float == 1.3797216632888e-310)
                         throw Error("Cannot deoptimize decodeFloat");
-                } 
+                }
             }
         } else {
             if (nWords > 0)
@@ -1715,7 +2243,7 @@ Object.subclass('Squeak.Object',
                 // SmallInteger - it's never accessed anyway
             }
         }
-        return ptrs;        
+        return ptrs;
     },
     decodeWords: function(nWords, theBits, littleEndian) {
         var data = new DataView(theBits.buffer, theBits.byteOffset),
@@ -1774,7 +2302,7 @@ Object.subclass('Squeak.Object',
     },
     bytesAsString: function() {
         if (!this.bytes) return '';
-    	return Squeak.bytesAsString(this.bytes);
+        return Squeak.bytesAsString(this.bytes);
     },
     bytesAsNumberString: function(negative) {
         if (!this.bytes) return '';
@@ -1791,7 +2319,7 @@ Object.subclass('Squeak.Object',
         return sign + '16r' + digits.join('') + ' (' + approx + sign + value + 'L)';
     },
     assnKeyAsString: function() {
-        return this.pointers[Squeak.Assn_key].bytesAsString();  
+        return this.pointers[Squeak.Assn_key].bytesAsString();
     },
     slotNameAt: function(index) {
         // one-based index
@@ -1813,7 +2341,7 @@ Object.subclass('Squeak.Object',
             case 'String':
             case 'ByteString': return "'" + this.bytesAsString() + "'";
             case 'Symbol':
-            case 'ByteSymbol':  return "#" + this.bytesAsString();         
+            case 'ByteSymbol':  return "#" + this.bytesAsString();
             case 'Point': return this.pointers.join("@");
             case 'Rectangle': return this.pointers.join(" corner: ");
             case 'Association':
@@ -1844,7 +2372,7 @@ Object.subclass('Squeak.Object',
         return this.format >= 12;
     },
     pointersSize: function() {
-    	return this.pointers ? this.pointers.length : 0;
+        return this.pointers ? this.pointers.length : 0;
     },
     bytesSize: function() {
         return this.bytes ? this.bytes.length : 0;
@@ -1901,7 +2429,7 @@ Object.subclass('Squeak.Object',
         // When compacting, the oop is adjusted directly, since header size does not change.
         var words = this.snapshotSize();
         this.oop = addr + words.header * 4;
-        return addr + (words.header + words.body) * 4; 
+        return addr + (words.header + words.body) * 4;
     },
     snapshotSize: function() {
         // words of extra object header and body this object would take up in image snapshot
@@ -1953,7 +2481,7 @@ Object.subclass('Squeak.Object',
                 data.setUint32(pos, this.words[i]); pos += 4;
             }
         } else if (this.pointers) {
-            for (var i = 0; i < this.pointers.length; i++) { 
+            for (var i = 0; i < this.pointers.length; i++) {
                 data.setUint32(pos, image.objectToOop(this.pointers[i])); pos += 4;
             }
         }
@@ -1976,7 +2504,7 @@ Object.subclass('Squeak.Object',
         return ((format >> 10) & 0xC0) + ((format >> 1) & 0x3F) - 1;
     },
     instVarNames: function() {
-        var index = this.pointers.length > 12 ? 4 : 
+        var index = this.pointers.length > 12 ? 4 :
             this.pointers.length > 9 ? 3 : 4; // index changed in newer images
         return (this.pointers[index].pointers || []).map(function(each) {
             return each.bytesAsString();
@@ -2032,19 +2560,19 @@ Object.subclass('Squeak.Object',
         return assn.pointers[Squeak.Assn_value];
     },
     methodNeedsLargeFrame: function() {
-        return (this.methodHeader() & 0x20000) > 0; 
+        return (this.methodHeader() & 0x20000) > 0;
     },
     methodAddPointers: function(headerAndLits) {
-        this.pointers = headerAndLits; 
+        this.pointers = headerAndLits;
     },
     methodTempCount: function() {
-        return (this.methodHeader()>>18) & 63; 
+        return (this.methodHeader()>>18) & 63;
     },
     methodGetLiteral: function(zeroBasedIndex) {
         return this.pointers[1+zeroBasedIndex]; // step over header
     },
     methodGetSelector: function(zeroBasedIndex) {
-        return this.pointers[1+zeroBasedIndex]; // step over header 
+        return this.pointers[1+zeroBasedIndex]; // step over header
     },
     methodSetLiteral: function(zeroBasedIndex, value) {
         this.pointers[1+zeroBasedIndex] = value; // step over header
@@ -2227,33 +2755,33 @@ Object.subclass('Squeak.Interpreter',
         switch (b) { /* The Main Bytecode Dispatch Loop */
 
             // load receiver variable
-            case 0x00: case 0x01: case 0x02: case 0x03: case 0x04: case 0x05: case 0x06: case 0x07: 
-            case 0x08: case 0x09: case 0x0A: case 0x0B: case 0x0C: case 0x0D: case 0x0E: case 0x0F: 
+            case 0x00: case 0x01: case 0x02: case 0x03: case 0x04: case 0x05: case 0x06: case 0x07:
+            case 0x08: case 0x09: case 0x0A: case 0x0B: case 0x0C: case 0x0D: case 0x0E: case 0x0F:
                 this.push(this.receiver.pointers[b&0xF]); return;
 
             // load temporary variable
-            case 0x10: case 0x11: case 0x12: case 0x13: case 0x14: case 0x15: case 0x16: case 0x17: 
-            case 0x18: case 0x19: case 0x1A: case 0x1B: case 0x1C: case 0x1D: case 0x1E: case 0x1F: 
+            case 0x10: case 0x11: case 0x12: case 0x13: case 0x14: case 0x15: case 0x16: case 0x17:
+            case 0x18: case 0x19: case 0x1A: case 0x1B: case 0x1C: case 0x1D: case 0x1E: case 0x1F:
                 this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&0xF)]); return;
 
             // loadLiteral
-            case 0x20: case 0x21: case 0x22: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27: 
-            case 0x28: case 0x29: case 0x2A: case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F: 
-            case 0x30: case 0x31: case 0x32: case 0x33: case 0x34: case 0x35: case 0x36: case 0x37: 
-            case 0x38: case 0x39: case 0x3A: case 0x3B: case 0x3C: case 0x3D: case 0x3E: case 0x3F: 
+            case 0x20: case 0x21: case 0x22: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27:
+            case 0x28: case 0x29: case 0x2A: case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F:
+            case 0x30: case 0x31: case 0x32: case 0x33: case 0x34: case 0x35: case 0x36: case 0x37:
+            case 0x38: case 0x39: case 0x3A: case 0x3B: case 0x3C: case 0x3D: case 0x3E: case 0x3F:
                 this.push(this.method.methodGetLiteral(b&0x1F)); return;
 
             // loadLiteralIndirect
-            case 0x40: case 0x41: case 0x42: case 0x43: case 0x44: case 0x45: case 0x46: case 0x47: 
-            case 0x48: case 0x49: case 0x4A: case 0x4B: case 0x4C: case 0x4D: case 0x4E: case 0x4F: 
-            case 0x50: case 0x51: case 0x52: case 0x53: case 0x54: case 0x55: case 0x56: case 0x57: 
-            case 0x58: case 0x59: case 0x5A: case 0x5B: case 0x5C: case 0x5D: case 0x5E: case 0x5F: 
+            case 0x40: case 0x41: case 0x42: case 0x43: case 0x44: case 0x45: case 0x46: case 0x47:
+            case 0x48: case 0x49: case 0x4A: case 0x4B: case 0x4C: case 0x4D: case 0x4E: case 0x4F:
+            case 0x50: case 0x51: case 0x52: case 0x53: case 0x54: case 0x55: case 0x56: case 0x57:
+            case 0x58: case 0x59: case 0x5A: case 0x5B: case 0x5C: case 0x5D: case 0x5E: case 0x5F:
                 this.push((this.method.methodGetLiteral(b&0x1F)).pointers[Squeak.Assn_value]); return;
 
             // storeAndPop rcvr, temp
-            case 0x60: case 0x61: case 0x62: case 0x63: case 0x64: case 0x65: case 0x66: case 0x67: 
+            case 0x60: case 0x61: case 0x62: case 0x63: case 0x64: case 0x65: case 0x66: case 0x67:
                 this.receiver.pointers[b&7] = this.pop(); return;
-            case 0x68: case 0x69: case 0x6A: case 0x6B: case 0x6C: case 0x6D: case 0x6E: case 0x6F: 
+            case 0x68: case 0x69: case 0x6A: case 0x6B: case 0x6C: case 0x6D: case 0x6E: case 0x6F:
                 this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&7)] = this.pop(); return;
 
             // Quick push
@@ -2287,8 +2815,8 @@ Object.subclass('Squeak.Interpreter',
             case 0x85: b2= this.nextByte(); this.send(this.method.methodGetSelector(b2&31), b2>>5, true); return;
             // secondExtendedSend
             case 0x86: b2= this.nextByte(); this.send(this.method.methodGetSelector(b2&63), b2>>6, false); return;
-            case 0x87: this.pop(); return;	// pop
-            case 0x88: this.push(this.top()); return;	// dup
+            case 0x87: this.pop(); return;  // pop
+            case 0x88: this.push(this.top()); return;   // dup
             // thisContext
             case 0x89: this.push(this.activeContext); this.reclaimableContextCount = 0; return;
 
@@ -2308,13 +2836,13 @@ Object.subclass('Squeak.Interpreter',
             case 0x8F: this.pushClosureCopy(); return;
 
             // Short jmp
-            case 0x90: case 0x91: case 0x92: case 0x93: case 0x94: case 0x95: case 0x96: case 0x97: 
+            case 0x90: case 0x91: case 0x92: case 0x93: case 0x94: case 0x95: case 0x96: case 0x97:
                 this.pc += (b&7)+1; return;
             // Short conditional jump on false
-            case 0x98: case 0x99: case 0x9A: case 0x9B: case 0x9C: case 0x9D: case 0x9E: case 0x9F: 
+            case 0x98: case 0x99: case 0x9A: case 0x9B: case 0x9C: case 0x9D: case 0x9E: case 0x9F:
                 this.jumpIfFalse((b&7)+1); return;
             // Long jump, forward and back
-            case 0xA0: case 0xA1: case 0xA2: case 0xA3: case 0xA4: case 0xA5: case 0xA6: case 0xA7: 
+            case 0xA0: case 0xA1: case 0xA2: case 0xA3: case 0xA4: case 0xA5: case 0xA6: case 0xA7:
                 b2 = this.nextByte();
                 this.pc += (((b&7)-4)*256 + b2);
                 if ((b&7)<4)        // check for process switch on backward jumps (loops)
@@ -2324,14 +2852,14 @@ Object.subclass('Squeak.Interpreter',
             case 0xA8: case 0xA9: case 0xAA: case 0xAB:
                 this.jumpIfTrue((b&3)*256 + this.nextByte()); return;
             // Long conditional jump on false
-            case 0xAC: case 0xAD: case 0xAE: case 0xAF: 
+            case 0xAC: case 0xAD: case 0xAE: case 0xAF:
                 this.jumpIfFalse((b&3)*256 + this.nextByte()); return;
 
             // Arithmetic Ops... + - < > <= >= = ~=    * /  @ lshift: lxor: land: lor:
             case 0xB0: this.success = true; this.resultIsFloat = false;
-                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) + this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;	// PLUS +
+                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) + this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // PLUS +
             case 0xB1: this.success = true; this.resultIsFloat = false;
-                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) - this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;	// MINUS -
+                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) - this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // MINUS -
             case 0xB2: this.success = true;
                 if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) < this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LESS <
             case 0xB3: this.success = true;
@@ -2362,19 +2890,19 @@ Object.subclass('Squeak.Interpreter',
                 if(!this.pop2AndPushIntResult(this.stackInteger(1) | this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitOr:
 
             // at:, at:put:, size, next, nextPut:, ...
-            case 0xC0: case 0xC1: case 0xC2: case 0xC3: case 0xC4: case 0xC5: case 0xC6: case 0xC7: 
-            case 0xC8: case 0xC9: case 0xCA: case 0xCB: case 0xCC: case 0xCD: case 0xCE: case 0xCF: 
+            case 0xC0: case 0xC1: case 0xC2: case 0xC3: case 0xC4: case 0xC5: case 0xC6: case 0xC7:
+            case 0xC8: case 0xC9: case 0xCA: case 0xCB: case 0xCC: case 0xCD: case 0xCE: case 0xCF:
                 if (!this.primHandler.quickSendOther(this.receiver, b&0xF))
                     this.sendSpecial((b&0xF)+16); return;
 
             // Send Literal Selector with 0, 1, and 2 args
-            case 0xD0: case 0xD1: case 0xD2: case 0xD3: case 0xD4: case 0xD5: case 0xD6: case 0xD7: 
-            case 0xD8: case 0xD9: case 0xDA: case 0xDB: case 0xDC: case 0xDD: case 0xDE: case 0xDF: 
+            case 0xD0: case 0xD1: case 0xD2: case 0xD3: case 0xD4: case 0xD5: case 0xD6: case 0xD7:
+            case 0xD8: case 0xD9: case 0xDA: case 0xDB: case 0xDC: case 0xDD: case 0xDE: case 0xDF:
                 this.send(this.method.methodGetSelector(b&0xF), 0, false); return;
-            case 0xE0: case 0xE1: case 0xE2: case 0xE3: case 0xE4: case 0xE5: case 0xE6: case 0xE7: 
-            case 0xE8: case 0xE9: case 0xEA: case 0xEB: case 0xEC: case 0xED: case 0xEE: case 0xEF: 
+            case 0xE0: case 0xE1: case 0xE2: case 0xE3: case 0xE4: case 0xE5: case 0xE6: case 0xE7:
+            case 0xE8: case 0xE9: case 0xEA: case 0xEB: case 0xEC: case 0xED: case 0xEE: case 0xEF:
                 this.send(this.method.methodGetSelector(b&0xF), 1, false); return;
-            case 0xF0: case 0xF1: case 0xF2: case 0xF3: case 0xF4: case 0xF5: case 0xF6: case 0xF7: 
+            case 0xF0: case 0xF1: case 0xF2: case 0xF3: case 0xF4: case 0xF5: case 0xF6: case 0xF7:
             case 0xF8: case 0xF9: case 0xFA: case 0xFB: case 0xFC: case 0xFD: case 0xFE: case 0xFF:
                 this.send(this.method.methodGetSelector(b&0xF), 2, false); return;
         }
@@ -2464,13 +2992,13 @@ Object.subclass('Squeak.Interpreter',
                     this.interruptCheckCounterFeedBackReset -= 12;
             }
         }
-    	this.interruptCheckCounter = this.interruptCheckCounterFeedBackReset; //reset the interrupt check counter
-    	this.lastTick = now; //used to detect wraparound of millisecond clock
-        //	if(signalLowSpace) {
+        this.interruptCheckCounter = this.interruptCheckCounterFeedBackReset; //reset the interrupt check counter
+        this.lastTick = now; //used to detect wraparound of millisecond clock
+        //  if(signalLowSpace) {
         //            signalLowSpace= false; //reset flag
         //            sema= getSpecialObject(Squeak.splOb_TheLowSpaceSemaphore);
         //            if(sema != nilObj) synchronousSignal(sema); }
-        //	if(now >= nextPollTick) {
+        //  if(now >= nextPollTick) {
         //            ioProcessEvents(); //sets interruptPending if interrupt key pressed
         //            nextPollTick= now + 500; } //msecs to wait before next call to ioProcessEvents"
         if (this.interruptPending) {
@@ -2483,7 +3011,7 @@ Object.subclass('Squeak.Interpreter',
             var sema = this.specialObjects[Squeak.splOb_TheTimerSemaphore];
             if (!sema.isNil) this.primHandler.synchronousSignal(sema);
         }
-        //	if (pendingFinalizationSignals > 0) { //signal any pending finalizations
+        //  if (pendingFinalizationSignals > 0) { //signal any pending finalizations
         //            sema= getSpecialObject(Squeak.splOb_ThefinalizationSemaphore);
         //            pendingFinalizationSignals= 0;
         //            if(sema != nilObj) primHandler.synchronousSignal(sema); }
@@ -2588,14 +3116,14 @@ Object.subclass('Squeak.Interpreter',
         }
         this.pc += blockSize;
         this.push(closure);
-	},
-	newClosure: function(numArgs, initialPC, numCopied) {
+    },
+    newClosure: function(numArgs, initialPC, numCopied) {
         var size = Squeak.Closure_firstCopiedValue + numCopied,
             closure = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassBlockClosure], size);
         closure.pointers[Squeak.Closure_startpc] = initialPC;
         closure.pointers[Squeak.Closure_numArgs] = numArgs;
         return closure;
-	},
+    },
 },
 'sending', {
     send: function(selector, argCount, doSuper) {
@@ -2641,7 +3169,7 @@ Object.subclass('Squeak.Interpreter',
                 cacheEntry.argCount = argCount;
                 cacheEntry.mClass = currentClass;
                 return cacheEntry;
-            }  
+            }
             currentClass = currentClass.superclass();
         }
         //Cound not find a normal message -- send #doesNotUnderstand:
@@ -2766,18 +3294,18 @@ Object.subclass('Squeak.Interpreter',
     },
     aboutToReturnThrough: function(resultObj, aContext) {
         this.reclaimableContextCount = 0;
-    	this.push(this.activeContext);
-    	this.push(resultObj);
-    	this.push(aContext);
-    	var aboutToReturnSel = this.specialObjects[Squeak.splOb_SelectorAboutToReturn];
-    	this.send(aboutToReturnSel, 2);
+        this.push(this.activeContext);
+        this.push(resultObj);
+        this.push(aContext);
+        var aboutToReturnSel = this.specialObjects[Squeak.splOb_SelectorAboutToReturn];
+        this.send(aboutToReturnSel, 2);
     },
     cannotReturn: function(resultObj) {
         this.reclaimableContextCount = 0;
-    	this.push(this.activeContext);
-    	this.push(resultObj);
-    	var cannotReturnSel = this.specialObjects[Squeak.splOb_SelectorCannotReturn];
-    	this.send(cannotReturnSel, 1);
+        this.push(this.activeContext);
+        this.push(resultObj);
+        var cannotReturnSel = this.specialObjects[Squeak.splOb_SelectorCannotReturn];
+        this.send(cannotReturnSel, 1);
     },
     tryPrimitive: function(primIndex, argCount, newMethod) {
         if ((primIndex > 255) && (primIndex < 520)) {
@@ -3004,7 +3532,7 @@ Object.subclass('Squeak.Interpreter',
 'stack access', {
     pop: function() {
         //Note leaves garbage above SP.  Cleaned out by fullGC.
-        return this.activeContext.pointers[this.sp--];  
+        return this.activeContext.pointers[this.sp--];
     },
     popN: function(nToPop) {
         this.sp -= nToPop;
@@ -3039,9 +3567,9 @@ Object.subclass('Squeak.Interpreter',
             var value = 0;
             for (var i = 3; i >= 0; i--)
                 value = value * 256 + bytes[i];
-            if (num.sqClass === this.specialObjects[Squeak.splOb_ClassLargePositiveInteger]) 
+            if (num.sqClass === this.specialObjects[Squeak.splOb_ClassLargePositiveInteger])
                 return value;
-            if (num.sqClass === this.specialObjects[Squeak.splOb_ClassLargeNegativeInteger]) 
+            if (num.sqClass === this.specialObjects[Squeak.splOb_ClassLargeNegativeInteger])
                 return -value;
         }
         // none of the above
@@ -3279,7 +3807,7 @@ Object.subclass('Squeak.Interpreter',
             methodName = classAndMethodString.split('>>')[1];
         this.allMethodsDo(function(classObj, methodObj, selectorObj) {
             if (methodName.length == selectorObj.bytesSize()
-                && methodName == selectorObj.bytesAsString() 
+                && methodName == selectorObj.bytesAsString()
                 && className == classObj.className())
                     return found = methodObj;
         });
@@ -3383,26 +3911,26 @@ Object.subclass('Squeak.Interpreter',
         // message send or return
         var byte = this.method.bytes[this.pc];
         if (byte >= 120 && byte <= 125) return true; // return
-        /* 
+        /*
         if (byte < 96) return false;    // 96-103 storeAndPopReceiverVariableBytecode
         if (byte <= 111) return true;   // 104-111 storeAndPopTemporaryVariableBytecode
         if (byte == 129        // 129 extendedStoreBytecode
             || byte == 130     // 130 extendedStoreAndPopBytecode
-            || byte == 141	   // 141 storeRemoteTempLongBytecode
-            || byte == 142	   // 142 storeAndPopRemoteTempLongBytecode
-            || (byte == 132 && 
+            || byte == 141     // 141 storeRemoteTempLongBytecode
+            || byte == 142     // 142 storeAndPopRemoteTempLongBytecode
+            || (byte == 132 &&
                 this.method.bytes[this.pc + 1] >= 160)) // 132 doubleExtendedDoAnythingBytecode
                     return true;
         */
         if (byte < 131 || byte == 200) return false;
         if (byte >= 176) return true; // special send or short send
         if (byte <= 134) {         // long sends
-			// long form support demands we check the selector
-			var litIndex;
-			if (byte === 132) {
+            // long form support demands we check the selector
+            var litIndex;
+            if (byte === 132) {
                 if ((this.method.bytes[this.pc + 1] >> 5) > 1) return false;
                 litIndex = this.method.bytes[this.pc + 2];
-			} else
+            } else
                 litIndex = this.method.bytes[this.pc + 1] & (byte === 134 ? 63 : 31);
             var selectorObj = this.method.pointers[litIndex + 1];
             if (selectorObj.bytesAsString() != 'blockCopy:') return true;
@@ -3430,10 +3958,9 @@ Object.subclass('Squeak.Primitives',
         this.builtinModules = {
             FilePlugin:             this.findPluginFunctions("", "primitive(Disable)?(File|Directory)"),
             SoundPlugin:            this.findPluginFunctions("snd_"),
-            B2DPlugin:              this.findPluginFunctions("ge"),
             JPEGReadWriter2Plugin:  this.findPluginFunctions("jpeg2_"),
             SecurityPlugin: {
-                primitiveDisableImageWrite: this.fakePrimitive.bind(this, "SecurityPlugin.primitiveDisableImageWrite", 0), 
+                primitiveDisableImageWrite: this.fakePrimitive.bind(this, "SecurityPlugin.primitiveDisableImageWrite", 0),
             },
         };
         this.patchModules = {
@@ -3462,30 +3989,30 @@ Object.subclass('Squeak.Primitives',
             0xFFAFAFAF, 0xFFB7B7B7, 0xFFC7C7C7, 0xFFCFCFCF, 0xFFD7D7D7, 0xFFE7E7E7, 0xFFEFEFEF, 0xFFF7F7F7,
             0xFF000001, 0xFF003300, 0xFF006600, 0xFF009900, 0xFF00CC00, 0xFF00FF00, 0xFF000033, 0xFF003333,
             0xFF006633, 0xFF009933, 0xFF00CC33, 0xFF00FF33, 0xFF000066, 0xFF003366, 0xFF006666, 0xFF009966,
-            0xFF00CC66, 0xFF00FF66, 0xFF000099, 0xFF003399, 0xFF006699, 0xFF009999, 0xFF00CC99, 0xFF00FF99, 
-            0xFF0000CC, 0xFF0033CC, 0xFF0066CC, 0xFF0099CC, 0xFF00CCCC, 0xFF00FFCC, 0xFF0000FF, 0xFF0033FF, 
-            0xFF0066FF, 0xFF0099FF, 0xFF00CCFF, 0xFF00FFFF, 0xFF330000, 0xFF333300, 0xFF336600, 0xFF339900, 
-            0xFF33CC00, 0xFF33FF00, 0xFF330033, 0xFF333333, 0xFF336633, 0xFF339933, 0xFF33CC33, 0xFF33FF33, 
-            0xFF330066, 0xFF333366, 0xFF336666, 0xFF339966, 0xFF33CC66, 0xFF33FF66, 0xFF330099, 0xFF333399, 
+            0xFF00CC66, 0xFF00FF66, 0xFF000099, 0xFF003399, 0xFF006699, 0xFF009999, 0xFF00CC99, 0xFF00FF99,
+            0xFF0000CC, 0xFF0033CC, 0xFF0066CC, 0xFF0099CC, 0xFF00CCCC, 0xFF00FFCC, 0xFF0000FF, 0xFF0033FF,
+            0xFF0066FF, 0xFF0099FF, 0xFF00CCFF, 0xFF00FFFF, 0xFF330000, 0xFF333300, 0xFF336600, 0xFF339900,
+            0xFF33CC00, 0xFF33FF00, 0xFF330033, 0xFF333333, 0xFF336633, 0xFF339933, 0xFF33CC33, 0xFF33FF33,
+            0xFF330066, 0xFF333366, 0xFF336666, 0xFF339966, 0xFF33CC66, 0xFF33FF66, 0xFF330099, 0xFF333399,
             0xFF336699, 0xFF339999, 0xFF33CC99, 0xFF33FF99, 0xFF3300CC, 0xFF3333CC, 0xFF3366CC, 0xFF3399CC,
             0xFF33CCCC, 0xFF33FFCC, 0xFF3300FF, 0xFF3333FF, 0xFF3366FF, 0xFF3399FF, 0xFF33CCFF, 0xFF33FFFF,
             0xFF660000, 0xFF663300, 0xFF666600, 0xFF669900, 0xFF66CC00, 0xFF66FF00, 0xFF660033, 0xFF663333,
-            0xFF666633, 0xFF669933, 0xFF66CC33, 0xFF66FF33, 0xFF660066, 0xFF663366, 0xFF666666, 0xFF669966, 
-            0xFF66CC66, 0xFF66FF66, 0xFF660099, 0xFF663399, 0xFF666699, 0xFF669999, 0xFF66CC99, 0xFF66FF99, 
-            0xFF6600CC, 0xFF6633CC, 0xFF6666CC, 0xFF6699CC, 0xFF66CCCC, 0xFF66FFCC, 0xFF6600FF, 0xFF6633FF, 
-            0xFF6666FF, 0xFF6699FF, 0xFF66CCFF, 0xFF66FFFF, 0xFF990000, 0xFF993300, 0xFF996600, 0xFF999900, 
-            0xFF99CC00, 0xFF99FF00, 0xFF990033, 0xFF993333, 0xFF996633, 0xFF999933, 0xFF99CC33, 0xFF99FF33, 
-            0xFF990066, 0xFF993366, 0xFF996666, 0xFF999966, 0xFF99CC66, 0xFF99FF66, 0xFF990099, 0xFF993399, 
-            0xFF996699, 0xFF999999, 0xFF99CC99, 0xFF99FF99, 0xFF9900CC, 0xFF9933CC, 0xFF9966CC, 0xFF9999CC, 
-            0xFF99CCCC, 0xFF99FFCC, 0xFF9900FF, 0xFF9933FF, 0xFF9966FF, 0xFF9999FF, 0xFF99CCFF, 0xFF99FFFF, 
-            0xFFCC0000, 0xFFCC3300, 0xFFCC6600, 0xFFCC9900, 0xFFCCCC00, 0xFFCCFF00, 0xFFCC0033, 0xFFCC3333, 
+            0xFF666633, 0xFF669933, 0xFF66CC33, 0xFF66FF33, 0xFF660066, 0xFF663366, 0xFF666666, 0xFF669966,
+            0xFF66CC66, 0xFF66FF66, 0xFF660099, 0xFF663399, 0xFF666699, 0xFF669999, 0xFF66CC99, 0xFF66FF99,
+            0xFF6600CC, 0xFF6633CC, 0xFF6666CC, 0xFF6699CC, 0xFF66CCCC, 0xFF66FFCC, 0xFF6600FF, 0xFF6633FF,
+            0xFF6666FF, 0xFF6699FF, 0xFF66CCFF, 0xFF66FFFF, 0xFF990000, 0xFF993300, 0xFF996600, 0xFF999900,
+            0xFF99CC00, 0xFF99FF00, 0xFF990033, 0xFF993333, 0xFF996633, 0xFF999933, 0xFF99CC33, 0xFF99FF33,
+            0xFF990066, 0xFF993366, 0xFF996666, 0xFF999966, 0xFF99CC66, 0xFF99FF66, 0xFF990099, 0xFF993399,
+            0xFF996699, 0xFF999999, 0xFF99CC99, 0xFF99FF99, 0xFF9900CC, 0xFF9933CC, 0xFF9966CC, 0xFF9999CC,
+            0xFF99CCCC, 0xFF99FFCC, 0xFF9900FF, 0xFF9933FF, 0xFF9966FF, 0xFF9999FF, 0xFF99CCFF, 0xFF99FFFF,
+            0xFFCC0000, 0xFFCC3300, 0xFFCC6600, 0xFFCC9900, 0xFFCCCC00, 0xFFCCFF00, 0xFFCC0033, 0xFFCC3333,
             0xFFCC6633, 0xFFCC9933, 0xFFCCCC33, 0xFFCCFF33, 0xFFCC0066, 0xFFCC3366, 0xFFCC6666, 0xFFCC9966,
             0xFFCCCC66, 0xFFCCFF66, 0xFFCC0099, 0xFFCC3399, 0xFFCC6699, 0xFFCC9999, 0xFFCCCC99, 0xFFCCFF99,
-            0xFFCC00CC, 0xFFCC33CC, 0xFFCC66CC, 0xFFCC99CC, 0xFFCCCCCC, 0xFFCCFFCC, 0xFFCC00FF, 0xFFCC33FF, 
-            0xFFCC66FF, 0xFFCC99FF, 0xFFCCCCFF, 0xFFCCFFFF, 0xFFFF0000, 0xFFFF3300, 0xFFFF6600, 0xFFFF9900, 
+            0xFFCC00CC, 0xFFCC33CC, 0xFFCC66CC, 0xFFCC99CC, 0xFFCCCCCC, 0xFFCCFFCC, 0xFFCC00FF, 0xFFCC33FF,
+            0xFFCC66FF, 0xFFCC99FF, 0xFFCCCCFF, 0xFFCCFFFF, 0xFFFF0000, 0xFFFF3300, 0xFFFF6600, 0xFFFF9900,
             0xFFFFCC00, 0xFFFFFF00, 0xFFFF0033, 0xFFFF3333, 0xFFFF6633, 0xFFFF9933, 0xFFFFCC33, 0xFFFFFF33,
-            0xFFFF0066, 0xFFFF3366, 0xFFFF6666, 0xFFFF9966, 0xFFFFCC66, 0xFFFFFF66, 0xFFFF0099, 0xFFFF3399, 
-            0xFFFF6699, 0xFFFF9999, 0xFFFFCC99, 0xFFFFFF99, 0xFFFF00CC, 0xFFFF33CC, 0xFFFF66CC, 0xFFFF99CC, 
+            0xFFFF0066, 0xFFFF3366, 0xFFFF6666, 0xFFFF9966, 0xFFFFCC66, 0xFFFFFF66, 0xFFFF0099, 0xFFFF3399,
+            0xFFFF6699, 0xFFFF9999, 0xFFFFCC99, 0xFFFFFF99, 0xFFFF00CC, 0xFFFF33CC, 0xFFFF66CC, 0xFFFF99CC,
             0xFFFFCCCC, 0xFFFFFFCC, 0xFFFF00FF, 0xFFFF33FF, 0xFFFF66FF, 0xFFFF99FF, 0xFFFFCCFF, 0xFFFFFFFF];
     },
 },
@@ -3562,7 +4089,7 @@ Object.subclass('Squeak.Primitives',
             // Float Primitives (40-59)
             case 40: return this.popNandPushFloatIfOK(1,this.stackInteger(0)); // primitiveAsFloat
             case 41: return this.popNandPushFloatIfOK(2,this.stackFloat(1)+this.stackFloat(0));  // Float +
-            case 42: return this.popNandPushFloatIfOK(2,this.stackFloat(1)-this.stackFloat(0));  // Float -	
+            case 42: return this.popNandPushFloatIfOK(2,this.stackFloat(1)-this.stackFloat(0));  // Float -
             case 43: return this.pop2andPushBoolIfOK(this.stackFloat(1)<this.stackFloat(0));  // Float <
             case 44: return this.pop2andPushBoolIfOK(this.stackFloat(1)>this.stackFloat(0));  // Float >
             case 45: return this.pop2andPushBoolIfOK(this.stackFloat(1)<=this.stackFloat(0));  // Float <=
@@ -3617,7 +4144,7 @@ Object.subclass('Squeak.Primitives',
             case 90: return this.primitiveMousePoint(argCount); // mousePoint
             case 91: return this.primitiveTestDisplayDepth(argCount); // cursorLocPut in old images
             // case 92: return false; // primitiveSetDisplayMode
-            case 93: return this.primitiveInputSemaphore(argCount); 
+            case 93: return this.primitiveInputSemaphore(argCount);
             case 94: return this.primitiveGetNextEvent(argCount);
             case 95: return this.primitiveInputWord(argCount);
             case 96: return this.namedPrimitive('BitBltPlugin', 'primitiveCopyBits', argCount);
@@ -3653,8 +4180,8 @@ Object.subclass('Squeak.Primitives',
             case 124: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore));
             case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
             case 126: return this.primitiveDeferDisplayUpdates(argCount);
-    		case 127: return this.primitiveShowDisplayRect(argCount);
-    	} else if (index < 256) switch (index) { // Chrome only optimized up to 128 cases
+            case 127: return this.primitiveShowDisplayRect(argCount);
+        } else if (index < 256) switch (index) { // Chrome only optimized up to 128 cases
             case 128: return this.primitiveArrayBecome(argCount, true); // both ways
             case 129: return this.popNandPushIfOK(1, this.vm.image.specialObjectsArray); //specialObjectsOop
             case 130: return this.primitiveFullGC(argCount);
@@ -3696,7 +4223,7 @@ Object.subclass('Squeak.Primitives',
             case 165:
             case 166: return this.primitiveIntegerAtAndPut(argCount);
             case 167: return false; // Processor.yield
-            case 168: return this.primitiveCopyObject(argCount); 
+            case 168: return this.primitiveCopyObject(argCount);
             case 169: if (this.oldPrims) return this.primitiveDirectorySetMacTypeAndCreator(argCount);
                 else return this.primitiveNotIdentical(argCount);
             // Sound Primitives (170-199)
@@ -3791,7 +4318,7 @@ Object.subclass('Squeak.Primitives',
             case 248: return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod); // see findSelectorInClass()
             case 249: return this.primitiveArrayBecome(argCount, false); // one way, opt. copy hash
             case 254: return this.primitiveVMParameter(argCount);
-    	} else switch (index) { // Chrome only optimized up to 128 cases
+        } else switch (index) { // Chrome only optimized up to 128 cases
             //MIDI Primitives (520-539)
             case 521: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIClosePort', argCount);
             case 522: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIGetClock', argCount);
@@ -3802,7 +4329,7 @@ Object.subclass('Squeak.Primitives',
             case 527: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIParameterGetOrSet', argCount);
             case 528: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIRead', argCount);
             case 529: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIWrite', argCount);
-            // 530-539: reserved for extended MIDI primitives     
+            // 530-539: reserved for extended MIDI primitives
             // Sound Codec Primitives
             case 550: return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveDecodeMono', argCount);
             case 551: return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveDecodeStereo', argCount);
@@ -3818,6 +4345,7 @@ Object.subclass('Squeak.Primitives',
         return false;
     },
     namedPrimitive: function(modName, functionName, argCount) {
+        // duplicated in loadFunctionFrom()
         var mod = modName === "" ? this : this.loadedModules[modName];
         if (mod === undefined) { // null if earlier load failed
             mod = this.loadModule(modName);
@@ -3905,20 +4433,37 @@ Object.subclass('Squeak.Primitives',
         console.log("Unloaded module: " + modName);
         return mod;
     },
+    loadFunctionFrom: function(functionName, modName) {
+        // copy of namedPrimitive() returning the bound function instead of calling it
+        var mod = modName === "" ? this : this.loadedModules[modName];
+        if (mod === undefined) { // null if earlier load failed
+            mod = this.loadModule(modName);
+            this.loadedModules[modName] = mod;
+        }
+        if (!mod) return null;
+        var func = mod[functionName];
+        if (typeof func === "function") {
+            return func.bind(mod);
+        } else if (typeof func === "string") {
+            return (this[func]).bind(this);
+        }
+        this.vm.warnOnce("missing primitive: " + modName + "." + functionName);
+        return null;
+    },
     primitiveUnloadModule: function(argCount) {
-        var	moduleName = this.stackNonInteger(0).bytesAsString();
+        var moduleName = this.stackNonInteger(0).bytesAsString();
         if (!moduleName) return false;
         this.unloadModule(moduleName);
-    	return this.popNIfOK(argCount);
-	},
+        return this.popNIfOK(argCount);
+    },
     primitiveListBuiltinModule: function(argCount) {
-        var	index = this.stackInteger(0) - 1;
+        var index = this.stackInteger(0) - 1;
         if (!this.success) return false;
         var moduleNames = Object.keys(this.builtinModules);
-    	return this.popNandPushIfOK(argCount + 1, this.makeStObject(moduleNames[index]));
+        return this.popNandPushIfOK(argCount + 1, this.makeStObject(moduleNames[index]));
     },
     primitiveListLoadedModule: function(argCount) {
-        var	index = this.stackInteger(0) - 1;
+        var index = this.stackInteger(0) - 1;
         if (!this.success) return false;
         var moduleNames = [];
         for (var key in this.loadedModules) {
@@ -3928,7 +4473,7 @@ Object.subclass('Squeak.Primitives',
                 moduleNames.push(moduleName);
             }
         }
-    	return this.popNandPushIfOK(argCount + 1, this.makeStObject(moduleNames[index]));
+        return this.popNandPushIfOK(argCount + 1, this.makeStObject(moduleNames[index]));
     },
 },
 'stack access', {
@@ -3947,7 +4492,7 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     popNandPushIntIfOK: function(nToPop, returnValue) {
-        if (!this.success || !this.vm.canBeSmallInt(returnValue)) return false; 
+        if (!this.success || !this.vm.canBeSmallInt(returnValue)) return false;
         return this.popNandPushIfOK(nToPop, returnValue);
     },
     popNandPushFloatIfOK: function(nToPop, returnValue) {
@@ -4001,9 +4546,9 @@ Object.subclass('Squeak.Primitives',
             value = 0;
         for (var i=0; i<4; i++)
             value += (bytes[i]&255) * (1 << 8*i);
-        if (this.isA(stackVal, Squeak.splOb_ClassLargePositiveInteger)) 
+        if (this.isA(stackVal, Squeak.splOb_ClassLargePositiveInteger))
             return value;
-        if (this.isA(stackVal, Squeak.splOb_ClassLargeNegativeInteger)) 
+        if (this.isA(stackVal, Squeak.splOb_ClassLargeNegativeInteger))
             return -value;
         this.success = false;
         return 0;
@@ -4178,7 +4723,7 @@ Object.subclass('Squeak.Primitives',
         var newFloat = this.vm.instantiateClass(floatClass, 2);
         newFloat.float = value;
         return newFloat;
-	},
+    },
     makeLargeIfNeeded: function(integer) {
         return this.vm.canBeSmallInt(integer) ? integer : this.makeLargeInt(integer);
     },
@@ -4238,7 +4783,7 @@ Object.subclass('Squeak.Primitives',
     filenameToSqueak: function(unixpath) {
         var slash = unixpath[0] !== "/" ? "/" : "",
             filepath = "/SqueakJS" + slash + unixpath;                      // add SqueakJS
-        if (this.emulateMac) 
+        if (this.emulateMac)
             filepath = ("Macintosh HD" + filepath)                          // add Mac volume
                 .replace(/\//g, "€").replace(/:/g, "/").replace(/€/g, ":"); // substitute : for /
         return filepath;
@@ -4446,7 +4991,7 @@ Object.subclass('Squeak.Primitives',
     },
     primitiveStoreStackp: function(argCount) {
         var ctxt = this.stackNonInteger(1),
-            newStackp = this.stackInteger(0);       
+            newStackp = this.stackInteger(0);
         if (!this.success || newStackp < 0 || this.vm.decodeSqueakSP(newStackp) >= ctxt.pointers.length)
             return false;
         var stackp = ctxt.pointers[Squeak.Context_stackPointer];
@@ -4565,7 +5110,7 @@ Object.subclass('Squeak.Primitives',
         if (numArgs !== argsArray.pointersSize()) return false;
         // drop all args, push receiver, and new arguments
         this.vm.popNandPush(argCount+1, receiver);
-        for (var i = 0; i < numArgs; i++) 
+        for (var i = 0; i < numArgs; i++)
             this.vm.push(argsArray.pointers[i]);
         this.vm.executeNewMethod(receiver, methodObj, numArgs, methodObj.methodPrimitiveIndex(), null, null);
         return true;
@@ -4715,7 +5260,7 @@ Object.subclass('Squeak.Primitives',
             blockArgCount = blockClosure.pointers[Squeak.Closure_numArgs];
         if (argCount !== blockArgCount) return false;
         return this.activateNewClosureMethod(blockClosure, argCount);
-	},
+    },
     primitiveClosureValueWithArgs: function(argCount) {
         var array = this.vm.top(),
             arraySize = array.pointersSize(),
@@ -4726,7 +5271,7 @@ Object.subclass('Squeak.Primitives',
         for (var i = 0; i < arraySize; i++)
             this.vm.push(array.pointers[i]);
         return this.activateNewClosureMethod(blockClosure, arraySize);
-	},
+    },
     primitiveClosureValueNoContextSwitch: function(argCount) {
         return this.primitiveClosureValue(argCount);
     },
@@ -4751,14 +5296,14 @@ Object.subclass('Squeak.Primitives',
         this.vm.popN(argCount + 1);
         this.vm.newActiveContext(newContext);
         return true;
-	},
+    },
 },
 'scheduling',
 {
     primitiveResume: function() {
         this.resume(this.vm.top());
         return true;
-	},
+    },
     primitiveSuspend: function() {
         var activeProc = this.getScheduler().pointers[Squeak.ProcSched_activeProcess];
         if (this.vm.top() !== activeProc) return false;
@@ -4813,7 +5358,7 @@ Object.subclass('Squeak.Primitives',
             processList = schedLists.pointers[p--];
         } while (this.isEmptyList(processList));
         return this.removeFirstLinkOfList(processList);
-	},    
+    },
     linkProcessToList: function(proc, aList) {
         // Add the given process to the given linked list and set the backpointer
         // of process to its new list.
@@ -4852,7 +5397,7 @@ Object.subclass('Squeak.Primitives',
         return this.vm.stackValue(1);
     },
     primitiveWait: function() {
-    	var sema = this.vm.top();
+        var sema = this.vm.top();
         if (!this.isA(sema, Squeak.splOb_ClassSemaphore)) return false;
         var excessSignals = sema.pointers[Squeak.Semaphore_excessSignals];
         if (excessSignals > 0)
@@ -4865,13 +5410,13 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     primitiveSignal: function() {
-	    var sema = this.vm.top();
+        var sema = this.vm.top();
         if (!this.isA(sema, Squeak.splOb_ClassSemaphore)) return false;
         this.synchronousSignal(sema);
         return true;
     },
     synchronousSignal: function(sema) {
-    	if (this.isEmptyList(sema)) {
+        if (this.isEmptyList(sema)) {
             // no process is waiting on this semaphore
             sema.pointers[Squeak.Semaphore_excessSignals]++;
         } else
@@ -4892,11 +5437,11 @@ Object.subclass('Squeak.Primitives',
         }
         this.vm.popN(argCount); // return self
         return true;
-	},
-	signalSemaphoreWithIndex: function(semaIndex) {
-	    // asynch signal: will actually be signaled in checkForInterrupts()
-    	this.semaphoresToSignal.push(semaIndex);
-	},
+    },
+    signalSemaphoreWithIndex: function(semaIndex) {
+        // asynch signal: will actually be signaled in checkForInterrupts()
+        this.semaphoresToSignal.push(semaIndex);
+    },
     signalExternalSemaphores: function() {
         var semaphores = this.vm.specialObjects[Squeak.splOb_ExternalObjectsArray].pointers,
             semaClass = this.vm.specialObjects[Squeak.splOb_ClassSemaphore];
@@ -4930,7 +5475,7 @@ Object.subclass('Squeak.Primitives',
         }
         this.vm.popNandPush(argCount+1, this.makeStObject(value));
         return true;
-	},
+    },
     setLowSpaceThreshold: function() {
         var nBytes = this.stackInteger(0);
         if (this.success) this.vm.lowSpaceThreshold = nBytes;
@@ -4938,11 +5483,11 @@ Object.subclass('Squeak.Primitives',
     },
     primitiveVMParameter: function(argCount) {
         /* Behaviour depends on argument count:
-		0 args:	return an Array of VM parameter values;
-		1 arg:	return the indicated VM parameter;
-		2 args:	set the VM indicated parameter. */
-		var paramsArraySize = 41;
-		switch (argCount) {
+        0 args: return an Array of VM parameter values;
+        1 arg:  return the indicated VM parameter;
+        2 args: set the VM indicated parameter. */
+        var paramsArraySize = 41;
+        switch (argCount) {
             case 0:
                 var arrayObj = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassArray], paramsArraySize);
                 for (var i = 0; i < paramsArraySize; i++)
@@ -4953,8 +5498,8 @@ Object.subclass('Squeak.Primitives',
                 return this.popNandPushIfOK(2, this.makeStObject(this.vmParameterAt(parm)));
             case 2:
                 return this.popNandPushIfOK(3, 0);
-		};
-		return false;
+        };
+        return false;
     },
     vmParameterAt: function(index) {
         switch (index) {
@@ -4970,25 +5515,25 @@ Object.subclass('Squeak.Primitives',
             case 10: return 0;                              // total milliseconds in incremental GCs since startup (read-only)
             case 11: return this.vm.image.gcTenured;        // tenures of surving objects since startup (read-only)
             // 12-20 specific to the translating VM
-            // 21	root table size (read-only)
-            // 22	root table overflows since startup (read-only)
-            // 23	bytes of extra memory to reserve for VM buffers, plugins, etc.
-            // 24	memory threshold above which to shrink object memory (read-write)
-            // 25	memory headroom when growing object memory (read-write)
-            // 26	interruptChecksEveryNms - force an ioProcessEvents every N milliseconds (read-write)
-            // 27	number of times mark loop iterated for current IGC/FGC (read-only) includes ALL marking
-            // 28	number of times sweep loop iterated for current IGC/FGC (read-only)
-            // 29	number of times make forward loop iterated for current IGC/FGC (read-only)
-            // 30	number of times compact move loop iterated for current IGC/FGC (read-only)
-            // 31	number of grow memory requests (read-only)
-            // 32	number of shrink memory requests (read-only)
-            // 33	number of root table entries used for current IGC/FGC (read-only)
-            // 34	number of allocations done before current IGC/FGC (read-only)
-            // 35	number of survivor objects after current IGC/FGC (read-only)
-            // 36	millisecond clock when current IGC/FGC completed (read-only)
-            // 37	number of marked objects for Roots of the world, not including Root Table entries for current IGC/FGC (read-only)
-            // 38	milliseconds taken by current IGC (read-only)
-            // 39	Number of finalization signals for Weak Objects pending when current IGC/FGC completed (read-only)
+            // 21   root table size (read-only)
+            // 22   root table overflows since startup (read-only)
+            // 23   bytes of extra memory to reserve for VM buffers, plugins, etc.
+            // 24   memory threshold above which to shrink object memory (read-write)
+            // 25   memory headroom when growing object memory (read-write)
+            // 26   interruptChecksEveryNms - force an ioProcessEvents every N milliseconds (read-write)
+            // 27   number of times mark loop iterated for current IGC/FGC (read-only) includes ALL marking
+            // 28   number of times sweep loop iterated for current IGC/FGC (read-only)
+            // 29   number of times make forward loop iterated for current IGC/FGC (read-only)
+            // 30   number of times compact move loop iterated for current IGC/FGC (read-only)
+            // 31   number of grow memory requests (read-only)
+            // 32   number of shrink memory requests (read-only)
+            // 33   number of root table entries used for current IGC/FGC (read-only)
+            // 34   number of allocations done before current IGC/FGC (read-only)
+            // 35   number of survivor objects after current IGC/FGC (read-only)
+            // 36   millisecond clock when current IGC/FGC completed (read-only)
+            // 37   number of marked objects for Roots of the world, not including Root Table entries for current IGC/FGC (read-only)
+            // 38   milliseconds taken by current IGC (read-only)
+            // 39   Number of finalization signals for Weak Objects pending when current IGC/FGC completed (read-only)
             case 40: return 4; // BytesPerWord for this image
             case 41: return this.vm.image.formatVersion();
         }
@@ -5016,7 +5561,7 @@ Object.subclass('Squeak.Primitives',
     primitiveQuit: function(argCount) {
         Squeak.flushAllFiles();
         this.display.quitFlag = true;
-        this.vm.breakNow("quit"); 
+        this.vm.breakNow("quit");
         return true;
     },
     primitiveExitToDebugger: function(argCount) {
@@ -5041,7 +5586,7 @@ Object.subclass('Squeak.Primitives',
         this.vm.specialObjects[Squeak.splOb_TheDisplay] = displayObj;
         this.vm.popN(argCount); // return self
         return true;
-	},
+    },
     primitiveReverseDisplay: function(argCount) {
         this.reverseDisplay = !this.reverseDisplay;
         this.redrawDisplay();
@@ -5114,7 +5659,7 @@ Object.subclass('Squeak.Primitives',
                     var src = form.bits[srcIndex];
                     var dstIndex = pixels.width * y;
                     for (var x = 0; x < srcW; x++) {
-                        dest[dstIndex++] = colors[(src >>> srcShift) & mask]; 
+                        dest[dstIndex++] = colors[(src >>> srcShift) & mask];
                         if ((srcShift -= form.depth) < 0) {
                             srcShift = 32 - form.depth;
                             src = form.bits[++srcIndex];
@@ -5136,7 +5681,7 @@ Object.subclass('Squeak.Primitives',
                             ((rgb & 0x7C00) >> 7)     // shift red   down 2*5, up 0*8 + 3
                             + ((rgb & 0x03E0) << 6)   // shift green down 1*5, up 1*8 + 3
                             + ((rgb & 0x001F) << 19)  // shift blue  down 0*5, up 2*8 + 3
-                            + 0xFF000000;             // set alpha to opaque 
+                            + 0xFF000000;             // set alpha to opaque
                         if ((srcShift -= 16) < 0) {
                             srcShift = 16;
                             src = form.bits[++srcIndex];
@@ -5243,7 +5788,7 @@ Object.subclass('Squeak.Primitives',
         if (noCursor) return;
         // show cursor if it was just overwritten
         if (this.cursorX + this.cursorW > rect.left && this.cursorX < rect.right &&
-            this.cursorY + this.cursorH > rect.top && this.cursorY < rect.bottom) 
+            this.cursorY + this.cursorH > rect.top && this.cursorY < rect.bottom)
                 this.cursorDraw();
     },
     cursorUpdate: function() {
@@ -5277,7 +5822,7 @@ Object.subclass('Squeak.Primitives',
     },
 },
 'input', {
-	primitiveClipboardText: function(argCount) {
+    primitiveClipboardText: function(argCount) {
         if (argCount === 0) { // read from clipboard
             if (typeof(this.display.clipboardString) !== 'string') return false;
             this.vm.popNandPush(1, this.makeStString(this.display.clipboardString));
@@ -5290,7 +5835,7 @@ Object.subclass('Squeak.Primitives',
             this.vm.pop();
         }
         return true;
-	},
+    },
     primitiveKeyboardNext: function(argCount) {
         return this.popNandPushIfOK(argCount+1, this.ensureSmallInt(this.display.keys.shift()));
     },
@@ -5343,19 +5888,19 @@ Object.subclass('Squeak.Primitives',
         this.vm.goIdle();        // might switch process, so must be after pop
         return true;
     },
-	millisecondClockValue: function() {
+    millisecondClockValue: function() {
         //Return the value of the millisecond clock as an integer.
         //Note that the millisecond clock wraps around periodically.
         //The range is limited to SmallInteger maxVal / 2 to allow
         //delays of up to that length without overflowing a SmallInteger.
         return (Date.now() - this.vm.startupTime) & Squeak.MillisecondClockMask;
-	},
-	millisecondClockValueSet: function(clock) {
-        // set millisecondClock to the (previously saved) clock value 
+    },
+    millisecondClockValueSet: function(clock) {
+        // set millisecondClock to the (previously saved) clock value
         // to allow "stopping" the VM clock while debugging
         this.vm.startupTime = Date.now() - clock;
-	},
-	secondClock: function() {
+    },
+    secondClock: function() {
         return this.pos32BitIntFor(Squeak.totalSeconds()); // will overflow 32 bits in 2037
     },
     microsecondClockUTC: function() {
@@ -5661,19 +6206,19 @@ Object.subclass('Squeak.Primitives',
         source.connect(this.audioContext.destination);
         if (this.audioNextTimeSlot < this.audioContext.currentTime) {
             if (this.audioNextTimeSlot > 0)
-                console.warn("sound " + this.audioContext.currentTime.toFixed(3) + 
+                console.warn("sound " + this.audioContext.currentTime.toFixed(3) +
                     ": buffer underrun by " + (this.audioContext.currentTime - this.audioNextTimeSlot).toFixed(3) + " s");
             this.audioNextTimeSlot = this.audioContext.currentTime;
         }
         source.start(this.audioNextTimeSlot);
-        //console.log("sound " + this.audioContext.currentTime.toFixed(3) + 
-        //    ": scheduling from " + this.audioNextTimeSlot.toFixed(3) + 
+        //console.log("sound " + this.audioContext.currentTime.toFixed(3) +
+        //    ": scheduling from " + this.audioNextTimeSlot.toFixed(3) +
         //    " to " + (this.audioNextTimeSlot + source.buffer.duration).toFixed(3));
         this.audioNextTimeSlot += source.buffer.duration;
         // source.onended is unreliable, using a timeout instead
         window.setTimeout(function() {
             if (!this.audioContext) return;
-            // console.log("sound " + this.audioContext.currentTime.toFixed(3) + 
+            // console.log("sound " + this.audioContext.currentTime.toFixed(3) +
             //    ": done, next time slot " + this.audioNextTimeSlot.toFixed(3));
             this.audioBuffersUnused.push(source.buffer);
             if (this.audioSema) this.signalSemaphoreWithIndex(this.audioSema);
@@ -5856,577 +6401,6 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
 },
-'B2DPlugin', {
-    geInitialiseModule: function() {
-        this.b2d_debug = false;
-        this.b2d_state = {
-            form: null,
-        };
-    },
-    geReset: function(bitbltObj) {
-        if (this.b2d_debug) console.log("-- reset");
-        var state = this.b2d_state,
-            formObj = bitbltObj.pointers[Squeak.BitBlt_dest];
-        if (!state.form || state.form.obj !== formObj)
-            state.form = this.loadForm(formObj);
-        this.geSetupCanvas();
-        state.didRender = false;
-        state.needsFlush = false;
-        state.hasFill = false;
-        state.hasStroke = false;
-        state.fills = [];
-        state.minX = 0;
-        state.minY = 0;
-        state.maxX = state.form.width;
-        state.maxY = state.form.height;
-    },
-    geSetupCanvas: function() {
-        var state = this.b2d_state;
-        // create canvas and drawing context
-        if (!state.context) {
-            var canvas = document.getElementById("SqueakB2DCanvas");
-            if (!canvas) {
-                canvas = document.createElement("canvas");
-                canvas.id = "SqueakB2DCanvas";
-                canvas.setAttribute("style", "position:fixed;top:20px;left:950px;background:rgba(255,255,255,0.5)");
-                document.body.appendChild(canvas);
-            }
-            state.context = canvas.getContext("2d");
-            if (!state.context) alert("B2D: cannot create context");
-        };
-        // set canvas size, which also clears it
-        var form = state.form,
-            canvas = state.context.canvas;
-        canvas.width = form.width;
-        canvas.height = form.height;
-        canvas.style.visibility = this.b2d_debug ? "visible" : "hidden";
-    },
-    geFlush: function() {
-        if (this.b2d_debug) console.log("-- flush");
-        var state = this.b2d_state;
-        // fill and stroke path
-        if (state.hasFill) {
-            state.context.closePath();
-            state.context.fill();
-            state.didRender = true;
-            if (this.b2d_debug) console.log("==> filling");
-        }
-        if (state.hasStroke) {
-            state.context.stroke();
-            state.didRender = true;
-            if (this.b2d_debug) console.log("==> stroking");
-        }
-        // if (this.b2d_debug) this.vm.breakNow("b2d_debug");
-        state.context.beginPath();
-        state.flushNeeded = false;
-    },
-    geRender: function() {
-        if (this.b2d_debug) console.log("-- render");
-        var state = this.b2d_state;
-        if (state.flushNeeded) this.geFlush();
-        if (state.didRender) this.geBlendOverForm();
-        return 0; // answer stop reason
-    },
-    geBlendOverForm: function() {
-        var state = this.b2d_state,
-            form = state.form;
-        if (this.b2d_debug) console.log("==> read into " + form.width + "x" + form.height + "@" + form.depth);
-        if (!form.width || !form.height || state.maxX <= state.minX || state.maxY <= state.minY) return;
-        if (!form.msb) return this.vm.warnOnce("B2D: drawing to little-endian forms not implemented yet");
-        if (form.depth == 32) {
-            this.geBlendOverForm32();
-        } else if (form.depth == 16) {
-            this.geBlendOverForm16();
-        } else if (form.depth == 8) {
-            this.geBlendOverForm8();
-        } else if (form.depth == 1) {
-            this.geBlendOverForm1();
-        } else {
-            this.vm.warnOnce("B2D: drawing to " + form.depth + " bit forms not supported yet");
-        }
-        this.displayDirty(form.obj, {left: state.minX, top: state.minY, right: state.maxX, bottom: state.maxY});
-    },
-    geBlendOverForm1: function() {
-        // since we have 32 pixels per word, round to 32 pixels
-        var state = this.b2d_state,
-            form = state.form,
-            minX = state.minX & ~31,
-            minY = state.minY,
-            maxX = (state.maxX + 31) & ~31,
-            maxY = state.maxY,
-            width = maxX - minX,
-            height = maxY - minY,
-            canvasBytes = state.context.getImageData(minX, minY, width, height).data,
-            srcIndex = 0;
-        if (this.b2d_debug) console.log("==> clipped to " + width + "x" + height);
-        for (var y = minY; y < maxY; y++) {
-            var dstIndex = y * form.pitch + (minX / 32);
-            for (var x = minX; x < maxX; x += 32*4) {
-                var dstPixels = form.bits[dstIndex],  // 32 one-bit pixels
-                    dstShift = 31,
-                    result = 0;
-                for (var i = 0; i < 32; i++) {
-                    var alpha = canvasBytes[srcIndex+3],
-                        pix = alpha > 0.5 ? 0 : dstPixels;  // assume we're drawing in black 
-                    result = result | (pix & (1 << dstShift));
-                    dstShift--;
-                    srcIndex += 4;
-                }
-                form.bits[dstIndex] = result;
-                dstIndex++;
-            }
-        }
-    },
-    geBlendOverForm8: function() {
-        // since we have four pixels per word, round to 4 pixels
-        var state = this.b2d_state,
-            form = state.form,
-            minX = state.minX & ~3,
-            minY = state.minY,
-            maxX = (state.maxX + 3) & ~3,
-            maxY = state.maxY,
-            width = maxX - minX,
-            height = maxY - minY,
-            canvasBytes = state.context.getImageData(minX, minY, width, height).data,
-            srcIndex = 0;
-        if (this.b2d_debug) console.log("==> clipped to " + width + "x" + height);
-        for (var y = minY; y < maxY; y++) {
-            var dstIndex = y * form.pitch + (minX / 4);
-            for (var x = minX; x < maxX; x += 4) {
-                if (!(canvasBytes[srcIndex+3] | canvasBytes[srcIndex+7] | canvasBytes[srcIndex+11] | canvasBytes[srcIndex+15])) {
-                    srcIndex += 16; dstIndex++; // skip pixels if fully transparent
-                    continue;
-                }
-                var dstPixels = form.bits[dstIndex],  // four 8-bit pixels
-                    dstShift = 24,
-                    result = 0;
-                for (var i = 0; i < 4; i++) {
-                    var alpha = canvasBytes[srcIndex+3] / 255;
-                    if (alpha < 0.1) {
-                        result = result | (dstPixels & (0xFF << dstShift)); // keep dst
-                    } else {
-                        var oneMinusAlpha = 1 - alpha,
-                            pix = this.indexedColors[(dstPixels >> dstShift) & 0xFF],
-                            r = alpha * canvasBytes[srcIndex  ] + oneMinusAlpha * ((pix >> 16) & 0xFF),
-                            g = alpha * canvasBytes[srcIndex+1] + oneMinusAlpha * ((pix >>  8) & 0xFF),
-                            b = alpha * canvasBytes[srcIndex+2] + oneMinusAlpha * ( pix        & 0xFF),
-                            res = 40 + (r / 255 * 5.5|0) * 36 + (b / 255 * 5.5|0) * 6 + (g / 255 * 5.5|0);  // 6x6x6 RGB cube
-                        result = result | (res << dstShift);
-                    }
-                    dstShift -= 8;
-                    srcIndex += 4;
-                }
-                form.bits[dstIndex] = result;
-                dstIndex++;
-            }
-        }
-    },
-    geBlendOverForm16: function() {
-        // since we have two pixels per word, grab from even positions
-        var state = this.b2d_state,
-            form = state.form,
-            minX = state.minX & ~1,
-            minY = state.minY,
-            maxX = (state.maxX + 1) & ~1,
-            maxY = state.maxY,
-            width = maxX - minX,
-            height = maxY - minY,
-            canvasBytes = state.context.getImageData(minX, minY, width, height).data,
-            srcIndex = 0;
-        if (this.b2d_debug) console.log("==> clipped to " + width + "x" + height);
-        for (var y = minY; y < maxY; y++) {
-            var dstIndex = y * form.pitch + (minX / 2);
-            for (var x = minX; x < maxX; x += 2) {
-                if (!(canvasBytes[srcIndex+3] | canvasBytes[srcIndex+7])) {
-                    srcIndex += 8; dstIndex++; // skip pixels if fully transparent
-                    continue;
-                }
-                var dstPixels = form.bits[dstIndex],  // two 16-bit pixels
-                    dstShift = 16,
-                    result = 0;
-                for (var i = 0; i < 2; i++) {
-                    var alpha = canvasBytes[srcIndex+3] / 255,
-                        oneMinusAlpha = 1 - alpha,
-                        pix = dstPixels >> dstShift,
-                        r = alpha * canvasBytes[srcIndex  ] + oneMinusAlpha * ((pix >> 7) & 0xF8),
-                        g = alpha * canvasBytes[srcIndex+1] + oneMinusAlpha * ((pix >> 2) & 0xF8),
-                        b = alpha * canvasBytes[srcIndex+2] + oneMinusAlpha * ((pix << 3) & 0xF8),
-                        res = (r & 0xF8) << 7 | (g & 0xF8) << 2 | (b & 0xF8) >> 3;  
-                    result = result | (res << dstShift);
-                    dstShift -= 16;
-                    srcIndex += 4;
-                }
-                form.bits[dstIndex] = result;
-                dstIndex++;
-            }
-        }
-    },
-    geBlendOverForm32: function() {
-        var state = this.b2d_state,
-            minX = state.minX,
-            minY = state.minY,
-            maxX = state.maxX,
-            maxY = state.maxY,
-            width = maxX - minX,
-            height = maxY - minY,
-            canvasBytes = state.context.getImageData(minX, minY, width, height).data,
-            form = state.form,
-            srcIndex = 0;
-        if (this.b2d_debug) console.log("==> reading " + width + "x" + height + " pixels");
-        for (var y = minY; y < maxY; y++) {
-            var dstIndex = y * form.pitch + minX;
-            for (var x = minX; x < maxX; x++) {
-                var srcAlpha = canvasBytes[srcIndex+3];
-                if (srcAlpha !== 0) { // skip pixel if fully transparent
-                    var alpha = srcAlpha / 255,
-                        oneMinusAlpha = 1 - alpha,
-                        pix = form.bits[dstIndex],
-                        a =                        srcAlpha + oneMinusAlpha * ((pix >> 24) & 0xFF),
-                        r = alpha * canvasBytes[srcIndex  ] + oneMinusAlpha * ((pix >> 16) & 0xFF),
-                        g = alpha * canvasBytes[srcIndex+1] + oneMinusAlpha * ((pix >>  8) & 0xFF),
-                        b = alpha * canvasBytes[srcIndex+2] + oneMinusAlpha * ( pix        & 0xFF);
-                    form.bits[dstIndex] = (a << 24) | (r << 16) | (g << 8) | b;
-                }
-                srcIndex+= 4;
-                dstIndex++;
-            }
-        }
-    },
-    gePointsFrom: function(arrayObj, nPoints) {
-        var words = arrayObj.words;
-        if (words) {
-            if (words.length == nPoints) return arrayObj.wordsAsInt16Array();       // ShortPointArray
-            if (words.length == nPoints * 2) return arrayObj.wordsAsInt32Array();   // PointArray
-            return null;
-        }
-        // Array of Points
-        var points = arrayObj.pointers;
-        if (!points || points.length != nPoints)
-            return null;
-        var array = [];
-        for (var i = 0; i < nPoints; i++) {
-            var p = points[i].pointers;         // Point
-            array.push(this.floatOrInt(p[0]));  // x
-            array.push(this.floatOrInt(p[1]));  // y
-        }
-        return array;
-    },
-    geSetClip: function(minX, minY, maxX, maxY) {
-        if (this.b2d_debug) console.log("==> clip " + minX + "," + minY + "," + maxX + "," + maxY);
-        var state = this.b2d_state;
-        if (state.minX < minX) state.minX = minX;
-        if (state.minY < minY) state.minY = minY;
-        if (state.maxX > maxX) state.maxX = maxX;
-        if (state.maxY > maxY) state.maxY = maxY;
-    },
-    geSetOffset: function(x, y) {
-        // TODO: make offset work together with transform
-        this.b2d_state.context.setTransform(1, 0, 0, 1, x, y);
-        if (this.b2d_debug) console.log("==> translate " + x +"," + y);
-    },
-    geSetTransform: function(t) {
-        /* Transform is a matrix:
-                ⎛a₁₁ a₁₂ a₁₃⎞
-                ⎝a₂₁ a₂₂ a₂₃⎠
-            Squeak Matrix2x3Transform stores as
-                [a₁₁, a₁₂, a₁₃, a₂₁, a₂₂, a₂₃]
-            but canvas expects
-                [a₁₁, a₂₁, a₁₂, a₂₂, a₁₃, a₂₃]
-        */
-        this.b2d_state.context.setTransform(t[0], t[3], t[1], t[4], t[2], t[5]);
-        if (this.b2d_debug) console.log("==> transform: " + [t[0], t[3], t[1], t[4], t[2], t[5]].join(','));
-    },
-    geSetStyle: function(fillIndex, borderIndex, borderWidth) {
-        var hasFill = fillIndex !== 0,
-            hasStroke = borderIndex !== 0 && borderWidth > 0,
-            state = this.b2d_state;
-        state.hasFill = hasFill;
-        state.hasStroke = hasStroke;
-        if (hasFill) {
-            state.context.fillStyle = this.geStyleFrom(fillIndex);
-            if (this.b2d_debug) console.log("==> fill style: " + state.context.fillStyle);
-        }
-        if (hasStroke) {
-            state.context.strokeStyle = this.geStyleFrom(borderIndex);
-            state.context.lineWidth = borderWidth;
-            if (this.b2d_debug) console.log("==> stroke style: " + state.context.strokeStyle + '@' + borderWidth);
-        }
-        return hasFill || hasStroke;
-    },
-    geColorFrom: function(word) {
-        var b = word & 0xFF,
-            g = (word & 0xFF00) >>> 8,
-            r = (word & 0xFF0000) >>> 16,
-            a = ((word & 0xFF000000) >>> 24) / 255;
-        if (a > 0) { // undo pre-multiplication of alpha
-            b = b / a & 0xFF;
-            g = g / a & 0xFF;
-            r = r / a & 0xFF;
-        }        
-        return "rgba(" + [r, g, b, a].join(",") + ")";
-    },
-    geStyleFrom: function(index) {
-        if (index === 0) return null;
-        var fills = this.b2d_state.fills;
-        if (index <= fills.length) return fills[index - 1];
-        return this.geColorFrom(index);
-    },
-    gePrimitiveSetEdgeTransform: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveSetEdgeTransform");
-        var transform = this.stackNonInteger(0);
-        if (!this.success) return false;
-        if (transform.words) this.geSetTransform(transform.wordsAsFloat32Array());
-        this.vm.popN(argCount);
-        return true;
-    },
-    gePrimitiveSetClipRect: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveSetClipRect");
-        var rect = this.stackNonInteger(0);
-        if (!this.success) return false;
-        var origin = rect.pointers[0].pointers,
-            corner = rect.pointers[1].pointers;
-        this.geSetClip(origin[0], origin[1], corner[0], corner[1]);
-        this.vm.popN(argCount);
-        return true;
-    },
-    gePrimitiveRenderImage: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveRenderImage");
-        var stopReason = this.geRender();
-        this.vm.popNandPush(argCount + 1, stopReason);
-        return true;
-    },
-    gePrimitiveRenderScanline: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveRenderScanline");
-        var stopReason = this.geRender();
-        this.vm.popNandPush(argCount + 1, stopReason);
-        return true;
-    },
-    gePrimitiveFinishedProcessing: function(argCount) {
-        var finished = !this.b2d_state.flushNeeded;
-        if (this.b2d_debug) console.log("b2d: gePrimitiveFinishedProcessing => " + finished);
-        this.vm.popNandPush(argCount+1, this.makeStObject(finished));
-        return true;
-    },
-    gePrimitiveNeedsFlushPut: function(argCount) {
-        var needsFlush = this.stackBoolean(0);
-        if (!this.success) return false;
-        this.b2d_state.needsFlush = needsFlush;
-        if (this.b2d_debug) console.log("b2d: gePrimitiveNeedsFlushPut: " + needsFlush);
-        this.vm.popN(argCount);
-        return true;
-    },
-    gePrimitiveInitializeBuffer: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveInitializeBuffer");
-        var engine = this.stackNonInteger(argCount),
-            bitblt = engine.pointers[2]; // BEBitBltIndex
-        this.geReset(bitblt);
-        this.vm.popN(argCount);
-        return true;
-    },
-    gePrimitiveAddOval: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveAddOval");
-        var origin      = this.stackNonInteger(4).pointers,
-            corner      = this.stackNonInteger(3).pointers,
-            fillIndex   = this.stackPos32BitInt(2),
-            borderWidth = this.stackInteger(1),
-            borderIndex = this.stackPos32BitInt(0);
-        if (!this.success) return false;
-        if (this.geSetStyle(fillIndex, borderIndex, borderWidth)) {
-            var ctx = this.b2d_state.context,
-                x = this.floatOrInt(origin[0]),
-                y = this.floatOrInt(origin[1]),
-                w = this.floatOrInt(corner[0]) - x,
-                h = this.floatOrInt(corner[1]) - y;
-            ctx.save();
-            ctx.translate(x, y);
-            ctx.scale(w, h);
-            ctx.arc(0.5, 0.5, 0.5, 0, Math.PI * 2);
-            ctx.restore();
-            if (this.b2d_debug) console.log("==> oval " + [x, y, w, h].join(','));
-            this.b2d_state.flushNeeded = true;
-        }
-        this.vm.popN(argCount);
-        return true;
-    },
-    gePrimitiveAddBezierShape: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveAddBezierShape");
-        var points      = this.stackNonInteger(4),
-            nSegments   = this.stackInteger(3),
-            fillIndex   = this.stackPos32BitInt(2),
-            borderWidth = this.stackInteger(1),
-            borderIndex = this.stackPos32BitInt(0);
-        if (!this.success) return false;
-        if (this.geSetStyle(fillIndex, borderIndex, borderWidth)) {
-            var p = this.gePointsFrom(points, nSegments * 3);
-            if (!p) return false;
-            var ctx = this.b2d_state.context;
-            ctx.moveTo(p[0], p[1]);
-            for (var i = 0; i < p.length; i += 6)
-                ctx.quadraticCurveTo(p[i+2], p[i+3], p[i+4], p[i+5]);
-            if (this.b2d_debug) console.log("==> beziershape");
-            this.b2d_state.flushNeeded = true;
-        }
-        this.vm.popN(argCount);
-        return true;
-    },
-    gePrimitiveAddPolygon: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveAddPolygon");
-        var points      = this.stackNonInteger(4),
-            nPoints     = this.stackInteger(3),
-            fillIndex   = this.stackPos32BitInt(2),
-            borderWidth = this.stackInteger(1),
-            borderIndex = this.stackPos32BitInt(0);
-        if (!this.success) return false;
-        if (this.geSetStyle(fillIndex, borderIndex, borderWidth)) {
-            var p = this.gePointsFrom(points, nPoints);
-            if (!p) return false;
-            var ctx = this.b2d_state.context;
-            ctx.moveTo(p[0], p[1]);
-            for (var i = 2; i < p.length; i += 2)
-                ctx.lineTo(p[i], p[i+1]);
-            if (this.b2d_debug) console.log("==> polygon");
-            this.b2d_state.flushNeeded = true;
-        }
-        return true;
-    },
-    gePrimitiveAddRect: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveAddRect");
-        var origin      = this.stackNonInteger(4).pointers,
-            corner      = this.stackNonInteger(3).pointers,
-            fillIndex   = this.stackPos32BitInt(2),
-            borderWidth = this.stackInteger(1),
-            borderIndex = this.stackPos32BitInt(0);
-        if (!this.success) return false;
-        if (this.geSetStyle(fillIndex, borderIndex, borderWidth)) {
-            var x = this.floatOrInt(origin[0]),
-                y = this.floatOrInt(origin[1]),
-                w = this.floatOrInt(corner[0]) - x,
-                h = this.floatOrInt(corner[1]) - y; 
-            this.b2d_state.context.rect(x, y, w, h);
-            if (this.b2d_debug) console.log("==> rect " + [x, y, w, h].join(','));
-            this.b2d_state.flushNeeded = true;
-        }
-        this.vm.popNandPush(argCount+1, 0);
-        return true;
-    },
-    gePrimitiveAddBezier: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveAddBezier");
-        this.vm.warnOnce("B2D: beziers not implemented yet");
-        this.vm.popN(argCount);
-        return true;
-    },
-    gePrimitiveAddCompressedShape: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveAddCompressedShape");
-        var points = this.stackNonInteger(6),
-            nSegments = this.stackInteger(5),
-            leftFills = this.stackNonInteger(4).wordsAsInt16Array(),
-            rightFills = this.stackNonInteger(3).wordsAsInt16Array(),
-            lineWidths = this.stackNonInteger(2).wordsAsInt16Array(),
-            lineFills = this.stackNonInteger(1).wordsAsInt16Array(),
-            fillIndexList = this.stackNonInteger(0).words;
-        if (!this.success) return false;
-        // fills and widths are ShortRunArrays
-        if (leftFills.length !== 2 || rightFills.length !== 2 || lineWidths.length !== 2 || lineFills.length !== 2 ||
-            leftFills[1] !== nSegments || rightFills[1] !== nSegments || lineWidths[1] !== nSegments || lineFills[1] !== nSegments ||
-            leftFills[0] !== 0) {
-            this.vm.warnOnce("B2D: complex compressed shapes not implemented yet");
-            debugger;
-        }
-        var fillIndex = rightFills[0] ? fillIndexList[rightFills[0] - 1] : 0,
-            borderIndex = lineFills[0] ? fillIndexList[lineFills[0] - 1] : 0,
-            borderWidth = lineWidths[0];
-        if (this.geSetStyle(fillIndex, borderIndex, borderWidth)) {
-            var p = this.gePointsFrom(points, nSegments * 3);
-            if (!p) return false;
-            var ctx = this.b2d_state.context;
-            ctx.moveTo(p[0], p[1]);
-            for (var i = 0; i < p.length; i += 6)
-                ctx.quadraticCurveTo(p[i+2], p[i+3], p[i+4], p[i+5]);
-            if (this.b2d_debug) console.log("==> beziershape");
-            this.geFlush();
-        }
-        this.vm.popN(argCount);
-        return true;
-    },
-    gePrimitiveAddLine: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveAddLine");
-        this.vm.warnOnce("B2D: lines not implemented yet");
-        this.vm.popN(argCount);
-        return true;
-    },
-    gePrimitiveAddBitmapFill: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveAddBitmapFill");
-        this.vm.warnOnce("B2D: bitmap fills not implemented yet");
-        var fills = this.b2d_state.fills;
-        fills.push('red');
-        this.vm.popNandPush(argCount+1, fills.length);
-        return true;
-    },
-    gePrimitiveAddGradientFill: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveAddGradientFill");
-        var ramp = this.stackNonInteger(4).words,
-            origin = this.stackNonInteger(3).pointers,
-            direction = this.stackNonInteger(2).pointers,
-            //normal = this.stackNonInteger(1).pointers,
-            isRadial = this.stackBoolean(0);
-        if (!this.success) return false;
-        var x = this.floatOrInt(origin[0]),
-            y = this.floatOrInt(origin[1]),
-            dx = this.floatOrInt(direction[0]),
-            dy = this.floatOrInt(direction[1]),
-            state = this.b2d_state,
-            ctx = state.context,
-            gradient = isRadial
-                ? ctx.createRadialGradient(x, y, 0, x, y, Math.sqrt(dx*dx + dy*dy))
-                : ctx.createLinearGradient(x, y, x + dx, y + dy);
-        // we get a 512-step color ramp here. Going to assume it's made from only two colors.
-        gradient.addColorStop(0, this.geColorFrom(ramp[0]));
-        gradient.addColorStop(1, this.geColorFrom(ramp[ramp.length - 1]));
-        // TODO: use more than two stops
-        // IDEA: the original gradient is likely in a temp at this.vm.stackValue(7)
-        //       so we could get the original color stops from it
-        state.fills.push(gradient);
-        this.vm.popNandPush(argCount+1, state.fills.length);
-        return true;
-    },
-    gePrimitiveNeedsFlush: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveNeedsFlush => " + this.b2d_state.needsFlush);
-        this.vm.popNandPush(argCount, this.makeStObject(this.b2d_state.needsFlush));
-        return true;
-    },
-    gePrimitiveSetOffset: function(argCount) {
-        if (this.b2d_debug) console.log("b2d: gePrimitiveSetOffset");
-        var offset = this.stackNonInteger(0).pointers;
-        if (!offset) return false;
-        this.geSetOffset(this.floatOrInt(offset[0]), this.floatOrInt(offset[1]));
-        this.vm.popN(argCount);
-        return true;
-    },
-    gePrimitiveGetFailureReason: function(argCount) { this.vm.popN(argCount+1, 0); return true; },
-    gePrimitiveSetColorTransform: function(argCount) {this.vm.popN(argCount); return true;},
-    gePrimitiveSetAALevel: function(argCount) { this.vm.popN(argCount); return true; },
-    gePrimitiveGetAALevel: function(argCount) { return false; },
-    gePrimitiveSetDepth: function(argCount) {this.vm.popN(argCount); return true; },
-    gePrimitiveGetDepth: function(argCount) {this.vm.popNandPush(argCount+1, 0); return true; },
-    gePrimitiveGetClipRect: function(argCount) { return false; },
-    gePrimitiveGetOffset: function(argCount) { return false; },
-    gePrimitiveSetBitBltPlugin: function(argCount) { this.vm.popN(argCount); return true; },
-    gePrimitiveDoProfileStats: function(argCount) { this.vm.popN(argCount); return true; },
-    gePrimitiveGetBezierStats: function(argCount) { this.vm.popN(argCount); return true; },
-    gePrimitiveGetCounts: function(argCount) { this.vm.popN(argCount); return true; },
-    gePrimitiveGetTimes: function(argCount) { this.vm.popN(argCount); return true; },
-    gePrimitiveInitializeProcessing: function(argCount) { return false; },
-    gePrimitiveAddActiveEdgeEntry: function(argCount) { return false; },
-    gePrimitiveChangedActiveEdgeEntry: function(argCount) { return false; },
-    gePrimitiveNextActiveEdgeEntry: function(argCount) { return false; },
-    gePrimitiveNextGlobalEdgeEntry: function(argCount) { return false; },
-    gePrimitiveDisplaySpanBuffer: function(argCount) { return false; },
-    gePrimitiveCopyBuffer: function(argCount) { return false; },
-    gePrimitiveNextFillEntry: function(argCount) { return false; },
-    gePrimitiveMergeFillFrom: function(argCount) { return false; },
-    gePrimitiveRegisterExternalEdge: function(argCount) { return false; },
-    gePrimitiveRegisterExternalFill: function(argCount) { return false; },
-},
 'JPEGReadWriter2Plugin', {
     jpeg2_primJPEGPluginIsPresent: function(argCount) {
         return this.popNandPushIfOK(argCount + 1, this.vm.trueObj);
@@ -6532,7 +6506,7 @@ Object.subclass('Squeak.Primitives',
         var width = image.width,
             height = image.height,
             pixels = image.data;
-        for (var y = 0; y < height; y++)    
+        for (var y = 0; y < height; y++)
             for (var x = 0; x < width; x += 2) {
                 var i = y * height + x,
                     r1 = pixels[i*4 + 0] >> 3,
@@ -6553,8 +6527,8 @@ Object.subclass('Squeak.Primitives',
             height = image.height,
             pixels = image.data,
             ditherMatrix1 = [2, 0, 14, 12, 1, 3, 13, 15],
-			ditherMatrix2 = [10, 8, 6, 4, 9, 11, 5, 7];
-        for (var y = 0; y < height; y++)    
+            ditherMatrix2 = [10, 8, 6, 4, 9, 11, 5, 7];
+        for (var y = 0; y < height; y++)
             for (var x = 0; x < width; x++) {
                 var i = (y * height + 2 * x) << 2,
                     r1 = pixels[i + 0],
@@ -6574,7 +6548,7 @@ Object.subclass('Squeak.Primitives',
                 if (dmv1 < dmi) { g1 = dmo+1; } else { g1 = dmo; };
                 di = (b1 * 496) >> 8; dmi = di & 15; dmo = di >> 4;
                 if (dmv1 < dmi) { b1 = dmo+1; } else { b1 = dmo; };
-                
+
                 di = (r2 * 496) >> 8; dmi = di & 15; dmo = di >> 4;
                 if (dmv2 < dmi) { r2 = dmo+1; } else { r2 = dmo; };
                 di = (g2 * 496) >> 8; dmi = di & 15; dmo = di >> 4;
@@ -6705,6 +6679,135 @@ Object.subclass('Squeak.Primitives',
     primitiveFFTPermuteData: function(argCount) {
         return this.namedPrimitive("FFTPlugin", "primitiveFFTPermuteData", argCount);
     },
+	gePrimitiveMergeFillFrom: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveMergeFillFrom", argCount);
+	},
+	gePrimitiveCopyBuffer: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveCopyBuffer", argCount);
+	},
+	gePrimitiveAddRect: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAddRect", argCount);
+	},
+	gePrimitiveAddGradientFill: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAddGradientFill", argCount);
+	},
+	gePrimitiveSetClipRect: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveSetClipRect", argCount);
+	},
+	gePrimitiveSetBitBltPlugin: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveSetBitBltPlugin", argCount);
+	},
+	gePrimitiveRegisterExternalEdge: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveRegisterExternalEdge", argCount);
+	},
+	gePrimitiveGetClipRect: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveGetClipRect", argCount);
+	},
+	gePrimitiveAddBezier: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAddBezier", argCount);
+	},
+	gePrimitiveInitializeProcessing: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveInitializeProcessing", argCount);
+	},
+	gePrimitiveRenderImage: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveRenderImage", argCount);
+	},
+	gePrimitiveGetOffset: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveGetOffset", argCount);
+	},
+	gePrimitiveSetDepth: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveSetDepth", argCount);
+	},
+	gePrimitiveAddBezierShape: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAddBezierShape", argCount);
+	},
+	gePrimitiveSetEdgeTransform: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveSetEdgeTransform", argCount);
+	},
+	gePrimitiveGetTimes: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveGetTimes", argCount);
+	},
+	gePrimitiveNextActiveEdgeEntry: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveNextActiveEdgeEntry", argCount);
+	},
+	gePrimitiveAddBitmapFill: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAddBitmapFill", argCount);
+	},
+	gePrimitiveGetDepth: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveGetDepth", argCount);
+	},
+	gePrimitiveAbortProcessing: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAbortProcessing", argCount);
+	},
+	gePrimitiveNextGlobalEdgeEntry: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveNextGlobalEdgeEntry", argCount);
+	},
+	gePrimitiveGetFailureReason: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveGetFailureReason", argCount);
+	},
+	gePrimitiveDisplaySpanBuffer: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveDisplaySpanBuffer", argCount);
+	},
+	gePrimitiveGetCounts: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveGetCounts", argCount);
+	},
+	gePrimitiveChangedActiveEdgeEntry: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveChangedActiveEdgeEntry", argCount);
+	},
+	gePrimitiveRenderScanline: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveRenderScanline", argCount);
+	},
+	gePrimitiveGetBezierStats: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveGetBezierStats", argCount);
+	},
+	gePrimitiveFinishedProcessing: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveFinishedProcessing", argCount);
+	},
+	gePrimitiveNeedsFlush: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveNeedsFlush", argCount);
+	},
+	gePrimitiveAddLine: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAddLine", argCount);
+	},
+	gePrimitiveSetOffset: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveSetOffset", argCount);
+	},
+	gePrimitiveNextFillEntry: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveNextFillEntry", argCount);
+	},
+	gePrimitiveInitializeBuffer: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveInitializeBuffer", argCount);
+	},
+	gePrimitiveDoProfileStats: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveDoProfileStats", argCount);
+	},
+	gePrimitiveAddActiveEdgeEntry: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAddActiveEdgeEntry", argCount);
+	},
+	gePrimitiveSetAALevel: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveSetAALevel", argCount);
+	},
+	gePrimitiveNeedsFlushPut: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveNeedsFlushPut", argCount);
+	},
+	gePrimitiveAddCompressedShape: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAddCompressedShape", argCount);
+	},
+	gePrimitiveSetColorTransform: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveSetColorTransform", argCount);
+	},
+	gePrimitiveAddOval: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAddOval", argCount);
+	},
+	gePrimitiveRegisterExternalFill: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveRegisterExternalFill", argCount);
+	},
+	gePrimitiveAddPolygon: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveAddPolygon", argCount);
+	},
+	gePrimitiveGetAALevel: function(argCount) {
+	    return this.namedPrimitive("B2DPlugin", "primitiveGetAALevel", argCount);
+	},
 });
 
 Object.subclass('Squeak.InterpreterProxy',
@@ -6736,6 +6839,9 @@ Object.subclass('Squeak.InterpreterProxy',
     primitiveFail: function() {
         this.successFlag = false;
     },
+    primitiveFailFor: function(reasonCode) {
+        this.successFlag = false;
+    },
     success: function(boolean) {
         if (!boolean) this.successFlag = false;
     },
@@ -6763,7 +6869,7 @@ Object.subclass('Squeak.InterpreterProxy',
     stackValue: function(n) {
         return this.vm.stackValue(n);
     },
-	stackIntegerValue: function(n) {
+    stackIntegerValue: function(n) {
         var int = this.vm.stackValue(n);
         if (typeof int === "number") return int;
         this.successFlag = false;
@@ -6831,6 +6937,9 @@ Object.subclass('Squeak.InterpreterProxy',
     isIntegerValue: function(obj) {
         return typeof obj === "number" && obj >= -0x40000000 && obj <= 0x3FFFFFFF;
     },
+    isArray: function(obj) {
+        return obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassArray];
+    },
     isMemberOf: function(obj, className) {
         var nameBytes = obj.sqClass.pointers[Squeak.Class_name].bytes;
         if (className.length !== nameBytes.length) return false;
@@ -6893,10 +7002,10 @@ Object.subclass('Squeak.InterpreterProxy',
         return [];
     },
     fetchIntegerofObject: function(n, obj) {
-	    var int = obj.pointers[n];
-	    if (typeof int === "number") return int;
-	    this.successFlag = false;
-	    return 0;
+        var int = obj.pointers[n];
+        if (typeof int === "number") return int;
+        this.successFlag = false;
+        return 0;
     },
     fetchLong32ofObject: function(n, obj) {
         return obj.words[n];
@@ -6917,7 +7026,7 @@ Object.subclass('Squeak.InterpreterProxy',
         if (index < 1 || index >= array.pointers.length) return this.successFlag = false;
         array.pointers[index] = obj;
     },
-}, 
+},
 'constant access',
 {
     isKindOfInteger: function(obj) {
@@ -6927,6 +7036,9 @@ Object.subclass('Squeak.InterpreterProxy',
     },
     classArray: function() {
         return this.vm.specialObjects[Squeak.splOb_ClassArray];
+    },
+    classBitmap: function() {
+        return this.vm.specialObjects[Squeak.splOb_ClassBitmap];
     },
     classSmallInteger: function() {
         return this.vm.specialObjects[Squeak.splOb_ClassInteger];
@@ -6977,490 +7089,10 @@ Object.subclass('Squeak.InterpreterProxy',
         }
     },
     ioLoadFunctionFrom: function(funcName, pluginName) {
-        return null;
+        return this.vm.primHandler.loadFunctionFrom(funcName, pluginName);
     },
 });
 
-Object.extend(Squeak, {
-    fsck: function(dir, files) {
-        dir = dir || "";
-        if (!files) {
-            // find existing files
-            files = {};
-            for (var key in localStorage) {
-                var match = key.match(/squeak-file(\.lz)?:(.*)$/);
-                if (match) {files[match[2]] = true};
-            }
-            if (typeof indexedDB !== "undefined") {
-                return this.dbTransaction("readonly", "fsck cursor", function(fileStore) {
-                    var cursorReq = fileStore.openCursor();
-                    cursorReq.onsuccess = function(e) {
-                        var cursor = e.target.result;
-                        if (cursor) {
-                            files[cursor.key] = true;
-                            cursor.continue();
-                        } else { // done
-                            Squeak.fsck(dir, files);
-                        }
-                    }
-                    cursorReq.onerror = function(e) {
-                        console.error("fsck failed");
-                    }
-                });
-            }
-        }
-        // check directories
-        var entries = Squeak.dirList(dir);
-        for (var name in entries) {
-            var path = dir + "/" + name,
-                isDir = entries[name][3];
-            if (isDir) {
-                var exists = "squeak:" + path in localStorage;
-                if (exists) Squeak.fsck(path, files);
-                else {
-                    console.log("Deleting stale directory " + path);
-                    Squeak.dirDelete(path);
-                }
-            } else {
-                if (!files[path]) {
-                    console.log("Deleting stale file entry " + path);
-                    Squeak.fileDelete(path, true);
-                } else {
-                    files[path] = false; // mark as visited
-                }
-            }
-        }
-        // check orphaned files
-        if (dir === "") {
-            var orphaned = [],
-                total = 0;
-            for (var path in files) {
-                total++;
-                if (files[path]) orphaned.push(path); // not marked visited
-            }
-            if (orphaned.length > 0) {
-                for (var i = 0; i < orphaned.length; i++) {
-                    console.log("Deleting orphaned file " + orphaned[i]);
-                    delete localStorage["squeak-file:" + orphaned[i]];
-                    delete localStorage["squeak-file.lz:" + orphaned[i]];
-                }
-                if (typeof indexedDB !== "undefined") {
-                    this.dbTransaction("readwrite", "fsck delete", function(fileStore) {
-                        for (var i = 0; i < orphaned.length; i++) {
-                            fileStore.delete(orphaned[i]);
-                        };
-                    });
-                }
-            }
-        }
-    },
-    dbTransaction: function(mode, description, transactionFunc, completionFunc) {
-        // File contents is stored in the IndexedDB named "squeak" in object store "files"
-        // and directory entries in localStorage with prefix "squeak:"
-        if (typeof indexedDB == "undefined") {
-            transactionFunc(this.dbFake());
-            if (completionFunc) completionFunc();
-            return;
-        }
-
-        var startTransaction = function() {
-            var trans = SqueakDB.transaction("files", mode),
-                fileStore = trans.objectStore("files");
-            trans.oncomplete = function(e) { if (completionFunc) completionFunc(); }
-            trans.onerror = function(e) { console.error("transaction error:" + e.target.error.name + " (" + description + ")"); }
-            trans.onabort = function(e) { console.error("transaction aborted: " + e.target.error.name + " (" + description + ")"); }
-            transactionFunc(fileStore);
-        };
-
-        // if database connection already opened, just do transaction
-        if (window.SqueakDB) return startTransaction();
-        
-        // otherwise, open SqueakDB first
-        var openReq = indexedDB.open("squeak");
-        openReq.onsuccess = function(e) {
-            window.SqueakDB = this.result;
-            SqueakDB.onversionchange = function(e) {
-                delete window.SqueakDB;
-                this.close();
-            };
-            SqueakDB.onerror = function(e) {
-                console.log("Error accessing database: " + e.target.errorCode);
-            };
-            startTransaction();
-        };
-        openReq.onupgradeneeded = function (e) {
-            // run only first time, or when version changed
-            console.log("Creating database version " + e.newVersion);
-            var db = e.target.result;
-            db.createObjectStore("files");
-        };
-        openReq.onerror = function(e) {
-            console.log("Error opening database: " + e.target.errorCode);
-        };
-        openReq.onblocked = function(e) {
-            // If some other tab is loaded with the database, then it needs to be closed
-            // before we can proceed upgrading the database.
-            alert("Database upgrade needed. Please close all other tabs with this site open!");
-        };
-    },
-    dbFake: function() {
-        // indexedDB is not supported by this browser, fake it using localStorage
-        // since localStorage space is severly limited, use LZString if loaded
-        // see https://github.com/pieroxy/lz-string
-        if (typeof SqueakDBFake == "undefined") {
-            if (typeof indexedDB == "undefined")
-                console.warn("IndexedDB not supported by this browser, using localStorage");
-            window.SqueakDBFake = {
-                bigFiles: {},
-                bigFileThreshold: 100000,
-                get: function(filename) {
-                    var buffer = SqueakDBFake.bigFiles[filename];
-                    if (!buffer) {
-                        var string = localStorage["squeak-file:" + filename];
-                        if (!string) {
-                            var compressed = localStorage["squeak-file.lz:" + filename];
-                            if (compressed) {
-                                if (typeof LZString == "object") {
-                                    string = LZString.decompressFromUTF16(compressed);
-                                } else {
-                                    console.error("LZString not loaded: cannot decompress " + filename);
-                                }
-                            }
-                        }
-                        if (string) {
-                            var bytes = new Uint8Array(string.length);
-                            for (var i = 0; i < bytes.length; i++)
-                                bytes[i] = string.charCodeAt(i) & 0xFF;
-                            buffer = bytes.buffer;
-                        }
-                    }
-                    var req = {result: buffer};
-                    setTimeout(function(){
-                        if (buffer && req.onsuccess) req.onsuccess();
-                        if (!buffer && req.onerror) req.onerror();
-                    }, 0);
-                    return req;
-                },
-                put: function(buffer, filename) {
-                    if (buffer.byteLength > SqueakDBFake.bigFileThreshold) {
-                        if (!SqueakDBFake.bigFiles[filename])
-                            console.log("File " + filename + " (" + buffer.byteLength + " bytes) too large, storing in memory only");
-                        SqueakDBFake.bigFiles[filename] = buffer;
-                    } else {
-                        var string = Squeak.bytesAsString(new Uint8Array(buffer));
-                        if (typeof LZString == "object") {
-                            var compressed = LZString.compressToUTF16(string);
-                            localStorage["squeak-file.lz:" + filename] = compressed;
-                            delete localStorage["squeak-file:" + filename];
-                        } else {
-                            localStorage["squeak-file:" + filename] = string;
-                        }
-                    }
-                    var req = {};
-                    setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
-                    return req;
-                },
-                delete: function(filename) {
-                    delete localStorage["squeak-file:" + filename];
-                    delete localStorage["squeak-file.lz:" + filename];
-                    delete SqueakDBFake.bigFiles[filename];
-                    var req = {};
-                    setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
-                    return req;
-                },
-            }
-        }
-        return SqueakDBFake;
-    },
-    fileGet: function(filepath, thenDo, errorDo) {
-        if (!errorDo) errorDo = function(err) { console.log(err) };
-        var path = this.splitFilePath(filepath);
-        if (!path.basename) return errorDo("Invalid path: " + filepath);
-        this.dbTransaction("readonly", "get " + filepath, function(fileStore) {
-            var getReq = fileStore.get(path.fullname);
-            getReq.onerror = function(e) { errorDo(this.errorCode) };
-            getReq.onsuccess = function(e) {
-                if (this.result !== undefined) return thenDo(this.result);
-                // might be a template
-                Squeak.fetchTemplateFile(path.fullname,
-                    function gotTemplate(template) {thenDo(template)},
-                    function noTemplate() {
-                        // if no indexedDB then we have checked fake db already
-                        if (typeof indexedDB == "undefined") return errorDo("file not found: " + path.fullname);
-                        // fall back on fake db, may be file is there
-                        var fakeReq = Squeak.dbFake().get(path.fullname);
-                        fakeReq.onerror = function(e) { errorDo("file not found: " + path.fullname) };
-                        fakeReq.onsuccess = function(e) { thenDo(this.result); }
-                    });
-            };
-        });
-    },
-    filePut: function(filepath, contents, optSuccess) {
-        // store file, return dir entry if successful
-        var path = this.splitFilePath(filepath); if (!path.basename) return null;
-        var directory = this.dirList(path.dirname); if (!directory) return null;
-        // get or create entry
-        var entry = directory[path.basename],
-            now = this.totalSeconds();
-        if (!entry) { // new file
-            entry = [/*name*/ path.basename, /*ctime*/ now, /*mtime*/ 0, /*dir*/ false, /*size*/ 0];
-            directory[path.basename] = entry;
-        } else if (entry[3]) // is a directory
-            return null;
-        // update directory entry
-        entry[2] = now; // modification time
-        entry[4] = contents.byteLength || contents.length || 0;
-        localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
-        // put file contents (async)
-        this.dbTransaction("readwrite", "put " + filepath,
-            function(fileStore) {
-                fileStore.put(contents, path.fullname);
-            },
-            function transactionComplete() {
-                if (optSuccess) optSuccess();
-            });
-        return entry;
-    },
-    fileDelete: function(filepath, entryOnly) {
-        var path = this.splitFilePath(filepath); if (!path.basename) return false;
-        var directory = this.dirList(path.dirname); if (!directory) return false;
-        var entry = directory[path.basename]; if (!entry || entry[3]) return false; // not found or is a directory
-        // delete entry from directory
-        delete directory[path.basename];
-        localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
-        if (entryOnly) return true;
-        // delete file contents (async)
-        this.dbTransaction("readwrite", "delete " + filepath, function(fileStore) {
-            fileStore.delete(path.fullname);
-        });
-        return true;
-    },
-    fileRename: function(from, to) {
-        var oldpath = this.splitFilePath(from); if (!oldpath.basename) return false;
-        var newpath = this.splitFilePath(to); if (!newpath.basename) return false;
-        var olddir = this.dirList(oldpath.dirname); if (!olddir) return false;
-        var entry = olddir[oldpath.basename]; if (!entry || entry[3]) return false; // not found or is a directory
-        var samedir = oldpath.dirname == newpath.dirname;
-        var newdir = samedir ? olddir : this.dirList(newpath.dirname); if (!newdir) return false;
-        if (newdir[newpath.basename]) return false; // exists already
-        delete olddir[oldpath.basename];            // delete old entry
-        entry[0] = newpath.basename;                // rename entry
-        newdir[newpath.basename] = entry;           // add new entry
-        localStorage["squeak:" + newpath.dirname] = JSON.stringify(newdir);
-        if (!samedir) localStorage["squeak:" + oldpath.dirname] = JSON.stringify(olddir);
-        // move file contents (async)
-        this.fileGet(oldpath.fullname,
-            function success(contents) {
-                this.dbTransaction("readwrite", "rename " + oldpath.fullname + " to " + newpath.fullname, function(fileStore) {
-                    fileStore.delete(oldpath.fullname);
-                    fileStore.put(contents, newpath.fullname);
-                });
-            }.bind(this),
-            function error(msg) {
-                console.log("File rename failed: " + msg);
-            }.bind(this));
-        return true;
-    },
-    fileExists: function(filepath) {
-        var path = this.splitFilePath(filepath); if (!path.basename) return false;
-        var directory = this.dirList(path.dirname); if (!directory) return false;
-        var entry = directory[path.basename]; if (!entry || entry[3]) return false; // not found or is a directory
-        return true;
-    },
-    dirCreate: function(dirpath, withParents) {
-        var path = this.splitFilePath(dirpath); if (!path.basename) return false;
-        if (withParents && !localStorage["squeak:" + path.dirname]) Squeak.dirCreate(path.dirname, true);
-        var directory = this.dirList(path.dirname); if (!directory) return false;
-        if (directory[path.basename]) return false;
-        var now = this.totalSeconds(),
-            entry = [/*name*/ path.basename, /*ctime*/ now, /*mtime*/ now, /*dir*/ true, /*size*/ 0];
-        directory[path.basename] = entry;
-        localStorage["squeak:" + path.fullname] = JSON.stringify({});
-        localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
-        return true;
-    },
-    dirDelete: function(dirpath) {
-        var path = this.splitFilePath(dirpath); if (!path.basename) return false;
-        var directory = this.dirList(path.dirname); if (!directory) return false;
-        if (!directory[path.basename]) return false;
-        var children = this.dirList(path.fullname);
-        if (!children) return false;
-        for (var child in children) return false; // not empty
-        // delete from parent
-        delete directory[path.basename];
-        localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
-        // delete itself
-        delete localStorage["squeak:" + path.fullname];
-        return true;
-    },
-    dirList: function(dirpath, includeTemplates) {
-        // return directory entries or null
-        var path = this.splitFilePath(dirpath),
-            localEntries = localStorage["squeak:" + path.fullname],
-            template = includeTemplates && localStorage["squeak-template:" + path.fullname];
-        if (localEntries || template) {
-            var dir = {};
-            function addEntries(entries) {
-                for (var key in entries) {
-                    if (entries.hasOwnProperty(key)) {
-                        var entry = entries[key];
-                        dir[entry[0]] = entry;
-                    }
-                }
-            }
-            // local entries override templates
-            if (template) addEntries(JSON.parse(template).entries);
-            if (localEntries) addEntries(JSON.parse(localEntries));
-            return dir;
-        }
-        if (path.fullname == "/") return {};
-        return null;
-    },
-    splitFilePath: function(filepath) {
-        if (filepath[0] !== '/') filepath = '/' + filepath;
-        filepath = filepath.replace(/\/\//ig, '/');      // replace double-slashes
-        var matches = filepath.match(/(.*)\/(.*)/),
-            dirname = matches[1].length ? matches[1] : '/',
-            basename = matches[2].length ? matches[2] : null;
-        return {fullname: filepath, dirname: dirname, basename: basename};
-    },
-    bytesAsString: function(bytes) {
-	var chars = [];
-        for (var i = 0; i < bytes.length; i++)
-            chars.push(String.fromCharCode(bytes[i]));
-	return chars.join('');
-    },
-    flushFile: function(file) {
-        if (file.modified) {
-            var buffer = file.contents.buffer;
-            if (buffer.byteLength !== file.size) {
-                buffer = new ArrayBuffer(file.size);
-                (new Uint8Array(buffer)).set(file.contents.subarray(0, file.size));
-            }
-            Squeak.filePut(file.name, buffer);
-            // if (/SqueakDebug.log/.test(file.name)) {
-            //     var chars = Squeak.bytesAsString(new Uint8Array(buffer));
-            //     console.warn(chars.replace(/\r/g, '\n'));
-            // }
-            file.modified = false;
-        }
-    },
-    flushAllFiles: function() {
-        if (typeof SqueakFiles == 'undefined') return;
-        for (var name in SqueakFiles)
-            this.flushFile(SqueakFiles[name]);
-    },
-    closeAllFiles: function() {
-        // close the files held open in memory
-        Squeak.flushAllFiles();
-        delete window.SqueakFiles;
-    },
-    fetchTemplateDir: function(path, url) {
-        // Called on app startup. Fetch url/sqindex.json and
-        // cache all subdirectory entries in localStorage.
-        // File contents is only fetched on demand
-        path = Squeak.splitFilePath(path).fullname;
-        function ensureTemplateParent(template) {
-            var path = Squeak.splitFilePath(template);
-            if (path.dirname !== "/") ensureTemplateParent(path.dirname);
-            var template = JSON.parse(localStorage["squeak-template:" + path.dirname] || '{"entries": {}}');
-            if (!template.entries[path.basename]) {
-                var now = Squeak.totalSeconds();
-                template.entries[path.basename] = [path.basename, now, now, true, 0];
-                localStorage["squeak-template:" + path.dirname] = JSON.stringify(template);
-            }
-        }
-        function checkSubTemplates(path, url) {
-            var template = JSON.parse(localStorage["squeak-template:" + path]);
-            template.entries.forEach(function(entry) {
-                if (entry[3]) Squeak.fetchTemplateDir(path + "/" + entry[0], url + "/" + entry[0]);
-            });
-        }
-        if (localStorage["squeak-template:" + path]) {
-            checkSubTemplates(path, url);
-        } else  {
-            var index = url + "/sqindex.json";
-            var rq = new XMLHttpRequest();
-            rq.open('GET', index, true);
-            rq.onload = function(e) {
-                if (rq.status == 200) {
-                    console.log("adding template " + path);
-                    ensureTemplateParent(path);
-                    localStorage["squeak-template:" + path] = '{"url": ' + JSON.stringify(url) + ', "entries": ' + rq.response + '}';
-                    checkSubTemplates(path, url);
-                }
-                else rq.onerror(rq.statusText);
-            };
-            rq.onerror = function(e) {
-                console.log("cannot load template index " + index);
-            }
-            rq.send();
-        }
-    },
-    fetchTemplateFile: function(path, ifFound, ifNotFound) {
-        path = Squeak.splitFilePath(path);
-        var template = localStorage["squeak-template:" + path.dirname];
-        if (!template) return ifNotFound();
-        var url = JSON.parse(template).url;
-        if (!url) return ifNotFound();
-        url += "/" + path.basename;
-        var rq = new XMLHttpRequest();
-        rq.open("get", url, true);
-        rq.responseType = "arraybuffer";
-        rq.timeout = 30000;
-        rq.onreadystatechange = function() {
-            if (this.readyState != this.DONE) return;
-            if (this.status == 200) {
-                var buffer = this.response;
-                console.log("Got " + buffer.byteLength + " bytes from " + url);
-                Squeak.dirCreate(path.dirname, true);
-                Squeak.filePut(path.fullname, buffer);
-                ifFound(buffer);
-            } else {
-                alert("Download failed (" + this.status + ") " + url);
-                ifNotFound();
-            }
-        }
-        console.log("Fetching " + url);
-        rq.send();
-    },
-    totalSeconds: function() {
-        // seconds since 1901-01-01, local time
-        return Math.floor((Date.now() - Squeak.Epoch) / 1000);
-    },
-    startAudioOut: function() {
-        if (!this.audioOutContext) {
-            var ctxProto = window.AudioContext || window.webkitAudioContext
-                || window.mozAudioContext || window.msAudioContext;
-            this.audioOutContext = ctxProto && new ctxProto();
-        }
-        return this.audioOutContext;
-    },
-    startAudioIn: function(thenDo, errorDo) {
-        if (this.audioInContext) {
-            this.audioInSource.disconnect();
-            return thenDo(this.audioInContext, this.audioInSource);
-        }
-        navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia
-            || navigator.mozGetUserMedia || navigator.msGetUserMedia;
-        if (!navigator.getUserMedia) return errorDo("test: audio input not supported");
-        navigator.getUserMedia({audio: true, toString: function() {return "audio"}},
-            function onSuccess(stream) {
-                var ctxProto = window.AudioContext || window.webkitAudioContext
-                    || window.mozAudioContext || window.msAudioContext;
-                this.audioInContext = ctxProto && new ctxProto();
-                this.audioInSource = this.audioInContext.createMediaStreamSource(stream);
-                thenDo(this.audioInContext, this.audioInSource);
-            },
-            function onError() {
-                errorDo("cannot access microphone");
-            });
-    },
-    stopAudio: function() {
-        if (this.audioInSource)
-            this.audioInSource.disconnect();
-    },
-});
 
 Object.subclass('Squeak.InstructionPrinter',
 'initialization', {
@@ -7482,7 +7114,7 @@ Object.subclass('Squeak.InstructionPrinter',
         this.endPC = 0;                 // adjusted while scanning
         this.done = false;
         while (!this.done)
-        	this.scanner.interpretNextInstructionFor(this);
+            this.scanner.interpretNextInstructionFor(this);
         return this.result;
     },
     print: function(instruction) {
@@ -7505,15 +7137,15 @@ Object.subclass('Squeak.InstructionPrinter',
 },
 'decoding', {
     blockReturnTop: function() {
-    	this.print('blockReturn');
+        this.print('blockReturn');
     },
     doDup: function() {
-    	this.print('dup');
+        this.print('dup');
     },
     doPop: function() {
-    	this.print('pop');
+        this.print('pop');
     },
-	jump: function(offset) {
+    jump: function(offset) {
         this.print('jumpTo: ' + (this.scanner.pc + offset));
         if (this.scanner.pc + offset > this.endPC) this.endPC = this.scanner.pc + offset;
     },
@@ -7533,45 +7165,45 @@ Object.subclass('Squeak.InstructionPrinter',
         this.print('returnConst: ' + obj.toString());
         this.done = this.scanner.pc > this.endPC;
     },
-    popIntoLiteralVariable: function(anAssociation) { 
-    	this.print('popIntoBinding: ' + anAssociation.assnKeyAsString());
+    popIntoLiteralVariable: function(anAssociation) {
+        this.print('popIntoBinding: ' + anAssociation.assnKeyAsString());
     },
-    popIntoReceiverVariable: function(offset) { 
-    	this.print('popIntoInstVar: ' + offset);
+    popIntoReceiverVariable: function(offset) {
+        this.print('popIntoInstVar: ' + offset);
     },
-    popIntoTemporaryVariable: function(offset) { 
-    	this.print('popIntoTemp: ' + offset);
+    popIntoTemporaryVariable: function(offset) {
+        this.print('popIntoTemp: ' + offset);
     },
-	pushActiveContext: function() {
-	    this.print('push: thisContext');
+    pushActiveContext: function() {
+        this.print('push: thisContext');
     },
     pushConstant: function(obj) {
         var value = obj.sqInstName ? obj.sqInstName() : obj.toString();
         this.print('pushConst: ' + value);
     },
     pushLiteralVariable: function(anAssociation) {
-    	this.print('pushBinding: ' + anAssociation.assnKeyAsString());
+        this.print('pushBinding: ' + anAssociation.assnKeyAsString());
     },
-	pushReceiver: function() {
-	    this.print('push: self');
+    pushReceiver: function() {
+        this.print('push: self');
     },
-    pushReceiverVariable: function(offset) { 
-    	this.print('pushInstVar: ' + offset);
+    pushReceiverVariable: function(offset) {
+        this.print('pushInstVar: ' + offset);
     },
-	pushTemporaryVariable: function(offset) {
-	    this.print('pushTemp: ' + offset);
+    pushTemporaryVariable: function(offset) {
+        this.print('pushTemp: ' + offset);
     },
     send: function(selector, numberArguments, supered) {
-    	this.print( (supered ? 'superSend: #' : 'send: #') + (selector.bytesAsString ? selector.bytesAsString() : selector));
+        this.print( (supered ? 'superSend: #' : 'send: #') + (selector.bytesAsString ? selector.bytesAsString() : selector));
     },
     storeIntoLiteralVariable: function(anAssociation) {
-    	this.print('storeIntoBinding: ' + anAssociation.assnKeyAsString());
+        this.print('storeIntoBinding: ' + anAssociation.assnKeyAsString());
     },
-    storeIntoReceiverVariable: function(offset) { 
-    	this.print('storeIntoInstVar: ' + offset);
+    storeIntoReceiverVariable: function(offset) {
+        this.print('storeIntoInstVar: ' + offset);
     },
-	storeIntoTemporaryVariable: function(offset) {
-	    this.print('storeIntoTemp: ' + offset);
+    storeIntoTemporaryVariable: function(offset) {
+        this.print('storeIntoTemp: ' + offset);
     },
     pushNewArray: function(size) {
         this.print('push: (Array new: ' + size + ')');
@@ -7593,9 +7225,9 @@ Object.subclass('Squeak.InstructionPrinter',
             to = from + blockSize;
         this.print('closure(' + from + '-' + (to-1) + '): ' + numCopied + ' captured, ' + numArgs + ' args');
         for (var i = from; i < to; i++)
-    		this.innerIndents[i] = (this.innerIndents[i] || 0) + 1;
-    	if (to > this.endPC) this.endPC = to;
-	},
+            this.innerIndents[i] = (this.innerIndents[i] || 0) + 1;
+        if (to > this.endPC) this.endPC = to;
+    },
 });
 
 Object.subclass('Squeak.InstructionStream',
@@ -7615,97 +7247,97 @@ Object.subclass('Squeak.InstructionStream',
 'decoding',
 {
     interpretNextInstructionFor: function(client) {
-    	// Send to the argument, client, a message that specifies the type of the next instruction.
-    	var method = this.method;
-    	var byte = method.bytes[this.pc++];
-    	var type = (byte / 16) | 0;  
-    	var offset = byte % 16;
-    	if (type === 0) return client.pushReceiverVariable(offset);
-    	if (type === 1) return client.pushTemporaryVariable(offset);
-    	if (type === 2) return client.pushConstant(method.methodGetLiteral(offset));
-    	if (type === 3) return client.pushConstant(method.methodGetLiteral(offset + 16));
-    	if (type === 4) return client.pushLiteralVariable(method.methodGetLiteral(offset));
-    	if (type === 5) return client.pushLiteralVariable(method.methodGetLiteral(offset + 16));
-    	if (type === 6)
-    		if (offset<8) return client.popIntoReceiverVariable(offset)
-    		else return client.popIntoTemporaryVariable(offset-8);
-    	if (type === 7) {
+        // Send to the argument, client, a message that specifies the type of the next instruction.
+        var method = this.method;
+        var byte = method.bytes[this.pc++];
+        var type = (byte / 16) | 0;
+        var offset = byte % 16;
+        if (type === 0) return client.pushReceiverVariable(offset);
+        if (type === 1) return client.pushTemporaryVariable(offset);
+        if (type === 2) return client.pushConstant(method.methodGetLiteral(offset));
+        if (type === 3) return client.pushConstant(method.methodGetLiteral(offset + 16));
+        if (type === 4) return client.pushLiteralVariable(method.methodGetLiteral(offset));
+        if (type === 5) return client.pushLiteralVariable(method.methodGetLiteral(offset + 16));
+        if (type === 6)
+            if (offset<8) return client.popIntoReceiverVariable(offset)
+            else return client.popIntoTemporaryVariable(offset-8);
+        if (type === 7) {
             if (offset===0) return client.pushReceiver()
-			if (offset < 8) return client.pushConstant(this.specialConstants[offset - 1])
-			if (offset===8) return client.methodReturnReceiver();
-			if (offset < 12) return client.methodReturnConstant(this.specialConstants[offset - 9]);
-			if (offset===12) return client.methodReturnTop();
-			if (offset===13) return client.blockReturnTop();
-			if (offset > 13) throw Error("unusedBytecode");
-    	}
-    	if (type === 8) return this.interpretExtension(offset, method, client);
-    	if (type === 9) // short jumps
-    			if (offset<8) return client.jump(offset+1);
-    			else return client.jumpIf(false, offset-8+1);
-    	if (type === 10) {// long jumps
-    		byte = this.method.bytes[this.pc++];
-			if (offset<8) return client.jump((offset-4)*256 + byte);
-			else return client.jumpIf(offset<12, (offset & 3)*256 + byte);
-    	}
-    	if (type === 11)
-            return client.send(this.specialSelectors[offset], 
-				this.specialSelectorsNArgs[offset],
-				false);
-    	if (type === 12)
-            return client.send(this.specialSelectors[offset+16], 
-				this.specialSelectorsNArgs[offset+16],
-				false);
-    	if (type > 12)
-    		return client.send(method.methodGetLiteral(offset), type-13, false);
+            if (offset < 8) return client.pushConstant(this.specialConstants[offset - 1])
+            if (offset===8) return client.methodReturnReceiver();
+            if (offset < 12) return client.methodReturnConstant(this.specialConstants[offset - 9]);
+            if (offset===12) return client.methodReturnTop();
+            if (offset===13) return client.blockReturnTop();
+            if (offset > 13) throw Error("unusedBytecode");
+        }
+        if (type === 8) return this.interpretExtension(offset, method, client);
+        if (type === 9) // short jumps
+                if (offset<8) return client.jump(offset+1);
+                else return client.jumpIf(false, offset-8+1);
+        if (type === 10) {// long jumps
+            byte = this.method.bytes[this.pc++];
+            if (offset<8) return client.jump((offset-4)*256 + byte);
+            else return client.jumpIf(offset<12, (offset & 3)*256 + byte);
+        }
+        if (type === 11)
+            return client.send(this.specialSelectors[offset],
+                this.specialSelectorsNArgs[offset],
+                false);
+        if (type === 12)
+            return client.send(this.specialSelectors[offset+16],
+                this.specialSelectorsNArgs[offset+16],
+                false);
+        if (type > 12)
+            return client.send(method.methodGetLiteral(offset), type-13, false);
     },
     interpretExtension: function(offset, method, client) {
-    	if (offset <= 6) { // Extended op codes 128-134
-    		var byte2 = this.method.bytes[this.pc++];
-    		if (offset <= 2) { // 128-130:  extended pushes and pops
-    			var type = byte2 / 64 | 0;
-    			var offset2 = byte2 % 64;
-    			if (offset === 0) {
-    			    if (type === 0) return client.pushReceiverVariable(offset2);
-    				if (type === 1) return client.pushTemporaryVariable(offset2);
-    				if (type === 2) return client.pushConstant(this.method.methodGetLiteral(offset2));
-    				if (type === 3) return client.pushLiteralVariable(this.method.methodGetLiteral(offset2));
-    			}
-    			if (offset === 1) {
-    			    if (type === 0) return client.storeIntoReceiverVariable(offset2);
-    				if (type === 1) return client.storeIntoTemporaryVariable(offset2);
-    				if (type === 2) throw Error("illegalStore");
-    				if (type === 3) return client.storeIntoLiteralVariable(this.method.methodGetLiteral(offset2));
-    			}
-    			if (offset === 2) {
-        			if (type === 0) return client.popIntoReceiverVariable(offset2);
-    				if (type === 1) return client.popIntoTemporaryVariable(offset2);
-    				if (type === 2) throw Error("illegalStore");
-    				if (type === 3) return client.popIntoLiteralVariable(this.method.methodGetLiteral(offset2));
-    			}
-    		}
-    		// 131-134 (extended sends)
-    		if (offset === 3) // Single extended send
-    			return client.send(this.method.methodGetLiteral(byte2 % 32), byte2 / 32 | 0, false);
-    		if (offset === 4) { // Double extended do-anything
-    			var byte3 = this.method.bytes[this.pc++];
-    			var type = byte2 / 32 | 0;
-    			if (type === 0) return client.send(this.method.methodGetLiteral(byte3), byte2 % 32, false);
-    			if (type === 1) return client.send(this.method.methodGetLiteral(byte3), byte2 % 32, true);
-    			if (type === 2) return client.pushReceiverVariable(byte3);
-    			if (type === 3) return client.pushConstant(this.method.methodGetLiteral(byte3));
-    			if (type === 4) return client.pushLiteralVariable(this.method.methodGetLiteral(byte3));
-    			if (type === 5) return client.storeIntoReceiverVariable(byte3);
-    			if (type === 6) return client.popIntoReceiverVariable(byte3);
-    			if (type === 7) return client.storeIntoLiteralVariable(this.method.methodGetLiteral(byte3));
-    		}
-    		if (offset === 5) // Single extended send to super
-    			return client.send(this.method.methodGetLiteral(byte2 & 31), byte2 >> 5, true);
-    		if (offset === 6) // Second extended send
-    			return client.send(this.method.methodGetLiteral(byte2 & 63), byte2 >> 6, false);
-    	}
-    	if (offset === 7) return client.doPop();
-    	if (offset === 8) return client.doDup();
-    	if (offset === 9) return client.pushActiveContext();
+        if (offset <= 6) { // Extended op codes 128-134
+            var byte2 = this.method.bytes[this.pc++];
+            if (offset <= 2) { // 128-130:  extended pushes and pops
+                var type = byte2 / 64 | 0;
+                var offset2 = byte2 % 64;
+                if (offset === 0) {
+                    if (type === 0) return client.pushReceiverVariable(offset2);
+                    if (type === 1) return client.pushTemporaryVariable(offset2);
+                    if (type === 2) return client.pushConstant(this.method.methodGetLiteral(offset2));
+                    if (type === 3) return client.pushLiteralVariable(this.method.methodGetLiteral(offset2));
+                }
+                if (offset === 1) {
+                    if (type === 0) return client.storeIntoReceiverVariable(offset2);
+                    if (type === 1) return client.storeIntoTemporaryVariable(offset2);
+                    if (type === 2) throw Error("illegalStore");
+                    if (type === 3) return client.storeIntoLiteralVariable(this.method.methodGetLiteral(offset2));
+                }
+                if (offset === 2) {
+                    if (type === 0) return client.popIntoReceiverVariable(offset2);
+                    if (type === 1) return client.popIntoTemporaryVariable(offset2);
+                    if (type === 2) throw Error("illegalStore");
+                    if (type === 3) return client.popIntoLiteralVariable(this.method.methodGetLiteral(offset2));
+                }
+            }
+            // 131-134 (extended sends)
+            if (offset === 3) // Single extended send
+                return client.send(this.method.methodGetLiteral(byte2 % 32), byte2 / 32 | 0, false);
+            if (offset === 4) { // Double extended do-anything
+                var byte3 = this.method.bytes[this.pc++];
+                var type = byte2 / 32 | 0;
+                if (type === 0) return client.send(this.method.methodGetLiteral(byte3), byte2 % 32, false);
+                if (type === 1) return client.send(this.method.methodGetLiteral(byte3), byte2 % 32, true);
+                if (type === 2) return client.pushReceiverVariable(byte3);
+                if (type === 3) return client.pushConstant(this.method.methodGetLiteral(byte3));
+                if (type === 4) return client.pushLiteralVariable(this.method.methodGetLiteral(byte3));
+                if (type === 5) return client.storeIntoReceiverVariable(byte3);
+                if (type === 6) return client.popIntoReceiverVariable(byte3);
+                if (type === 7) return client.storeIntoLiteralVariable(this.method.methodGetLiteral(byte3));
+            }
+            if (offset === 5) // Single extended send to super
+                return client.send(this.method.methodGetLiteral(byte2 & 31), byte2 >> 5, true);
+            if (offset === 6) // Second extended send
+                return client.send(this.method.methodGetLiteral(byte2 & 63), byte2 >> 6, false);
+        }
+        if (offset === 7) return client.doPop();
+        if (offset === 8) return client.doDup();
+        if (offset === 9) return client.pushActiveContext();
         // closures
         var byte2 = this.method.bytes[this.pc++];
         if (offset === 10)
@@ -9033,6 +8665,7747 @@ Squeak.registerExternalModule("ADPCMCodecPlugin", {
 	primitiveEncodeMono: primitiveEncodeMono,
 	primitiveDecodeMono: primitiveDecodeMono,
 	getModuleName: getModuleName,
+});
+
+}); // end of module
+
+/***** including ../plugins/B2DPlugin.js *****/
+
+/* Smalltalk from Squeak4.5 with VMMaker 4.13.6 translated as JS source on 14 November 2014 12:21:50 am */
+/* Automatically generated by
+	JSPluginCodeGenerator VMMakerJS-bf.17 uuid: 399be48b-95d8-4722-bdcc-39a94a12c486
+   from
+	BalloonEnginePlugin VMMaker-bf.353 uuid: 8ae25e7e-8d2c-451e-8277-598b30e9c002
+ */
+
+module("users.bert.SqueakJS.plugins.B2DPlugin").requires("users.bert.SqueakJS.vm").toRun(function() {
+
+var VM_PROXY_MAJOR = 1;
+var VM_PROXY_MINOR = 11;
+
+/*** Functions ***/
+function CLASSOF(obj) { return typeof obj === "number" ? interpreterProxy.classSmallInteger() : obj.sqClass }
+function SIZEOF(obj) { return obj.pointers ? obj.pointers.length : obj.words ? obj.words.length : obj.bytes ? obj.bytes.length : 0 }
+function BYTESIZEOF(obj) { return obj.bytes ? obj.bytes.length : obj.words ? obj.words.length * 4 : 0 }
+function DIV(a, b) { return Math.floor(a / b) | 0; }   // integer division
+function MOD(a, b) { return a - DIV(a, b) * b | 0; }   // signed modulus
+function SHL(a, b) { return b > 31 ? 0 : a << b; }     // fix JS shift
+function SHR(a, b) { return b > 31 ? 0 : a >>> b; }    // fix JS shift
+function SHIFT(a, b) { return b < 0 ? (b < -31 ? 0 : a >>> (0-b) ) : (b > 31 ? 0 : a << b); }
+function PTR_ADD(p, n) { return new Int32Array(p.buffer, p.byteOffset + n * 4); }
+function FPTR_ADD(p, n) { return new Float32Array(p.buffer, p.byteOffset + n * 4); }
+
+/*** Constants ***/
+var BEBalloonEngineSize = 12;
+var BEBitBltIndex = 2;
+var BEFormsIndex = 3;
+var BESpanIndex = 1;
+var BEWorkBufferIndex = 0;
+var ETBalloonEdgeDataSize = 6;
+var ETIndexIndex = 0;
+var ETLinesIndex = 4;
+var ETXValueIndex = 1;
+var ETYValueIndex = 2;
+var ETZValueIndex = 3;
+var FTBalloonFillDataSize = 6;
+var FTIndexIndex = 0;
+var FTMaxXIndex = 2;
+var FTMinXIndex = 1;
+var FTYValueIndex = 3;
+var GBBaseSize = 16;
+var GBBitmapDepth = 12;
+var GBBitmapHeight = 11;
+var GBBitmapRaster = 14;
+var GBBitmapSize = 13;
+var GBBitmapWidth = 10;
+var GBColormapOffset = 18;
+var GBColormapSize = 15;
+var GBEndX = 14;
+var GBEndY = 15;
+var GBFinalX = 21;
+var GBMBaseSize = 18;
+var GBTileFlag = 16;
+var GBUpdateDDX = 4;
+var GBUpdateDDY = 5;
+var GBUpdateDX = 2;
+var GBUpdateDY = 3;
+var GBUpdateData = 10;
+var GBUpdateX = 0;
+var GBUpdateY = 1;
+var GBViaX = 12;
+var GBViaY = 13;
+var GBWideEntry = 18;
+var GBWideExit = 19;
+var GBWideExtent = 20;
+var GBWideFill = 16;
+var GBWideSize = 28;
+var GBWideUpdateData = 22;
+var GBWideWidth = 17;
+var GEBaseEdgeSize = 10;
+var GEBaseFillSize = 4;
+var GEEdgeFillsInvalid = 65536;
+var GEFAlreadyFailed = 100;
+var GEFBadPoint = 121;
+var GEFBitBltLoadFailed = 122;
+var GEFClassMismatch = 114;
+var GEFEdgeDataTooSmall = 112;
+var GEFEngineIsInteger = 101;
+var GEFEngineIsWords = 102;
+var GEFEngineStopped = 104;
+var GEFEngineTooSmall = 103;
+var GEFEntityCheckFailed = 120;
+var GEFEntityLoadFailed = 119;
+var GEFFillDataTooSmall = 113;
+var GEFFormLoadFailed = 123;
+var GEFSizeMismatch = 115;
+var GEFWorkBufferBadMagic = 108;
+var GEFWorkBufferIsInteger = 105;
+var GEFWorkBufferIsPointers = 106;
+var GEFWorkBufferStartWrong = 110;
+var GEFWorkBufferTooSmall = 107;
+var GEFWorkBufferWrongSize = 109;
+var GEFWorkTooBig = 111;
+var GEFWrongEdge = 118;
+var GEFWrongFill = 117;
+var GEFWrongState = 116;
+var GEFillIndexLeft = 8;
+var GEFillIndexRight = 9;
+var GENumLines = 7;
+var GEObjectIndex = 2;
+var GEObjectLength = 1;
+var GEObjectType = 0;
+var GEPrimitiveBezier = 6;
+var GEPrimitiveClippedBitmapFill = 1024;
+var GEPrimitiveEdge = 2;
+var GEPrimitiveEdgeMask = 255;
+var GEPrimitiveFill = 256;
+var GEPrimitiveFillMask = 65280;
+var GEPrimitiveLine = 4;
+var GEPrimitiveLinearGradientFill = 512;
+var GEPrimitiveRadialGradientFill = 768;
+var GEPrimitiveTypeMask = 65535;
+var GEPrimitiveWide = 1;
+var GEPrimitiveWideBezier = 7;
+var GEPrimitiveWideLine = 5;
+var GEPrimitiveWideMask = 254;
+var GEStateAddingFromGET = 1;
+var GEStateBlitBuffer = 5;
+var GEStateCompleted = 8;
+var GEStateScanningAET = 3;
+var GEStateUnlocked = 0;
+var GEStateUpdateEdges = 6;
+var GEStateWaitingChange = 7;
+var GEStateWaitingForEdge = 2;
+var GEStateWaitingForFill = 4;
+var GEXValue = 4;
+var GEYValue = 5;
+var GEZValue = 6;
+var GErrorAETEntry = 6;
+var GErrorBadState = 2;
+var GErrorFillEntry = 5;
+var GErrorGETEntry = 4;
+var GErrorNeedFlush = 3;
+var GErrorNoMoreSpace = 1;
+var GFDirectionX = 6;
+var GFDirectionY = 7;
+var GFNormalX = 8;
+var GFNormalY = 9;
+var GFOriginX = 4;
+var GFOriginY = 5;
+var GFRampLength = 10;
+var GFRampOffset = 12;
+var GGBaseSize = 12;
+var GLBaseSize = 16;
+var GLEndX = 14;
+var GLEndY = 15;
+var GLError = 13;
+var GLErrorAdjDown = 15;
+var GLErrorAdjUp = 14;
+var GLWideEntry = 18;
+var GLWideExit = 19;
+var GLWideExtent = 20;
+var GLWideFill = 16;
+var GLWideSize = 21;
+var GLWideWidth = 17;
+var GLXDirection = 10;
+var GLXIncrement = 12;
+var GLYDirection = 11;
+var GWAAColorMask = 51;
+var GWAAColorShift = 50;
+var GWAAHalfPixel = 53;
+var GWAALevel = 48;
+var GWAAScanMask = 52;
+var GWAAShift = 49;
+var GWAETStart = 13;
+var GWAETUsed = 14;
+var GWBezierHeightSubdivisions = 109;
+var GWBezierLineConversions = 111;
+var GWBezierMonotonSubdivisions = 108;
+var GWBezierOverflowSubdivisions = 110;
+var GWBufferTop = 10;
+var GWClearSpanBuffer = 69;
+var GWClipMaxX = 43;
+var GWClipMaxY = 45;
+var GWClipMinX = 42;
+var GWClipMinY = 44;
+var GWColorTransform = 24;
+var GWCountAddAETEntry = 97;
+var GWCountChangeAETEntry = 107;
+var GWCountDisplaySpan = 103;
+var GWCountFinishTest = 93;
+var GWCountInitializing = 91;
+var GWCountMergeFill = 101;
+var GWCountNextAETEntry = 105;
+var GWCountNextFillEntry = 99;
+var GWCountNextGETEntry = 95;
+var GWCurrentY = 88;
+var GWCurrentZ = 113;
+var GWDestOffsetX = 46;
+var GWDestOffsetY = 47;
+var GWEdgeTransform = 18;
+var GWFillMaxX = 37;
+var GWFillMaxY = 39;
+var GWFillMinX = 36;
+var GWFillMinY = 38;
+var GWGETStart = 11;
+var GWGETUsed = 12;
+var GWHasColorTransform = 17;
+var GWHasEdgeTransform = 16;
+var GWHeaderSize = 128;
+var GWLastExportedEdge = 65;
+var GWLastExportedFill = 66;
+var GWLastExportedLeftX = 67;
+var GWLastExportedRightX = 68;
+var GWMagicIndex = 0;
+var GWMagicNumber = 1097753705;
+var GWMinimalSize = 256;
+var GWNeedsFlush = 63;
+var GWObjStart = 8;
+var GWObjUsed = 9;
+var GWPoint1 = 80;
+var GWPoint2 = 82;
+var GWPoint3 = 84;
+var GWPoint4 = 86;
+var GWSize = 1;
+var GWSpanEnd = 34;
+var GWSpanEndAA = 35;
+var GWSpanSize = 33;
+var GWSpanStart = 32;
+var GWState = 2;
+var GWStopReason = 64;
+var GWTimeAddAETEntry = 96;
+var GWTimeChangeAETEntry = 106;
+var GWTimeDisplaySpan = 102;
+var GWTimeFinishTest = 92;
+var GWTimeInitializing = 90;
+var GWTimeMergeFill = 100;
+var GWTimeNextAETEntry = 104;
+var GWTimeNextFillEntry = 98;
+var GWTimeNextGETEntry = 94;
+var PrimErrBadArgument = 3;
+var PrimErrBadNumArgs = 5;
+
+/*** Variables ***/
+var aetBuffer = null;
+var bbPluginName = "BitBltPlugin";
+var copyBitsFn = null;
+var dispatchReturnValue = 0;
+var dispatchedValue = 0;
+var doProfileStats = 0;
+var engine = 0;
+var engineStopped = 0;
+var formArray = 0;
+var geProfileTime = 0;
+var getBuffer = null;
+var interpreterProxy = null;
+var loadBBFn = null;
+var moduleName = "B2DPlugin 14 November 2014 (e)";
+var objBuffer = null;
+var objUsed = 0;
+var spanBuffer = null;
+var workBuffer = null;
+
+
+function aaColorMaskGet() {
+	return workBuffer[GWAAColorMask];
+}
+
+function aaColorMaskPut(value) {
+	return workBuffer[GWAAColorMask] = value;
+}
+
+function aaColorShiftGet() {
+	return workBuffer[GWAAColorShift];
+}
+
+function aaColorShiftPut(value) {
+	return workBuffer[GWAAColorShift] = value;
+}
+
+
+/*	Common function to compute the first full pixel for AA drawing */
+
+function aaFirstPixelFromto(leftX, rightX) {
+	var firstPixel;
+
+	firstPixel = ((leftX + aaLevelGet()) - 1) & ~(aaLevelGet() - 1);
+	if (firstPixel > rightX) {
+		return rightX;
+	} else {
+		return firstPixel;
+	}
+}
+
+function aaHalfPixelPut(value) {
+	return workBuffer[GWAAHalfPixel] = value;
+}
+
+
+/*	Common function to compute the last full pixel for AA drawing */
+
+function aaLastPixelFromto(leftX, rightX) {
+	return (rightX - 1) & ~(aaLevelGet() - 1);
+}
+
+function aaLevelGet() {
+	return workBuffer[GWAALevel];
+}
+
+function aaLevelPut(value) {
+	return workBuffer[GWAALevel] = value;
+}
+
+function aaScanMaskGet() {
+	return workBuffer[GWAAScanMask];
+}
+
+function aaScanMaskPut(value) {
+	return workBuffer[GWAAScanMask] = value;
+}
+
+function aaShiftGet() {
+	return workBuffer[GWAAShift];
+}
+
+function aaShiftPut(value) {
+	return workBuffer[GWAAShift] = value;
+}
+
+
+/*	Compute the squared value of a 8.24 number with 0.0 <= value < 1.0,
+	e.g., compute (value * value) bitShift: -24 */
+
+function absoluteSquared8Dot24(value) {
+	var word1;
+	var word2;
+
+	word1 = value & 65535;
+	word2 = (value >>> 16) & 255;
+	return ((((word1 * word1) >>> 16) + ((word1 * word2) * 2)) + ((word2 * word2) << 16)) >>> 8;
+}
+
+
+/*	Return the accurate length of the vector described by deltaX and deltaY */
+
+function accurateLengthOfwith(deltaX, deltaY) {
+	var length2;
+
+	if (deltaX === 0) {
+		if (deltaY < 0) {
+			return 0 - deltaY;
+		} else {
+			return deltaY;
+		}
+	}
+	if (deltaY === 0) {
+		if (deltaX < 0) {
+			return 0 - deltaX;
+		} else {
+			return deltaX;
+		}
+	}
+	length2 = (deltaX * deltaX) + (deltaY * deltaY);
+	return computeSqrt(length2);
+}
+
+function addEdgeToGET(edge) {
+	if (!allocateGETEntry(1)) {
+		return 0;
+	}
+	getBuffer[getUsedGet()] = edge;
+	getUsedPut(getUsedGet() + 1);
+}
+
+
+/*	Adjust the wide bezier curve (dx < 0) to start/end at the right point */
+
+function adjustWideBezierLeftwidthoffsetendX(bezier, lineWidth, lineOffset, endX) {
+	var lastX;
+	var lastY;
+
+	bezierUpdateDataOf(bezier)[GBUpdateX] = (bezierUpdateDataOf(bezier)[GBUpdateX] - (lineOffset * 256));
+	lastX = wideBezierUpdateDataOf(bezier)[GBUpdateX];
+	wideBezierUpdateDataOf(bezier)[GBUpdateX] = (lastX + ((lineWidth - lineOffset) * 256));
+	lastY = wideBezierUpdateDataOf(bezier)[GBUpdateY];
+	wideBezierUpdateDataOf(bezier)[GBUpdateY] = (lastY + (lineWidth * 256));
+	bezierFinalXOfput(bezier, endX - lineOffset);
+}
+
+
+/*	Adjust the wide bezier curve (dx >= 0) to start/end at the right point */
+
+function adjustWideBezierRightwidthoffsetendX(bezier, lineWidth, lineOffset, endX) {
+	var lastX;
+	var lastY;
+
+	bezierUpdateDataOf(bezier)[GBUpdateX] = (bezierUpdateDataOf(bezier)[GBUpdateX] + (lineOffset * 256));
+	lastX = wideBezierUpdateDataOf(bezier)[GBUpdateX];
+	wideBezierUpdateDataOf(bezier)[GBUpdateX] = (lastX - ((lineWidth - lineOffset) * 256));
+
+	/* Set lineWidth pixels down */
+
+	lastY = wideBezierUpdateDataOf(bezier)[GBUpdateY];
+	wideBezierUpdateDataOf(bezier)[GBUpdateY] = (lastY + (lineWidth * 256));
+	bezierFinalXOfput(bezier, (endX - lineOffset) + lineWidth);
+}
+
+
+/*	Adjust the wide line after it has been stepped from lastX to nextX.
+	Special adjustments of line width and start position are made here
+	to simulate a rectangular brush */
+
+function adjustWideLineafterSteppingFromto(line, lastX, nextX) {
+	var baseWidth;
+	var deltaX;
+	var lineOffset;
+	var lineWidth;
+	var xDir;
+	var yEntry;
+	var yExit;
+
+
+	/* Don't inline this */
+	/* Fetch the values the adjustment decisions are based on */
+
+	yEntry = wideLineEntryOf(line);
+	yExit = wideLineExitOf(line);
+	baseWidth = wideLineExtentOf(line);
+	lineOffset = offsetFromWidth(baseWidth);
+	lineWidth = wideLineWidthOf(line);
+	xDir = lineXDirectionOf(line);
+
+	/* Adjust the start of the line to fill an entire rectangle */
+
+	deltaX = nextX - lastX;
+	if (yEntry < baseWidth) {
+		if (xDir < 0) {
+
+			/* effectively adding */
+
+			lineWidth -= deltaX;
+		} else {
+			lineWidth += deltaX;
+			edgeXValueOfput(line, lastX);
+		}
+	}
+	if ((yExit + lineOffset) === 0) {
+		if (xDir > 0) {
+			lineWidth -= lineXIncrementOf(line);
+		} else {
+
+			/* effectively subtracting */
+
+			lineWidth += lineXIncrementOf(line);
+			edgeXValueOfput(line, lastX);
+		}
+	}
+	if ((yExit + lineOffset) > 0) {
+		if (xDir < 0) {
+
+			/* effectively subtracting */
+
+			lineWidth += deltaX;
+			edgeXValueOfput(line, lastX);
+		} else {
+			lineWidth -= deltaX;
+		}
+	}
+	wideLineWidthOfput(line, lineWidth);
+}
+
+function aetStartGet() {
+	return workBuffer[GWAETStart];
+}
+
+function aetStartPut(value) {
+	return workBuffer[GWAETStart] = value;
+}
+
+function aetUsedGet() {
+	return workBuffer[GWAETUsed];
+}
+
+function aetUsedPut(value) {
+	return workBuffer[GWAETUsed] = value;
+}
+
+
+/*	Allocate n slots in the active edge table */
+
+function allocateAETEntry(nSlots) {
+	return needAvailableSpace(nSlots);
+}
+
+function allocateBezier() {
+	var bezier;
+
+	if (!allocateObjEntry(GBBaseSize)) {
+		return 0;
+	}
+	bezier = objUsed;
+	objUsed = bezier + GBBaseSize;
+	objectTypeOfput(bezier, GEPrimitiveBezier);
+	objectIndexOfput(bezier, 0);
+	objectLengthOfput(bezier, GBBaseSize);
+	return bezier;
+}
+
+function allocateBezierStackEntry() {
+	wbStackPush(6);
+	return wbStackSize();
+}
+
+function allocateBitmapFillcolormap(cmSize, cmBits) {
+	var cm;
+	var fill;
+	var fillSize;
+	var i;
+
+	fillSize = GBMBaseSize + cmSize;
+	if (!allocateObjEntry(fillSize)) {
+		return 0;
+	}
+	fill = objUsed;
+	objUsed = fill + fillSize;
+	objectTypeOfput(fill, GEPrimitiveClippedBitmapFill);
+	objectIndexOfput(fill, 0);
+	objectLengthOfput(fill, fillSize);
+	cm = colormapOf(fill);
+	if (hasColorTransform()) {
+		for (i = 0; i <= (cmSize - 1); i++) {
+			cm[i] = transformColor(cmBits[i]);
+		}
+	} else {
+		for (i = 0; i <= (cmSize - 1); i++) {
+			cm[i] = cmBits[i];
+		}
+	}
+	bitmapCmSizeOfput(fill, cmSize);
+	return fill;
+}
+
+
+/*	Allocate n slots in the global edge table */
+
+function allocateGETEntry(nSlots) {
+	var dstIndex;
+	var i;
+	var srcIndex;
+	var iLimiT;
+
+
+	/* First allocate nSlots in the AET */
+
+	if (!allocateAETEntry(nSlots)) {
+		return false;
+	}
+	if (aetUsedGet() !== 0) {
+
+		/* Then move the AET upwards */
+
+		srcIndex = aetUsedGet();
+		dstIndex = aetUsedGet() + nSlots;
+		for (i = 1, iLimiT = aetUsedGet(); i <= iLimiT; i++) {
+			aetBuffer[(--dstIndex)] = aetBuffer[(--srcIndex)];
+		}
+	}
+	aetBuffer = PTR_ADD(aetBuffer, nSlots);
+	return true;
+}
+
+function allocateGradientFillrampWidthisRadial(ramp, rampWidth, isRadial) {
+	var fill;
+	var fillSize;
+	var i;
+	var rampPtr;
+
+	fillSize = GGBaseSize + rampWidth;
+	if (!allocateObjEntry(fillSize)) {
+		return 0;
+	}
+	fill = objUsed;
+	objUsed = fill + fillSize;
+	if (isRadial) {
+		objectTypeOfput(fill, GEPrimitiveRadialGradientFill);
+	} else {
+		objectTypeOfput(fill, GEPrimitiveLinearGradientFill);
+	}
+	objectIndexOfput(fill, 0);
+	objectLengthOfput(fill, fillSize);
+	rampPtr = gradientRampOf(fill);
+	if (hasColorTransform()) {
+		for (i = 0; i <= (rampWidth - 1); i++) {
+			rampPtr[i] = transformColor(ramp[i]);
+		}
+	} else {
+		for (i = 0; i <= (rampWidth - 1); i++) {
+			rampPtr[i] = ramp[i];
+		}
+	}
+	gradientRampLengthOfput(fill, rampWidth);
+	return fill;
+}
+
+function allocateLine() {
+	var line;
+
+	if (!allocateObjEntry(GLBaseSize)) {
+		return 0;
+	}
+	line = objUsed;
+	objUsed = line + GLBaseSize;
+	objectTypeOfput(line, GEPrimitiveLine);
+	objectIndexOfput(line, 0);
+	objectLengthOfput(line, GLBaseSize);
+	return line;
+}
+
+
+/*	Allocate n slots in the object buffer */
+
+function allocateObjEntry(nSlots) {
+	var dstIndex;
+	var i;
+	var srcIndex;
+	var iLimiT;
+
+
+	/* First allocate nSlots in the GET */
+
+	if (!allocateGETEntry(nSlots)) {
+		return false;
+	}
+	if (getUsedGet() !== 0) {
+
+		/* Then move the GET upwards */
+
+		srcIndex = getUsedGet();
+		dstIndex = getUsedGet() + nSlots;
+		for (i = 1, iLimiT = getUsedGet(); i <= iLimiT; i++) {
+			getBuffer[(--dstIndex)] = getBuffer[(--srcIndex)];
+		}
+	}
+	getBuffer = PTR_ADD(getBuffer, nSlots);
+	return true;
+}
+
+
+/*	AET and Stack allocation are symmetric */
+
+function allocateStackEntry(nSlots) {
+	return needAvailableSpace(nSlots);
+}
+
+function allocateStackFillEntry() {
+	return wbStackPush(stackFillEntryLength());
+}
+
+function allocateWideBezier() {
+	var bezier;
+
+	if (!allocateObjEntry(GBWideSize)) {
+		return 0;
+	}
+	bezier = objUsed;
+	objUsed = bezier + GBWideSize;
+	objectTypeOfput(bezier, GEPrimitiveWideBezier);
+	objectIndexOfput(bezier, 0);
+	objectLengthOfput(bezier, GBWideSize);
+	return bezier;
+}
+
+function allocateWideLine() {
+	var line;
+
+	if (!allocateObjEntry(GLWideSize)) {
+		return 0;
+	}
+	line = objUsed;
+	objUsed = line + GLWideSize;
+	objectTypeOfput(line, GEPrimitiveWideLine);
+	objectIndexOfput(line, 0);
+	objectLengthOfput(line, GLWideSize);
+	return line;
+}
+
+function areEdgeFillsValid(edge) {
+	return (objectHeaderOf(edge) & GEEdgeFillsInvalid) === 0;
+}
+
+
+/*	Make sure that val1 is between val2 and val3. */
+
+function assureValuebetweenand(val1, val2, val3) {
+	if (val2 > val3) {
+		if (val1 > val2) {
+			return val2;
+		}
+		if (val1 < val3) {
+			return val3;
+		}
+	} else {
+		if (val1 < val2) {
+			return val2;
+		}
+		if (val1 > val3) {
+			return val3;
+		}
+	}
+	return val1;
+}
+
+function bezierEndXOf(bezier) {
+	return objat(bezier, GBEndX);
+}
+
+function bezierEndXOfput(bezier, value) {
+	return objatput(bezier, GBEndX, value);
+}
+
+function bezierEndYOf(bezier) {
+	return objat(bezier, GBEndY);
+}
+
+function bezierEndYOfput(bezier, value) {
+	return objatput(bezier, GBEndY, value);
+}
+
+function bezierFinalXOf(bezier) {
+	return objat(bezier, GBFinalX);
+}
+
+function bezierFinalXOfput(bezier, value) {
+	return objatput(bezier, GBFinalX, value);
+}
+
+function bezierUpdateDataOf(bezier) {
+	return PTR_ADD(objBuffer, bezier + GBUpdateData);
+}
+
+function bezierViaXOf(bezier) {
+	return objat(bezier, GBViaX);
+}
+
+function bezierViaXOfput(bezier, value) {
+	return objatput(bezier, GBViaX, value);
+}
+
+function bezierViaYOf(bezier) {
+	return objat(bezier, GBViaY);
+}
+
+function bezierViaYOfput(bezier, value) {
+	return objatput(bezier, GBViaY, value);
+}
+
+function bitmapCmSizeOf(bmFill) {
+	return objat(bmFill, GBColormapSize);
+}
+
+function bitmapCmSizeOfput(bmFill, value) {
+	return objatput(bmFill, GBColormapSize, value);
+}
+
+function bitmapDepthOf(bmFill) {
+	return objat(bmFill, GBBitmapDepth);
+}
+
+function bitmapDepthOfput(bmFill, value) {
+	return objatput(bmFill, GBBitmapDepth, value);
+}
+
+function bitmapHeightOf(bmFill) {
+	return objat(bmFill, GBBitmapHeight);
+}
+
+function bitmapHeightOfput(bmFill, value) {
+	return objatput(bmFill, GBBitmapHeight, value);
+}
+
+function bitmapRasterOf(bmFill) {
+	return objat(bmFill, GBBitmapRaster);
+}
+
+function bitmapRasterOfput(bmFill, value) {
+	return objatput(bmFill, GBBitmapRaster, value);
+}
+
+function bitmapSizeOf(bmFill) {
+	return objat(bmFill, GBBitmapSize);
+}
+
+function bitmapSizeOfput(bmFill, value) {
+	return objatput(bmFill, GBBitmapSize, value);
+}
+
+function bitmapTileFlagOf(bmFill) {
+	return objat(bmFill, GBTileFlag);
+}
+
+function bitmapTileFlagOfput(bmFill, value) {
+	return objatput(bmFill, GBTileFlag, value);
+}
+
+function bitmapValuebitsatXy(bmFill, bits, xp, yp) {
+	var a;
+	var b;
+	var bmDepth;
+	var bmRaster;
+	var cMask;
+	var g;
+	var r;
+	var rShift;
+	var value;
+
+	bmDepth = bitmapDepthOf(bmFill);
+	bmRaster = bitmapRasterOf(bmFill);
+	if (bmDepth === 32) {
+		value = (bits[(bmRaster * yp) + xp]|0);
+		if ((value !== 0) && ((value & 4278190080) === 0)) {
+			value = value | 4278190080;
+		}
+		return uncheckedTransformColor(value);
+	}
+	rShift = rShiftTable()[bmDepth];
+
+	/* cMask - mask out the pixel from the word */
+
+	value = bits[(bmRaster * yp) + (SHR(xp, rShift))];
+
+	/* rShift - shift value to move the pixel in the word to the lowest bit position */
+
+	cMask = (SHL(1, bmDepth)) - 1;
+	rShift = (32 - bmDepth) - ((xp & ((SHL(1, rShift)) - 1)) * bmDepth);
+	value = (SHR(value, rShift)) & cMask;
+	if (bmDepth === 16) {
+
+		/* Must convert by expanding bits */
+
+		if (value !== 0) {
+			b = (value & 31) << 3;
+			b += b >>> 5;
+			g = ((value >>> 5) & 31) << 3;
+			g += g >>> 5;
+			r = ((value >>> 10) & 31) << 3;
+			r += r >>> 5;
+			a = 255;
+			value = ((b + (g << 8)) + (r << 16)) + (a << 24);
+		}
+	} else {
+
+		/* Must convert by using color map */
+
+		if (bitmapCmSizeOf(bmFill) === 0) {
+			value = 0;
+		} else {
+			value = colormapOf(bmFill)[value];
+		}
+	}
+	return uncheckedTransformColor(value);
+}
+
+function bitmapWidthOf(bmFill) {
+	return objat(bmFill, GBBitmapWidth);
+}
+
+function bitmapWidthOfput(bmFill, value) {
+	return objatput(bmFill, GBBitmapWidth, value);
+}
+
+function bzEndX(index) {
+	return wbStackValue((wbStackSize() - index) + 4);
+}
+
+function bzEndXput(index, value) {
+	return wbStackValueput((wbStackSize() - index) + 4, value);
+}
+
+function bzEndY(index) {
+	return wbStackValue((wbStackSize() - index) + 5);
+}
+
+function bzEndYput(index, value) {
+	return wbStackValueput((wbStackSize() - index) + 5, value);
+}
+
+function bzStartX(index) {
+	return wbStackValue((wbStackSize() - index) + 0);
+}
+
+function bzStartXput(index, value) {
+	return wbStackValueput((wbStackSize() - index) + 0, value);
+}
+
+function bzStartY(index) {
+	return wbStackValue((wbStackSize() - index) + 1);
+}
+
+function bzStartYput(index, value) {
+	return wbStackValueput((wbStackSize() - index) + 1, value);
+}
+
+function bzViaX(index) {
+	return wbStackValue((wbStackSize() - index) + 2);
+}
+
+function bzViaXput(index, value) {
+	return wbStackValueput((wbStackSize() - index) + 2, value);
+}
+
+function bzViaY(index) {
+	return wbStackValue((wbStackSize() - index) + 3);
+}
+
+function bzViaYput(index, value) {
+	return wbStackValueput((wbStackSize() - index) + 3, value);
+}
+
+
+/*	Check the fill indexes in the run-length encoded fillList */
+
+function checkCompressedFillIndexListmaxsegments(fillList, maxIndex, nSegs) {
+	var fillPtr;
+	var i;
+	var length;
+	var nFills;
+	var runLength;
+	var runValue;
+
+	length = SIZEOF(fillList);
+	fillPtr = fillList.wordsAsInt32Array();
+	nFills = 0;
+	for (i = 0; i <= (length - 1); i++) {
+		runLength = shortRunLengthAtfrom(i, fillPtr);
+		runValue = shortRunValueAtfrom(i, fillPtr);
+		if (!((runValue >= 0) && (runValue <= maxIndex))) {
+			return false;
+		}
+		nFills += runLength;
+	}
+	return nFills === nSegs;
+}
+
+
+/*	Check if the indexList (containing fill handles) is okay. */
+
+function checkCompressedFills(indexList) {
+	var fillIndex;
+	var fillPtr;
+	var i;
+	var length;
+
+
+	/* First check if the oops have the right format */
+
+	if (!interpreterProxy.isWords(indexList)) {
+		return false;
+	}
+	length = SIZEOF(indexList);
+	fillPtr = indexList.wordsAsInt32Array();
+	for (i = 0; i <= (length - 1); i++) {
+
+		/* Make sure the fill is okay */
+
+		fillIndex = fillPtr[i];
+		if (!isFillOkay(fillIndex)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+
+/*	Check the run-length encoded lineWidthList matches nSegments */
+
+function checkCompressedLineWidthssegments(lineWidthList, nSegments) {
+	var i;
+	var length;
+	var nItems;
+	var ptr;
+	var runLength;
+
+	length = SIZEOF(lineWidthList);
+	ptr = lineWidthList.wordsAsInt32Array();
+	nItems = 0;
+	for (i = 0; i <= (length - 1); i++) {
+		runLength = shortRunLengthAtfrom(i, ptr);
+		nItems += runLength;
+	}
+	return nItems === nSegments;
+}
+
+
+/*	Check if the given point array can be handled by the engine. */
+
+function checkCompressedPointssegments(points, nSegments) {
+	var pSize;
+
+	if (!interpreterProxy.isWords(points)) {
+		return false;
+	}
+
+	/* The points must be either in PointArray format or ShortPointArray format.
+	Also, we currently handle only quadratic segments (e.g., 3 points each) and thus either
+		pSize = nSegments * 3,		for ShortPointArrays or,
+		pSize = nSegments * 6,		for PointArrays */
+
+	pSize = SIZEOF(points);
+	if (!((pSize === (nSegments * 3)) || (pSize === (nSegments * 6)))) {
+		return false;
+	}
+	return true;
+}
+
+
+/*	Check if the given shape can be handled by the engine. 
+	Since there are a number of requirements this is an extra method. */
+
+function checkCompressedShapesegmentsleftFillsrightFillslineWidthslineFillsfillIndexList(points, nSegments, leftFills, rightFills, lineWidths, lineFills, fillIndexList) {
+	var maxFillIndex;
+
+	if (!checkCompressedPointssegments(points, nSegments)) {
+		return false;
+	}
+	if (!checkCompressedFills(fillIndexList)) {
+		return false;
+	}
+	maxFillIndex = SIZEOF(fillIndexList);
+	if (!checkCompressedFillIndexListmaxsegments(leftFills, maxFillIndex, nSegments)) {
+		return false;
+	}
+	if (!checkCompressedFillIndexListmaxsegments(rightFills, maxFillIndex, nSegments)) {
+		return false;
+	}
+	if (!checkCompressedFillIndexListmaxsegments(lineFills, maxFillIndex, nSegments)) {
+		return false;
+	}
+	if (!checkCompressedLineWidthssegments(lineWidths, nSegments)) {
+		return false;
+	}
+	return true;
+}
+
+
+/*	Add the bezier to the global edge table if it intersects the clipping region */
+
+function checkedAddBezierToGET(bezier) {
+	var lineWidth;
+
+	if (isWide(bezier)) {
+		lineWidth = wideBezierExtentOf(bezier);
+	} else {
+		lineWidth = 0;
+	}
+	if ((bezierEndYOf(bezier) + lineWidth) < fillMinYGet()) {
+		return 0;
+	}
+	if (((edgeXValueOf(bezier) - lineWidth) >= fillMaxXGet()) && ((bezierEndXOf(bezier) - lineWidth) >= fillMaxXGet())) {
+		return 0;
+	}
+	addEdgeToGET(bezier);
+}
+
+
+/*	Add the edge to the global edge table.
+	For known edge types, check if the edge intersects the visible region */
+
+function checkedAddEdgeToGET(edge) {
+	if (isLine(edge)) {
+		return checkedAddLineToGET(edge);
+	}
+	if (isBezier(edge)) {
+		return checkedAddBezierToGET(edge);
+	}
+	addEdgeToGET(edge);
+}
+
+
+/*	Add the line to the global edge table if it intersects the clipping region */
+
+function checkedAddLineToGET(line) {
+	var lineWidth;
+
+	if (isWide(line)) {
+		lineWidth = wideLineExtentOf(line);
+	} else {
+		lineWidth = 0;
+	}
+	if ((lineEndYOf(line) + lineWidth) < fillMinYGet()) {
+		return 0;
+	}
+	if (((edgeXValueOf(line) - lineWidth) >= fillMaxXGet()) && ((lineEndXOf(line) - lineWidth) >= fillMaxXGet())) {
+		return 0;
+	}
+	addEdgeToGET(line);
+}
+
+function circleCosTable() {
+	var theTable =
+		[1.0, 0.98078528040323, 0.923879532511287, 0.831469612302545,
+		0.7071067811865475, 0.555570233019602, 0.38268343236509, 0.1950903220161286,
+		0.0, -0.1950903220161283, -0.3826834323650896, -0.555570233019602,
+		-0.707106781186547, -0.831469612302545, -0.9238795325112865, -0.98078528040323,
+		-1.0, -0.98078528040323, -0.923879532511287, -0.831469612302545,
+		-0.707106781186548, -0.555570233019602, -0.3826834323650903, -0.1950903220161287,
+		0.0, 0.1950903220161282, 0.38268343236509, 0.555570233019602,
+		0.707106781186547, 0.831469612302545, 0.9238795325112865, 0.98078528040323,
+		1.0 ];
+
+	return theTable;
+}
+
+function circleSinTable() {
+	var theTable =
+		[0.0, 0.1950903220161282, 0.3826834323650897, 0.555570233019602,
+		0.707106781186547, 0.831469612302545, 0.923879532511287, 0.98078528040323,
+		1.0, 0.98078528040323, 0.923879532511287, 0.831469612302545,
+		0.7071067811865475, 0.555570233019602, 0.38268343236509, 0.1950903220161286,
+		0.0, -0.1950903220161283, -0.3826834323650896, -0.555570233019602,
+		-0.707106781186547, -0.831469612302545, -0.9238795325112865, -0.98078528040323,
+		-1.0, -0.98078528040323, -0.923879532511287, -0.831469612302545,
+		-0.707106781186548, -0.555570233019602, -0.3826834323650903, -0.1950903220161287,
+		 0.0 ];
+
+	return theTable;
+}
+
+function clampValuemax(value, maxValue) {
+	if (value < 0) {
+		return 0;
+	} else {
+		if (value >= maxValue) {
+			return maxValue - 1;
+		} else {
+			return value;
+		}
+	}
+}
+
+
+/*	Clear the current span buffer.
+	The span buffer is only cleared in the area that has been used by the previous scan line. */
+
+function clearSpanBuffer() {
+	var x0;
+	var x1;
+
+	x0 = SHR(spanStartGet(), aaShiftGet());
+	x1 = (SHR(spanEndGet(), aaShiftGet())) + 1;
+	if (x0 < 0) {
+		x0 = 0;
+	}
+	if (x1 > spanSizeGet()) {
+		x1 = spanSizeGet();
+	}
+	while (x0 < x1) {
+		spanBuffer[x0] = 0;
+		++x0;
+	}
+	spanStartPut(spanSizeGet());
+	spanEndPut(0);
+}
+
+function clearSpanBufferGet() {
+	return workBuffer[GWClearSpanBuffer];
+}
+
+function clearSpanBufferPut(value) {
+	return workBuffer[GWClearSpanBuffer] = value;
+}
+
+function clipMaxXGet() {
+	return workBuffer[GWClipMaxX];
+}
+
+function clipMaxXPut(value) {
+	return workBuffer[GWClipMaxX] = value;
+}
+
+function clipMaxYGet() {
+	return workBuffer[GWClipMaxY];
+}
+
+function clipMaxYPut(value) {
+	return workBuffer[GWClipMaxY] = value;
+}
+
+function clipMinXGet() {
+	return workBuffer[GWClipMinX];
+}
+
+function clipMinXPut(value) {
+	return workBuffer[GWClipMinX] = value;
+}
+
+function clipMinYGet() {
+	return workBuffer[GWClipMinY];
+}
+
+function clipMinYPut(value) {
+	return workBuffer[GWClipMinY] = value;
+}
+
+function colorTransform() {
+	return FPTR_ADD(workBuffer, GWColorTransform);
+}
+
+function colormapOf(bmFill) {
+	return PTR_ADD(objBuffer, bmFill + GBColormapOffset);
+}
+
+
+/*	Split the bezier curve at the given parametric value.
+	Note: Since this method is only invoked to make non-monoton
+		beziers monoton we must check for the resulting y values
+		to be *really* between the start and end value. */
+
+function computeBeziersplitAt(index, param) {
+	var endX;
+	var endY;
+	var leftViaX;
+	var leftViaY;
+	var newIndex;
+	var rightViaX;
+	var rightViaY;
+	var sharedX;
+	var sharedY;
+	var startX;
+	var startY;
+	var viaX;
+	var viaY;
+
+	leftViaX = (startX = bzStartX(index));
+	leftViaY = (startY = bzStartY(index));
+	rightViaX = (viaX = bzViaX(index));
+	rightViaY = (viaY = bzViaY(index));
+	endX = bzEndX(index);
+
+	/* Compute intermediate points */
+
+	endY = bzEndY(index);
+	sharedX = (leftViaX += (((viaX - startX) * param)|0));
+	sharedY = (leftViaY += (((viaY - startY) * param)|0));
+	rightViaX += (((endX - viaX) * param)|0);
+
+	/* Compute new shared point */
+
+	rightViaY += (((endY - viaY) * param)|0);
+	sharedX += (((rightViaX - leftViaX) * param)|0);
+
+	/* Check the new via points */
+
+	sharedY += (((rightViaY - leftViaY) * param)|0);
+	leftViaY = assureValuebetweenand(leftViaY, startY, sharedY);
+	rightViaY = assureValuebetweenand(rightViaY, sharedY, endY);
+	newIndex = allocateBezierStackEntry();
+	if (engineStopped) {
+		return 0;
+	}
+	bzViaXput(index, leftViaX);
+	bzViaYput(index, leftViaY);
+	bzEndXput(index, sharedX);
+	bzEndYput(index, sharedY);
+	bzStartXput(newIndex, sharedX);
+	bzStartYput(newIndex, sharedY);
+	bzViaXput(newIndex, rightViaX);
+	bzViaYput(newIndex, rightViaY);
+	bzEndXput(newIndex, endX);
+	bzEndYput(newIndex, endY);
+	return newIndex;
+}
+
+
+/*	Split the bezier curve at 0.5. */
+
+function computeBezierSplitAtHalf(index) {
+	var endX;
+	var endY;
+	var leftViaX;
+	var leftViaY;
+	var newIndex;
+	var rightViaX;
+	var rightViaY;
+	var sharedX;
+	var sharedY;
+	var startX;
+	var startY;
+	var viaX;
+	var viaY;
+
+	newIndex = allocateBezierStackEntry();
+	if (engineStopped) {
+		return 0;
+	}
+	leftViaX = (startX = bzStartX(index));
+	leftViaY = (startY = bzStartY(index));
+	rightViaX = (viaX = bzViaX(index));
+	rightViaY = (viaY = bzViaY(index));
+	endX = bzEndX(index);
+
+	/* Compute intermediate points */
+
+	endY = bzEndY(index);
+	leftViaX += (viaX - startX) >> 1;
+	leftViaY += (viaY - startY) >> 1;
+	sharedX = (rightViaX += (endX - viaX) >> 1);
+
+	/* Compute new shared point */
+
+	sharedY = (rightViaY += (endY - viaY) >> 1);
+	sharedX += (leftViaX - rightViaX) >> 1;
+
+	/* Store the first part back */
+
+	sharedY += (leftViaY - rightViaY) >> 1;
+	bzViaXput(index, leftViaX);
+	bzViaYput(index, leftViaY);
+	bzEndXput(index, sharedX);
+	bzEndYput(index, sharedY);
+	bzStartXput(newIndex, sharedX);
+	bzStartYput(newIndex, sharedY);
+	bzViaXput(newIndex, rightViaX);
+	bzViaYput(newIndex, rightViaY);
+	bzEndXput(newIndex, endX);
+	bzEndYput(newIndex, endY);
+	return newIndex;
+}
+
+
+/*	Get both values from the two boundaries of the given bezier 
+	and compute the actual position/width of the line */
+
+function computeFinalWideBezierValueswidth(bezier, lineWidth) {
+	var leftX;
+	var rightX;
+	var temp;
+
+	leftX = bezierUpdateDataOf(bezier)[GBUpdateX] >> 8;
+	rightX = wideBezierUpdateDataOf(bezier)[GBUpdateX] >> 8;
+	if (leftX > rightX) {
+		temp = leftX;
+		leftX = rightX;
+		rightX = temp;
+	}
+	edgeXValueOfput(bezier, leftX);
+	if ((rightX - leftX) > lineWidth) {
+		wideBezierWidthOfput(bezier, rightX - leftX);
+	} else {
+		wideBezierWidthOfput(bezier, lineWidth);
+	}
+}
+
+function computeSqrt(length2) {
+	if (length2 < 32) {
+		return smallSqrtTable()[length2];
+	} else {
+		return ((Math.sqrt(length2) + 0.5)|0);
+	}
+}
+
+function copyBitsFromtoat(x0, x1, yValue) {
+	if (!copyBitsFn) {
+
+		/* We need copyBits here so try to load it implicitly */
+
+		if (!initialiseModule()) {
+			return false;
+		}
+	}
+	return copyBitsFn(x0, x1, yValue);
+}
+
+
+/*	Create the global edge table */
+
+function createGlobalEdgeTable() {
+	var end;
+	var object;
+
+	object = 0;
+	end = objUsed;
+	while (object < end) {
+
+		/* Note: addEdgeToGET: may fail on insufficient space but that's not a problem here */
+
+		if (isEdge(object)) {
+
+			/* Check if the edge starts below fillMaxY. */
+
+			if (!(edgeYValueOf(object) >= fillMaxYGet())) {
+				checkedAddEdgeToGET(object);
+			}
+		}
+		object += objectLengthOf(object);
+	}
+}
+
+function currentYGet() {
+	return workBuffer[GWCurrentY];
+}
+
+function currentYPut(value) {
+	return workBuffer[GWCurrentY] = value;
+}
+
+function currentZGet() {
+	return workBuffer[GWCurrentZ];
+}
+
+function currentZPut(value) {
+	return workBuffer[GWCurrentZ] = value;
+}
+
+function destOffsetXGet() {
+	return workBuffer[GWDestOffsetX];
+}
+
+function destOffsetXPut(value) {
+	return workBuffer[GWDestOffsetX] = value;
+}
+
+function destOffsetYGet() {
+	return workBuffer[GWDestOffsetY];
+}
+
+function destOffsetYPut(value) {
+	return workBuffer[GWDestOffsetY] = value;
+}
+
+
+/*	Display the span buffer at the current scan line. */
+
+function displaySpanBufferAt(y) {
+	var targetX0;
+	var targetX1;
+	var targetY;
+
+
+	/* self aaLevelGet > 1 ifTrue:[self adjustAALevel]. */
+
+	targetX0 = SHR(spanStartGet(), aaShiftGet());
+	if (targetX0 < clipMinXGet()) {
+		targetX0 = clipMinXGet();
+	}
+	targetX1 = SHR(((spanEndGet() + aaLevelGet()) - 1), aaShiftGet());
+	if (targetX1 > clipMaxXGet()) {
+		targetX1 = clipMaxXGet();
+	}
+	targetY = SHR(y, aaShiftGet());
+	if ((targetY < clipMinYGet()) || ((targetY >= clipMaxYGet()) || ((targetX1 < clipMinXGet()) || (targetX0 >= clipMaxXGet())))) {
+		return 0;
+	}
+	copyBitsFromtoat(targetX0, targetX1, targetY);
+}
+
+function edgeFillsInvalidate(edge) {
+	return objectTypeOfput(edge, objectTypeOf(edge) | GEEdgeFillsInvalid);
+}
+
+function edgeFillsValidate(edge) {
+	return objectTypeOfput(edge, objectTypeOf(edge) & ~GEEdgeFillsInvalid);
+}
+
+function edgeLeftFillOf(edge) {
+	return objat(edge, GEFillIndexLeft);
+}
+
+function edgeLeftFillOfput(edge, value) {
+	return objatput(edge, GEFillIndexLeft, value);
+}
+
+function edgeNumLinesOf(edge) {
+	return objat(edge, GENumLines);
+}
+
+function edgeNumLinesOfput(edge, value) {
+	return objatput(edge, GENumLines, value);
+}
+
+function edgeRightFillOf(edge) {
+	return objat(edge, GEFillIndexRight);
+}
+
+function edgeRightFillOfput(edge, value) {
+	return objatput(edge, GEFillIndexRight, value);
+}
+
+function edgeTransform() {
+	return FPTR_ADD(workBuffer, GWEdgeTransform);
+}
+
+
+/*	Return the edge type (e.g., witout the wide edge flag) */
+
+function edgeTypeOf(edge) {
+	return objectTypeOf(edge) >>> 1;
+}
+
+function edgeXValueOf(edge) {
+	return objat(edge, GEXValue);
+}
+
+function edgeXValueOfput(edge, value) {
+	return objatput(edge, GEXValue, value);
+}
+
+function edgeYValueOf(edge) {
+	return objat(edge, GEYValue);
+}
+
+function edgeYValueOfput(edge, value) {
+	return objatput(edge, GEYValue, value);
+}
+
+function edgeZValueOf(edge) {
+	return objat(edge, GEZValue);
+}
+
+function edgeZValueOfput(edge, value) {
+	return objatput(edge, GEZValue, value);
+}
+
+
+/*	Ignore dispatch errors when translating to C
+	(since we have no entry point for #error in the VM proxy) */
+
+function errorWrongIndex() {
+	;
+}
+
+
+/*	Fill the span buffer from leftX to rightX with the given fill. */
+
+function fillAllFromto(leftX, rightX) {
+	var fill;
+	var startX;
+	var stopX;
+
+	fill = topFill();
+	startX = leftX;
+	stopX = topRightX();
+	while (stopX < rightX) {
+		fill = topFill();
+		if (fill !== 0) {
+			if (fillSpanfromto(fill, startX, stopX)) {
+				return true;
+			}
+		}
+		quickRemoveInvalidFillsAt(stopX);
+		startX = stopX;
+		stopX = topRightX();
+	}
+	fill = topFill();
+	if (fill !== 0) {
+		return fillSpanfromto(fill, startX, rightX);
+	}
+	return false;
+}
+
+function fillBitmapSpan() {
+	return fillBitmapSpanfromtoat(lastExportedFillGet(), lastExportedLeftXGet(), lastExportedRightXGet(), currentYGet());
+}
+
+
+/*	Fill the span buffer between leftEdge and rightEdge using the given bits.
+	Note: We always start from zero - this avoids using huge bitmap buffers if the bitmap is to be displayed at the very far right hand side and also gives us a chance of using certain bitmaps (e.g., those with depth 32) directly. */
+
+function fillBitmapSpanfromto(bits, leftX, rightX) {
+	var baseShift;
+	var bitX;
+	var colorMask;
+	var colorShift;
+	var fillValue;
+	var x;
+	var x0;
+	var x1;
+
+	x0 = leftX;
+	x1 = rightX;
+
+	/* Hack for pre-increment */
+
+	bitX = -1;
+	if (aaLevelGet() === 1) {
+
+		/* Speedy version for no anti-aliasing */
+
+		while (x0 < x1) {
+			fillValue = (bits[(++bitX)]|0);
+			spanBuffer[x0] = fillValue;
+			++x0;
+		}
+	} else {
+
+		/* Generic version with anti-aliasing */
+
+		colorMask = aaColorMaskGet();
+		colorShift = aaColorShiftGet();
+		baseShift = aaShiftGet();
+		while (x0 < x1) {
+			x = SHR(x0, baseShift);
+			fillValue = (bits[(++bitX)]|0);
+			fillValue = SHR((fillValue & colorMask), colorShift);
+			spanBuffer[x] = (spanBuffer[x] + fillValue);
+			++x0;
+		}
+	}
+	if (x1 > spanEndGet()) {
+		spanEndPut(x1);
+	}
+	if (x1 > spanEndAAGet()) {
+		spanEndAAPut(x1);
+	}
+}
+
+function fillBitmapSpanfromtoat(bmFill, leftX, rightX, yValue) {
+	var bits;
+	var bmHeight;
+	var bmWidth;
+	var deltaX;
+	var deltaY;
+	var ds;
+	var dsX;
+	var dt;
+	var dtX;
+	var fillValue;
+	var tileFlag;
+	var x;
+	var x1;
+	var xp;
+	var yp;
+
+	if (aaLevelGet() !== 1) {
+		return fillBitmapSpanAAfromtoat(bmFill, leftX, rightX, yValue);
+	}
+	bits = loadBitsFrom(bmFill);
+	if (!bits) {
+		return null;
+	}
+	bmWidth = bitmapWidthOf(bmFill);
+	bmHeight = bitmapHeightOf(bmFill);
+	tileFlag = bitmapTileFlagOf(bmFill) === 1;
+	deltaX = leftX - fillOriginXOf(bmFill);
+	deltaY = yValue - fillOriginYOf(bmFill);
+	dsX = fillDirectionXOf(bmFill);
+	dtX = fillNormalXOf(bmFill);
+	ds = (deltaX * dsX) + (deltaY * fillDirectionYOf(bmFill));
+	dt = (deltaX * dtX) + (deltaY * fillNormalYOf(bmFill));
+	x = leftX;
+	x1 = rightX;
+	while (x < x1) {
+		if (tileFlag) {
+			ds = repeatValuemax(ds, bmWidth << 16);
+			dt = repeatValuemax(dt, bmHeight << 16);
+		}
+		xp = ds >> 16;
+		yp = dt >> 16;
+		if (!tileFlag) {
+			xp = clampValuemax(xp, bmWidth);
+			yp = clampValuemax(yp, bmHeight);
+		}
+		if ((xp >= 0) && ((yp >= 0) && ((xp < bmWidth) && (yp < bmHeight)))) {
+			fillValue = bitmapValuebitsatXy(bmFill, bits, xp, yp);
+			spanBuffer[x] = fillValue;
+		}
+		ds += dsX;
+		dt += dtX;
+		++x;
+	}
+}
+
+function fillBitmapSpanAAfromtoat(bmFill, leftX, rightX, yValue) {
+	var aaLevel;
+	var baseShift;
+	var bits;
+	var bmHeight;
+	var bmWidth;
+	var cMask;
+	var cShift;
+	var deltaX;
+	var deltaY;
+	var ds;
+	var dsX;
+	var dt;
+	var dtX;
+	var fillValue;
+	var firstPixel;
+	var idx;
+	var lastPixel;
+	var tileFlag;
+	var x;
+	var xp;
+	var yp;
+
+	bits = loadBitsFrom(bmFill);
+	if (!bits) {
+		return null;
+	}
+	bmWidth = bitmapWidthOf(bmFill);
+	bmHeight = bitmapHeightOf(bmFill);
+	tileFlag = bitmapTileFlagOf(bmFill) === 1;
+	deltaX = leftX - fillOriginXOf(bmFill);
+	deltaY = yValue - fillOriginYOf(bmFill);
+	dsX = fillDirectionXOf(bmFill);
+	dtX = fillNormalXOf(bmFill);
+	ds = (deltaX * dsX) + (deltaY * fillDirectionYOf(bmFill));
+	dt = (deltaX * dtX) + (deltaY * fillNormalYOf(bmFill));
+	aaLevel = aaLevelGet();
+	firstPixel = aaFirstPixelFromto(leftX, rightX);
+	lastPixel = aaLastPixelFromto(leftX, rightX);
+	baseShift = aaShiftGet();
+	cMask = aaColorMaskGet();
+	cShift = aaColorShiftGet();
+	x = leftX;
+	while (x < firstPixel) {
+		if (tileFlag) {
+			ds = repeatValuemax(ds, bmWidth << 16);
+			dt = repeatValuemax(dt, bmHeight << 16);
+		}
+		xp = ds >> 16;
+		yp = dt >> 16;
+		if (!tileFlag) {
+			xp = clampValuemax(xp, bmWidth);
+			yp = clampValuemax(yp, bmHeight);
+		}
+		if ((xp >= 0) && ((yp >= 0) && ((xp < bmWidth) && (yp < bmHeight)))) {
+			fillValue = bitmapValuebitsatXy(bmFill, bits, xp, yp);
+			fillValue = SHR((fillValue & cMask), cShift);
+			idx = SHR(x, baseShift);
+			spanBuffer[idx] = (spanBuffer[idx] + fillValue);
+		}
+		ds += dsX;
+		dt += dtX;
+		++x;
+	}
+	cMask = (SHR(aaColorMaskGet(), aaShiftGet())) | 4042322160;
+	cShift = aaShiftGet();
+	while (x < lastPixel) {
+		if (tileFlag) {
+			ds = repeatValuemax(ds, bmWidth << 16);
+			dt = repeatValuemax(dt, bmHeight << 16);
+		}
+		xp = ds >> 16;
+		yp = dt >> 16;
+		if (!tileFlag) {
+			xp = clampValuemax(xp, bmWidth);
+			yp = clampValuemax(yp, bmHeight);
+		}
+		if ((xp >= 0) && ((yp >= 0) && ((xp < bmWidth) && (yp < bmHeight)))) {
+			fillValue = bitmapValuebitsatXy(bmFill, bits, xp, yp);
+			fillValue = SHR((fillValue & cMask), cShift);
+			idx = SHR(x, baseShift);
+			spanBuffer[idx] = (spanBuffer[idx] + fillValue);
+		}
+		ds += SHL(dsX, cShift);
+		dt += SHL(dtX, cShift);
+		x += aaLevel;
+	}
+	cMask = aaColorMaskGet();
+	cShift = aaColorShiftGet();
+	while (x < rightX) {
+		if (tileFlag) {
+			ds = repeatValuemax(ds, bmWidth << 16);
+			dt = repeatValuemax(dt, bmHeight << 16);
+		}
+		xp = ds >> 16;
+		yp = dt >> 16;
+		if (!tileFlag) {
+			xp = clampValuemax(xp, bmWidth);
+			yp = clampValuemax(yp, bmHeight);
+		}
+		if ((xp >= 0) && ((yp >= 0) && ((xp < bmWidth) && (yp < bmHeight)))) {
+			fillValue = bitmapValuebitsatXy(bmFill, bits, xp, yp);
+			fillValue = SHR((fillValue & cMask), cShift);
+			idx = SHR(x, baseShift);
+			spanBuffer[idx] = (spanBuffer[idx] + fillValue);
+		}
+		ds += dsX;
+		dt += dtX;
+		++x;
+	}
+}
+
+
+/*	Fill the span buffer between leftEdge and rightEdge with the given pixel value. */
+
+function fillColorSpanfromto(pixelValue32, leftX, rightX) {
+	var x0;
+	var x1;
+
+
+	/* Use a unrolled version for anti-aliased fills... */
+
+	if (aaLevelGet() !== 1) {
+		return fillColorSpanAAx0x1(pixelValue32, leftX, rightX);
+	}
+	x0 = leftX;
+
+	/* Unroll the inner loop four times, since we're only storing data. */
+
+	x1 = rightX;
+	while ((x0 + 4) < x1) {
+		spanBuffer[x0] = pixelValue32;
+		spanBuffer[x0 + 1] = pixelValue32;
+		spanBuffer[x0 + 2] = pixelValue32;
+		spanBuffer[x0 + 3] = pixelValue32;
+		x0 += 4;
+	}
+	while (x0 < x1) {
+		spanBuffer[x0] = pixelValue32;
+		++x0;
+	}
+}
+
+
+/*	This is the inner loop for solid color fills with anti-aliasing.
+	This loop has been unrolled for speed and quality into three parts:
+		a) copy all pixels that fall into the first full pixel.
+		b) copy aaLevel pixels between the first and the last full pixel
+		c) copy all pixels that fall in the last full pixel */
+
+function fillColorSpanAAx0x1(pixelValue32, leftX, rightX) {
+	var aaLevel;
+	var baseShift;
+	var colorMask;
+	var firstPixel;
+	var idx;
+	var lastPixel;
+	var pv32;
+	var x;
+
+
+	/* Not now -- maybe later */
+	/* Compute the pixel boundaries. */
+
+	firstPixel = aaFirstPixelFromto(leftX, rightX);
+	lastPixel = aaLastPixelFromto(leftX, rightX);
+	aaLevel = aaLevelGet();
+	baseShift = aaShiftGet();
+
+	/* Part a: Deal with the first n sub-pixels */
+
+	x = leftX;
+	if (x < firstPixel) {
+		pv32 = SHR((pixelValue32 & aaColorMaskGet()), aaColorShiftGet());
+		while (x < firstPixel) {
+			idx = SHR(x, baseShift);
+			spanBuffer[idx] = (spanBuffer[idx] + pv32);
+			++x;
+		}
+	}
+	if (x < lastPixel) {
+		colorMask = (SHR(aaColorMaskGet(), aaShiftGet())) | 4042322160;
+		pv32 = SHR((pixelValue32 & colorMask), aaShiftGet());
+		while (x < lastPixel) {
+			idx = SHR(x, baseShift);
+			spanBuffer[idx] = (spanBuffer[idx] + pv32);
+			x += aaLevel;
+		}
+	}
+	if (x < rightX) {
+		pv32 = SHR((pixelValue32 & aaColorMaskGet()), aaColorShiftGet());
+		while (x < rightX) {
+			idx = SHR(x, baseShift);
+			spanBuffer[idx] = (spanBuffer[idx] + pv32);
+			++x;
+		}
+	}
+}
+
+function fillDirectionXOf(fill) {
+	return objat(fill, GFDirectionX);
+}
+
+function fillDirectionXOfput(fill, value) {
+	return objatput(fill, GFDirectionX, value);
+}
+
+function fillDirectionYOf(fill) {
+	return objat(fill, GFDirectionY);
+}
+
+function fillDirectionYOfput(fill, value) {
+	return objatput(fill, GFDirectionY, value);
+}
+
+function fillLinearGradient() {
+	return fillLinearGradientfromtoat(lastExportedFillGet(), lastExportedLeftXGet(), lastExportedRightXGet(), currentYGet());
+}
+
+
+/*	Draw a linear gradient fill. */
+
+function fillLinearGradientfromtoat(fill, leftX, rightX, yValue) {
+	var ds;
+	var dsX;
+	var ramp;
+	var rampIndex;
+	var rampSize;
+	var x;
+	var x0;
+	var x1;
+
+	ramp = gradientRampOf(fill);
+	rampSize = gradientRampLengthOf(fill);
+	dsX = fillDirectionXOf(fill);
+	ds = ((leftX - fillOriginXOf(fill)) * dsX) + ((yValue - fillOriginYOf(fill)) * fillDirectionYOf(fill));
+	x = (x0 = leftX);
+
+	/* Note: The inner loop has been divided into three parts for speed */
+	/* Part one: Fill everything outside the left boundary */
+
+	x1 = rightX;
+	while (((((rampIndex = ds >> 16)) < 0) || (rampIndex >= rampSize)) && (x < x1)) {
+		++x;
+		ds += dsX;
+	}
+	if (x > x0) {
+		if (rampIndex < 0) {
+			rampIndex = 0;
+		}
+		if (rampIndex >= rampSize) {
+			rampIndex = rampSize - 1;
+		}
+		fillColorSpanfromto(ramp[rampIndex], x0, x);
+	}
+	if (aaLevelGet() === 1) {
+
+		/* Fast version w/o anti-aliasing */
+
+		while (((((rampIndex = ds >> 16)) < rampSize) && (rampIndex >= 0)) && (x < x1)) {
+			spanBuffer[x] = ramp[rampIndex];
+			++x;
+			ds += dsX;
+		}
+	} else {
+		x = fillLinearGradientAArampdsdsXfromto(fill, ramp, ds, dsX, x, rightX);
+	}
+	if (x < x1) {
+		if (rampIndex < 0) {
+			rampIndex = 0;
+		}
+		if (rampIndex >= rampSize) {
+			rampIndex = rampSize - 1;
+		}
+		fillColorSpanfromto(ramp[rampIndex], x, x1);
+	}
+}
+
+
+/*	This is the AA version of linear gradient filling. */
+
+function fillLinearGradientAArampdsdsXfromto(fill, ramp, deltaS, dsX, leftX, rightX) {
+	var aaLevel;
+	var baseShift;
+	var colorMask;
+	var colorShift;
+	var ds;
+	var firstPixel;
+	var idx;
+	var lastPixel;
+	var rampIndex;
+	var rampSize;
+	var rampValue;
+	var x;
+
+	aaLevel = aaLevelGet();
+	baseShift = aaShiftGet();
+	rampSize = gradientRampLengthOf(fill);
+	ds = deltaS;
+	x = leftX;
+	rampIndex = ds >> 16;
+	firstPixel = aaFirstPixelFromto(leftX, rightX);
+
+	/* Deal with the first n sub-pixels */
+
+	lastPixel = aaLastPixelFromto(leftX, rightX);
+	colorMask = aaColorMaskGet();
+	colorShift = aaColorShiftGet();
+	while ((x < firstPixel) && ((rampIndex < rampSize) && (rampIndex >= 0))) {
+		rampValue = ramp[rampIndex];
+
+		/* Copy as many pixels as possible */
+
+		rampValue = SHR((rampValue & colorMask), colorShift);
+		while ((x < firstPixel) && ((ds >> 16) === rampIndex)) {
+			idx = SHR(x, baseShift);
+			spanBuffer[idx] = (spanBuffer[idx] + rampValue);
+			++x;
+			ds += dsX;
+		}
+		rampIndex = ds >> 16;
+	}
+	colorMask = (SHR(aaColorMaskGet(), aaShiftGet())) | 4042322160;
+	colorShift = aaShiftGet();
+	while ((x < lastPixel) && ((rampIndex < rampSize) && (rampIndex >= 0))) {
+		rampValue = ramp[rampIndex];
+
+		/* Copy as many pixels as possible */
+
+		rampValue = SHR((rampValue & colorMask), colorShift);
+		while ((x < lastPixel) && ((ds >> 16) === rampIndex)) {
+			idx = SHR(x, baseShift);
+			spanBuffer[idx] = (spanBuffer[idx] + rampValue);
+			x += aaLevel;
+			ds += SHL(dsX, colorShift);
+		}
+		rampIndex = ds >> 16;
+	}
+	colorMask = aaColorMaskGet();
+	colorShift = aaColorShiftGet();
+	while ((x < rightX) && ((rampIndex < rampSize) && (rampIndex >= 0))) {
+		rampValue = ramp[rampIndex];
+
+		/* Copy as many pixels as possible */
+
+		rampValue = SHR((rampValue & colorMask), colorShift);
+		while ((x < rightX) && ((ds >> 16) === rampIndex)) {
+			idx = SHR(x, baseShift);
+			spanBuffer[idx] = (spanBuffer[idx] + rampValue);
+			++x;
+			ds += dsX;
+		}
+		rampIndex = ds >> 16;
+	}
+	return x;
+}
+
+function fillMaxXGet() {
+	return workBuffer[GWFillMaxX];
+}
+
+function fillMaxXPut(value) {
+	return workBuffer[GWFillMaxX] = value;
+}
+
+function fillMaxYGet() {
+	return workBuffer[GWFillMaxY];
+}
+
+function fillMaxYPut(value) {
+	return workBuffer[GWFillMaxY] = value;
+}
+
+function fillMinXGet() {
+	return workBuffer[GWFillMinX];
+}
+
+function fillMinXPut(value) {
+	return workBuffer[GWFillMinX] = value;
+}
+
+function fillMinYGet() {
+	return workBuffer[GWFillMinY];
+}
+
+function fillMinYPut(value) {
+	return workBuffer[GWFillMinY] = value;
+}
+
+function fillNormalXOf(fill) {
+	return objat(fill, GFNormalX);
+}
+
+function fillNormalXOfput(fill, value) {
+	return objatput(fill, GFNormalX, value);
+}
+
+function fillNormalYOf(fill) {
+	return objat(fill, GFNormalY);
+}
+
+function fillNormalYOfput(fill, value) {
+	return objatput(fill, GFNormalY, value);
+}
+
+function fillOriginXOf(fill) {
+	return objat(fill, GFOriginX);
+}
+
+function fillOriginXOfput(fill, value) {
+	return objatput(fill, GFOriginX, value);
+}
+
+function fillOriginYOf(fill) {
+	return objat(fill, GFOriginY);
+}
+
+function fillOriginYOfput(fill, value) {
+	return objatput(fill, GFOriginY, value);
+}
+
+
+/*	Part 2a) Compute the decreasing part of the ramp */
+
+function fillRadialDecreasingrampdeltaSTdsXdtXfromto(fill, ramp, deltaST, dsX, dtX, leftX, rightX) {
+	var ds;
+	var dt;
+	var length2;
+	var nextLength;
+	var rampIndex;
+	var rampValue;
+	var x;
+	var x1;
+
+	ds = (deltaST[0]|0);
+	dt = (deltaST[1]|0);
+	rampIndex = accurateLengthOfwith(ds >> 16, dt >> 16);
+	rampValue = ramp[rampIndex];
+	length2 = (rampIndex - 1) * (rampIndex - 1);
+	x = leftX;
+	x1 = rightX;
+	if (x1 > fillOriginXOf(fill)) {
+		x1 = fillOriginXOf(fill);
+	}
+	while (x < x1) {
+
+		/* Try to copy the current value more than just once */
+
+		while ((x < x1) && (squaredLengthOfwith(ds >> 16, dt >> 16) >= length2)) {
+			spanBuffer[x] = rampValue;
+			++x;
+			ds += dsX;
+			dt += dtX;
+		}
+		nextLength = squaredLengthOfwith(ds >> 16, dt >> 16);
+		while (nextLength < length2) {
+			--rampIndex;
+			rampValue = ramp[rampIndex];
+			length2 = (rampIndex - 1) * (rampIndex - 1);
+		}
+	}
+	deltaST[0] = ds;
+	deltaST[1] = dt;
+	return x;
+}
+
+
+/*	Part 2a) Compute the decreasing part of the ramp */
+
+function fillRadialDecreasingAArampdeltaSTdsXdtXfromto(fill, ramp, deltaST, dsX, dtX, leftX, rightX) {
+	var aaLevel;
+	var baseShift;
+	var colorMask;
+	var colorShift;
+	var ds;
+	var dt;
+	var firstPixel;
+	var index;
+	var lastPixel;
+	var length2;
+	var nextLength;
+	var rampIndex;
+	var rampValue;
+	var x;
+	var x1;
+
+	ds = (deltaST[0]|0);
+	dt = (deltaST[1]|0);
+	aaLevel = aaLevelGet();
+	baseShift = aaShiftGet();
+	rampIndex = accurateLengthOfwith(ds >> 16, dt >> 16);
+	length2 = (rampIndex - 1) * (rampIndex - 1);
+	x = leftX;
+	x1 = fillOriginXOf(fill);
+	if (x1 > rightX) {
+		x1 = rightX;
+	}
+	firstPixel = aaFirstPixelFromto(leftX, x1);
+
+	/* Deal with the first n sub-pixels */
+
+	lastPixel = aaLastPixelFromto(leftX, x1);
+	if (x < firstPixel) {
+		colorMask = aaColorMaskGet();
+		colorShift = aaColorShiftGet();
+		rampValue = ramp[rampIndex];
+		rampValue = SHR((rampValue & colorMask), colorShift);
+		while (x < firstPixel) {
+
+			/* Try to copy the current value more than just once */
+
+			while ((x < firstPixel) && (squaredLengthOfwith(ds >> 16, dt >> 16) >= length2)) {
+				index = SHR(x, baseShift);
+				spanBuffer[index] = (spanBuffer[index] + rampValue);
+				++x;
+				ds += dsX;
+				dt += dtX;
+			}
+			nextLength = squaredLengthOfwith(ds >> 16, dt >> 16);
+			while (nextLength < length2) {
+				--rampIndex;
+				rampValue = ramp[rampIndex];
+				rampValue = SHR((rampValue & colorMask), colorShift);
+				length2 = (rampIndex - 1) * (rampIndex - 1);
+			}
+		}
+	}
+	if (x < lastPixel) {
+		colorMask = (SHR(aaColorMaskGet(), aaShiftGet())) | 4042322160;
+		colorShift = aaShiftGet();
+		rampValue = ramp[rampIndex];
+		rampValue = SHR((rampValue & colorMask), colorShift);
+		while (x < lastPixel) {
+
+			/* Try to copy the current value more than just once */
+
+			while ((x < lastPixel) && (squaredLengthOfwith(ds >> 16, dt >> 16) >= length2)) {
+				index = SHR(x, baseShift);
+				spanBuffer[index] = (spanBuffer[index] + rampValue);
+				x += aaLevel;
+				ds += SHL(dsX, colorShift);
+				dt += SHL(dtX, colorShift);
+			}
+			nextLength = squaredLengthOfwith(ds >> 16, dt >> 16);
+			while (nextLength < length2) {
+				--rampIndex;
+				rampValue = ramp[rampIndex];
+				rampValue = SHR((rampValue & colorMask), colorShift);
+				length2 = (rampIndex - 1) * (rampIndex - 1);
+			}
+		}
+	}
+	if (x < x1) {
+		colorMask = aaColorMaskGet();
+		colorShift = aaColorShiftGet();
+		rampValue = ramp[rampIndex];
+		rampValue = SHR((rampValue & colorMask), colorShift);
+		while (x < x1) {
+
+			/* Try to copy the current value more than just once */
+
+			while ((x < x1) && (squaredLengthOfwith(ds >> 16, dt >> 16) >= length2)) {
+				index = SHR(x, baseShift);
+				spanBuffer[index] = (spanBuffer[index] + rampValue);
+				++x;
+				ds += dsX;
+				dt += dtX;
+			}
+			nextLength = squaredLengthOfwith(ds >> 16, dt >> 16);
+			while (nextLength < length2) {
+				--rampIndex;
+				rampValue = ramp[rampIndex];
+				rampValue = SHR((rampValue & colorMask), colorShift);
+				length2 = (rampIndex - 1) * (rampIndex - 1);
+			}
+		}
+	}
+	deltaST[0] = ds;
+	deltaST[1] = dt;
+	return x;
+}
+
+function fillRadialGradient() {
+	return fillRadialGradientfromtoat(lastExportedFillGet(), lastExportedLeftXGet(), lastExportedRightXGet(), currentYGet());
+}
+
+
+/*	Draw a radial gradient fill. */
+
+function fillRadialGradientfromtoat(fill, leftX, rightX, yValue) {
+	var deltaST;
+	var deltaX;
+	var deltaY;
+	var ds;
+	var dsX;
+	var dt;
+	var dtX;
+	var length2;
+	var ramp;
+	var rampSize;
+	var x;
+	var x1;
+
+	ramp = gradientRampOf(fill);
+	rampSize = gradientRampLengthOf(fill);
+	deltaX = leftX - fillOriginXOf(fill);
+	deltaY = yValue - fillOriginYOf(fill);
+	dsX = fillDirectionXOf(fill);
+	dtX = fillNormalXOf(fill);
+	ds = (deltaX * dsX) + (deltaY * fillDirectionYOf(fill));
+	dt = (deltaX * dtX) + (deltaY * fillNormalYOf(fill));
+	x = leftX;
+
+	/* Note: The inner loop has been divided into three parts for speed */
+	/* Part one: Fill everything outside the left boundary */
+
+	x1 = rightX;
+
+	/* This is the upper bound */
+
+	length2 = (rampSize - 1) * (rampSize - 1);
+	while ((squaredLengthOfwith(ds >> 16, dt >> 16) >= length2) && (x < x1)) {
+		++x;
+		ds += dsX;
+		dt += dtX;
+	}
+	if (x > leftX) {
+		fillColorSpanfromto(ramp[rampSize - 1], leftX, x);
+	}
+	deltaST = point1Get();
+	deltaST[0] = ds;
+	deltaST[1] = dt;
+	if (x < fillOriginXOf(fill)) {
+
+		/* Draw the decreasing part */
+
+		if (aaLevelGet() === 1) {
+			x = fillRadialDecreasingrampdeltaSTdsXdtXfromto(fill, ramp, deltaST, dsX, dtX, x, x1);
+		} else {
+			x = fillRadialDecreasingAArampdeltaSTdsXdtXfromto(fill, ramp, deltaST, dsX, dtX, x, x1);
+		}
+	}
+	if (x < x1) {
+
+		/* Draw the increasing part */
+
+		if (aaLevelGet() === 1) {
+			x = fillRadialIncreasingrampdeltaSTdsXdtXfromto(fill, ramp, deltaST, dsX, dtX, x, x1);
+		} else {
+			x = fillRadialIncreasingAArampdeltaSTdsXdtXfromto(fill, ramp, deltaST, dsX, dtX, x, x1);
+		}
+	}
+	if (x < rightX) {
+		fillColorSpanfromto(ramp[rampSize - 1], x, rightX);
+	}
+}
+
+
+/*	Part 2b) Compute the increasing part of the ramp */
+
+function fillRadialIncreasingrampdeltaSTdsXdtXfromto(fill, ramp, deltaST, dsX, dtX, leftX, rightX) {
+	var ds;
+	var dt;
+	var lastLength;
+	var length2;
+	var nextLength;
+	var rampIndex;
+	var rampSize;
+	var rampValue;
+	var x;
+	var x1;
+
+	ds = (deltaST[0]|0);
+	dt = (deltaST[1]|0);
+	rampIndex = accurateLengthOfwith(ds >> 16, dt >> 16);
+	rampValue = ramp[rampIndex];
+	rampSize = gradientRampLengthOf(fill);
+
+	/* This is the upper bound */
+
+	length2 = (rampSize - 1) * (rampSize - 1);
+	nextLength = (rampIndex + 1) * (rampIndex + 1);
+	lastLength = squaredLengthOfwith(ds >> 16, dt >> 16);
+	x = leftX;
+	x1 = rightX;
+	while ((x < x1) && (lastLength < length2)) {
+
+		/* Try to copy the current value more than once */
+
+		while ((x < x1) && (squaredLengthOfwith(ds >> 16, dt >> 16) <= nextLength)) {
+			spanBuffer[x] = rampValue;
+			++x;
+			ds += dsX;
+			dt += dtX;
+		}
+		lastLength = squaredLengthOfwith(ds >> 16, dt >> 16);
+		while (lastLength > nextLength) {
+			++rampIndex;
+			rampValue = ramp[rampIndex];
+			nextLength = (rampIndex + 1) * (rampIndex + 1);
+		}
+	}
+	deltaST[0] = ds;
+	deltaST[1] = dt;
+	return x;
+}
+
+
+/*	Part 2b) Compute the increasing part of the ramp */
+
+function fillRadialIncreasingAArampdeltaSTdsXdtXfromto(fill, ramp, deltaST, dsX, dtX, leftX, rightX) {
+	var aaLevel;
+	var baseShift;
+	var colorMask;
+	var colorShift;
+	var ds;
+	var dt;
+	var firstPixel;
+	var index;
+	var lastLength;
+	var lastPixel;
+	var length2;
+	var nextLength;
+	var rampIndex;
+	var rampSize;
+	var rampValue;
+	var x;
+
+	ds = (deltaST[0]|0);
+	dt = (deltaST[1]|0);
+	aaLevel = aaLevelGet();
+	baseShift = aaShiftGet();
+	rampIndex = accurateLengthOfwith(ds >> 16, dt >> 16);
+	rampSize = gradientRampLengthOf(fill);
+
+	/* This is the upper bound */
+
+	length2 = (rampSize - 1) * (rampSize - 1);
+	nextLength = (rampIndex + 1) * (rampIndex + 1);
+	lastLength = squaredLengthOfwith(ds >> 16, dt >> 16);
+	x = leftX;
+	firstPixel = aaFirstPixelFromto(leftX, rightX);
+
+	/* Deal with the first n subPixels */
+
+	lastPixel = aaLastPixelFromto(leftX, rightX);
+	if ((x < firstPixel) && (lastLength < length2)) {
+		colorMask = aaColorMaskGet();
+		colorShift = aaColorShiftGet();
+		rampValue = ramp[rampIndex];
+		rampValue = SHR((rampValue & colorMask), colorShift);
+		while ((x < firstPixel) && (lastLength < length2)) {
+
+			/* Try to copy the current value more than once */
+
+			while ((x < firstPixel) && (squaredLengthOfwith(ds >> 16, dt >> 16) <= nextLength)) {
+				index = SHR(x, baseShift);
+				spanBuffer[index] = (spanBuffer[index] + rampValue);
+				++x;
+				ds += dsX;
+				dt += dtX;
+			}
+			lastLength = squaredLengthOfwith(ds >> 16, dt >> 16);
+			while (lastLength > nextLength) {
+				++rampIndex;
+				rampValue = ramp[rampIndex];
+				rampValue = SHR((rampValue & colorMask), colorShift);
+				nextLength = (rampIndex + 1) * (rampIndex + 1);
+			}
+		}
+	}
+	if ((x < lastPixel) && (lastLength < length2)) {
+		colorMask = (SHR(aaColorMaskGet(), aaShiftGet())) | 4042322160;
+		colorShift = aaShiftGet();
+		rampValue = ramp[rampIndex];
+		rampValue = SHR((rampValue & colorMask), colorShift);
+		while ((x < lastPixel) && (lastLength < length2)) {
+
+			/* Try to copy the current value more than once */
+
+			while ((x < lastPixel) && (squaredLengthOfwith(ds >> 16, dt >> 16) <= nextLength)) {
+				index = SHR(x, baseShift);
+				spanBuffer[index] = (spanBuffer[index] + rampValue);
+				x += aaLevel;
+				ds += SHL(dsX, colorShift);
+				dt += SHL(dtX, colorShift);
+			}
+			lastLength = squaredLengthOfwith(ds >> 16, dt >> 16);
+			while (lastLength > nextLength) {
+				++rampIndex;
+				rampValue = ramp[rampIndex];
+				rampValue = SHR((rampValue & colorMask), colorShift);
+				nextLength = (rampIndex + 1) * (rampIndex + 1);
+			}
+		}
+	}
+	if ((x < rightX) && (lastLength < length2)) {
+		colorMask = aaColorMaskGet();
+		colorShift = aaColorShiftGet();
+		rampValue = ramp[rampIndex];
+		rampValue = SHR((rampValue & colorMask), colorShift);
+		while ((x < rightX) && (lastLength < length2)) {
+
+			/* Try to copy the current value more than once */
+
+			while ((x < rightX) && (squaredLengthOfwith(ds >> 16, dt >> 16) <= nextLength)) {
+				index = SHR(x, baseShift);
+				spanBuffer[index] = (spanBuffer[index] + rampValue);
+				++x;
+				ds += dsX;
+				dt += dtX;
+			}
+			lastLength = squaredLengthOfwith(ds >> 16, dt >> 16);
+			while (lastLength > nextLength) {
+				++rampIndex;
+				rampValue = ramp[rampIndex];
+				rampValue = SHR((rampValue & colorMask), colorShift);
+				nextLength = (rampIndex + 1) * (rampIndex + 1);
+			}
+		}
+	}
+	deltaST[0] = ds;
+	deltaST[1] = dt;
+	return x;
+}
+
+
+/*	Return true if fillEntry1 should be drawn before fillEntry2 */
+
+function fillSortsbefore(fillEntry1, fillEntry2) {
+	var diff;
+
+
+	/* First check the depth value */
+
+	diff = stackFillDepth(fillEntry1) - stackFillDepth(fillEntry2);
+	if (diff !== 0) {
+		return diff > 0;
+	}
+	return (stackFillValue(fillEntry1)>>>0) < (stackFillValue(fillEntry2)>>>0);
+}
+
+
+/*	Fill the span buffer from leftX to rightX with the given fill.
+	Clip before performing any operations. Return true if the fill must
+	be handled by some Smalltalk code. */
+
+function fillSpanfromto(fill, leftX, rightX) {
+	var type;
+	var x0;
+	var x1;
+
+	if (fill === 0) {
+		return false;
+	}
+	if (leftX < spanEndAAGet()) {
+		x0 = spanEndAAGet();
+	} else {
+		x0 = leftX;
+	}
+	if (rightX > (SHL(spanSizeGet(), aaShiftGet()))) {
+		x1 = SHL(spanSizeGet(), aaShiftGet());
+	} else {
+		x1 = rightX;
+	}
+	if (x0 < fillMinXGet()) {
+		x0 = fillMinXGet();
+	}
+	if (x1 > fillMaxXGet()) {
+		x1 = fillMaxXGet();
+	}
+	if (x0 < spanStartGet()) {
+		spanStartPut(x0);
+	}
+	if (x1 > spanEndGet()) {
+		spanEndPut(x1);
+	}
+	if (x1 > spanEndAAGet()) {
+		spanEndAAPut(x1);
+	}
+	if (x0 >= x1) {
+		return false;
+	}
+	if (isFillColor(fill)) {
+		fillColorSpanfromto(fill, x0, x1);
+	} else {
+
+		/* Store the values for the dispatch */
+
+		lastExportedFillPut(fill);
+		lastExportedLeftXPut(x0);
+		lastExportedRightXPut(x1);
+		type = fillTypeOf(fill);
+		if (type <= 1) {
+			return true;
+		}
+		switch (type) {
+		case 0:
+		case 1:
+			errorWrongIndex();
+			break;
+		case 2:
+			fillLinearGradient();
+			break;
+		case 3:
+			fillRadialGradient();
+			break;
+		case 4:
+		case 5:
+			fillBitmapSpan();
+			break;
+		}
+	}
+	return false;
+}
+
+function fillTypeOf(fill) {
+	return (objectTypeOf(fill) & GEPrimitiveFillMask) >>> 8;
+}
+
+
+/*	Check the global edge table for any entries that cannot be handled by the engine itself.
+	If there are any, return true. Otherwise, initialize the the edge and add it to the AET */
+
+function findNextExternalEntryFromGET() {
+	var edge;
+	var type;
+	var yValue;
+
+
+	/* As long as we have entries in the GET */
+
+	yValue = currentYGet();
+	while (getStartGet() < getUsedGet()) {
+		edge = getBuffer[getStartGet()];
+		if (edgeYValueOf(edge) > yValue) {
+			return false;
+		}
+		type = objectTypeOf(edge);
+		if ((type & GEPrimitiveWideMask) === GEPrimitiveEdge) {
+			return true;
+		}
+		if (!needAvailableSpace(1)) {
+			return false;
+		}
+		switch (type) {
+		case 0:
+		case 1:
+		case 2:
+		case 3:
+			errorWrongIndex();
+			break;
+		case 4:
+			stepToFirstLine();
+			break;
+		case 5:
+			stepToFirstWideLine();
+			break;
+		case 6:
+			stepToFirstBezier();
+			break;
+		case 7:
+			stepToFirstWideBezier();
+			break;
+		}
+		insertEdgeIntoAET(edge);
+		getStartPut(getStartGet() + 1);
+	}
+	return false;
+}
+
+
+/*	Scan the active edge table. If there is any fill that cannot be handled by the engine itself,  return true. Otherwise handle the fills and return false. */
+/*	self currentYGet >= 680 ifTrue:[
+self printAET.
+self halt.
+]. */
+
+function findNextExternalFillFromAET() {
+	var leftEdge;
+	var leftX;
+	var rightEdge;
+	var rightX;
+
+	leftX = (rightX = fillMaxXGet());
+	while (aetStartGet() < aetUsedGet()) {
+
+		/* TODO: We should check if leftX from last operation 
+			is  greater than leftX from next edge.
+			Currently, we rely here on spanEndAA
+			from the span buffer fill. */
+
+		leftEdge = (rightEdge = aetBuffer[aetStartGet()]);
+		leftX = (rightX = edgeXValueOf(leftEdge));
+		if (leftX >= fillMaxXGet()) {
+			return false;
+		}
+		quickRemoveInvalidFillsAt(leftX);
+		if (isWide(leftEdge)) {
+			toggleWideFillOf(leftEdge);
+		}
+		if (areEdgeFillsValid(leftEdge)) {
+			toggleFillsOf(leftEdge);
+			if (engineStopped) {
+				return false;
+			}
+		}
+		aetStartPut(aetStartGet() + 1);
+		if (aetStartGet() < aetUsedGet()) {
+			rightEdge = aetBuffer[aetStartGet()];
+			rightX = edgeXValueOf(rightEdge);
+			if (rightX >= fillMinXGet()) {
+
+				/* This is the visible portion */
+
+				fillAllFromto(leftX, rightX);
+			}
+		}
+	}
+	if (rightX < fillMaxXGet()) {
+		fillAllFromto(rightX, fillMaxXGet());
+	}
+	return false;
+}
+
+
+/*	Check the active edge table for any entries that cannot be handled by the engine itself.
+	If there are any, return true. Otherwise, step the the edge to the next y value. */
+
+function findNextExternalUpdateFromAET() {
+	var count;
+	var edge;
+	var type;
+
+	while (aetStartGet() < aetUsedGet()) {
+		edge = aetBuffer[aetStartGet()];
+		count = edgeNumLinesOf(edge) - 1;
+		if (count === 0) {
+
+			/* Edge at end -- remove it */
+
+			removeFirstAETEntry();
+		} else {
+
+			/* Store remaining lines back */
+
+			edgeNumLinesOfput(edge, count);
+			type = objectTypeOf(edge);
+			if ((type & GEPrimitiveWideMask) === GEPrimitiveEdge) {
+				return true;
+			}
+			switch (type) {
+			case 0:
+			case 1:
+			case 2:
+			case 3:
+				errorWrongIndex();
+				break;
+			case 4:
+				stepToNextLine();
+				break;
+			case 5:
+				stepToNextWideLine();
+				break;
+			case 6:
+				stepToNextBezier();
+				break;
+			case 7:
+				stepToNextWideBezier();
+				break;
+			}
+			resortFirstAETEntry();
+			aetStartPut(aetStartGet() + 1);
+		}
+	}
+	return false;
+}
+
+function findStackFilldepth(fillIndex, depth) {
+	var index;
+
+	index = 0;
+	while ((index < stackFillSize()) && ((stackFillValue(index) !== fillIndex) || (stackFillDepth(index) !== depth))) {
+		index += stackFillEntryLength();
+	}
+	if (index >= stackFillSize()) {
+		return -1;
+	} else {
+		return index;
+	}
+}
+
+
+/*	Return true if processing is finished */
+
+function finishedProcessing() {
+	return stateGet() === GEStateCompleted;
+}
+
+function freeStackFillEntry() {
+	wbStackPop(stackFillEntryLength());
+}
+
+
+/*	Note: This is hardcoded so it can be run from Squeak.
+	The module name is used for validating a module *after*
+	it is loaded to check if it does really contain the module
+	we're thinking it contains. This is important! */
+
+function getModuleName() {
+	return moduleName;
+}
+
+
+/*	Return true if the edge at index i should sort before the edge at index j. */
+
+function getSortsbefore(edge1, edge2) {
+	var diff;
+
+	if (edge1 === edge2) {
+		return true;
+	}
+	diff = edgeYValueOf(edge1) - edgeYValueOf(edge2);
+	if (diff !== 0) {
+		return diff < 0;
+	}
+	diff = edgeXValueOf(edge1) - edgeXValueOf(edge2);
+	return diff < 0;
+}
+
+function getStartGet() {
+	return workBuffer[GWGETStart];
+}
+
+function getStartPut(value) {
+	return workBuffer[GWGETStart] = value;
+}
+
+function getUsedGet() {
+	return workBuffer[GWGETUsed];
+}
+
+function getUsedPut(value) {
+	return workBuffer[GWGETUsed] = value;
+}
+
+function gradientRampLengthOf(fill) {
+	return objat(fill, GFRampLength);
+}
+
+function gradientRampLengthOfput(fill, value) {
+	return objatput(fill, GFRampLength, value);
+}
+
+function gradientRampOf(fill) {
+	return PTR_ADD(objBuffer, fill + GFRampOffset);
+}
+
+function halt() {
+	;
+}
+
+function hasColorTransform() {
+	return hasColorTransformGet() !== 0;
+}
+
+function hasColorTransformGet() {
+	return workBuffer[GWHasColorTransform];
+}
+
+function hasColorTransformPut(value) {
+	return workBuffer[GWHasColorTransform] = value;
+}
+
+function hasEdgeTransform() {
+	return hasEdgeTransformGet() !== 0;
+}
+
+function hasEdgeTransformGet() {
+	return workBuffer[GWHasEdgeTransform];
+}
+
+function hasEdgeTransformPut(value) {
+	return workBuffer[GWHasEdgeTransform] = value;
+}
+
+
+/*	Make the fill style with the given index invisible */
+
+function hideFilldepth(fillIndex, depth) {
+	var index;
+	var newDepth;
+	var newRightX;
+	var newTop;
+	var newTopIndex;
+
+	index = findStackFilldepth(fillIndex, depth);
+	if (index === -1) {
+		return false;
+	}
+	if (index === 0) {
+		freeStackFillEntry();
+		return true;
+	}
+	stackFillValueput(index, stackFillValue(0));
+	stackFillDepthput(index, stackFillDepth(0));
+	stackFillRightXput(index, stackFillRightX(0));
+	freeStackFillEntry();
+	if (stackFillSize() <= stackFillEntryLength()) {
+		return true;
+	}
+	newTopIndex = 0;
+	index = stackFillEntryLength();
+	while (index < stackFillSize()) {
+		if (fillSortsbefore(index, newTopIndex)) {
+			newTopIndex = index;
+		}
+		index += stackFillEntryLength();
+	}
+	if ((newTopIndex + stackFillEntryLength()) === stackFillSize()) {
+		return true;
+	}
+	newTop = stackFillValue(newTopIndex);
+	stackFillValueput(newTopIndex, topFillValue());
+	topFillValuePut(newTop);
+	newDepth = stackFillDepth(newTopIndex);
+	stackFillDepthput(newTopIndex, topFillDepth());
+	topFillDepthPut(newDepth);
+	newRightX = stackFillRightX(newTopIndex);
+	stackFillRightXput(newTopIndex, topFillRightX());
+	topFillRightXPut(newRightX);
+	return true;
+}
+
+function incrementStatby(statIndex, value) {
+	return workBuffer[statIndex] = (workBuffer[statIndex] + value);
+}
+
+
+/*	Find insertion point for the given edge in the AET */
+
+function indexForInsertingIntoAET(edge) {
+	var index;
+	var initialX;
+
+	initialX = edgeXValueOf(edge);
+	index = 0;
+	while ((index < aetUsedGet()) && (edgeXValueOf(aetBuffer[index]) < initialX)) {
+		++index;
+	}
+	while ((index < aetUsedGet()) && ((edgeXValueOf(aetBuffer[index]) === initialX) && (getSortsbefore(aetBuffer[index], edge)))) {
+		++index;
+	}
+	return index;
+}
+
+function initColorTransform() {
+	var transform;
+
+	transform = colorTransform();
+	transform[0] = 1.0;
+	transform[1] = 0.0;
+	transform[2] = 1.0;
+	transform[3] = 0.0;
+	transform[4] = 1.0;
+	transform[5] = 0.0;
+	transform[6] = 1.0;
+	transform[7] = 0.0;
+	hasColorTransformPut(0);
+}
+
+function initEdgeTransform() {
+	var transform;
+
+	transform = edgeTransform();
+	transform[0] = 1.0;
+	transform[1] = 0.0;
+	transform[2] = 0.0;
+	transform[3] = 0.0;
+	transform[4] = 1.0;
+	transform[5] = 0.0;
+	hasEdgeTransformPut(0);
+}
+
+function initialiseModule() {
+	loadBBFn = interpreterProxy.ioLoadFunctionFrom("loadBitBltFrom", bbPluginName);
+	copyBitsFn = interpreterProxy.ioLoadFunctionFrom("copyBitsFromtoat", bbPluginName);
+	return (!!loadBBFn) && (!!copyBitsFn);
+}
+
+
+/*	Initialization stuff that needs to be done before any processing can take place. */
+/*	Make sure aaLevel is initialized */
+
+function initializeGETProcessing() {
+	setAALevel(aaLevelGet());
+	if (clipMinXGet() < 0) {
+		clipMinXPut(0);
+	}
+	if (clipMaxXGet() > spanSizeGet()) {
+		clipMaxXPut(spanSizeGet());
+	}
+	fillMinXPut(SHL(clipMinXGet(), aaShiftGet()));
+	fillMinYPut(SHL(clipMinYGet(), aaShiftGet()));
+	fillMaxXPut(SHL(clipMaxXGet(), aaShiftGet()));
+	fillMaxYPut(SHL(clipMaxYGet(), aaShiftGet()));
+	getUsedPut(0);
+	aetUsedPut(0);
+	getBuffer = PTR_ADD(objBuffer, objUsed);
+
+	/* Create the global edge table */
+
+	aetBuffer = PTR_ADD(objBuffer, objUsed);
+	createGlobalEdgeTable();
+	if (engineStopped) {
+		return null;
+	}
+	if (getUsedGet() === 0) {
+
+		/* Nothing to do */
+
+		currentYPut(fillMaxYGet());
+		return 0;
+	}
+	sortGlobalEdgeTable();
+	currentYPut(edgeYValueOf(getBuffer[0]));
+	if (currentYGet() < fillMinYGet()) {
+		currentYPut(fillMinYGet());
+	}
+	spanStartPut(0);
+	spanEndPut((SHL(spanSizeGet(), aaShiftGet())) - 1);
+	clearSpanBuffer();
+}
+
+
+/*	Insert the edge with the given index from the global edge table into the active edge table.
+	The edge has already been stepped to the initial yValue -- thus remainingLines and rasterX
+	are both set. */
+
+function insertEdgeIntoAET(edge) {
+	var index;
+
+
+	/* Check for the number of lines remaining */
+
+	if (edgeNumLinesOf(edge) <= 0) {
+		return null;
+	}
+
+	/* And insert edge */
+
+	index = indexForInsertingIntoAET(edge);
+	insertToAETbeforeIndex(edge, index);
+}
+
+
+/*	Insert the given edge into the AET. */
+
+function insertToAETbeforeIndex(edge, index) {
+	var i;
+
+
+	/* Make sure we have space in the AET */
+
+	if (!allocateAETEntry(1)) {
+		return null;
+	}
+	i = aetUsedGet() - 1;
+	while (!(i < index)) {
+		aetBuffer[i + 1] = aetBuffer[i];
+		--i;
+	}
+	aetBuffer[index] = edge;
+	aetUsedPut(aetUsedGet() + 1);
+}
+
+function isBezier(bezier) {
+	return (objectTypeOf(bezier) & GEPrimitiveWideMask) === GEPrimitiveBezier;
+}
+
+function isEdge(edge) {
+	var type;
+
+	type = objectTypeOf(edge);
+	if (type > GEPrimitiveEdgeMask) {
+		return false;
+	}
+	return (objectTypeOf(edge) & GEPrimitiveEdgeMask) !== 0;
+}
+
+function isFill(fill) {
+	return isFillColor(fill) || (isRealFill(fill));
+}
+
+function isFillColor(fill) {
+	return (fill & 4278190080) !== 0;
+}
+
+function isFillOkay(fill) {
+	return (fill === 0) || (isFillColor(fill) || (isObject(fill) && (isFill(fill))));
+}
+
+function isLine(line) {
+	return (objectTypeOf(line) & GEPrimitiveWideMask) === GEPrimitiveLine;
+}
+
+function isObject(obj) {
+	return (obj >= 0) && (obj < objUsed);
+}
+
+function isRealFill(fill) {
+	return (objectTypeOf(fill) & GEPrimitiveFillMask) !== 0;
+}
+
+function isWide(object) {
+	return (objectTypeOf(object) & GEPrimitiveWide) !== 0;
+}
+
+function lastExportedEdgeGet() {
+	return workBuffer[GWLastExportedEdge];
+}
+
+function lastExportedEdgePut(value) {
+	return workBuffer[GWLastExportedEdge] = value;
+}
+
+function lastExportedFillGet() {
+	return workBuffer[GWLastExportedFill];
+}
+
+function lastExportedFillPut(value) {
+	return workBuffer[GWLastExportedFill] = value;
+}
+
+function lastExportedLeftXGet() {
+	return workBuffer[GWLastExportedLeftX];
+}
+
+function lastExportedLeftXPut(value) {
+	return workBuffer[GWLastExportedLeftX] = value;
+}
+
+function lastExportedRightXGet() {
+	return workBuffer[GWLastExportedRightX];
+}
+
+function lastExportedRightXPut(value) {
+	return workBuffer[GWLastExportedRightX] = value;
+}
+
+function lineEndXOf(line) {
+	return objat(line, GLEndX);
+}
+
+function lineEndXOfput(line, value) {
+	return objatput(line, GLEndX, value);
+}
+
+function lineEndYOf(line) {
+	return objat(line, GLEndY);
+}
+
+function lineEndYOfput(line, value) {
+	return objatput(line, GLEndY, value);
+}
+
+function lineErrorAdjDownOf(line) {
+	return objat(line, GLErrorAdjDown);
+}
+
+function lineErrorAdjDownOfput(line, value) {
+	return objatput(line, GLErrorAdjDown, value);
+}
+
+function lineErrorAdjUpOf(line) {
+	return objat(line, GLErrorAdjUp);
+}
+
+function lineErrorAdjUpOfput(line, value) {
+	return objatput(line, GLErrorAdjUp, value);
+}
+
+function lineErrorOf(line) {
+	return objat(line, GLError);
+}
+
+function lineErrorOfput(line, value) {
+	return objatput(line, GLError, value);
+}
+
+function lineXDirectionOf(line) {
+	return objat(line, GLXDirection);
+}
+
+function lineXDirectionOfput(line, value) {
+	return objatput(line, GLXDirection, value);
+}
+
+function lineXIncrementOf(line) {
+	return objat(line, GLXIncrement);
+}
+
+function lineXIncrementOfput(line, value) {
+	return objatput(line, GLXIncrement, value);
+}
+
+function lineYDirectionOfput(line, value) {
+	return objatput(line, GLYDirection, value);
+}
+
+
+/*	Load and subdivide the bezier curve from point1/point2/point3.
+	If wideFlag is set then make sure the curve is monoton in X. */
+
+function loadAndSubdivideBezierFromviatoisWide(point1, point2, point3, wideFlag) {
+	var bz1;
+	var bz2;
+	var index;
+	var index1;
+	var index2;
+
+	bz1 = allocateBezierStackEntry();
+	if (engineStopped) {
+		return 0;
+	}
+	bzStartXput(bz1, point1[0]);
+	bzStartYput(bz1, point1[1]);
+	bzViaXput(bz1, point2[0]);
+	bzViaYput(bz1, point2[1]);
+	bzEndXput(bz1, point3[0]);
+	bzEndYput(bz1, point3[1]);
+	index2 = (bz2 = subdivideToBeMonotoninX(bz1, wideFlag));
+	for (index = bz1; index <= bz2; index += 6) {
+		index1 = subdivideBezierFrom(index);
+		if (index1 > index2) {
+			index2 = index1;
+		}
+		if (engineStopped) {
+			return 0;
+		}
+	}
+	return DIV(index2, 6);
+}
+
+function loadArrayPolygonnPointsfilllineWidthlineFill(points, nPoints, fillIndex, lineWidth, lineFill) {
+	var i;
+	var x0;
+	var x1;
+	var y0;
+	var y1;
+
+	loadPointfrom(point1Get(), interpreterProxy.fetchPointerofObject(0, points));
+	if (interpreterProxy.failed()) {
+		return null;
+	}
+	x0 = point1Get()[0];
+	y0 = point1Get()[1];
+	for (i = 1; i <= (nPoints - 1); i++) {
+		loadPointfrom(point1Get(), interpreterProxy.fetchPointerofObject(i, points));
+		if (interpreterProxy.failed()) {
+			return null;
+		}
+		x1 = point1Get()[0];
+		y1 = point1Get()[1];
+		point1Get()[0] = x0;
+		point1Get()[1] = y0;
+		point2Get()[0] = x1;
+		point2Get()[1] = y1;
+		transformPoints(2);
+		loadWideLinefromtolineFillleftFillrightFill(lineWidth, point1Get(), point2Get(), lineFill, fillIndex, 0);
+		if (engineStopped) {
+			return null;
+		}
+		x0 = x1;
+		y0 = y1;
+	}
+}
+
+function loadArrayShapenSegmentsfilllineWidthlineFill(points, nSegments, fillIndex, lineWidth, lineFill) {
+	var i;
+	var pointOop;
+	var segs;
+	var x0;
+	var x1;
+	var x2;
+	var y0;
+	var y1;
+	var y2;
+
+	for (i = 0; i <= (nSegments - 1); i++) {
+		pointOop = interpreterProxy.fetchPointerofObject(i * 3, points);
+		loadPointfrom(point1Get(), pointOop);
+		pointOop = interpreterProxy.fetchPointerofObject((i * 3) + 1, points);
+		loadPointfrom(point2Get(), pointOop);
+		pointOop = interpreterProxy.fetchPointerofObject((i * 3) + 2, points);
+		loadPointfrom(point3Get(), pointOop);
+		if (interpreterProxy.failed()) {
+			return null;
+		}
+		transformPoints(3);
+		x0 = point1Get()[0];
+		y0 = point1Get()[1];
+		x1 = point2Get()[0];
+		y1 = point2Get()[1];
+		x2 = point3Get()[0];
+
+		/* Check if we can use a line */
+
+		y2 = point3Get()[1];
+		if (((x0 === y0) && (x1 === y1)) || ((x1 === x2) && (y1 === y2))) {
+			loadWideLinefromtolineFillleftFillrightFill(lineWidth, point1Get(), point3Get(), lineFill, fillIndex, 0);
+		} else {
+
+			/* Need bezier */
+
+			segs = loadAndSubdivideBezierFromviatoisWide(point1Get(), point2Get(), point3Get(), (lineWidth !== 0) && (lineFill !== 0));
+			if (engineStopped) {
+				return null;
+			}
+			loadWideBezierlineFillleftFillrightFilln(lineWidth, lineFill, fillIndex, 0, segs);
+		}
+		if (engineStopped) {
+			return null;
+		}
+	}
+}
+
+
+/*	Load a transformation from the given array. */
+
+function loadArrayTransformFromintolength(transformOop, destPtr, n) {
+	var i;
+	var value;
+
+	for (i = 0; i <= (n - 1); i++) {
+		value = interpreterProxy.fetchPointerofObject(i, transformOop);
+		if (!(typeof value === "number" || (value.isFloat))) {
+			return interpreterProxy.primitiveFail();
+		}
+		if (typeof value === "number") {
+			destPtr[i] = value;
+		} else {
+			destPtr[i] = interpreterProxy.floatValueOf(value);
+		}
+	}
+}
+
+
+/*	Initialize the bezier segment stored on the stack */
+
+function loadBeziersegmentleftFillrightFilloffset(bezier, index, leftFillIndex, rightFillIndex, yOffset) {
+	if (bzEndY(index) >= bzStartY(index)) {
+
+		/* Top to bottom */
+
+		edgeXValueOfput(bezier, bzStartX(index));
+		edgeYValueOfput(bezier, bzStartY(index) - yOffset);
+		bezierViaXOfput(bezier, bzViaX(index));
+		bezierViaYOfput(bezier, bzViaY(index) - yOffset);
+		bezierEndXOfput(bezier, bzEndX(index));
+		bezierEndYOfput(bezier, bzEndY(index) - yOffset);
+	} else {
+		edgeXValueOfput(bezier, bzEndX(index));
+		edgeYValueOfput(bezier, bzEndY(index) - yOffset);
+		bezierViaXOfput(bezier, bzViaX(index));
+		bezierViaYOfput(bezier, bzViaY(index) - yOffset);
+		bezierEndXOfput(bezier, bzStartX(index));
+		bezierEndYOfput(bezier, bzStartY(index) - yOffset);
+	}
+	edgeZValueOfput(bezier, currentZGet());
+	edgeLeftFillOfput(bezier, leftFillIndex);
+	edgeRightFillOfput(bezier, rightFillIndex);
+}
+
+function loadBitBltFrom(bbObj) {
+	if (!loadBBFn) {
+
+		/* We need copyBits here so try to load it implicitly */
+
+		if (!initialiseModule()) {
+			return false;
+		}
+	}
+	return loadBBFn(bbObj);
+}
+
+
+/*	Load the bitmap fill. */
+
+function loadBitmapFillcolormaptilefromalongnormalxIndex(formOop, cmOop, tileFlag, point1, point2, point3, xIndex) {
+	var bmBits;
+	var bmBitsSize;
+	var bmDepth;
+	var bmFill;
+	var bmHeight;
+	var bmRaster;
+	var bmWidth;
+	var cmBits;
+	var cmSize;
+	var ppw;
+
+	if (cmOop.isNil) {
+		cmSize = 0;
+		cmBits = null;
+	} else {
+		if (CLASSOF(cmOop) !== interpreterProxy.classBitmap()) {
+			return interpreterProxy.primitiveFail();
+		}
+		cmSize = SIZEOF(cmOop);
+		cmBits = cmOop.wordsAsInt32Array();
+	}
+	if (typeof formOop === "number") {
+		return interpreterProxy.primitiveFail();
+	}
+	if (!interpreterProxy.isPointers(formOop)) {
+		return interpreterProxy.primitiveFail();
+	}
+	if (SIZEOF(formOop) < 5) {
+		return interpreterProxy.primitiveFail();
+	}
+	bmBits = interpreterProxy.fetchPointerofObject(0, formOop);
+	if (CLASSOF(bmBits) !== interpreterProxy.classBitmap()) {
+		return interpreterProxy.primitiveFail();
+	}
+	bmBitsSize = SIZEOF(bmBits);
+	bmWidth = interpreterProxy.fetchIntegerofObject(1, formOop);
+	bmHeight = interpreterProxy.fetchIntegerofObject(2, formOop);
+	bmDepth = interpreterProxy.fetchIntegerofObject(3, formOop);
+	if (interpreterProxy.failed()) {
+		return null;
+	}
+	if (!((bmWidth >= 0) && (bmHeight >= 0))) {
+		return interpreterProxy.primitiveFail();
+	}
+	if (!((((((bmDepth === 32) || (bmDepth === 8)) || (bmDepth === 16)) || (bmDepth === 1)) || (bmDepth === 2)) || (bmDepth === 4))) {
+		return interpreterProxy.primitiveFail();
+	}
+	if (!((cmSize === 0) || (cmSize === (SHL(1, bmDepth))))) {
+		return interpreterProxy.primitiveFail();
+	}
+	ppw = DIV(32, bmDepth);
+	bmRaster = DIV((bmWidth + (ppw - 1)), ppw);
+	if (bmBitsSize !== (bmRaster * bmHeight)) {
+		return interpreterProxy.primitiveFail();
+	}
+	bmFill = allocateBitmapFillcolormap(cmSize, cmBits);
+	if (engineStopped) {
+		return null;
+	}
+	bitmapWidthOfput(bmFill, bmWidth);
+	bitmapHeightOfput(bmFill, bmHeight);
+	bitmapDepthOfput(bmFill, bmDepth);
+	bitmapRasterOfput(bmFill, bmRaster);
+	bitmapSizeOfput(bmFill, bmBitsSize);
+	bitmapTileFlagOfput(bmFill, tileFlag);
+	objectIndexOfput(bmFill, xIndex);
+	loadFillOrientationfromalongnormalwidthheight(bmFill, point1, point2, point3, bmWidth, bmHeight);
+	return bmFill;
+}
+
+
+/*	Note: Assumes that the contents of formArray has been checked before */
+
+function loadBitsFrom(bmFill) {
+	var bitsLen;
+	var bitsOop;
+	var formOop;
+	var xIndex;
+
+	xIndex = objectIndexOf(bmFill);
+	if (xIndex > SIZEOF(formArray)) {
+		return null;
+	}
+	formOop = interpreterProxy.fetchPointerofObject(xIndex, formArray);
+	bitsOop = interpreterProxy.fetchPointerofObject(0, formOop);
+	bitsLen = SIZEOF(bitsOop);
+	if (bitsLen !== bitmapSizeOf(bmFill)) {
+		return null;
+	}
+	return bitsOop.wordsAsInt32Array();
+}
+
+
+/*	Load a 2x3 transformation matrix from the given oop.
+	Return true if the matrix is not nil, false otherwise */
+
+function loadColorTransformFrom(transformOop) {
+	var okay;
+	var transform;
+
+	transform = colorTransform();
+	hasColorTransformPut(0);
+	okay = loadTransformFromintolength(transformOop, transform, 8);
+	if (!okay) {
+		return false;
+	}
+	hasColorTransformPut(1);
+	transform[1] = (transform[1] * 256.0);
+	transform[3] = (transform[3] * 256.0);
+	transform[5] = (transform[5] * 256.0);
+	transform[7] = (transform[7] * 256.0);
+	return okay;
+}
+
+
+/*	Load the compressed segment identified by segment index */
+
+function loadCompressedSegmentfromshortleftFillrightFilllineWidthlineColor(segmentIndex, points, pointsShort, leftFill, rightFill, lineWidth, lineFill) {
+	var index;
+	var segs;
+	var x0;
+	var x1;
+	var x2;
+	var y0;
+	var y1;
+	var y2;
+
+
+	/* Check if have anything to do at all */
+
+	if ((leftFill === rightFill) && ((lineWidth === 0) || (lineFill === 0))) {
+		return null;
+	}
+
+	/* 3 points with x/y each */
+
+	index = segmentIndex * 6;
+	if (pointsShort) {
+
+		/* Load short points */
+
+		x0 = (points.int16Array || (points.int16Array = new Int16Array(points.buffer, points.byteOffset)))[index + 0];
+		y0 = (points.int16Array || (points.int16Array = new Int16Array(points.buffer, points.byteOffset)))[index + 1];
+		x1 = (points.int16Array || (points.int16Array = new Int16Array(points.buffer, points.byteOffset)))[index + 2];
+		y1 = (points.int16Array || (points.int16Array = new Int16Array(points.buffer, points.byteOffset)))[index + 3];
+		x2 = (points.int16Array || (points.int16Array = new Int16Array(points.buffer, points.byteOffset)))[index + 4];
+		y2 = (points.int16Array || (points.int16Array = new Int16Array(points.buffer, points.byteOffset)))[index + 5];
+	} else {
+		x0 = (points[(index + 0)]|0);
+		y0 = (points[(index + 1)]|0);
+		x1 = (points[(index + 2)]|0);
+		y1 = (points[(index + 3)]|0);
+		x2 = (points[(index + 4)]|0);
+		y2 = (points[(index + 5)]|0);
+	}
+	if (((x0 === x1) && (y0 === y1)) || ((x1 === x2) && (y1 === y2))) {
+
+		/* We can use a line from x0/y0 to x2/y2 */
+
+		if ((x0 === x2) && (y0 === y2)) {
+			return null;
+		}
+		point1Get()[0] = x0;
+		point1Get()[1] = y0;
+		point2Get()[0] = x2;
+		point2Get()[1] = y2;
+		transformPoints(2);
+		return loadWideLinefromtolineFillleftFillrightFill(lineWidth, point1Get(), point2Get(), lineFill, leftFill, rightFill);
+	}
+	point1Get()[0] = x0;
+	point1Get()[1] = y0;
+	point2Get()[0] = x1;
+	point2Get()[1] = y1;
+	point3Get()[0] = x2;
+	point3Get()[1] = y2;
+	transformPoints(3);
+	segs = loadAndSubdivideBezierFromviatoisWide(point1Get(), point2Get(), point3Get(), (lineWidth !== 0) && (lineFill !== 0));
+	if (engineStopped) {
+		return null;
+	}
+	loadWideBezierlineFillleftFillrightFilln(lineWidth, lineFill, leftFill, rightFill, segs);
+}
+
+
+/*	Load a compressed shape into the engine.
+		WARNING: THIS METHOD NEEDS THE FULL FRAME SIZE!!!!
+	 */
+
+function loadCompressedShapesegmentsleftFillsrightFillslineWidthslineFillsfillIndexListpointShort(points, nSegments, leftFills, rightFills, lineWidths, lineFills, fillIndexList, pointsShort) {
+	var i;
+	var leftLength;
+	var leftRun;
+	var leftValue;
+	var lineFillLength;
+	var lineFillRun;
+	var lineFillValue;
+	var rightLength;
+	var rightRun;
+	var rightValue;
+	var widthLength;
+	var widthRun;
+	var widthValue;
+
+	if (nSegments === 0) {
+		return 0;
+	}
+	leftRun = (rightRun = (widthRun = (lineFillRun = -1)));
+	leftLength = (rightLength = (widthLength = (lineFillLength = 1)));
+	leftValue = (rightValue = (widthValue = (lineFillValue = 0)));
+	for (i = 1; i <= nSegments; i++) {
+
+		/* Decrement current run length and load new stuff */
+
+		if (((--leftLength)) <= 0) {
+			++leftRun;
+			leftLength = shortRunLengthAtfrom(leftRun, leftFills);
+			leftValue = shortRunValueAtfrom(leftRun, leftFills);
+			if (leftValue !== 0) {
+				leftValue = fillIndexList[leftValue - 1];
+				leftValue = transformColor(leftValue);
+				if (engineStopped) {
+					return null;
+				}
+			}
+		}
+		if (((--rightLength)) <= 0) {
+			++rightRun;
+			rightLength = shortRunLengthAtfrom(rightRun, rightFills);
+			rightValue = shortRunValueAtfrom(rightRun, rightFills);
+			if (rightValue !== 0) {
+				rightValue = fillIndexList[rightValue - 1];
+				rightValue = transformColor(rightValue);
+			}
+		}
+		if (((--widthLength)) <= 0) {
+			++widthRun;
+			widthLength = shortRunLengthAtfrom(widthRun, lineWidths);
+			widthValue = shortRunValueAtfrom(widthRun, lineWidths);
+			if (widthValue !== 0) {
+				widthValue = transformWidth(widthValue);
+			}
+		}
+		if (((--lineFillLength)) <= 0) {
+			++lineFillRun;
+			lineFillLength = shortRunLengthAtfrom(lineFillRun, lineFills);
+			lineFillValue = shortRunValueAtfrom(lineFillRun, lineFills);
+			if (lineFillValue !== 0) {
+				lineFillValue = fillIndexList[lineFillValue - 1];
+			}
+		}
+		loadCompressedSegmentfromshortleftFillrightFilllineWidthlineColor(i - 1, points, pointsShort, leftValue, rightValue, widthValue, lineFillValue);
+		if (engineStopped) {
+			return null;
+		}
+	}
+}
+
+function loadEdgeStateFrom(edgeOop) {
+	var edge;
+
+	edge = lastExportedEdgeGet();
+	if (SIZEOF(edgeOop) < ETBalloonEdgeDataSize) {
+		return null;
+	}
+	edgeXValueOfput(edge, interpreterProxy.fetchIntegerofObject(ETXValueIndex, edgeOop));
+	edgeYValueOfput(edge, interpreterProxy.fetchIntegerofObject(ETYValueIndex, edgeOop));
+	edgeZValueOfput(edge, interpreterProxy.fetchIntegerofObject(ETZValueIndex, edgeOop));
+	edgeNumLinesOfput(edge, interpreterProxy.fetchIntegerofObject(ETLinesIndex, edgeOop));
+	return edge;
+}
+
+
+/*	Load a 2x3 transformation matrix from the given oop.
+	Return true if the matrix is not nil, false otherwise */
+
+function loadEdgeTransformFrom(transformOop) {
+	var okay;
+	var transform;
+
+	hasEdgeTransformPut(0);
+	transform = edgeTransform();
+	okay = loadTransformFromintolength(transformOop, transform, 6);
+	if (interpreterProxy.failed()) {
+		return null;
+	}
+	if (!okay) {
+		return false;
+	}
+	hasEdgeTransformPut(1);
+	transform[2] = (transform[2] + destOffsetXGet());
+	transform[5] = (transform[5] + destOffsetYGet());
+	return true;
+}
+
+
+/*	Transform the points */
+
+function loadFillOrientationfromalongnormalwidthheight(fill, point1, point2, point3, fillWidth, fillHeight) {
+	var dirX;
+	var dirY;
+	var dsLength2;
+	var dsX;
+	var dsY;
+	var dtLength2;
+	var dtX;
+	var dtY;
+	var nrmX;
+	var nrmY;
+
+	point2[0] = (point2[0] + point1[0]);
+	point2[1] = (point2[1] + point1[1]);
+	point3[0] = (point3[0] + point1[0]);
+	point3[1] = (point3[1] + point1[1]);
+	transformPoint(point1);
+	transformPoint(point2);
+	transformPoint(point3);
+	dirX = point2[0] - point1[0];
+	dirY = point2[1] - point1[1];
+	nrmX = point3[0] - point1[0];
+
+	/* Compute the scale from direction/normal into ramp size */
+
+	nrmY = point3[1] - point1[1];
+	dsLength2 = (dirX * dirX) + (dirY * dirY);
+	if (dsLength2 > 0) {
+		dsX = ((((dirX * fillWidth) * 65536.0) / dsLength2)|0);
+		dsY = ((((dirY * fillWidth) * 65536.0) / dsLength2)|0);
+	} else {
+		dsX = 0;
+		dsY = 0;
+	}
+	dtLength2 = (nrmX * nrmX) + (nrmY * nrmY);
+	if (dtLength2 > 0) {
+		dtX = ((((nrmX * fillHeight) * 65536.0) / dtLength2)|0);
+		dtY = ((((nrmY * fillHeight) * 65536.0) / dtLength2)|0);
+	} else {
+		dtX = 0;
+		dtY = 0;
+	}
+	fillOriginXOfput(fill, point1[0]);
+	fillOriginYOfput(fill, point1[1]);
+	fillDirectionXOfput(fill, dsX);
+	fillDirectionYOfput(fill, dsY);
+	fillNormalXOfput(fill, dtX);
+	fillNormalYOfput(fill, dtY);
+}
+
+
+/*	Check all the forms from arrayOop. */
+
+function loadFormsFrom(arrayOop) {
+	var bmBits;
+	var bmBitsSize;
+	var bmDepth;
+	var bmHeight;
+	var bmRaster;
+	var bmWidth;
+	var formOop;
+	var i;
+	var ppw;
+
+	if (!interpreterProxy.isArray(arrayOop)) {
+		return false;
+	}
+	formArray = arrayOop;
+	for (i = 0; i <= (SIZEOF(formArray) - 1); i++) {
+		formOop = interpreterProxy.fetchPointerofObject(i, formArray);
+		if (typeof formOop === "number") {
+			return false;
+		}
+		if (!interpreterProxy.isPointers(formOop)) {
+			return false;
+		}
+		if (SIZEOF(formOop) < 5) {
+			return false;
+		}
+		bmBits = interpreterProxy.fetchPointerofObject(0, formOop);
+		if (CLASSOF(bmBits) !== interpreterProxy.classBitmap()) {
+			return false;
+		}
+		bmBitsSize = SIZEOF(bmBits);
+		bmWidth = interpreterProxy.fetchIntegerofObject(1, formOop);
+		bmHeight = interpreterProxy.fetchIntegerofObject(2, formOop);
+		bmDepth = interpreterProxy.fetchIntegerofObject(3, formOop);
+		if (interpreterProxy.failed()) {
+			return false;
+		}
+		if (!((bmWidth >= 0) && (bmHeight >= 0))) {
+			return false;
+		}
+		ppw = DIV(32, bmDepth);
+		bmRaster = DIV((bmWidth + (ppw - 1)), ppw);
+		if (bmBitsSize !== (bmRaster * bmHeight)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+
+/*	Load the gradient fill as defined by the color ramp. */
+
+function loadGradientFillfromalongnormalisRadial(rampOop, point1, point2, point3, isRadial) {
+	var fill;
+	var rampWidth;
+
+	if (CLASSOF(rampOop) !== interpreterProxy.classBitmap()) {
+		return interpreterProxy.primitiveFail();
+	}
+	rampWidth = SIZEOF(rampOop);
+	fill = allocateGradientFillrampWidthisRadial(rampOop.wordsAsInt32Array(), rampWidth, isRadial);
+	if (engineStopped) {
+		return null;
+	}
+	loadFillOrientationfromalongnormalwidthheight(fill, point1, point2, point3, rampWidth, rampWidth);
+	return fill;
+}
+
+
+/*	Load the line defined by point1 and point2. */
+
+function loadLinefromtooffsetleftFillrightFill(line, point1, point2, yOffset, leftFill, rightFill) {
+	var p1;
+	var p2;
+	var yDir;
+
+	if (point1[1] <= point2[1]) {
+		p1 = point1;
+		p2 = point2;
+		yDir = 1;
+	} else {
+		p1 = point2;
+		p2 = point1;
+		yDir = -1;
+	}
+	edgeXValueOfput(line, p1[0]);
+	edgeYValueOfput(line, p1[1] - yOffset);
+	edgeZValueOfput(line, currentZGet());
+	edgeLeftFillOfput(line, leftFill);
+	edgeRightFillOfput(line, rightFill);
+	lineEndXOfput(line, p2[0]);
+	lineEndYOfput(line, p2[1] - yOffset);
+	lineYDirectionOfput(line, yDir);
+}
+
+
+/*	Load a rectangular oval currently defined by point1/point2 */
+
+function loadOvallineFillleftFillrightFill(lineWidth, lineFill, leftFill, rightFill) {
+	var cx;
+	var cy;
+	var h;
+	var i;
+	var nSegments;
+	var w;
+
+	w = (point2Get()[0] - point1Get()[0]) >> 1;
+	h = (point2Get()[1] - point1Get()[1]) >> 1;
+	cx = (point2Get()[0] + point1Get()[0]) >> 1;
+	cy = (point2Get()[1] + point1Get()[1]) >> 1;
+	for (i = 0; i <= 15; i++) {
+		loadOvalSegmentwhcxcy(i, w, h, cx, cy);
+		transformPoints(3);
+		nSegments = loadAndSubdivideBezierFromviatoisWide(point1Get(), point2Get(), point3Get(), (lineWidth !== 0) && (lineFill !== 0));
+		if (engineStopped) {
+			return null;
+		}
+		loadWideBezierlineFillleftFillrightFilln(lineWidth, lineFill, leftFill, rightFill, nSegments);
+		if (engineStopped) {
+			return null;
+		}
+	}
+}
+
+function loadOvalSegmentwhcxcy(seg, w, h, cx, cy) {
+	var x0;
+	var x1;
+	var x2;
+	var y0;
+	var y1;
+	var y2;
+
+
+	/* Load start point of segment */
+
+	x0 = (((circleCosTable()[(seg * 2) + 0] * w) + cx)|0);
+	y0 = (((circleSinTable()[(seg * 2) + 0] * h) + cy)|0);
+	point1Get()[0] = x0;
+	point1Get()[1] = y0;
+	x2 = (((circleCosTable()[(seg * 2) + 2] * w) + cx)|0);
+	y2 = (((circleSinTable()[(seg * 2) + 2] * h) + cy)|0);
+	point3Get()[0] = x2;
+	point3Get()[1] = y2;
+	x1 = (((circleCosTable()[(seg * 2) + 1] * w) + cx)|0);
+
+	/* NOTE: The intermediate point is the point ON the curve
+	and not yet the control point (which is OFF the curve) */
+
+	y1 = (((circleSinTable()[(seg * 2) + 1] * h) + cy)|0);
+	x1 = (x1 * 2) - ((x0 + x2) >> 1);
+	y1 = (y1 * 2) - ((y0 + y2) >> 1);
+	point2Get()[0] = x1;
+	point2Get()[1] = y1;
+}
+
+
+/*	Load the contents of pointOop into pointArray */
+
+function loadPointfrom(pointArray, pointOop) {
+	var value;
+
+	if (CLASSOF(pointOop) !== interpreterProxy.classPoint()) {
+		return interpreterProxy.primitiveFail();
+	}
+	value = interpreterProxy.fetchPointerofObject(0, pointOop);
+	if (!(typeof value === "number" || (value.isFloat))) {
+		return interpreterProxy.primitiveFail();
+	}
+	if (typeof value === "number") {
+		pointArray[0] = value;
+	} else {
+		pointArray[0] = (interpreterProxy.floatValueOf(value)|0);
+	}
+	value = interpreterProxy.fetchPointerofObject(1, pointOop);
+	if (!(typeof value === "number" || (value.isFloat))) {
+		return interpreterProxy.primitiveFail();
+	}
+	if (typeof value === "number") {
+		pointArray[1] = value;
+	} else {
+		pointArray[1] = (interpreterProxy.floatValueOf(value)|0);
+	}
+}
+
+function loadPolygonnPointsfilllineWidthlineFillpointsShort(points, nPoints, fillIndex, lineWidth, lineFill, isShort) {
+	var i;
+	var x0;
+	var x1;
+	var y0;
+	var y1;
+
+	if (isShort) {
+		x0 = (points.int16Array || (points.int16Array = new Int16Array(points.buffer, points.byteOffset)))[0];
+		y0 = (points.int16Array || (points.int16Array = new Int16Array(points.buffer, points.byteOffset)))[1];
+	} else {
+		x0 = (points[0]|0);
+		y0 = (points[1]|0);
+	}
+	for (i = 1; i <= (nPoints - 1); i++) {
+		if (isShort) {
+			x1 = (points.int16Array || (points.int16Array = new Int16Array(points.buffer, points.byteOffset)))[i * 2];
+			y1 = (points.int16Array || (points.int16Array = new Int16Array(points.buffer, points.byteOffset)))[(i * 2) + 1];
+		} else {
+			x1 = (points[(i * 2)]|0);
+			y1 = (points[((i * 2) + 1)]|0);
+		}
+		point1Get()[0] = x0;
+		point1Get()[1] = y0;
+		point2Get()[0] = x1;
+		point2Get()[1] = y1;
+		transformPoints(2);
+		loadWideLinefromtolineFillleftFillrightFill(lineWidth, point1Get(), point2Get(), lineFill, fillIndex, 0);
+		if (engineStopped) {
+			return null;
+		}
+		x0 = x1;
+		y0 = y1;
+	}
+}
+
+
+/*	Load a rectangle currently defined by point1-point4 */
+
+function loadRectanglelineFillleftFillrightFill(lineWidth, lineFill, leftFill, rightFill) {
+	loadWideLinefromtolineFillleftFillrightFill(lineWidth, point1Get(), point2Get(), lineFill, leftFill, rightFill);
+	loadWideLinefromtolineFillleftFillrightFill(lineWidth, point2Get(), point3Get(), lineFill, leftFill, rightFill);
+	loadWideLinefromtolineFillleftFillrightFill(lineWidth, point3Get(), point4Get(), lineFill, leftFill, rightFill);
+	loadWideLinefromtolineFillleftFillrightFill(lineWidth, point4Get(), point1Get(), lineFill, leftFill, rightFill);
+}
+
+
+/*	Load the entire state from the interpreter for the rendering primitives.
+	 Answer 0 on success or a non-zero failure code on failure. */
+
+function loadRenderingState() {
+	var edgeOop;
+	var failCode;
+	var fillOop;
+	var state;
+
+	if (interpreterProxy.methodArgumentCount() !== 2) {
+		return PrimErrBadNumArgs;
+	}
+	if (((failCode = quickLoadEngineFrom(interpreterProxy.stackValue(2)))) !== 0) {
+		return failCode;
+	}
+	fillOop = interpreterProxy.stackObjectValue(0);
+	edgeOop = interpreterProxy.stackObjectValue(1);
+	if (interpreterProxy.failed()) {
+		return PrimErrBadArgument;
+	}
+	if (((failCode = loadSpanBufferFrom(interpreterProxy.fetchPointerofObject(BESpanIndex, engine)))) !== 0) {
+		return failCode;
+	}
+	if (!loadBitBltFrom(interpreterProxy.fetchPointerofObject(BEBitBltIndex, engine))) {
+		return GEFBitBltLoadFailed;
+	}
+	if (!loadFormsFrom(interpreterProxy.fetchPointerofObject(BEFormsIndex, engine))) {
+		return GEFFormLoadFailed;
+	}
+	if (SIZEOF(edgeOop) < ETBalloonEdgeDataSize) {
+		return GEFEdgeDataTooSmall;
+	}
+	if (SIZEOF(fillOop) < FTBalloonFillDataSize) {
+		return GEFFillDataTooSmall;
+	}
+	state = stateGet();
+	if ((state === GEStateWaitingForEdge) || ((state === GEStateWaitingForFill) || (state === GEStateWaitingChange))) {
+		return GEFWrongState;
+	}
+	return 0;
+}
+
+function loadShapenSegmentsfilllineWidthlineFillpointsShort(points, nSegments, fillIndex, lineWidth, lineFill, pointsShort) {
+	var i;
+
+	for (i = 1; i <= nSegments; i++) {
+		loadCompressedSegmentfromshortleftFillrightFilllineWidthlineColor(i - 1, points, pointsShort, fillIndex, 0, lineWidth, lineFill);
+		if (engineStopped) {
+			return null;
+		}
+	}
+}
+
+
+/*	Load the span buffer from the given oop.
+	 Answer 0 on success or a non-zero failure code on failure. */
+
+function loadSpanBufferFrom(spanOop) {
+	if (CLASSOF(spanOop) !== interpreterProxy.classBitmap()) {
+		return GEFClassMismatch;
+	}
+
+	/* Leave last entry unused to avoid complications */
+
+	spanBuffer = spanOop.words;
+	spanSizePut(SIZEOF(spanOop) - 1);
+	return 0;
+}
+
+
+/*	Load a transformation from transformOop into the float array
+	defined by destPtr. The transformation is assumed to be either
+	an array or a FloatArray of length n. */
+
+function loadTransformFromintolength(transformOop, destPtr, n) {
+	if (transformOop.isNil) {
+		return false;
+	}
+	if (typeof transformOop === "number") {
+		return interpreterProxy.primitiveFail();
+	}
+	if (SIZEOF(transformOop) !== n) {
+		return interpreterProxy.primitiveFail();
+	}
+	if (interpreterProxy.isWords(transformOop)) {
+		loadWordTransformFromintolength(transformOop, destPtr, n);
+	} else {
+		loadArrayTransformFromintolength(transformOop, destPtr, n);
+	}
+	return true;
+}
+
+
+/*	Load the (possibly wide) bezier from the segments currently on the bezier stack. */
+
+function loadWideBezierlineFillleftFillrightFilln(lineWidth, lineFill, leftFill, rightFill, nSegments) {
+	var bezier;
+	var index;
+	var offset;
+	var wide;
+
+	if ((lineWidth === 0) || (lineFill === 0)) {
+		wide = false;
+		offset = 0;
+	} else {
+		wide = true;
+		offset = offsetFromWidth(lineWidth);
+	}
+	index = nSegments * 6;
+	while (index > 0) {
+		if (wide) {
+			bezier = allocateWideBezier();
+		} else {
+			bezier = allocateBezier();
+		}
+		if (engineStopped) {
+			return 0;
+		}
+		loadBeziersegmentleftFillrightFilloffset(bezier, index, leftFill, rightFill, offset);
+		if (wide) {
+			wideBezierFillOfput(bezier, lineFill);
+			wideBezierWidthOfput(bezier, lineWidth);
+			wideBezierExtentOfput(bezier, lineWidth);
+		}
+		index -= 6;
+	}
+	wbStackClear();
+}
+
+
+/*	Load a (possibly wide) line defined by the points p1 and p2 */
+
+function loadWideLinefromtolineFillleftFillrightFill(lineWidth, p1, p2, lineFill, leftFill, rightFill) {
+	var line;
+	var offset;
+
+	if ((lineWidth === 0) || (lineFill === 0)) {
+		line = allocateLine();
+		offset = 0;
+	} else {
+		line = allocateWideLine();
+		offset = offsetFromWidth(lineWidth);
+	}
+	if (engineStopped) {
+		return 0;
+	}
+	loadLinefromtooffsetleftFillrightFill(line, p1, p2, offset, leftFill, rightFill);
+	if (isWide(line)) {
+		wideLineFillOfput(line, lineFill);
+		wideLineWidthOfput(line, lineWidth);
+		wideLineExtentOfput(line, lineWidth);
+	}
+}
+
+
+/*	Load a float array transformation from the given oop */
+
+function loadWordTransformFromintolength(transformOop, destPtr, n) {
+	var i;
+	var srcPtr;
+
+	srcPtr = transformOop.wordsAsFloat32Array();
+	for (i = 0; i <= (n - 1); i++) {
+		destPtr[i] = srcPtr[i];
+	}
+}
+
+
+/*	Load the working buffer from the given oop */
+
+function loadWorkBufferFrom(wbOop) {
+	if (typeof wbOop === "number") {
+		return GEFWorkBufferIsInteger;
+	}
+	if (!interpreterProxy.isWords(wbOop)) {
+		return GEFWorkBufferIsPointers;
+	}
+	if (SIZEOF(wbOop) < GWMinimalSize) {
+		return GEFWorkBufferTooSmall;
+	}
+	workBufferPut(wbOop);
+	if (magicNumberGet() !== GWMagicNumber) {
+		return GEFWorkBufferBadMagic;
+	}
+	if (wbSizeGet() !== SIZEOF(wbOop)) {
+		return GEFWorkBufferWrongSize;
+	}
+	if (objStartGet() !== GWHeaderSize) {
+		return GEFWorkBufferStartWrong;
+	}
+	objBuffer = PTR_ADD(workBuffer, objStartGet());
+	getBuffer = PTR_ADD(objBuffer, objUsedGet());
+
+	/* Make sure we don't exceed the work buffer */
+
+	aetBuffer = PTR_ADD(getBuffer, getUsedGet());
+	if ((((GWHeaderSize + objUsedGet()) + getUsedGet()) + aetUsedGet()) > wbSizeGet()) {
+		return GEFWorkTooBig;
+	}
+	return 0;
+}
+
+function magicNumberGet() {
+	return workBuffer[GWMagicIndex];
+}
+
+function magicNumberPut(value) {
+	return workBuffer[GWMagicIndex] = value;
+}
+
+
+/*	The module with the given name was just unloaded.
+	Make sure we have no dangling references. */
+
+function moduleUnloaded(aModuleName) {
+	if (strcmp(aModuleName, bbPluginName) === 0) {
+
+		/* BitBlt just shut down. How nasty. */
+
+		loadBBFn = 0;
+		copyBitsFn = 0;
+	}
+}
+
+
+/*	The entry at index is not in the right position of the AET. 
+	Move it to the left until the position is okay. */
+
+function moveAETEntryFromedgex(index, edge, xValue) {
+	var newIndex;
+
+	newIndex = index;
+	while ((newIndex > 0) && (edgeXValueOf(aetBuffer[newIndex - 1]) > xValue)) {
+		aetBuffer[newIndex] = aetBuffer[newIndex - 1];
+		--newIndex;
+	}
+	aetBuffer[newIndex] = edge;
+}
+
+
+/*	Check if we have n slots available */
+
+function needAvailableSpace(nSlots) {
+	if (((((GWHeaderSize + objUsed) + getUsedGet()) + aetUsedGet()) + nSlots) > wbTopGet()) {
+		stopBecauseOf(GErrorNoMoreSpace);
+		return false;
+	}
+	return true;
+}
+
+function needsFlush() {
+	return needsFlushGet() !== 0;
+}
+
+function needsFlushGet() {
+	return workBuffer[GWNeedsFlush];
+}
+
+function needsFlushPut(value) {
+	return workBuffer[GWNeedsFlush] = value;
+}
+
+function objat(object, index) {
+	return objBuffer[object + index];
+}
+
+function objatput(object, index, value) {
+	return objBuffer[object + index] = value;
+}
+
+function objStartGet() {
+	return workBuffer[GWObjStart];
+}
+
+function objStartPut(value) {
+	return workBuffer[GWObjStart] = value;
+}
+
+function objUsedGet() {
+	return workBuffer[GWObjUsed];
+}
+
+function objUsedPut(value) {
+	return workBuffer[GWObjUsed] = value;
+}
+
+function objectHeaderOf(obj) {
+	return objat(obj, GEObjectType);
+}
+
+function objectIndexOf(obj) {
+	return objat(obj, GEObjectIndex);
+}
+
+function objectIndexOfput(obj, value) {
+	return objatput(obj, GEObjectIndex, value);
+}
+
+function objectLengthOf(obj) {
+	return objat(obj, GEObjectLength);
+}
+
+function objectLengthOfput(obj, value) {
+	return objatput(obj, GEObjectLength, value);
+}
+
+function objectTypeOf(obj) {
+	return objat(obj, GEObjectType) & GEPrimitiveTypeMask;
+}
+
+function objectTypeOfput(obj, value) {
+	return objatput(obj, GEObjectType, value);
+}
+
+
+/*	Common function so that we don't compute that wrong in any place
+	and can easily find all the places where we deal with one-pixel offsets. */
+
+function offsetFromWidth(lineWidth) {
+	return lineWidth >> 1;
+}
+
+function point1Get() {
+	return PTR_ADD(workBuffer, GWPoint1);
+}
+
+function point2Get() {
+	return PTR_ADD(workBuffer, GWPoint2);
+}
+
+function point3Get() {
+	return PTR_ADD(workBuffer, GWPoint3);
+}
+
+function point4Get() {
+	return PTR_ADD(workBuffer, GWPoint4);
+}
+
+
+/*	We have just blitted a scan line to the screen.
+	Do whatever seems to be a good idea here. */
+/*	Note: In the future we may check the time needed for this scan line and interrupt processing to give the Smalltalk code a chance to run at a certain time. */
+/*	Check if there is any more work to do. */
+
+function postDisplayAction() {
+	if ((getStartGet() >= getUsedGet()) && (aetUsedGet() === 0)) {
+
+		/* No more entries to process */
+
+		statePut(GEStateCompleted);
+	}
+	if (currentYGet() >= fillMaxYGet()) {
+
+		/* Out of clipping range */
+
+		statePut(GEStateCompleted);
+	}
+}
+
+function primitiveAbortProcessing() {
+	var failureCode;
+
+	if (interpreterProxy.methodArgumentCount() !== 0) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFrom(interpreterProxy.stackValue(0)))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	statePut(GEStateCompleted);
+	storeEngineStateInto(engine);
+}
+
+
+/*	Note: No need to load either bitBlt or spanBuffer */
+
+function primitiveAddActiveEdgeEntry() {
+	var edge;
+	var edgeOop;
+	var failureCode;
+
+	if (doProfileStats) {
+		geProfileTime = interpreterProxy.ioMicroMSecs();
+	}
+	if (interpreterProxy.methodArgumentCount() !== 1) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(1), GEStateWaitingForEdge))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	edgeOop = interpreterProxy.stackObjectValue(0);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	edge = loadEdgeStateFrom(edgeOop);
+	if (!edge) {
+		return interpreterProxy.primitiveFailFor(GEFEdgeDataTooSmall);
+	}
+	if (!needAvailableSpace(1)) {
+		return interpreterProxy.primitiveFailFor(GEFWorkTooBig);
+	}
+	if (edgeNumLinesOf(edge) > 0) {
+		insertEdgeIntoAET(edge);
+	}
+	if (engineStopped) {
+		return interpreterProxy.primitiveFailFor(GEFEngineStopped);
+	}
+	statePut(GEStateAddingFromGET);
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(1);
+	if (doProfileStats) {
+		incrementStatby(GWCountAddAETEntry, 1);
+		incrementStatby(GWTimeAddAETEntry, interpreterProxy.ioMicroMSecs() - geProfileTime);
+	}
+}
+
+function primitiveAddBezier() {
+	var endOop;
+	var failureCode;
+	var leftFill;
+	var nSegments;
+	var rightFill;
+	var startOop;
+	var viaOop;
+
+
+	/* Fail if we have the wrong number of arguments */
+
+	if (interpreterProxy.methodArgumentCount() !== 5) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	rightFill = interpreterProxy.positive32BitValueOf(interpreterProxy.stackValue(0));
+	leftFill = interpreterProxy.positive32BitValueOf(interpreterProxy.stackValue(1));
+	viaOop = interpreterProxy.stackObjectValue(2);
+	endOop = interpreterProxy.stackObjectValue(3);
+	startOop = interpreterProxy.stackObjectValue(4);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(5), GEStateUnlocked))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	if (!(isFillOkay(leftFill) && (isFillOkay(rightFill)))) {
+		return interpreterProxy.primitiveFailFor(GEFWrongFill);
+	}
+	if ((leftFill === rightFill) && false) {
+		return interpreterProxy.pop(6);
+	}
+	loadPointfrom(point1Get(), startOop);
+	loadPointfrom(point2Get(), viaOop);
+	loadPointfrom(point3Get(), endOop);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	transformPoints(3);
+	nSegments = loadAndSubdivideBezierFromviatoisWide(point1Get(), point2Get(), point3Get(), false);
+	needAvailableSpace(nSegments * GBBaseSize);
+	if (!engineStopped) {
+		leftFill = transformColor(leftFill);
+		rightFill = transformColor(rightFill);
+	}
+	if (!engineStopped) {
+		loadWideBezierlineFillleftFillrightFilln(0, 0, leftFill, rightFill, nSegments);
+	}
+	if (engineStopped) {
+
+		/* Make sure the stack is okay */
+
+		wbStackClear();
+		return interpreterProxy.primitiveFailFor(GEFEngineStopped);
+	}
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(GEFEntityLoadFailed);
+	}
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(5);
+}
+
+function primitiveAddBezierShape() {
+	var failureCode;
+	var fillIndex;
+	var length;
+	var lineFill;
+	var lineWidth;
+	var nSegments;
+	var points;
+	var pointsIsArray;
+	var segSize;
+
+
+	/* Fail if we have the wrong number of arguments */
+
+	if (interpreterProxy.methodArgumentCount() !== 5) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	lineFill = interpreterProxy.positive32BitValueOf(interpreterProxy.stackValue(0));
+	lineWidth = interpreterProxy.stackIntegerValue(1);
+	fillIndex = interpreterProxy.positive32BitValueOf(interpreterProxy.stackValue(2));
+	nSegments = interpreterProxy.stackIntegerValue(3);
+	points = interpreterProxy.stackObjectValue(4);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(5), GEStateUnlocked))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	length = SIZEOF(points);
+	if (interpreterProxy.isWords(points)) {
+
+		/* Either PointArray or ShortPointArray */
+
+		pointsIsArray = false;
+		if (!((length === (nSegments * 3)) || (length === (nSegments * 6)))) {
+			return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+		}
+	} else {
+
+		/* Must be Array of points */
+
+		if (!interpreterProxy.isArray(points)) {
+			return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+		}
+		if (length !== (nSegments * 3)) {
+			return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+		}
+		pointsIsArray = true;
+	}
+	if ((lineWidth === 0) || (lineFill === 0)) {
+		segSize = GLBaseSize;
+	} else {
+		segSize = GLWideSize;
+	}
+	if (!needAvailableSpace(segSize * nSegments)) {
+		return interpreterProxy.primitiveFailFor(GEFWorkTooBig);
+	}
+	if (!(isFillOkay(lineFill) && (isFillOkay(fillIndex)))) {
+		return interpreterProxy.primitiveFailFor(GEFWrongFill);
+	}
+	lineFill = transformColor(lineFill);
+	fillIndex = transformColor(fillIndex);
+	if (engineStopped) {
+		return interpreterProxy.primitiveFailFor(GEFEngineStopped);
+	}
+	if (((lineFill === 0) || (lineWidth === 0)) && (fillIndex === 0)) {
+		return interpreterProxy.pop(5);
+	}
+	if (lineWidth !== 0) {
+		lineWidth = transformWidth(lineWidth);
+		if (lineWidth < 1) {
+			lineWidth = 1;
+		}
+	}
+	if (pointsIsArray) {
+		loadArrayShapenSegmentsfilllineWidthlineFill(points, nSegments, fillIndex, lineWidth, lineFill);
+	} else {
+		loadShapenSegmentsfilllineWidthlineFillpointsShort(points.wordsAsInt32Array(), nSegments, fillIndex, lineWidth, lineFill, (nSegments * 3) === length);
+	}
+	if (engineStopped) {
+		return interpreterProxy.primitiveFailFor(GEFEngineStopped);
+	}
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(GEFEntityLoadFailed);
+	}
+	needsFlushPut(1);
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(5);
+}
+
+function primitiveAddBitmapFill() {
+	var cmOop;
+	var dirOop;
+	var failureCode;
+	var fill;
+	var formOop;
+	var nrmOop;
+	var originOop;
+	var tileFlag;
+	var xIndex;
+
+
+	/* Fail if we have the wrong number of arguments */
+
+	if (interpreterProxy.methodArgumentCount() !== 7) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	xIndex = interpreterProxy.stackIntegerValue(0);
+	if (xIndex <= 0) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	nrmOop = interpreterProxy.stackObjectValue(1);
+	dirOop = interpreterProxy.stackObjectValue(2);
+	originOop = interpreterProxy.stackObjectValue(3);
+	tileFlag = interpreterProxy.booleanValueOf(interpreterProxy.stackValue(4));
+	cmOop = interpreterProxy.stackObjectValue(5);
+	formOop = interpreterProxy.stackObjectValue(6);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(7), GEStateUnlocked))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	loadPointfrom(point1Get(), originOop);
+	loadPointfrom(point2Get(), dirOop);
+	loadPointfrom(point3Get(), nrmOop);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(GEFBadPoint);
+	}
+	fill = loadBitmapFillcolormaptilefromalongnormalxIndex(formOop, cmOop, (tileFlag
+		? 1
+		: 0), point1Get(), point2Get(), point3Get(), xIndex - 1);
+	if (engineStopped) {
+
+		/* Make sure the stack is okay */
+
+		return interpreterProxy.primitiveFailFor(GEFEngineStopped);
+	}
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(GEFEntityLoadFailed);
+	}
+	storeEngineStateInto(engine);
+	interpreterProxy.popthenPush(8, interpreterProxy.positive32BitIntegerFor(fill));
+}
+
+function primitiveAddCompressedShape() {
+	var failureCode;
+	var fillIndexList;
+	var leftFills;
+	var lineFills;
+	var lineWidths;
+	var nSegments;
+	var points;
+	var pointsShort;
+	var rightFills;
+
+
+	/* Fail if we have the wrong number of arguments */
+
+	if (interpreterProxy.methodArgumentCount() !== 7) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	fillIndexList = interpreterProxy.stackObjectValue(0);
+	lineFills = interpreterProxy.stackObjectValue(1);
+	lineWidths = interpreterProxy.stackObjectValue(2);
+	rightFills = interpreterProxy.stackObjectValue(3);
+	leftFills = interpreterProxy.stackObjectValue(4);
+	nSegments = interpreterProxy.stackIntegerValue(5);
+	points = interpreterProxy.stackObjectValue(6);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(7), GEStateUnlocked))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	if (!checkCompressedShapesegmentsleftFillsrightFillslineWidthslineFillsfillIndexList(points, nSegments, leftFills, rightFills, lineWidths, lineFills, fillIndexList)) {
+		return interpreterProxy.primitiveFailFor(GEFEntityCheckFailed);
+	}
+	if (!needAvailableSpace(Math.max(GBBaseSize, GLBaseSize) * nSegments)) {
+		return interpreterProxy.primitiveFailFor(GEFWorkTooBig);
+	}
+
+	/* Then actually load the compressed shape */
+
+	pointsShort = SIZEOF(points) === (nSegments * 3);
+	loadCompressedShapesegmentsleftFillsrightFillslineWidthslineFillsfillIndexListpointShort(points.wordsAsInt32Array(), nSegments, leftFills.wordsAsInt32Array(), rightFills.wordsAsInt32Array(), lineWidths.wordsAsInt32Array(), lineFills.wordsAsInt32Array(), fillIndexList.wordsAsInt32Array(), pointsShort);
+	if (engineStopped) {
+		return interpreterProxy.primitiveFailFor(GEFEngineStopped);
+	}
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(GEFEntityLoadFailed);
+	}
+	needsFlushPut(1);
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(7);
+}
+
+function primitiveAddGradientFill() {
+	var dirOop;
+	var failureCode;
+	var fill;
+	var isRadial;
+	var nrmOop;
+	var originOop;
+	var rampOop;
+
+
+	/* Fail if we have the wrong number of arguments */
+
+	if (interpreterProxy.methodArgumentCount() !== 5) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	isRadial = interpreterProxy.booleanValueOf(interpreterProxy.stackValue(0));
+	nrmOop = interpreterProxy.stackValue(1);
+	dirOop = interpreterProxy.stackValue(2);
+	originOop = interpreterProxy.stackValue(3);
+	rampOop = interpreterProxy.stackValue(4);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(5), GEStateUnlocked))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	loadPointfrom(point1Get(), originOop);
+	loadPointfrom(point2Get(), dirOop);
+	loadPointfrom(point3Get(), nrmOop);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(GEFBadPoint);
+	}
+	fill = loadGradientFillfromalongnormalisRadial(rampOop, point1Get(), point2Get(), point3Get(), isRadial);
+	if (engineStopped) {
+
+		/* Make sure the stack is okay */
+
+		return interpreterProxy.primitiveFailFor(GEFEngineStopped);
+	}
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(GEFEntityLoadFailed);
+	}
+	storeEngineStateInto(engine);
+	interpreterProxy.popthenPush(6, interpreterProxy.positive32BitIntegerFor(fill));
+}
+
+function primitiveAddLine() {
+	var endOop;
+	var failureCode;
+	var leftFill;
+	var rightFill;
+	var startOop;
+
+
+	/* Fail if we have the wrong number of arguments */
+
+	if (interpreterProxy.methodArgumentCount() !== 4) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	rightFill = interpreterProxy.positive32BitValueOf(interpreterProxy.stackValue(0));
+	leftFill = interpreterProxy.positive32BitValueOf(interpreterProxy.stackValue(1));
+	endOop = interpreterProxy.stackObjectValue(2);
+	startOop = interpreterProxy.stackObjectValue(3);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(4), GEStateUnlocked))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	if (!(isFillOkay(leftFill) && (isFillOkay(rightFill)))) {
+		return interpreterProxy.primitiveFailFor(GEFWrongFill);
+	}
+	loadPointfrom(point1Get(), startOop);
+	loadPointfrom(point2Get(), endOop);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(GEFBadPoint);
+	}
+	transformPoints(2);
+	leftFill = transformColor(leftFill);
+	rightFill = transformColor(rightFill);
+	if (engineStopped) {
+		return interpreterProxy.primitiveFailFor(GEFEngineStopped);
+	}
+	loadWideLinefromtolineFillleftFillrightFill(0, point1Get(), point2Get(), 0, leftFill, rightFill);
+	if (engineStopped) {
+		return interpreterProxy.primitiveFailFor(GEFEngineStopped);
+	}
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(GEFEntityLoadFailed);
+	}
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(4);
+}
+
+function primitiveAddOval() {
+	var borderIndex;
+	var borderWidth;
+	var endOop;
+	var failureCode;
+	var fillIndex;
+	var startOop;
+
+
+	/* Fail if we have the wrong number of arguments */
+
+	if (interpreterProxy.methodArgumentCount() !== 5) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	borderIndex = interpreterProxy.positive32BitValueOf(interpreterProxy.stackValue(0));
+	borderWidth = interpreterProxy.stackIntegerValue(1);
+	fillIndex = interpreterProxy.positive32BitValueOf(interpreterProxy.stackValue(2));
+	endOop = interpreterProxy.stackObjectValue(3);
+	startOop = interpreterProxy.stackObjectValue(4);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(5), GEStateUnlocked))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	if (!(isFillOkay(borderIndex) && (isFillOkay(fillIndex)))) {
+		return interpreterProxy.primitiveFailFor(GEFWrongFill);
+	}
+	fillIndex = transformColor(fillIndex);
+	borderIndex = transformColor(borderIndex);
+	if (engineStopped) {
+		return interpreterProxy.primitiveFailFor(GEFEngineStopped);
+	}
+	if ((fillIndex === 0) && ((borderIndex === 0) || (borderWidth <= 0))) {
+		return interpreterProxy.pop(5);
+	}
+	if (!needAvailableSpace(16 * GBBaseSize)) {
+		return interpreterProxy.primitiveFailFor(GEFWorkTooBig);
+	}
+	if ((borderWidth > 0) && (borderIndex !== 0)) {
+		borderWidth = transformWidth(borderWidth);
+	} else {
+		borderWidth = 0;
+	}
+	loadPointfrom(point1Get(), startOop);
+	loadPointfrom(point2Get(), endOop);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(GEFBadPoint);
+	}
+	loadOvallineFillleftFillrightFill(borderWidth, borderIndex, 0, fillIndex);
+	if (engineStopped) {
+		wbStackClear();
+		return interpreterProxy.primitiveFailFor(GEFEngineStopped);
+	}
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(GEFEntityLoadFailed);
+	}
+	needsFlushPut(1);
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(5);
+}
+
+function primitiveAddPolygon() {
+	var failureCode;
+	var fillIndex;
+	var length;
+	var lineFill;
+	var lineWidth;
+	var nPoints;
+	var points;
+	var pointsIsArray;
+	var segSize;
+
+
+	/* Fail if we have the wrong number of arguments */
+
+	if (interpreterProxy.methodArgumentCount() !== 5) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	lineFill = interpreterProxy.positive32BitValueOf(interpreterProxy.stackValue(0));
+	lineWidth = interpreterProxy.stackIntegerValue(1);
+	fillIndex = interpreterProxy.positive32BitValueOf(interpreterProxy.stackValue(2));
+	nPoints = interpreterProxy.stackIntegerValue(3);
+	points = interpreterProxy.stackObjectValue(4);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(5), GEStateUnlocked))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	length = SIZEOF(points);
+	if (interpreterProxy.isWords(points)) {
+
+		/* Either PointArray or ShortPointArray */
+
+		pointsIsArray = false;
+		if (!((length === nPoints) || ((nPoints * 2) === length))) {
+			return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+		}
+	} else {
+
+		/* Must be Array of points */
+
+		if (!interpreterProxy.isArray(points)) {
+			return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+		}
+		if (length !== nPoints) {
+			return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+		}
+		pointsIsArray = true;
+	}
+	if ((lineWidth === 0) || (lineFill === 0)) {
+		segSize = GLBaseSize;
+	} else {
+		segSize = GLWideSize;
+	}
+	if (!needAvailableSpace(segSize * nPoints)) {
+		return interpreterProxy.primitiveFail();
+	}
+	if (!(isFillOkay(lineFill) && (isFillOkay(fillIndex)))) {
+		return interpreterProxy.primitiveFailFor(GEFWrongFill);
+	}
+	lineFill = transformColor(lineFill);
+	fillIndex = transformColor(fillIndex);
+	if (engineStopped) {
+		return interpreterProxy.primitiveFailFor(GEFEngineStopped);
+	}
+	if (((lineFill === 0) || (lineWidth === 0)) && (fillIndex === 0)) {
+		return interpreterProxy.pop(5);
+	}
+	if (lineWidth !== 0) {
+		lineWidth = transformWidth(lineWidth);
+	}
+	if (pointsIsArray) {
+		loadArrayPolygonnPointsfilllineWidthlineFill(points, nPoints, fillIndex, lineWidth, lineFill);
+	} else {
+		loadPolygonnPointsfilllineWidthlineFillpointsShort(points.wordsAsInt32Array(), nPoints, fillIndex, lineWidth, lineFill, nPoints === length);
+	}
+	if (engineStopped) {
+		return interpreterProxy.primitiveFailFor(GEFEngineStopped);
+	}
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(GEFEntityLoadFailed);
+	}
+	needsFlushPut(1);
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(5);
+}
+
+function primitiveAddRect() {
+	var borderIndex;
+	var borderWidth;
+	var endOop;
+	var failureCode;
+	var fillIndex;
+	var startOop;
+
+
+	/* Fail if we have the wrong number of arguments */
+
+	if (interpreterProxy.methodArgumentCount() !== 5) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	borderIndex = interpreterProxy.positive32BitValueOf(interpreterProxy.stackValue(0));
+	borderWidth = interpreterProxy.stackIntegerValue(1);
+	fillIndex = interpreterProxy.positive32BitValueOf(interpreterProxy.stackValue(2));
+	endOop = interpreterProxy.stackObjectValue(3);
+	startOop = interpreterProxy.stackObjectValue(4);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(5), GEStateUnlocked))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	if (!(isFillOkay(borderIndex) && (isFillOkay(fillIndex)))) {
+		return interpreterProxy.primitiveFailFor(GEFWrongFill);
+	}
+	borderIndex = transformColor(borderIndex);
+	fillIndex = transformColor(fillIndex);
+	if (engineStopped) {
+		return interpreterProxy.primitiveFailFor(GEFEngineStopped);
+	}
+	if ((fillIndex === 0) && ((borderIndex === 0) || (borderWidth === 0))) {
+		return interpreterProxy.pop(5);
+	}
+	if (!needAvailableSpace(4 * GLBaseSize)) {
+		return interpreterProxy.primitiveFailFor(GEFWorkTooBig);
+	}
+	if ((borderWidth > 0) && (borderIndex !== 0)) {
+		borderWidth = transformWidth(borderWidth);
+	} else {
+		borderWidth = 0;
+	}
+	loadPointfrom(point1Get(), startOop);
+	loadPointfrom(point3Get(), endOop);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(GEFBadPoint);
+	}
+	point2Get()[0] = point3Get()[0];
+	point2Get()[1] = point1Get()[1];
+	point4Get()[0] = point1Get()[0];
+	point4Get()[1] = point3Get()[1];
+	transformPoints(4);
+	loadRectanglelineFillleftFillrightFill(borderWidth, borderIndex, 0, fillIndex);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(GEFEntityLoadFailed);
+	}
+	needsFlushPut(1);
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(5);
+}
+
+
+/*	Note: No need to load either bitBlt or spanBuffer */
+
+function primitiveChangedActiveEdgeEntry() {
+	var edge;
+	var edgeOop;
+	var failureCode;
+
+	if (doProfileStats) {
+		geProfileTime = interpreterProxy.ioMicroMSecs();
+	}
+	if (interpreterProxy.methodArgumentCount() !== 1) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(1), GEStateWaitingChange))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	edgeOop = interpreterProxy.stackObjectValue(0);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	edge = loadEdgeStateFrom(edgeOop);
+	if (!edge) {
+		return interpreterProxy.primitiveFailFor(GEFEdgeDataTooSmall);
+	}
+	if (edgeNumLinesOf(edge) === 0) {
+		removeFirstAETEntry();
+	} else {
+		resortFirstAETEntry();
+		aetStartPut(aetStartGet() + 1);
+	}
+	statePut(GEStateUpdateEdges);
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(1);
+	if (doProfileStats) {
+		incrementStatby(GWCountChangeAETEntry, 1);
+		incrementStatby(GWTimeChangeAETEntry, interpreterProxy.ioMicroMSecs() - geProfileTime);
+	}
+}
+
+function primitiveCopyBuffer() {
+	var buf1;
+	var buf2;
+	var diff;
+	var dst;
+	var failCode;
+	var i;
+	var src;
+	var iLimiT;
+
+	if (interpreterProxy.methodArgumentCount() !== 2) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	buf2 = interpreterProxy.stackValue(0);
+
+	/* Make sure the old buffer is properly initialized */
+
+	buf1 = interpreterProxy.stackValue(1);
+	if (((failCode = loadWorkBufferFrom(buf1))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failCode);
+	}
+	if (CLASSOF(buf1) !== CLASSOF(buf2)) {
+		return interpreterProxy.primitiveFailFor(GEFClassMismatch);
+	}
+	diff = SIZEOF(buf2) - SIZEOF(buf1);
+	if (diff < 0) {
+		return interpreterProxy.primitiveFailFor(GEFSizeMismatch);
+	}
+	src = workBuffer;
+	dst = buf2.wordsAsInt32Array();
+	for (i = 0, iLimiT = (wbTopGet() - 1); i <= iLimiT; i++) {
+		dst[i] = src[i];
+	}
+	dst[GWBufferTop] = (wbTopGet() + diff);
+	dst[GWSize] = (wbSizeGet() + diff);
+	src = PTR_ADD(src, wbTopGet());
+	dst = PTR_ADD(dst, wbTopGet() + diff);
+	for (i = 0, iLimiT = ((wbSizeGet() - wbTopGet()) - 1); i <= iLimiT; i++) {
+		dst[i] = src[i];
+	}
+	if (((failCode = loadWorkBufferFrom(buf2))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failCode);
+	}
+	interpreterProxy.pop(2);
+}
+
+
+/*	Note: Must load bitBlt and spanBuffer */
+
+function primitiveDisplaySpanBuffer() {
+	var failureCode;
+
+	if (doProfileStats) {
+		geProfileTime = interpreterProxy.ioMicroMSecs();
+	}
+	if (interpreterProxy.methodArgumentCount() !== 0) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(0), GEStateBlitBuffer))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	if (((failureCode = loadSpanBufferFrom(interpreterProxy.fetchPointerofObject(BESpanIndex, engine)))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	if (!loadBitBltFrom(interpreterProxy.fetchPointerofObject(BEBitBltIndex, engine))) {
+		return interpreterProxy.primitiveFailFor(GEFBitBltLoadFailed);
+	}
+	if ((currentYGet() & aaScanMaskGet()) === aaScanMaskGet()) {
+		displaySpanBufferAt(currentYGet());
+		postDisplayAction();
+	}
+	if (!finishedProcessing()) {
+		aetStartPut(0);
+		currentYPut(currentYGet() + 1);
+		statePut(GEStateUpdateEdges);
+	}
+	storeEngineStateInto(engine);
+	if (doProfileStats) {
+		incrementStatby(GWCountDisplaySpan, 1);
+		incrementStatby(GWTimeDisplaySpan, interpreterProxy.ioMicroMSecs() - geProfileTime);
+	}
+}
+
+
+/*	Turn on/off profiling. Return the old value of the flag. */
+
+function primitiveDoProfileStats() {
+	var newValue;
+	var oldValue;
+
+	oldValue = doProfileStats;
+	newValue = interpreterProxy.stackObjectValue(0);
+	newValue = interpreterProxy.booleanValueOf(newValue);
+	if (!interpreterProxy.failed()) {
+		doProfileStats = newValue;
+		interpreterProxy.pop(2);
+		interpreterProxy.pushBool(oldValue);
+	}
+}
+
+function primitiveFinishedProcessing() {
+	var failureCode;
+	var finished;
+
+	if (doProfileStats) {
+		geProfileTime = interpreterProxy.ioMicroMSecs();
+	}
+	if (interpreterProxy.methodArgumentCount() !== 0) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFrom(interpreterProxy.stackValue(0)))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	finished = finishedProcessing();
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(1);
+	interpreterProxy.pushBool(finished);
+	if (doProfileStats) {
+		incrementStatby(GWCountFinishTest, 1);
+		incrementStatby(GWTimeFinishTest, interpreterProxy.ioMicroMSecs() - geProfileTime);
+	}
+}
+
+function primitiveGetAALevel() {
+	var failureCode;
+
+	if (interpreterProxy.methodArgumentCount() !== 0) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFrom(interpreterProxy.stackValue(0)))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	interpreterProxy.pop(1);
+	interpreterProxy.pushInteger(aaLevelGet());
+}
+
+function primitiveGetBezierStats() {
+	var failureCode;
+	var statOop;
+	var stats;
+
+	if (interpreterProxy.methodArgumentCount() !== 1) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFrom(interpreterProxy.stackValue(1)))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	statOop = interpreterProxy.stackObjectValue(0);
+	if (!(!interpreterProxy.failed() && (interpreterProxy.isWords(statOop) && (SIZEOF(statOop) >= 4)))) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	stats = statOop.wordsAsInt32Array();
+	stats[0] = (stats[0] + workBuffer[GWBezierMonotonSubdivisions]);
+	stats[1] = (stats[1] + workBuffer[GWBezierHeightSubdivisions]);
+	stats[2] = (stats[2] + workBuffer[GWBezierOverflowSubdivisions]);
+	stats[3] = (stats[3] + workBuffer[GWBezierLineConversions]);
+	interpreterProxy.pop(1);
+}
+
+function primitiveGetClipRect() {
+	var failureCode;
+	var pointOop;
+	var rectOop;
+
+	if (interpreterProxy.methodArgumentCount() !== 1) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFrom(interpreterProxy.stackValue(1)))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	rectOop = interpreterProxy.stackObjectValue(0);
+	if (!(!interpreterProxy.failed() && (interpreterProxy.isPointers(rectOop) && (SIZEOF(rectOop) >= 2)))) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	interpreterProxy.pushRemappableOop(rectOop);
+	pointOop = interpreterProxy.makePointwithxValueyValue(clipMinXGet(), clipMinYGet());
+	interpreterProxy.storePointerofObjectwithValue(0, interpreterProxy.topRemappableOop(), pointOop);
+	pointOop = interpreterProxy.makePointwithxValueyValue(clipMaxXGet(), clipMaxYGet());
+	rectOop = interpreterProxy.popRemappableOop();
+	interpreterProxy.storePointerofObjectwithValue(1, rectOop, pointOop);
+	interpreterProxy.popthenPush(2, rectOop);
+}
+
+function primitiveGetCounts() {
+	var failureCode;
+	var statOop;
+	var stats;
+
+	if (interpreterProxy.methodArgumentCount() !== 1) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFrom(interpreterProxy.stackValue(1)))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	statOop = interpreterProxy.stackObjectValue(0);
+	if (!(!interpreterProxy.failed() && (interpreterProxy.isWords(statOop) && (SIZEOF(statOop) >= 9)))) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	stats = statOop.wordsAsInt32Array();
+	stats[0] = (stats[0] + workBuffer[GWCountInitializing]);
+	stats[1] = (stats[1] + workBuffer[GWCountFinishTest]);
+	stats[2] = (stats[2] + workBuffer[GWCountNextGETEntry]);
+	stats[3] = (stats[3] + workBuffer[GWCountAddAETEntry]);
+	stats[4] = (stats[4] + workBuffer[GWCountNextFillEntry]);
+	stats[5] = (stats[5] + workBuffer[GWCountMergeFill]);
+	stats[6] = (stats[6] + workBuffer[GWCountDisplaySpan]);
+	stats[7] = (stats[7] + workBuffer[GWCountNextAETEntry]);
+	stats[8] = (stats[8] + workBuffer[GWCountChangeAETEntry]);
+	interpreterProxy.pop(1);
+}
+
+function primitiveGetDepth() {
+	var failureCode;
+
+	if (interpreterProxy.methodArgumentCount() !== 0) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFrom(interpreterProxy.stackValue(0)))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	interpreterProxy.pop(1);
+	interpreterProxy.pushInteger(currentZGet());
+}
+
+
+/*	Return the reason why the last operation failed. */
+
+function primitiveGetFailureReason() {
+	var failCode;
+
+	if (interpreterProxy.methodArgumentCount() !== 0) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+
+	/* Note -- don't call loadEngineFrom here because this will override the stopReason with Zero */
+
+	engine = interpreterProxy.stackValue(0);
+	if (typeof engine === "number") {
+		return interpreterProxy.primitiveFailFor(GEFEngineIsInteger);
+	}
+	if (!interpreterProxy.isPointers(engine)) {
+		return interpreterProxy.primitiveFailFor(GEFEngineIsWords);
+	}
+	if (SIZEOF(engine) < BEBalloonEngineSize) {
+		return interpreterProxy.primitiveFailFor(GEFEngineTooSmall);
+	}
+	if (((failCode = loadWorkBufferFrom(interpreterProxy.fetchPointerofObject(BEWorkBufferIndex, engine)))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failCode);
+	}
+	interpreterProxy.pop(1);
+	interpreterProxy.pushInteger(stopReasonGet());
+}
+
+function primitiveGetOffset() {
+	var failureCode;
+	var pointOop;
+
+	if (interpreterProxy.methodArgumentCount() !== 0) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFrom(interpreterProxy.stackValue(0)))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	pointOop = interpreterProxy.makePointwithxValueyValue(destOffsetXGet(), destOffsetYGet());
+	interpreterProxy.popthenPush(1, pointOop);
+}
+
+function primitiveGetTimes() {
+	var failureCode;
+	var statOop;
+	var stats;
+
+	if (interpreterProxy.methodArgumentCount() !== 1) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFrom(interpreterProxy.stackValue(1)))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	statOop = interpreterProxy.stackObjectValue(0);
+	if (!(!interpreterProxy.failed() && (interpreterProxy.isWords(statOop) && (SIZEOF(statOop) >= 9)))) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	stats = statOop.wordsAsInt32Array();
+	stats[0] = (stats[0] + workBuffer[GWTimeInitializing]);
+	stats[1] = (stats[1] + workBuffer[GWTimeFinishTest]);
+	stats[2] = (stats[2] + workBuffer[GWTimeNextGETEntry]);
+	stats[3] = (stats[3] + workBuffer[GWTimeAddAETEntry]);
+	stats[4] = (stats[4] + workBuffer[GWTimeNextFillEntry]);
+	stats[5] = (stats[5] + workBuffer[GWTimeMergeFill]);
+	stats[6] = (stats[6] + workBuffer[GWTimeDisplaySpan]);
+	stats[7] = (stats[7] + workBuffer[GWTimeNextAETEntry]);
+	stats[8] = (stats[8] + workBuffer[GWTimeChangeAETEntry]);
+	interpreterProxy.pop(1);
+}
+
+function primitiveInitializeBuffer() {
+	var size;
+	var wbOop;
+
+	if (interpreterProxy.methodArgumentCount() !== 1) {
+		return interpreterProxy.primitiveFail();
+	}
+	wbOop = interpreterProxy.stackObjectValue(0);
+	if (interpreterProxy.failed()) {
+		return null;
+	}
+	if (!interpreterProxy.isWords(wbOop)) {
+		return interpreterProxy.primitiveFail();
+	}
+	if (((size = SIZEOF(wbOop))) < GWMinimalSize) {
+		return interpreterProxy.primitiveFail();
+	}
+	workBufferPut(wbOop);
+	objBuffer = PTR_ADD(workBuffer, GWHeaderSize);
+	magicNumberPut(GWMagicNumber);
+	wbSizePut(size);
+	wbTopPut(size);
+	statePut(GEStateUnlocked);
+	objStartPut(GWHeaderSize);
+	objUsedPut(4);
+	objectTypeOfput(0, GEPrimitiveFill);
+	objectLengthOfput(0, 4);
+	objectIndexOfput(0, 0);
+	getStartPut(0);
+	getUsedPut(0);
+	aetStartPut(0);
+	aetUsedPut(0);
+	stopReasonPut(0);
+	needsFlushPut(0);
+	clipMinXPut(0);
+	clipMaxXPut(0);
+	clipMinYPut(0);
+	clipMaxYPut(0);
+	currentZPut(0);
+	resetGraphicsEngineStats();
+	initEdgeTransform();
+	initColorTransform();
+	interpreterProxy.pop(2);
+	interpreterProxy.push(wbOop);
+}
+
+
+/*	Note: No need to load bitBlt but must load spanBuffer */
+
+function primitiveInitializeProcessing() {
+	var failureCode;
+
+	if (doProfileStats) {
+		geProfileTime = interpreterProxy.ioMicroMSecs();
+	}
+	if (interpreterProxy.methodArgumentCount() !== 0) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(0), GEStateUnlocked))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	if (((failureCode = loadSpanBufferFrom(interpreterProxy.fetchPointerofObject(BESpanIndex, engine)))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	initializeGETProcessing();
+	if (engineStopped) {
+		return interpreterProxy.primitiveFailFor(GEFEngineStopped);
+	}
+	statePut(GEStateAddingFromGET);
+	if (!interpreterProxy.failed()) {
+		storeEngineStateInto(engine);
+	}
+	if (doProfileStats) {
+		incrementStatby(GWCountInitializing, 1);
+		incrementStatby(GWTimeInitializing, interpreterProxy.ioMicroMSecs() - geProfileTime);
+	}
+}
+
+
+/*	Note: No need to load bitBlt but must load spanBuffer */
+
+function primitiveMergeFillFrom() {
+	var bitsOop;
+	var failureCode;
+	var fillOop;
+	var value;
+
+	if (doProfileStats) {
+		geProfileTime = interpreterProxy.ioMicroMSecs();
+	}
+	if (interpreterProxy.methodArgumentCount() !== 2) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(2), GEStateWaitingForFill))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	if (((failureCode = loadSpanBufferFrom(interpreterProxy.fetchPointerofObject(BESpanIndex, engine)))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	fillOop = interpreterProxy.stackObjectValue(0);
+
+	/* Check bitmap */
+
+	bitsOop = interpreterProxy.stackObjectValue(1);
+	if (!(!interpreterProxy.failed() && (CLASSOF(bitsOop) === interpreterProxy.classBitmap()))) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	if (SIZEOF(fillOop) < FTBalloonFillDataSize) {
+		return interpreterProxy.primitiveFailFor(GEFFillDataTooSmall);
+	}
+	value = interpreterProxy.fetchIntegerofObject(FTIndexIndex, fillOop);
+	if (objectIndexOf(lastExportedFillGet()) !== value) {
+		return interpreterProxy.primitiveFailFor(GEFWrongFill);
+	}
+	value = interpreterProxy.fetchIntegerofObject(FTMinXIndex, fillOop);
+	if (lastExportedLeftXGet() !== value) {
+		return interpreterProxy.primitiveFailFor(GEFWrongFill);
+	}
+	value = interpreterProxy.fetchIntegerofObject(FTMaxXIndex, fillOop);
+	if (lastExportedRightXGet() !== value) {
+		return interpreterProxy.primitiveFailFor(GEFWrongFill);
+	}
+	if (SIZEOF(bitsOop) < (lastExportedRightXGet() - lastExportedLeftXGet())) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	if (interpreterProxy.failed()) {
+		return null;
+	}
+	fillBitmapSpanfromto(bitsOop.wordsAsInt32Array(), lastExportedLeftXGet(), lastExportedRightXGet());
+	statePut(GEStateScanningAET);
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(2);
+	if (doProfileStats) {
+		incrementStatby(GWCountMergeFill, 1);
+		incrementStatby(GWTimeMergeFill, interpreterProxy.ioMicroMSecs() - geProfileTime);
+	}
+}
+
+function primitiveNeedsFlush() {
+	var failureCode;
+	var needFlush;
+
+	if (interpreterProxy.methodArgumentCount() !== 0) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFrom(interpreterProxy.stackValue(0)))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	needFlush = needsFlush();
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(1);
+	interpreterProxy.pushBool(needFlush);
+}
+
+function primitiveNeedsFlushPut() {
+	var failureCode;
+	var needFlush;
+
+	if (interpreterProxy.methodArgumentCount() !== 1) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFrom(interpreterProxy.stackValue(1)))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	needFlush = interpreterProxy.booleanValueOf(interpreterProxy.stackValue(0));
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	if (needFlush === true) {
+		needsFlushPut(1);
+	} else {
+		needsFlushPut(0);
+	}
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(1);
+}
+
+
+/*	Note: No need to load either bitBlt or spanBuffer */
+
+function primitiveNextActiveEdgeEntry() {
+	var edge;
+	var edgeOop;
+	var failureCode;
+	var hasEdge;
+
+	if (doProfileStats) {
+		geProfileTime = interpreterProxy.ioMicroMSecs();
+	}
+	if (interpreterProxy.methodArgumentCount() !== 1) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredStateor(interpreterProxy.stackValue(1), GEStateUpdateEdges, GEStateCompleted))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	edgeOop = interpreterProxy.stackObjectValue(0);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	hasEdge = false;
+	if (stateGet() !== GEStateCompleted) {
+		hasEdge = findNextExternalUpdateFromAET();
+		if (hasEdge) {
+			edge = aetBuffer[aetStartGet()];
+			storeEdgeStateFrominto(edge, edgeOop);
+			statePut(GEStateWaitingChange);
+		} else {
+			statePut(GEStateAddingFromGET);
+		}
+	}
+	if (interpreterProxy.failed()) {
+		return null;
+	}
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(2);
+	interpreterProxy.pushBool(!hasEdge);
+	if (doProfileStats) {
+		incrementStatby(GWCountNextAETEntry, 1);
+		incrementStatby(GWTimeNextAETEntry, interpreterProxy.ioMicroMSecs() - geProfileTime);
+	}
+}
+
+
+/*	Note: No need to load bitBlt but must load spanBuffer */
+
+function primitiveNextFillEntry() {
+	var failureCode;
+	var fillOop;
+	var hasFill;
+
+	if (doProfileStats) {
+		geProfileTime = interpreterProxy.ioMicroMSecs();
+	}
+	if (interpreterProxy.methodArgumentCount() !== 1) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(1), GEStateScanningAET))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	if (((failureCode = loadSpanBufferFrom(interpreterProxy.fetchPointerofObject(BESpanIndex, engine)))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	if (!loadFormsFrom(interpreterProxy.fetchPointerofObject(BEFormsIndex, engine))) {
+		return interpreterProxy.primitiveFailFor(GEFFormLoadFailed);
+	}
+	if (clearSpanBufferGet() !== 0) {
+		if ((currentYGet() & aaScanMaskGet()) === 0) {
+			clearSpanBuffer();
+		}
+		clearSpanBufferPut(0);
+	}
+	fillOop = interpreterProxy.stackObjectValue(0);
+	hasFill = findNextExternalFillFromAET();
+	if (engineStopped) {
+		return interpreterProxy.primitiveFailFor(GEFEngineStopped);
+	}
+	if (hasFill) {
+		storeFillStateInto(fillOop);
+	}
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(GEFWrongFill);
+	}
+	if (hasFill) {
+		statePut(GEStateWaitingForFill);
+	} else {
+		wbStackClear();
+		spanEndAAPut(0);
+		statePut(GEStateBlitBuffer);
+	}
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(2);
+	interpreterProxy.pushBool(!hasFill);
+	if (doProfileStats) {
+		incrementStatby(GWCountNextFillEntry, 1);
+		incrementStatby(GWTimeNextFillEntry, interpreterProxy.ioMicroMSecs() - geProfileTime);
+	}
+}
+
+
+/*	Note: No need to load either bitBlt or spanBuffer */
+
+function primitiveNextGlobalEdgeEntry() {
+	var edge;
+	var edgeOop;
+	var failureCode;
+	var hasEdge;
+
+	if (doProfileStats) {
+		geProfileTime = interpreterProxy.ioMicroMSecs();
+	}
+	if (interpreterProxy.methodArgumentCount() !== 1) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(1), GEStateAddingFromGET))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	edgeOop = interpreterProxy.stackObjectValue(0);
+	hasEdge = findNextExternalEntryFromGET();
+	if (hasEdge) {
+		edge = getBuffer[getStartGet()];
+		storeEdgeStateFrominto(edge, edgeOop);
+		getStartPut(getStartGet() + 1);
+	}
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(GEFWrongEdge);
+	}
+	if (hasEdge) {
+		statePut(GEStateWaitingForEdge);
+	} else {
+
+		/* Start scanning the AET */
+
+		statePut(GEStateScanningAET);
+		clearSpanBufferPut(1);
+		aetStartPut(0);
+		wbStackClear();
+	}
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(2);
+	interpreterProxy.pushBool(!hasEdge);
+	if (doProfileStats) {
+		incrementStatby(GWCountNextGETEntry, 1);
+		incrementStatby(GWTimeNextGETEntry, interpreterProxy.ioMicroMSecs() - geProfileTime);
+	}
+}
+
+function primitiveRegisterExternalEdge() {
+	var edge;
+	var failureCode;
+	var index;
+	var initialX;
+	var initialY;
+	var initialZ;
+	var leftFillIndex;
+	var rightFillIndex;
+
+	if (interpreterProxy.methodArgumentCount() !== 6) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(6), GEStateUnlocked))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	rightFillIndex = interpreterProxy.positive32BitValueOf(interpreterProxy.stackValue(0));
+	leftFillIndex = interpreterProxy.positive32BitValueOf(interpreterProxy.stackValue(1));
+	initialZ = interpreterProxy.stackIntegerValue(2);
+	initialY = interpreterProxy.stackIntegerValue(3);
+	initialX = interpreterProxy.stackIntegerValue(4);
+	index = interpreterProxy.stackIntegerValue(5);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	if (!allocateObjEntry(GEBaseEdgeSize)) {
+		return interpreterProxy.primitiveFailFor(GEFWorkTooBig);
+	}
+	if (!(isFillOkay(leftFillIndex) && (isFillOkay(rightFillIndex)))) {
+		return interpreterProxy.primitiveFailFor(GEFWrongFill);
+	}
+	edge = objUsed;
+
+	/* Install type and length */
+
+	objUsed = edge + GEBaseEdgeSize;
+	objectTypeOfput(edge, GEPrimitiveEdge);
+	objectLengthOfput(edge, GEBaseEdgeSize);
+	objectIndexOfput(edge, index);
+	edgeXValueOfput(edge, initialX);
+	edgeYValueOfput(edge, initialY);
+	edgeZValueOfput(edge, initialZ);
+	edgeLeftFillOfput(edge, transformColor(leftFillIndex));
+	edgeRightFillOfput(edge, transformColor(rightFillIndex));
+	if (engineStopped) {
+		return interpreterProxy.primitiveFailFor(GEFEngineStopped);
+	}
+	if (!interpreterProxy.failed()) {
+		storeEngineStateInto(engine);
+		interpreterProxy.pop(6);
+	}
+}
+
+function primitiveRegisterExternalFill() {
+	var failureCode;
+	var fill;
+	var index;
+
+	if (interpreterProxy.methodArgumentCount() !== 1) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(1), GEStateUnlocked))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	index = interpreterProxy.stackIntegerValue(0);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	fill = 0;
+	while (fill === 0) {
+		if (!allocateObjEntry(GEBaseEdgeSize)) {
+			return interpreterProxy.primitiveFailFor(GEFWorkTooBig);
+		}
+		fill = objUsed;
+
+		/* Install type and length */
+
+		objUsed = fill + GEBaseFillSize;
+		objectTypeOfput(fill, GEPrimitiveFill);
+		objectLengthOfput(fill, GEBaseFillSize);
+		objectIndexOfput(fill, index);
+	}
+	if (!interpreterProxy.failed()) {
+		storeEngineStateInto(engine);
+		interpreterProxy.pop(2);
+		interpreterProxy.pushInteger(fill);
+	}
+}
+
+
+/*	Start/Proceed rendering the entire image */
+
+function primitiveRenderImage() {
+	var failCode;
+
+	if (((failCode = loadRenderingState())) !== 0) {
+		return interpreterProxy.primitiveFailFor(failCode);
+	}
+	proceedRenderingScanline();
+	if (engineStopped) {
+		return storeRenderingState();
+	}
+	proceedRenderingImage();
+	storeRenderingState();
+}
+
+
+/*	Start rendering the entire image */
+
+function primitiveRenderScanline() {
+	var failCode;
+
+	if (((failCode = loadRenderingState())) !== 0) {
+		return interpreterProxy.primitiveFailFor(failCode);
+	}
+	proceedRenderingScanline();
+	storeRenderingState();
+}
+
+function primitiveSetAALevel() {
+	var failureCode;
+	var level;
+
+	if (interpreterProxy.methodArgumentCount() !== 1) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(1), GEStateUnlocked))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	level = interpreterProxy.stackIntegerValue(0);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	setAALevel(level);
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(1);
+}
+
+
+/*	Primitive. Set the BitBlt plugin to use. */
+
+function primitiveSetBitBltPlugin() {
+	var i;
+	var length;
+	var needReload;
+	var pluginName;
+	var ptr;
+
+
+	/* Must be string to work */
+
+	pluginName = interpreterProxy.stackValue(0);
+	if (!interpreterProxy.isBytes(pluginName)) {
+		return interpreterProxy.primitiveFail();
+	}
+	length = BYTESIZEOF(pluginName);
+	if (length >= 256) {
+		return interpreterProxy.primitiveFail();
+	}
+	ptr = pluginName.bytes;
+	needReload = false;
+	for (i = 0; i <= (length - 1); i++) {
+
+		/* Compare and store the plugin to be used */
+
+		if (bbPluginName[i] !== ptr[i]) {
+			bbPluginName[i] = ptr[i];
+			needReload = true;
+		}
+	}
+	if (bbPluginName[length] !== 0) {
+		bbPluginName[length] = 0;
+		needReload = true;
+	}
+	if (needReload) {
+		if (!initialiseModule()) {
+			return interpreterProxy.primitiveFail();
+		}
+	}
+	interpreterProxy.pop(1);
+}
+
+function primitiveSetClipRect() {
+	var failureCode;
+	var rectOop;
+
+	if (interpreterProxy.methodArgumentCount() !== 1) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(1), GEStateUnlocked))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	rectOop = interpreterProxy.stackObjectValue(0);
+	if (!(!interpreterProxy.failed() && (interpreterProxy.isPointers(rectOop) && (SIZEOF(rectOop) >= 2)))) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	loadPointfrom(point1Get(), interpreterProxy.fetchPointerofObject(0, rectOop));
+	loadPointfrom(point2Get(), interpreterProxy.fetchPointerofObject(1, rectOop));
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	clipMinXPut(point1Get()[0]);
+	clipMinYPut(point1Get()[1]);
+	clipMaxXPut(point2Get()[0]);
+	clipMaxYPut(point2Get()[1]);
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(1);
+}
+
+function primitiveSetColorTransform() {
+	var failureCode;
+	var transformOop;
+
+	if (interpreterProxy.methodArgumentCount() !== 1) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(1), GEStateUnlocked))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	transformOop = interpreterProxy.stackObjectValue(0);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	loadColorTransformFrom(transformOop);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(GEFEntityLoadFailed);
+	}
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(1);
+}
+
+function primitiveSetDepth() {
+	var depth;
+	var failureCode;
+
+	if (interpreterProxy.methodArgumentCount() !== 1) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(1), GEStateUnlocked))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	depth = interpreterProxy.stackIntegerValue(0);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	currentZPut(depth);
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(1);
+}
+
+function primitiveSetEdgeTransform() {
+	var failureCode;
+	var transformOop;
+
+	if (interpreterProxy.methodArgumentCount() !== 1) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(1), GEStateUnlocked))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	transformOop = interpreterProxy.stackObjectValue(0);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	loadEdgeTransformFrom(transformOop);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(1);
+}
+
+function primitiveSetOffset() {
+	var failureCode;
+	var pointOop;
+
+	if (interpreterProxy.methodArgumentCount() !== 1) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadNumArgs);
+	}
+	if (((failureCode = quickLoadEngineFromrequiredState(interpreterProxy.stackValue(1), GEStateUnlocked))) !== 0) {
+		return interpreterProxy.primitiveFailFor(failureCode);
+	}
+	pointOop = interpreterProxy.stackValue(0);
+	if (CLASSOF(pointOop) !== interpreterProxy.classPoint()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	loadPointfrom(point1Get(), pointOop);
+	if (interpreterProxy.failed()) {
+		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
+	}
+	destOffsetXPut(point1Get()[0]);
+	destOffsetYPut(point1Get()[1]);
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(1);
+}
+
+
+/*	This is the main rendering entry */
+
+function proceedRenderingImage() {
+	var external;
+
+	while (!(finishedProcessing())) {
+		if (doProfileStats) {
+			geProfileTime = interpreterProxy.ioMicroMSecs();
+		}
+		external = findNextExternalEntryFromGET();
+		if (doProfileStats) {
+			incrementStatby(GWCountNextGETEntry, 1);
+			incrementStatby(GWTimeNextGETEntry, interpreterProxy.ioMicroMSecs() - geProfileTime);
+		}
+		if (engineStopped) {
+			return statePut(GEStateAddingFromGET);
+		}
+		if (external) {
+			statePut(GEStateWaitingForEdge);
+			return stopBecauseOf(GErrorGETEntry);
+		}
+		aetStartPut(0);
+		wbStackClear();
+		clearSpanBufferPut(1);
+		if (doProfileStats) {
+			geProfileTime = interpreterProxy.ioMicroMSecs();
+		}
+		if ((clearSpanBufferGet() !== 0) && ((currentYGet() & aaScanMaskGet()) === 0)) {
+			clearSpanBuffer();
+		}
+		clearSpanBufferPut(0);
+		external = findNextExternalFillFromAET();
+		if (doProfileStats) {
+			incrementStatby(GWCountNextFillEntry, 1);
+			incrementStatby(GWTimeNextFillEntry, interpreterProxy.ioMicroMSecs() - geProfileTime);
+		}
+		if (engineStopped) {
+			return statePut(GEStateScanningAET);
+		}
+		if (external) {
+			statePut(GEStateWaitingForFill);
+			return stopBecauseOf(GErrorFillEntry);
+		}
+		wbStackClear();
+		spanEndAAPut(0);
+		if (doProfileStats) {
+			geProfileTime = interpreterProxy.ioMicroMSecs();
+		}
+		if ((currentYGet() & aaScanMaskGet()) === aaScanMaskGet()) {
+			displaySpanBufferAt(currentYGet());
+			postDisplayAction();
+		}
+		if (doProfileStats) {
+			incrementStatby(GWCountDisplaySpan, 1);
+			incrementStatby(GWTimeDisplaySpan, interpreterProxy.ioMicroMSecs() - geProfileTime);
+		}
+		if (engineStopped) {
+			return statePut(GEStateBlitBuffer);
+		}
+		if (finishedProcessing()) {
+			return 0;
+		}
+		aetStartPut(0);
+		currentYPut(currentYGet() + 1);
+		if (doProfileStats) {
+			geProfileTime = interpreterProxy.ioMicroMSecs();
+		}
+		external = findNextExternalUpdateFromAET();
+		if (doProfileStats) {
+			incrementStatby(GWCountNextAETEntry, 1);
+			incrementStatby(GWTimeNextAETEntry, interpreterProxy.ioMicroMSecs() - geProfileTime);
+		}
+		if (engineStopped) {
+			return statePut(GEStateUpdateEdges);
+		}
+		if (external) {
+			statePut(GEStateWaitingChange);
+			return stopBecauseOf(GErrorAETEntry);
+		}
+	}
+}
+
+
+/*	Proceed rendering the current scan line.
+	This method may be called after some Smalltalk code has been executed inbetween. */
+/*	This is the main rendering entry */
+
+function proceedRenderingScanline() {
+	var external;
+	var state;
+
+	state = stateGet();
+	if (state === GEStateUnlocked) {
+		initializeGETProcessing();
+		if (engineStopped) {
+			return 0;
+		}
+		state = GEStateAddingFromGET;
+	}
+	if (state === GEStateAddingFromGET) {
+		if (doProfileStats) {
+			geProfileTime = interpreterProxy.ioMicroMSecs();
+		}
+		external = findNextExternalEntryFromGET();
+		if (doProfileStats) {
+			incrementStatby(GWCountNextGETEntry, 1);
+			incrementStatby(GWTimeNextGETEntry, interpreterProxy.ioMicroMSecs() - geProfileTime);
+		}
+		if (engineStopped) {
+			return statePut(GEStateAddingFromGET);
+		}
+		if (external) {
+			statePut(GEStateWaitingForEdge);
+			return stopBecauseOf(GErrorGETEntry);
+		}
+		aetStartPut(0);
+		wbStackClear();
+		clearSpanBufferPut(1);
+		state = GEStateScanningAET;
+	}
+	if (state === GEStateScanningAET) {
+		if (doProfileStats) {
+			geProfileTime = interpreterProxy.ioMicroMSecs();
+		}
+		if ((clearSpanBufferGet() !== 0) && ((currentYGet() & aaScanMaskGet()) === 0)) {
+			clearSpanBuffer();
+		}
+		clearSpanBufferPut(0);
+		external = findNextExternalFillFromAET();
+		if (doProfileStats) {
+			incrementStatby(GWCountNextFillEntry, 1);
+			incrementStatby(GWTimeNextFillEntry, interpreterProxy.ioMicroMSecs() - geProfileTime);
+		}
+		if (engineStopped) {
+			return statePut(GEStateScanningAET);
+		}
+		if (external) {
+			statePut(GEStateWaitingForFill);
+			return stopBecauseOf(GErrorFillEntry);
+		}
+		state = GEStateBlitBuffer;
+		wbStackClear();
+		spanEndAAPut(0);
+	}
+	if (state === GEStateBlitBuffer) {
+		if (doProfileStats) {
+			geProfileTime = interpreterProxy.ioMicroMSecs();
+		}
+		if ((currentYGet() & aaScanMaskGet()) === aaScanMaskGet()) {
+			displaySpanBufferAt(currentYGet());
+			postDisplayAction();
+		}
+		if (doProfileStats) {
+			incrementStatby(GWCountDisplaySpan, 1);
+			incrementStatby(GWTimeDisplaySpan, interpreterProxy.ioMicroMSecs() - geProfileTime);
+		}
+		if (engineStopped) {
+			return statePut(GEStateBlitBuffer);
+		}
+		if (finishedProcessing()) {
+			return 0;
+		}
+		state = GEStateUpdateEdges;
+		aetStartPut(0);
+		currentYPut(currentYGet() + 1);
+	}
+	if (state === GEStateUpdateEdges) {
+		if (doProfileStats) {
+			geProfileTime = interpreterProxy.ioMicroMSecs();
+		}
+		external = findNextExternalUpdateFromAET();
+		if (doProfileStats) {
+			incrementStatby(GWCountNextAETEntry, 1);
+			incrementStatby(GWTimeNextAETEntry, interpreterProxy.ioMicroMSecs() - geProfileTime);
+		}
+		if (engineStopped) {
+			return statePut(GEStateUpdateEdges);
+		}
+		if (external) {
+			statePut(GEStateWaitingChange);
+			return stopBecauseOf(GErrorAETEntry);
+		}
+		statePut(GEStateAddingFromGET);
+	}
+}
+
+
+/*	Load the minimal required state from the engineOop, e.g., just the work buffer.
+	 Answer 0 on success or non-zero a failure code on failure */
+
+function quickLoadEngineFrom(engineOop) {
+	var failCode;
+
+	if (interpreterProxy.failed()) {
+		return GEFAlreadyFailed;
+	}
+	if (typeof engineOop === "number") {
+		return GEFEngineIsInteger;
+	}
+	if (!interpreterProxy.isPointers(engineOop)) {
+		return GEFEngineIsWords;
+	}
+	if (SIZEOF(engineOop) < BEBalloonEngineSize) {
+		return GEFEngineTooSmall;
+	}
+	engine = engineOop;
+	if (((failCode = loadWorkBufferFrom(interpreterProxy.fetchPointerofObject(BEWorkBufferIndex, engineOop)))) !== 0) {
+		return failCode;
+	}
+	stopReasonPut(0);
+	objUsed = objUsedGet();
+	engineStopped = false;
+	return 0;
+}
+
+function quickLoadEngineFromrequiredState(oop, requiredState) {
+	var failureCode;
+
+	if (((failureCode = quickLoadEngineFrom(oop))) !== 0) {
+		return failureCode;
+	}
+	if (stateGet() === requiredState) {
+		return 0;
+	}
+	stopReasonPut(GErrorBadState);
+	return GEFWrongState;
+}
+
+function quickLoadEngineFromrequiredStateor(oop, requiredState, alternativeState) {
+	var failureCode;
+
+	if (((failureCode = quickLoadEngineFrom(oop))) !== 0) {
+		return failureCode;
+	}
+	if (stateGet() === requiredState) {
+		return 0;
+	}
+	if (stateGet() === alternativeState) {
+		return 0;
+	}
+	stopReasonPut(GErrorBadState);
+	return GEFWrongState;
+}
+
+
+/*	Remove any top fills if they have become invalid. */
+
+function quickRemoveInvalidFillsAt(leftX) {
+	if (stackFillSize() === 0) {
+		return null;
+	}
+	while (topRightX() <= leftX) {
+		hideFilldepth(topFill(), topDepth());
+		if (stackFillSize() === 0) {
+			return null;
+		}
+	}
+}
+
+
+/*	Sort elements i through j of self to be nondescending according to
+	sortBlock. */
+/*	Note: The original loop has been heavily re-written for C translation */
+
+function quickSortGlobalEdgeTablefromto(array, i, j) {
+	var again;
+	var before;
+	var di;
+	var dij;
+	var dj;
+	var ij;
+	var k;
+	var l;
+	var n;
+	var tmp;
+	var tt;
+
+
+	/* The prefix d means the data at that index. */
+
+	if (((n = (j + 1) - i)) <= 1) {
+		return 0;
+	}
+	di = array[i];
+	dj = array[j];
+
+	/* i.e., should di precede dj? */
+
+	before = getSortsbefore(di, dj);
+	if (!before) {
+		tmp = array[i];
+		array[i] = array[j];
+		array[j] = tmp;
+		tt = di;
+		di = dj;
+		dj = tt;
+	}
+	if (n <= 2) {
+		return 0;
+	}
+
+	/* ij is the midpoint of i and j. */
+
+	ij = (i + j) >> 1;
+
+	/* Sort di,dij,dj.  Make dij be their median. */
+
+	dij = array[ij];
+
+	/* i.e. should di precede dij? */
+
+	before = getSortsbefore(di, dij);
+	if (before) {
+
+		/* i.e., should dij precede dj? */
+
+		before = getSortsbefore(dij, dj);
+		if (!before) {
+
+			/* i.e., should dij precede dj? */
+
+			tmp = array[j];
+			array[j] = array[ij];
+			array[ij] = tmp;
+			dij = dj;
+		}
+	} else {
+
+		/* i.e. di should come after dij */
+
+		tmp = array[i];
+		array[i] = array[ij];
+		array[ij] = tmp;
+		dij = di;
+	}
+	if (n <= 3) {
+		return 0;
+	}
+	k = i;
+	l = j;
+	again = true;
+	while (again) {
+		before = true;
+		while (before) {
+			if (k <= ((--l))) {
+				tmp = array[l];
+				before = getSortsbefore(dij, tmp);
+			} else {
+				before = false;
+			}
+		}
+		before = true;
+		while (before) {
+			if (((++k)) <= l) {
+				tmp = array[k];
+				before = getSortsbefore(tmp, dij);
+			} else {
+				before = false;
+			}
+		}
+		again = k <= l;
+		if (again) {
+			tmp = array[k];
+			array[k] = array[l];
+			array[l] = tmp;
+		}
+	}
+	quickSortGlobalEdgeTablefromto(array, i, l);
+	quickSortGlobalEdgeTablefromto(array, k, j);
+}
+
+function rShiftTable() {
+	var theTable =
+		[0, 5, 4, 0, 3, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1];
+
+	return theTable;
+}
+
+function removeFirstAETEntry() {
+	var index;
+
+	index = aetStartGet();
+	aetUsedPut(aetUsedGet() - 1);
+	while (index < aetUsedGet()) {
+		aetBuffer[index] = aetBuffer[index + 1];
+		++index;
+	}
+}
+
+function repeatValuemax(delta, maxValue) {
+	var newDelta;
+
+	newDelta = delta;
+	while (newDelta < 0) {
+		newDelta += maxValue;
+	}
+	while (newDelta >= maxValue) {
+		newDelta -= maxValue;
+	}
+	return newDelta;
+}
+
+function resetGraphicsEngineStats() {
+	workBuffer[GWTimeInitializing] = 0;
+	workBuffer[GWTimeFinishTest] = 0;
+	workBuffer[GWTimeNextGETEntry] = 0;
+	workBuffer[GWTimeAddAETEntry] = 0;
+	workBuffer[GWTimeNextFillEntry] = 0;
+	workBuffer[GWTimeMergeFill] = 0;
+	workBuffer[GWTimeDisplaySpan] = 0;
+	workBuffer[GWTimeNextAETEntry] = 0;
+	workBuffer[GWTimeChangeAETEntry] = 0;
+	workBuffer[GWCountInitializing] = 0;
+	workBuffer[GWCountFinishTest] = 0;
+	workBuffer[GWCountNextGETEntry] = 0;
+	workBuffer[GWCountAddAETEntry] = 0;
+	workBuffer[GWCountNextFillEntry] = 0;
+	workBuffer[GWCountMergeFill] = 0;
+	workBuffer[GWCountDisplaySpan] = 0;
+	workBuffer[GWCountNextAETEntry] = 0;
+	workBuffer[GWCountChangeAETEntry] = 0;
+	workBuffer[GWBezierMonotonSubdivisions] = 0;
+	workBuffer[GWBezierHeightSubdivisions] = 0;
+	workBuffer[GWBezierOverflowSubdivisions] = 0;
+	workBuffer[GWBezierLineConversions] = 0;
+}
+
+function resortFirstAETEntry() {
+	var edge;
+	var leftEdge;
+	var xValue;
+
+	if (aetStartGet() === 0) {
+		return null;
+	}
+	edge = aetBuffer[aetStartGet()];
+	xValue = edgeXValueOf(edge);
+	leftEdge = aetBuffer[aetStartGet() - 1];
+	if (edgeXValueOf(leftEdge) <= xValue) {
+		return null;
+	}
+	moveAETEntryFromedgex(aetStartGet(), edge, xValue);
+}
+
+function returnWideBezierFill() {
+	return (dispatchReturnValue = wideBezierFillOf(dispatchedValue));
+}
+
+function returnWideBezierWidth() {
+	return (dispatchReturnValue = wideBezierWidthOf(dispatchedValue));
+}
+
+
+/*	Return the fill of the (wide) line - this method is called from a case. */
+
+function returnWideLineFill() {
+	return (dispatchReturnValue = wideLineFillOf(dispatchedValue));
+}
+
+
+/*	Return the width of the (wide) line - this method is called from a case. */
+
+function returnWideLineWidth() {
+	return (dispatchReturnValue = wideLineWidthOf(dispatchedValue));
+}
+
+
+/*	Set the anti-aliasing level. Three levels are supported:
+		1 - No antialiasing
+		2 - 2x2 unweighted anti-aliasing
+		4 - 4x4 unweighted anti-aliasing.
+	 */
+
+function setAALevel(level) {
+	var aaLevel;
+
+	if (level >= 4) {
+		aaLevel = 4;
+	}
+	if ((level >= 2) && (level < 4)) {
+		aaLevel = 2;
+	}
+	if (level < 2) {
+		aaLevel = 1;
+	}
+	aaLevelPut(aaLevel);
+	if (aaLevel === 1) {
+		aaShiftPut(0);
+		aaColorMaskPut(4294967295);
+		aaScanMaskPut(0);
+	}
+	if (aaLevel === 2) {
+		aaShiftPut(1);
+		aaColorMaskPut(4244438268);
+		aaScanMaskPut(1);
+	}
+	if (aaLevel === 4) {
+		aaShiftPut(2);
+		aaColorMaskPut(4042322160);
+		aaScanMaskPut(3);
+	}
+	aaColorShiftPut(aaShiftGet() * 2);
+	aaHalfPixelPut(aaShiftGet());
+}
+
+
+/*	Note: This is coded so that is can be run from Squeak. */
+
+function setInterpreter(anInterpreter) {
+	var ok;
+
+	interpreterProxy = anInterpreter;
+	ok = interpreterProxy.majorVersion() == VM_PROXY_MAJOR;
+	if (ok === false) {
+		return false;
+	}
+	ok = interpreterProxy.minorVersion() >= VM_PROXY_MINOR;
+	return ok;
+}
+
+
+/*	Return the run-length value from the given ShortRunArray. */
+
+function shortRunLengthAtfrom(i, runArray) {
+	return (runArray[i]|0) >>> 16;
+}
+
+
+/*	Return the run-length value from the given ShortRunArray.
+	Note: We don't need any coercion to short/int here, since
+	we deal basically only with unsigned values. */
+
+function shortRunValueAtfrom(i, runArray) {
+	return (runArray[i]|0) & 65535;
+}
+
+function showFilldepthrightX(fillIndex, depth, rightX) {
+	if (!allocateStackFillEntry()) {
+		return null;
+	}
+	stackFillValueput(0, fillIndex);
+	stackFillDepthput(0, depth);
+	stackFillRightXput(0, rightX);
+	if (stackFillSize() === stackFillEntryLength()) {
+		return null;
+	}
+	if (fillSortsbefore(0, stackFillSize() - stackFillEntryLength())) {
+
+		/* New top fill */
+
+		stackFillValueput(0, topFillValue());
+		stackFillDepthput(0, topFillDepth());
+		stackFillRightXput(0, topFillRightX());
+		topFillValuePut(fillIndex);
+		topFillDepthPut(depth);
+		topFillRightXPut(rightX);
+	}
+}
+
+function smallSqrtTable() {
+	var theTable = 
+	[0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6];
+
+	return theTable;
+}
+
+
+/*	Sort the entire global edge table */
+
+function sortGlobalEdgeTable() {
+	quickSortGlobalEdgeTablefromto(getBuffer, 0, getUsedGet() - 1);
+}
+
+function spanEndAAGet() {
+	return workBuffer[GWSpanEndAA];
+}
+
+function spanEndAAPut(value) {
+	return workBuffer[GWSpanEndAA] = value;
+}
+
+function spanEndGet() {
+	return workBuffer[GWSpanEnd];
+}
+
+function spanEndPut(value) {
+	return workBuffer[GWSpanEnd] = value;
+}
+
+function spanSizeGet() {
+	return workBuffer[GWSpanSize];
+}
+
+function spanSizePut(value) {
+	return workBuffer[GWSpanSize] = value;
+}
+
+function spanStartGet() {
+	return workBuffer[GWSpanStart];
+}
+
+function spanStartPut(value) {
+	return workBuffer[GWSpanStart] = value;
+}
+
+function squaredLengthOfwith(deltaX, deltaY) {
+	return (deltaX * deltaX) + (deltaY * deltaY);
+}
+
+function stackFillDepth(index) {
+	return wbStackValue(index + 1);
+}
+
+function stackFillDepthput(index, value) {
+	return wbStackValueput(index + 1, value);
+}
+
+function stackFillEntryLength() {
+	return 3;
+}
+
+function stackFillRightX(index) {
+	return wbStackValue(index + 2);
+}
+
+function stackFillRightXput(index, value) {
+	return wbStackValueput(index + 2, value);
+}
+
+function stackFillSize() {
+	return wbStackSize();
+}
+
+function stackFillValue(index) {
+	return wbStackValue(index);
+}
+
+function stackFillValueput(index, value) {
+	return wbStackValueput(index, value);
+}
+
+function stateGet() {
+	return workBuffer[GWState];
+}
+
+function statePut(value) {
+	return workBuffer[GWState] = value;
+}
+
+
+/*	Initialize the current entry in the GET by stepping to the current scan line */
+
+function stepToFirstBezier() {
+	return stepToFirstBezierInat(getBuffer[getStartGet()], currentYGet());
+}
+
+
+/*	Initialize the bezier at yValue.
+	TODO: Check if reducing maxSteps from 2*deltaY to deltaY 
+		brings a *significant* performance improvement.
+		In theory this should make for double step performance
+		but will cost in quality. Might be that the AA stuff will
+		compensate for this - but I'm not really sure. */
+
+function stepToFirstBezierInat(bezier, yValue) {
+	var deltaY;
+	var endX;
+	var endY;
+	var fwDDx;
+	var fwDDy;
+	var fwDx;
+	var fwDy;
+	var fwX1;
+	var fwX2;
+	var fwY1;
+	var fwY2;
+	var maxSteps;
+	var scaledStepSize;
+	var squaredStepSize;
+	var startX;
+	var startY;
+	var updateData;
+	var viaX;
+	var viaY;
+
+
+	/* Do a quick check if there is anything at all to do */
+
+	if (!isWide(bezier) && (yValue >= bezierEndYOf(bezier))) {
+		return edgeNumLinesOfput(bezier, 0);
+	}
+	startX = edgeXValueOf(bezier);
+	startY = edgeYValueOf(bezier);
+	viaX = bezierViaXOf(bezier);
+	viaY = bezierViaYOf(bezier);
+	endX = bezierEndXOf(bezier);
+	endY = bezierEndYOf(bezier);
+
+	/* Initialize integer forward differencing */
+
+	deltaY = endY - startY;
+	fwX1 = (viaX - startX) * 2;
+	fwX2 = (startX + endX) - (viaX * 2);
+	fwY1 = (viaY - startY) * 2;
+	fwY2 = (startY + endY) - (viaY * 2);
+	maxSteps = deltaY * 2;
+	if (maxSteps < 2) {
+		maxSteps = 2;
+	}
+	scaledStepSize = DIV(16777216, maxSteps);
+	squaredStepSize = absoluteSquared8Dot24(scaledStepSize);
+	fwDx = fwX1 * scaledStepSize;
+	fwDDx = (fwX2 * squaredStepSize) * 2;
+	fwDx += fwDDx >> 1;
+	fwDy = fwY1 * scaledStepSize;
+	fwDDy = (fwY2 * squaredStepSize) * 2;
+
+	/* Store the values */
+
+	fwDy += fwDDy >> 1;
+	edgeNumLinesOfput(bezier, deltaY);
+	updateData = bezierUpdateDataOf(bezier);
+	updateData[GBUpdateX] = (startX * 256);
+	updateData[GBUpdateY] = (startY * 256);
+	updateData[GBUpdateDX] = fwDx;
+	updateData[GBUpdateDY] = fwDy;
+	updateData[GBUpdateDDX] = fwDDx;
+	updateData[GBUpdateDDY] = fwDDy;
+	if (((startY = edgeYValueOf(bezier))) !== yValue) {
+		stepToNextBezierInat(bezier, yValue);
+		edgeNumLinesOfput(bezier, deltaY - (yValue - startY));
+	}
+}
+
+
+/*	Initialize the current entry in the GET by stepping to the current scan line */
+
+function stepToFirstLine() {
+	return stepToFirstLineInat(getBuffer[getStartGet()], currentYGet());
+}
+
+
+/*	Initialize the line at yValue */
+
+function stepToFirstLineInat(line, yValue) {
+	var deltaX;
+	var deltaY;
+	var error;
+	var errorAdjUp;
+	var i;
+	var startY;
+	var widthX;
+	var xDir;
+	var xInc;
+
+
+	/* Do a quick check if there is anything at all to do */
+
+	if (!isWide(line) && (yValue >= lineEndYOf(line))) {
+		return edgeNumLinesOfput(line, 0);
+	}
+	deltaX = lineEndXOf(line) - edgeXValueOf(line);
+
+	/* Check if edge goes left to right */
+
+	deltaY = lineEndYOf(line) - edgeYValueOf(line);
+	if (deltaX >= 0) {
+		xDir = 1;
+		widthX = deltaX;
+		error = 0;
+	} else {
+		xDir = -1;
+		widthX = 0 - deltaX;
+		error = 1 - deltaY;
+	}
+	if (deltaY === 0) {
+
+		/* No error for horizontal edges */
+
+		error = 0;
+
+		/* Encodes width and direction */
+
+		xInc = deltaX;
+		errorAdjUp = 0;
+	} else {
+
+		/* Check if edge is y-major */
+
+		if (deltaY > widthX) {
+
+			/* Note: The '>' instead of '>=' could be important here... */
+
+			xInc = 0;
+			errorAdjUp = widthX;
+		} else {
+			xInc = (DIV(widthX, deltaY)) * xDir;
+			errorAdjUp = MOD(widthX, deltaY);
+		}
+	}
+	edgeNumLinesOfput(line, deltaY);
+	lineXDirectionOfput(line, xDir);
+	lineXIncrementOfput(line, xInc);
+	lineErrorOfput(line, error);
+	lineErrorAdjUpOfput(line, errorAdjUp);
+	lineErrorAdjDownOfput(line, deltaY);
+	if (((startY = edgeYValueOf(line))) !== yValue) {
+		for (i = startY; i <= (yValue - 1); i++) {
+			stepToNextLineInat(line, i);
+		}
+		edgeNumLinesOfput(line, deltaY - (yValue - startY));
+	}
+}
+
+
+/*	Initialize the current entry in the GET by stepping to the current scan line */
+
+function stepToFirstWideBezier() {
+	return stepToFirstWideBezierInat(getBuffer[getStartGet()], currentYGet());
+}
+
+
+/*	Initialize the bezier at yValue */
+
+function stepToFirstWideBezierInat(bezier, yValue) {
+	var endX;
+	var i;
+	var lineOffset;
+	var lineWidth;
+	var nLines;
+	var startY;
+	var xDir;
+	var yEntry;
+	var yExit;
+
+
+	/* Get some values */
+
+	lineWidth = wideBezierExtentOf(bezier);
+
+	/* Compute the incremental values of the bezier */
+
+	lineOffset = offsetFromWidth(lineWidth);
+	endX = bezierEndXOf(bezier);
+	startY = edgeYValueOf(bezier);
+	stepToFirstBezierInat(bezier, startY);
+
+	/* Copy the incremental update data */
+
+	nLines = edgeNumLinesOf(bezier);
+	for (i = 0; i <= 5; i++) {
+		wideBezierUpdateDataOf(bezier)[i] = bezierUpdateDataOf(bezier)[i];
+	}
+	xDir = bezierUpdateDataOf(bezier)[GBUpdateDX];
+	if (xDir === 0) {
+		bezierUpdateDataOf(bezier)[GBUpdateDDX];
+	}
+	if (xDir >= 0) {
+		xDir = 1;
+	} else {
+		xDir = -1;
+	}
+	if (xDir < 0) {
+		adjustWideBezierLeftwidthoffsetendX(bezier, lineWidth, lineOffset, endX);
+	} else {
+		adjustWideBezierRightwidthoffsetendX(bezier, lineWidth, lineOffset, endX);
+	}
+	if (nLines === 0) {
+		bezierUpdateDataOf(bezier)[GBUpdateX] = (bezierFinalXOf(bezier) * 256);
+	}
+	edgeNumLinesOfput(bezier, nLines + lineWidth);
+
+	/* turned on at lineOffset */
+
+	yEntry = 0;
+
+	/* turned off at zero */
+
+	yExit = (0 - nLines) - lineOffset;
+	wideBezierEntryOfput(bezier, yEntry);
+	wideBezierExitOfput(bezier, yExit);
+	if ((yEntry >= lineOffset) && (yExit < 0)) {
+		edgeFillsValidate(bezier);
+	} else {
+		edgeFillsInvalidate(bezier);
+	}
+	computeFinalWideBezierValueswidth(bezier, lineWidth);
+	if (startY !== yValue) {
+
+		/* Note: Must single step here so that entry/exit works */
+
+		for (i = startY; i <= (yValue - 1); i++) {
+			stepToNextWideBezierInat(bezier, i);
+		}
+		edgeNumLinesOfput(bezier, edgeNumLinesOf(bezier) - (yValue - startY));
+	}
+}
+
+
+/*	Initialize the current entry in the GET by stepping to the current scan line */
+
+function stepToFirstWideLine() {
+	return stepToFirstWideLineInat(getBuffer[getStartGet()], currentYGet());
+}
+
+
+/*	Initialize the wide line at yValue. */
+
+function stepToFirstWideLineInat(line, yValue) {
+	var i;
+	var lineOffset;
+	var lineWidth;
+	var nLines;
+	var startX;
+	var startY;
+	var xDir;
+	var yEntry;
+	var yExit;
+
+
+	/* Get some values */
+
+	lineWidth = wideLineExtentOf(line);
+
+	/* Compute the incremental values of the line */
+
+	lineOffset = offsetFromWidth(lineWidth);
+	startX = edgeXValueOf(line);
+	startY = edgeYValueOf(line);
+	stepToFirstLineInat(line, startY);
+	nLines = edgeNumLinesOf(line);
+
+	/* Adjust the line to start at the correct X position */
+
+	xDir = lineXDirectionOf(line);
+	edgeXValueOfput(line, startX - lineOffset);
+	edgeNumLinesOfput(line, nLines + lineWidth);
+	if (xDir > 0) {
+		wideLineWidthOfput(line, lineXIncrementOf(line) + lineWidth);
+	} else {
+		wideLineWidthOfput(line, lineWidth - lineXIncrementOf(line));
+		edgeXValueOfput(line, edgeXValueOf(line) + lineXIncrementOf(line));
+	}
+
+	/* turned on at lineOffset */
+
+	yEntry = 0;
+
+	/* turned off at zero */
+
+	yExit = (0 - nLines) - lineOffset;
+	wideLineEntryOfput(line, yEntry);
+	wideLineExitOfput(line, yExit);
+	if ((yEntry >= lineOffset) && (yExit < 0)) {
+		edgeFillsValidate(line);
+	} else {
+		edgeFillsInvalidate(line);
+	}
+	if (startY !== yValue) {
+		for (i = startY; i <= (yValue - 1); i++) {
+			stepToNextWideLineInat(line, i);
+		}
+		edgeNumLinesOfput(line, edgeNumLinesOf(line) - (yValue - startY));
+	}
+}
+
+
+/*	Process the current entry in the AET by stepping to the next scan line */
+
+function stepToNextBezier() {
+	return stepToNextBezierInat(aetBuffer[aetStartGet()], currentYGet());
+}
+
+
+/*	Incrementally step to the next scan line in the given bezier update data. */
+
+function stepToNextBezierForwardat(updateData, yValue) {
+	var fwDx;
+	var fwDy;
+	var lastX;
+	var lastY;
+	var minY;
+
+	lastX = updateData[GBUpdateX];
+	lastY = updateData[GBUpdateY];
+	fwDx = updateData[GBUpdateDX];
+	fwDy = updateData[GBUpdateDY];
+
+	/* Step as long as we haven't yet reached minY and also
+	as long as fwDy is greater than zero thus stepping down.
+	Note: The test for fwDy should not be necessary in theory
+		but is a good insurance in practice. */
+
+	minY = yValue * 256;
+	while ((minY > lastY) && (fwDy >= 0)) {
+		lastX += (fwDx + 32768) >> 16;
+		lastY += (fwDy + 32768) >> 16;
+		fwDx += updateData[GBUpdateDDX];
+		fwDy += updateData[GBUpdateDDY];
+	}
+	updateData[GBUpdateX] = lastX;
+	updateData[GBUpdateY] = lastY;
+	updateData[GBUpdateDX] = fwDx;
+	updateData[GBUpdateDY] = fwDy;
+	return lastX >> 8;
+}
+
+
+/*	Incrementally step to the next scan line in the given bezier */
+
+function stepToNextBezierInat(bezier, yValue) {
+	var xValue;
+
+	xValue = stepToNextBezierForwardat(bezierUpdateDataOf(bezier), yValue);
+	edgeXValueOfput(bezier, xValue);
+}
+
+
+/*	Process the current entry in the AET by stepping to the next scan line */
+
+function stepToNextLine() {
+	return stepToNextLineInat(aetBuffer[aetStartGet()], currentYGet());
+}
+
+
+/*	Incrementally step to the next scan line in the given line */
+
+function stepToNextLineInat(line, yValue) {
+	var err;
+	var x;
+
+	x = edgeXValueOf(line) + lineXIncrementOf(line);
+	err = lineErrorOf(line) + lineErrorAdjUpOf(line);
+	if (err > 0) {
+		x += lineXDirectionOf(line);
+		err -= lineErrorAdjDownOf(line);
+	}
+	lineErrorOfput(line, err);
+	edgeXValueOfput(line, x);
+}
+
+
+/*	Initialize the current entry in the GET by stepping to the current scan line */
+
+function stepToNextWideBezier() {
+	stepToNextWideBezierInat(aetBuffer[aetStartGet()], currentYGet());
+}
+
+
+/*	Incrementally step to the next scan line in the given wide bezier */
+
+function stepToNextWideBezierInat(bezier, yValue) {
+	var lineOffset;
+	var lineWidth;
+	var yEntry;
+	var yExit;
+
+
+	/* Don't inline this */
+
+	lineWidth = wideBezierExtentOf(bezier);
+	lineOffset = offsetFromWidth(lineWidth);
+	yEntry = wideBezierEntryOf(bezier) + 1;
+	yExit = wideBezierExitOf(bezier) + 1;
+	wideBezierEntryOfput(bezier, yEntry);
+	wideBezierExitOfput(bezier, yExit);
+	if (yEntry >= lineOffset) {
+		edgeFillsValidate(bezier);
+	}
+	if (yExit >= 0) {
+		edgeFillsInvalidate(bezier);
+	}
+	if ((yExit + lineOffset) < 0) {
+		stepToNextBezierForwardat(bezierUpdateDataOf(bezier), yValue);
+	} else {
+
+		/* Adjust the last x value to the final x recorded previously */
+
+		bezierUpdateDataOf(bezier)[GBUpdateX] = (bezierFinalXOf(bezier) * 256);
+	}
+	stepToNextBezierForwardat(wideBezierUpdateDataOf(bezier), yValue);
+	computeFinalWideBezierValueswidth(bezier, lineWidth);
+}
+
+
+/*	Process the current entry in the AET by stepping to the next scan line */
+
+function stepToNextWideLine() {
+	return stepToNextWideLineInat(aetBuffer[aetStartGet()], currentYGet());
+}
+
+
+/*	Incrementally step to the next scan line in the given wide line */
+
+function stepToNextWideLineInat(line, yValue) {
+	var lastX;
+	var lineOffset;
+	var lineWidth;
+	var nextX;
+	var yEntry;
+	var yExit;
+
+
+	/* Adjust entry/exit values */
+
+	yEntry = wideLineEntryOf(line) + 1;
+	yExit = wideLineExitOf(line) + 1;
+	wideLineEntryOfput(line, yEntry);
+	wideLineExitOfput(line, yExit);
+	lineWidth = wideLineExtentOf(line);
+	lineOffset = offsetFromWidth(lineWidth);
+	if (yEntry >= lineOffset) {
+		edgeFillsValidate(line);
+	}
+	if (yExit >= 0) {
+		edgeFillsInvalidate(line);
+	}
+	lastX = edgeXValueOf(line);
+	stepToNextLineInat(line, yValue);
+
+	/* Check for special start/end adjustments */
+
+	nextX = edgeXValueOf(line);
+	if ((yEntry <= lineWidth) || ((yExit + lineOffset) >= 0)) {
+
+		/* Yes, need an update */
+
+		adjustWideLineafterSteppingFromto(line, lastX, nextX);
+	}
+}
+
+function stopBecauseOf(stopReason) {
+	stopReasonPut(stopReason);
+	engineStopped = true;
+}
+
+function stopReasonGet() {
+	return workBuffer[GWStopReason];
+}
+
+function stopReasonPut(value) {
+	return workBuffer[GWStopReason] = value;
+}
+
+function storeEdgeStateFrominto(edge, edgeOop) {
+	if (SIZEOF(edgeOop) < ETBalloonEdgeDataSize) {
+		return interpreterProxy.primitiveFail();
+	}
+	interpreterProxy.storeIntegerofObjectwithValue(ETIndexIndex, edgeOop, objectIndexOf(edge));
+	interpreterProxy.storeIntegerofObjectwithValue(ETXValueIndex, edgeOop, edgeXValueOf(edge));
+	interpreterProxy.storeIntegerofObjectwithValue(ETYValueIndex, edgeOop, currentYGet());
+	interpreterProxy.storeIntegerofObjectwithValue(ETZValueIndex, edgeOop, edgeZValueOf(edge));
+	interpreterProxy.storeIntegerofObjectwithValue(ETLinesIndex, edgeOop, edgeNumLinesOf(edge));
+	lastExportedEdgePut(edge);
+}
+
+function storeEngineStateInto(oop) {
+	objUsedPut(objUsed);
+}
+
+function storeFillStateInto(fillOop) {
+	var fillIndex;
+	var leftX;
+	var rightX;
+
+	fillIndex = lastExportedFillGet();
+	leftX = lastExportedLeftXGet();
+	rightX = lastExportedRightXGet();
+	if (SIZEOF(fillOop) < FTBalloonFillDataSize) {
+		return interpreterProxy.primitiveFail();
+	}
+	interpreterProxy.storeIntegerofObjectwithValue(FTIndexIndex, fillOop, objectIndexOf(fillIndex));
+	interpreterProxy.storeIntegerofObjectwithValue(FTMinXIndex, fillOop, leftX);
+	interpreterProxy.storeIntegerofObjectwithValue(FTMaxXIndex, fillOop, rightX);
+	interpreterProxy.storeIntegerofObjectwithValue(FTYValueIndex, fillOop, currentYGet());
+}
+
+function storeRenderingState() {
+	if (interpreterProxy.failed()) {
+		return null;
+	}
+	if (engineStopped) {
+
+		/* Check the stop reason and store the required information */
+
+		storeStopStateIntoEdgefill(interpreterProxy.stackObjectValue(1), interpreterProxy.stackObjectValue(0));
+	}
+	storeEngineStateInto(engine);
+	interpreterProxy.pop(3);
+	interpreterProxy.pushInteger(stopReasonGet());
+}
+
+function storeStopStateIntoEdgefill(edgeOop, fillOop) {
+	var edge;
+	var reason;
+
+	reason = stopReasonGet();
+	if (reason === GErrorGETEntry) {
+		edge = getBuffer[getStartGet()];
+		storeEdgeStateFrominto(edge, edgeOop);
+		getStartPut(getStartGet() + 1);
+	}
+	if (reason === GErrorFillEntry) {
+		storeFillStateInto(fillOop);
+	}
+	if (reason === GErrorAETEntry) {
+		edge = aetBuffer[aetStartGet()];
+		storeEdgeStateFrominto(edge, edgeOop);
+	}
+}
+
+
+/*	Subdivide the given bezier curve if necessary */
+
+function subdivideBezier(index) {
+	var deltaX;
+	var deltaY;
+	var endX;
+	var endY;
+	var startX;
+	var startY;
+
+	startY = bzStartY(index);
+
+	/* If the receiver is horizontal, don't do anything */
+
+	endY = bzEndY(index);
+	if (endY === startY) {
+		return index;
+	}
+	deltaY = endY - startY;
+	if (deltaY < 0) {
+		deltaY = 0 - deltaY;
+	}
+	if (deltaY > 255) {
+		incrementStatby(GWBezierHeightSubdivisions, 1);
+		return computeBezierSplitAtHalf(index);
+	}
+	startX = bzStartX(index);
+	endX = bzEndX(index);
+	deltaX = endX - startX;
+	if (deltaX < 0) {
+		deltaX = 0 - deltaX;
+	}
+	if ((deltaY * 32) < deltaX) {
+		incrementStatby(GWBezierOverflowSubdivisions, 1);
+		return computeBezierSplitAtHalf(index);
+	}
+	return index;
+}
+
+
+/*	Recursively subdivide the curve on the bezier stack. */
+
+function subdivideBezierFrom(index) {
+	var index1;
+	var index2;
+	var otherIndex;
+
+	otherIndex = subdivideBezier(index);
+	if (otherIndex !== index) {
+		index1 = subdivideBezierFrom(index);
+		if (engineStopped) {
+			return 0;
+		}
+		index2 = subdivideBezierFrom(otherIndex);
+		if (engineStopped) {
+			return 0;
+		}
+		if (index1 >= index2) {
+			return index1;
+		} else {
+			return index2;
+		}
+	}
+	return index;
+}
+
+
+/*	Check if the given bezier curve is monoton in Y, and, if desired in X. 
+	If not, subdivide it */
+
+function subdivideToBeMonotoninX(base, doTestX) {
+	var base2;
+	var index1;
+	var index2;
+
+	base2 = (index1 = (index2 = subdivideToBeMonotonInY(base)));
+	if (doTestX) {
+		index1 = subdivideToBeMonotonInX(base);
+	}
+	if (index1 > index2) {
+		index2 = index1;
+	}
+	if ((base !== base2) && (doTestX)) {
+		index1 = subdivideToBeMonotonInX(base2);
+	}
+	if (index1 > index2) {
+		index2 = index1;
+	}
+	return index2;
+}
+
+
+/*	Check if the given bezier curve is monoton in X. If not, subdivide it */
+
+function subdivideToBeMonotonInX(index) {
+	var denom;
+	var dx1;
+	var dx2;
+	var endX;
+	var num;
+	var startX;
+	var viaX;
+
+	startX = bzStartX(index);
+	viaX = bzViaX(index);
+	endX = bzEndX(index);
+	dx1 = viaX - startX;
+	dx2 = endX - viaX;
+	if ((dx1 * dx2) >= 0) {
+		return index;
+	}
+	incrementStatby(GWBezierMonotonSubdivisions, 1);
+	denom = dx2 - dx1;
+	num = dx1;
+	if (num < 0) {
+		num = 0 - num;
+	}
+	if (denom < 0) {
+		denom = 0 - denom;
+	}
+	return computeBeziersplitAt(index, num / denom);
+}
+
+
+/*	Check if the given bezier curve is monoton in Y. If not, subdivide it */
+
+function subdivideToBeMonotonInY(index) {
+	var denom;
+	var dy1;
+	var dy2;
+	var endY;
+	var num;
+	var startY;
+	var viaY;
+
+	startY = bzStartY(index);
+	viaY = bzViaY(index);
+	endY = bzEndY(index);
+	dy1 = viaY - startY;
+	dy2 = endY - viaY;
+	if ((dy1 * dy2) >= 0) {
+		return index;
+	}
+	incrementStatby(GWBezierMonotonSubdivisions, 1);
+	denom = dy2 - dy1;
+	num = dy1;
+	if (num < 0) {
+		num = 0 - num;
+	}
+	if (denom < 0) {
+		denom = 0 - denom;
+	}
+	return computeBeziersplitAt(index, num / denom);
+}
+
+
+/*	Make the fill style with the given index either visible or invisible */
+
+function toggleFilldepthrightX(fillIndex, depth, rightX) {
+	var hidden;
+
+	if (stackFillSize() === 0) {
+		if (allocateStackFillEntry()) {
+			topFillValuePut(fillIndex);
+			topFillDepthPut(depth);
+			topFillRightXPut(rightX);
+		}
+	} else {
+		hidden = hideFilldepth(fillIndex, depth);
+		if (!hidden) {
+			showFilldepthrightX(fillIndex, depth, rightX);
+		}
+	}
+}
+
+function toggleFillsOf(edge) {
+	var depth;
+	var fillIndex;
+
+	if (!needAvailableSpace(stackFillEntryLength() * 2)) {
+		return null;
+	}
+	depth = edgeZValueOf(edge) << 1;
+	fillIndex = edgeLeftFillOf(edge);
+	if (fillIndex !== 0) {
+		toggleFilldepthrightX(fillIndex, depth, 999999999);
+	}
+	fillIndex = edgeRightFillOf(edge);
+	if (fillIndex !== 0) {
+		toggleFilldepthrightX(fillIndex, depth, 999999999);
+	}
+	quickRemoveInvalidFillsAt(edgeXValueOf(edge));
+}
+
+function toggleWideFillOf(edge) {
+	var depth;
+	var fill;
+	var index;
+	var lineWidth;
+	var rightX;
+	var type;
+
+	type = edgeTypeOf(edge);
+	dispatchedValue = edge;
+	switch (type) {
+	case 0:
+	case 1:
+		errorWrongIndex();
+		break;
+	case 2:
+		returnWideLineWidth();
+		break;
+	case 3:
+		returnWideBezierWidth();
+		break;
+	}
+	lineWidth = dispatchReturnValue;
+	switch (type) {
+	case 0:
+	case 1:
+		errorWrongIndex();
+		break;
+	case 2:
+		returnWideLineFill();
+		break;
+	case 3:
+		returnWideBezierFill();
+		break;
+	}
+	fill = dispatchReturnValue;
+	if (fill === 0) {
+		return null;
+	}
+	if (!needAvailableSpace(stackFillEntryLength())) {
+		return null;
+	}
+
+	/* So lines sort before interior fills */
+
+	depth = (edgeZValueOf(edge) << 1) + 1;
+	rightX = edgeXValueOf(edge) + lineWidth;
+	index = findStackFilldepth(fill, depth);
+	if (index === -1) {
+		showFilldepthrightX(fill, depth, rightX);
+	} else {
+		if (stackFillRightX(index) < rightX) {
+			stackFillRightXput(index, rightX);
+		}
+	}
+	quickRemoveInvalidFillsAt(edgeXValueOf(edge));
+}
+
+function topDepth() {
+	if (stackFillSize() === 0) {
+		return -1;
+	} else {
+		return topFillDepth();
+	}
+}
+
+function topFill() {
+	if (stackFillSize() === 0) {
+		return 0;
+	} else {
+		return topFillValue();
+	}
+}
+
+function topFillDepth() {
+	return stackFillDepth(stackFillSize() - stackFillEntryLength());
+}
+
+function topFillDepthPut(value) {
+	return stackFillDepthput(stackFillSize() - stackFillEntryLength(), value);
+}
+
+function topFillRightX() {
+	return stackFillRightX(stackFillSize() - stackFillEntryLength());
+}
+
+function topFillRightXPut(value) {
+	return stackFillRightXput(stackFillSize() - stackFillEntryLength(), value);
+}
+
+function topFillValue() {
+	return stackFillValue(stackFillSize() - stackFillEntryLength());
+}
+
+function topFillValuePut(value) {
+	return stackFillValueput(stackFillSize() - stackFillEntryLength(), value);
+}
+
+function topRightX() {
+	if (stackFillSize() === 0) {
+		return 999999999;
+	} else {
+		return topFillRightX();
+	}
+}
+
+function transformColor(fillIndex) {
+	var a;
+	var alphaScale;
+	var b;
+	var g;
+	var r;
+	var transform;
+
+	if (!((fillIndex === 0) || (isFillColor(fillIndex)))) {
+		return fillIndex;
+	}
+	b = fillIndex & 255;
+	g = (fillIndex >>> 8) & 255;
+	r = (fillIndex >>> 16) & 255;
+	a = (fillIndex >>> 24) & 255;
+	if (hasColorTransform()) {
+		transform = colorTransform();
+		alphaScale = ((a * transform[6]) + transform[7]) / a;
+		r = ((((r * transform[0]) + transform[1]) * alphaScale)|0);
+		g = ((((g * transform[2]) + transform[3]) * alphaScale)|0);
+		b = ((((b * transform[4]) + transform[5]) * alphaScale)|0);
+		a = a * alphaScale|0;
+		r = Math.max(r, 0);
+		r = Math.min(r, 255);
+		g = Math.max(g, 0);
+		g = Math.min(g, 255);
+		b = Math.max(b, 0);
+		b = Math.min(b, 255);
+		a = Math.max(a, 0);
+		a = Math.min(a, 255);
+	}
+	if (a < 1) {
+		return 0;
+	}
+	if ((a < 255) && (needsFlush())) {
+		stopBecauseOf(GErrorNeedFlush);
+	}
+	return ((b + (g << 8)) + (r << 16)) + (a << 24);
+}
+
+
+/*	Transform the given point. If haveMatrix is true then use the current transformation. */
+
+function transformPoint(point) {
+	if (hasEdgeTransform()) {
+
+		/* Note: AA adjustment is done in #transformPoint: for higher accuracy */
+
+		transformPointinto(point, point);
+	} else {
+
+		/* Multiply each component by aaLevel and add a half pixel */
+
+		point[0] = ((point[0] + destOffsetXGet()) * aaLevelGet());
+		point[1] = ((point[1] + destOffsetYGet()) * aaLevelGet());
+	}
+}
+
+
+/*	Transform srcPoint into dstPoint by using the currently loaded matrix */
+/*	Note: This method has been rewritten so that inlining works (e.g., removing
+	the declarations and adding argument coercions at the appropriate points) */
+
+function transformPointinto(srcPoint, dstPoint) {
+	transformPointXyinto((srcPoint[0]|0), (srcPoint[1]|0), dstPoint);
+}
+
+
+/*	Transform srcPoint into dstPoint by using the currently loaded matrix */
+/*	Note: This should be rewritten so that inlining works (e.g., removing
+	the declarations and adding argument coercions at the appropriate points) */
+
+function transformPointXyinto(xValue, yValue, dstPoint) {
+	var transform;
+	var x;
+	var y;
+
+	transform = edgeTransform();
+	x = (((((transform[0] * xValue) + (transform[1] * yValue)) + transform[2]) * aaLevelGet())|0);
+	y = (((((transform[3] * xValue) + (transform[4] * yValue)) + transform[5]) * aaLevelGet())|0);
+	dstPoint[0] = x;
+	dstPoint[1] = y;
+}
+
+
+/*	Transform n (n=1,2,3) points.
+	If haveMatrix is true then the matrix contains the actual transformation. */
+
+function transformPoints(n) {
+	if (n > 0) {
+		transformPoint(point1Get());
+	}
+	if (n > 1) {
+		transformPoint(point2Get());
+	}
+	if (n > 2) {
+		transformPoint(point3Get());
+	}
+	if (n > 3) {
+		transformPoint(point4Get());
+	}
+}
+
+
+/*	Transform the given width */
+
+function transformWidth(w) {
+	var deltaX;
+	var deltaY;
+	var dstWidth;
+	var dstWidth2;
+
+	if (w === 0) {
+		return 0;
+	}
+	point1Get()[0] = 0;
+	point1Get()[1] = 0;
+	point2Get()[0] = (w * 256);
+	point2Get()[1] = 0;
+	point3Get()[0] = 0;
+	point3Get()[1] = (w * 256);
+	transformPoints(3);
+	deltaX = (point2Get()[0] - point1Get()[0]);
+	deltaY = (point2Get()[1] - point1Get()[1]);
+	dstWidth = ((Math.sqrt((deltaX * deltaX) + (deltaY * deltaY))|0) + 128) >> 8;
+	deltaX = (point3Get()[0] - point1Get()[0]);
+	deltaY = (point3Get()[1] - point1Get()[1]);
+	dstWidth2 = ((Math.sqrt((deltaX * deltaX) + (deltaY * deltaY))|0) + 128) >> 8;
+	if (dstWidth2 < dstWidth) {
+		dstWidth = dstWidth2;
+	}
+	if (dstWidth === 0) {
+		return 1;
+	} else {
+		return dstWidth;
+	}
+}
+
+function uncheckedTransformColor(fillIndex) {
+	var a;
+	var b;
+	var g;
+	var r;
+	var transform;
+
+	if (!hasColorTransform()) {
+		return fillIndex;
+	}
+	b = fillIndex & 255;
+	g = (fillIndex >>> 8) & 255;
+	r = (fillIndex >>> 16) & 255;
+	a = (fillIndex >>> 24) & 255;
+	transform = colorTransform();
+	r = (((r * transform[0]) + transform[1])|0);
+	g = (((g * transform[2]) + transform[3])|0);
+	b = (((b * transform[4]) + transform[5])|0);
+	a = (((a * transform[6]) + transform[7])|0);
+	r = Math.max(r, 0);
+	r = Math.min(r, 255);
+	g = Math.max(g, 0);
+	g = Math.min(g, 255);
+	b = Math.max(b, 0);
+	b = Math.min(b, 255);
+	a = Math.max(a, 0);
+	a = Math.min(a, 255);
+	if (a < 16) {
+		return 0;
+	}
+	return ((b + (g << 8)) + (r << 16)) + (a << 24);
+}
+
+function wbSizeGet() {
+	return workBuffer[GWSize];
+}
+
+function wbSizePut(value) {
+	return workBuffer[GWSize] = value;
+}
+
+function wbStackClear() {
+	wbTopPut(wbSizeGet());
+}
+
+function wbStackPop(nItems) {
+	wbTopPut(wbTopGet() + nItems);
+}
+
+function wbStackPush(nItems) {
+	if (!allocateStackEntry(nItems)) {
+		return false;
+	}
+	wbTopPut(wbTopGet() - nItems);
+	return true;
+}
+
+function wbStackSize() {
+	return wbSizeGet() - wbTopGet();
+}
+
+function wbStackValue(index) {
+	return workBuffer[wbTopGet() + index];
+}
+
+function wbStackValueput(index, value) {
+	return workBuffer[wbTopGet() + index] = value;
+}
+
+function wbTopGet() {
+	return workBuffer[GWBufferTop];
+}
+
+function wbTopPut(value) {
+	return workBuffer[GWBufferTop] = value;
+}
+
+function wideBezierEntryOf(line) {
+	return objat(line, GBWideEntry);
+}
+
+function wideBezierEntryOfput(line, value) {
+	return objatput(line, GBWideEntry, value);
+}
+
+function wideBezierExitOf(line) {
+	return objat(line, GBWideExit);
+}
+
+function wideBezierExitOfput(line, value) {
+	return objatput(line, GBWideExit, value);
+}
+
+function wideBezierExtentOf(bezier) {
+	return objat(bezier, GBWideExtent);
+}
+
+function wideBezierExtentOfput(bezier, value) {
+	return objatput(bezier, GBWideExtent, value);
+}
+
+function wideBezierFillOf(bezier) {
+	return objat(bezier, GBWideFill);
+}
+
+function wideBezierFillOfput(bezier, value) {
+	return objatput(bezier, GBWideFill, value);
+}
+
+function wideBezierUpdateDataOf(bezier) {
+	return PTR_ADD(objBuffer, bezier + GBWideUpdateData);
+}
+
+function wideBezierWidthOf(line) {
+	return objat(line, GBWideWidth);
+}
+
+function wideBezierWidthOfput(line, value) {
+	return objatput(line, GBWideWidth, value);
+}
+
+function wideLineEntryOf(line) {
+	return objat(line, GLWideEntry);
+}
+
+function wideLineEntryOfput(line, value) {
+	return objatput(line, GLWideEntry, value);
+}
+
+function wideLineExitOf(line) {
+	return objat(line, GLWideExit);
+}
+
+function wideLineExitOfput(line, value) {
+	return objatput(line, GLWideExit, value);
+}
+
+function wideLineExtentOf(line) {
+	return objat(line, GLWideExtent);
+}
+
+function wideLineExtentOfput(line, value) {
+	return objatput(line, GLWideExtent, value);
+}
+
+function wideLineFillOf(line) {
+	return objat(line, GLWideFill);
+}
+
+function wideLineFillOfput(line, value) {
+	return objatput(line, GLWideFill, value);
+}
+
+function wideLineWidthOf(line) {
+	return objat(line, GLWideWidth);
+}
+
+function wideLineWidthOfput(line, value) {
+	return objatput(line, GLWideWidth, value);
+}
+
+function workBufferPut(wbOop) {
+	workBuffer = wbOop.wordsAsInt32Array();
+}
+
+
+Squeak.registerExternalModule("B2DPlugin", {
+	primitiveMergeFillFrom: primitiveMergeFillFrom,
+	primitiveCopyBuffer: primitiveCopyBuffer,
+	primitiveAddRect: primitiveAddRect,
+	primitiveAddGradientFill: primitiveAddGradientFill,
+	primitiveSetClipRect: primitiveSetClipRect,
+	initialiseModule: initialiseModule,
+	primitiveSetBitBltPlugin: primitiveSetBitBltPlugin,
+	primitiveRegisterExternalEdge: primitiveRegisterExternalEdge,
+	primitiveGetClipRect: primitiveGetClipRect,
+	primitiveAddBezier: primitiveAddBezier,
+	primitiveInitializeProcessing: primitiveInitializeProcessing,
+	primitiveRenderImage: primitiveRenderImage,
+	primitiveGetOffset: primitiveGetOffset,
+	primitiveSetDepth: primitiveSetDepth,
+	primitiveAddBezierShape: primitiveAddBezierShape,
+	primitiveSetEdgeTransform: primitiveSetEdgeTransform,
+	getModuleName: getModuleName,
+	primitiveGetTimes: primitiveGetTimes,
+	primitiveNextActiveEdgeEntry: primitiveNextActiveEdgeEntry,
+	primitiveAddBitmapFill: primitiveAddBitmapFill,
+	primitiveGetDepth: primitiveGetDepth,
+	primitiveAbortProcessing: primitiveAbortProcessing,
+	primitiveNextGlobalEdgeEntry: primitiveNextGlobalEdgeEntry,
+	primitiveGetFailureReason: primitiveGetFailureReason,
+	primitiveDisplaySpanBuffer: primitiveDisplaySpanBuffer,
+	moduleUnloaded: moduleUnloaded,
+	primitiveGetCounts: primitiveGetCounts,
+	primitiveChangedActiveEdgeEntry: primitiveChangedActiveEdgeEntry,
+	primitiveRenderScanline: primitiveRenderScanline,
+	primitiveGetBezierStats: primitiveGetBezierStats,
+	primitiveFinishedProcessing: primitiveFinishedProcessing,
+	setInterpreter: setInterpreter,
+	primitiveNeedsFlush: primitiveNeedsFlush,
+	primitiveAddLine: primitiveAddLine,
+	primitiveSetOffset: primitiveSetOffset,
+	primitiveNextFillEntry: primitiveNextFillEntry,
+	primitiveInitializeBuffer: primitiveInitializeBuffer,
+	primitiveDoProfileStats: primitiveDoProfileStats,
+	primitiveAddActiveEdgeEntry: primitiveAddActiveEdgeEntry,
+	primitiveSetAALevel: primitiveSetAALevel,
+	primitiveNeedsFlushPut: primitiveNeedsFlushPut,
+	primitiveAddCompressedShape: primitiveAddCompressedShape,
+	primitiveSetColorTransform: primitiveSetColorTransform,
+	primitiveAddOval: primitiveAddOval,
+	primitiveRegisterExternalFill: primitiveRegisterExternalFill,
+	primitiveAddPolygon: primitiveAddPolygon,
+	primitiveGetAALevel: primitiveGetAALevel,
 });
 
 }); // end of module
@@ -13744,445 +21117,6 @@ Squeak.registerExternalModule("BitBltPlugin", {
 
 }); // end of module
 
-/***** including ../plugins/DSAPrims.js *****/
-
-/* Smalltalk from Squeak4.5 with VMMaker 4.13.6 translated as JS source on 3 November 2014 1:52:20 pm */
-/* Automatically generated by
-	JSPluginCodeGenerator VMMakerJS-bf.15 uuid: fd4e10f2-3773-4e80-8bb5-c4b471a014e5
-   from
-	DSAPlugin VMMaker-bf.353 uuid: 8ae25e7e-8d2c-451e-8277-598b30e9c002
- */
-
-module("users.bert.SqueakJS.plugins.DSAPrims").requires("users.bert.SqueakJS.vm").toRun(function() {
-
-var VM_PROXY_MAJOR = 1;
-var VM_PROXY_MINOR = 11;
-
-/*** Functions ***/
-function CLASSOF(obj) { return typeof obj === "number" ? interpreterProxy.classSmallInteger() : obj.sqClass }
-function SIZEOF(obj) { return obj.pointers ? obj.pointers.length : obj.words ? obj.words.length : obj.bytes ? obj.bytes.length : 0 }
-function BYTESIZEOF(obj) { return obj.bytes ? obj.bytes.length : obj.words ? obj.words.length * 4 : 0 }
-function DIV(a, b) { return Math.floor(a / b) | 0; }   // integer division
-function MOD(a, b) { return a - DIV(a, b) * b | 0; }   // signed modulus
-function SHL(a, b) { return b > 31 ? 0 : a << b; }     // fix JS shift
-function SHR(a, b) { return b > 31 ? 0 : a >>> b; }    // fix JS shift
-function SHIFT(a, b) { return b < 0 ? (b < -31 ? 0 : a >>> (0-b) ) : (b > 31 ? 0 : a << b); }
-
-/*** Variables ***/
-var divisorDigitCount = 0;
-var dsaDivisor = null;
-var dsaQuotient = null;
-var dsaRemainder = null;
-var interpreterProxy = null;
-var moduleName = "DSAPrims 3 November 2014 (e)";
-var remainderDigitCount = 0;
-
-
-
-/*	Add back the divisor shifted left by the given number of digits. This is done only when the estimate of quotient digit was one larger than the correct value. */
-
-function addBackDivisorDigitShift(digitShift) {
-	var carry;
-	var i;
-	var rIndex;
-	var sum;
-
-	carry = 0;
-	rIndex = digitShift + 1;
-	for (i = 1; i <= divisorDigitCount; i++) {
-		sum = (dsaRemainder[rIndex] + dsaDivisor[i]) + carry;
-		dsaRemainder[rIndex] = (sum & 255);
-		carry = sum >>> 8;
-		++rIndex;
-	}
-	sum = dsaRemainder[rIndex] + carry;
-	dsaRemainder[rIndex] = (sum & 255);
-}
-
-
-/*	This is the core of the divide algorithm. This loop steps through the digit positions of the quotient, each time estimating the right quotient digit, subtracting from the remainder the divisor times the quotient digit shifted left by the appropriate number of digits. When the loop terminates, all digits of the quotient have been filled in and the remainder contains a value less than the divisor. The tricky bit is estimating the next quotient digit. Knuth shows that the digit estimate computed here will never be less than it should be and cannot be more than one over what it should be. Furthermore, the case where the estimate is one too large is extremely rare. For example, in a typical test of 100000 random 60-bit division problems, the rare case only occured five times. See Knuth, volume 2 ('Semi-Numerical Algorithms') 2nd edition, pp. 257-260 */
-/*	extract the top two digits of the divisor */
-
-function bigDivideLoop() {
-	var d1;
-	var d2;
-	var digitShift;
-	var firstDigit;
-	var firstTwoDigits;
-	var j;
-	var q;
-	var qTooBig;
-	var thirdDigit;
-
-	d1 = dsaDivisor[divisorDigitCount];
-	d2 = dsaDivisor[divisorDigitCount - 1];
-	for (j = remainderDigitCount; j >= (divisorDigitCount + 1); j += -1) {
-
-		/* extract the top several digits of remainder. */
-
-		firstDigit = dsaRemainder[j];
-		firstTwoDigits = (firstDigit << 8) + dsaRemainder[j - 1];
-
-		/* estimate q, the next digit of the quotient */
-
-		thirdDigit = dsaRemainder[j - 2];
-		if (firstDigit === d1) {
-			q = 255;
-		} else {
-			q = DIV(firstTwoDigits, d1);
-		}
-		if ((d2 * q) > (((firstTwoDigits - (q * d1)) << 8) + thirdDigit)) {
-			--q;
-			if ((d2 * q) > (((firstTwoDigits - (q * d1)) << 8) + thirdDigit)) {
-				--q;
-			}
-		}
-		digitShift = (j - divisorDigitCount) - 1;
-		if (q > 0) {
-			qTooBig = subtractDivisorMultipliedByDigitdigitShift(q, digitShift);
-			if (qTooBig) {
-
-				/* this case is extremely rare */
-
-				addBackDivisorDigitShift(digitShift);
-				--q;
-			}
-		}
-		dsaQuotient[digitShift + 1] = q;
-	}
-}
-
-
-/*	Note: This is hardcoded so it can be run from Squeak.
-	The module name is used for validating a module *after*
-	it is loaded to check if it does really contain the module
-	we're thinking it contains. This is important! */
-
-function getModuleName() {
-	return moduleName;
-}
-
-function halt() {
-	;
-}
-
-
-/*	Rotate the given 32-bit integer left by the given number of bits and answer the result. */
-
-function leftRotateby(anInteger, bits) {
-	return (SHL(anInteger, bits)) | (SHR(anInteger, (32 - bits)));
-}
-
-
-/*	Called with three LargePositiveInteger arguments, rem, div, quo. Divide div into rem and store the quotient into quo, leaving the remainder in rem. */
-/*	Assume: quo starts out filled with zeros. */
-
-function primitiveBigDivide() {
-	var div;
-	var quo;
-	var rem;
-
-	quo = interpreterProxy.stackObjectValue(0);
-	div = interpreterProxy.stackObjectValue(1);
-	rem = interpreterProxy.stackObjectValue(2);
-	interpreterProxy.success(CLASSOF(rem) === interpreterProxy.classLargePositiveInteger());
-	interpreterProxy.success(CLASSOF(div) === interpreterProxy.classLargePositiveInteger());
-	interpreterProxy.success(CLASSOF(quo) === interpreterProxy.classLargePositiveInteger());
-	if (interpreterProxy.failed()) {
-		return null;
-	}
-	dsaRemainder = rem.bytes;
-	dsaDivisor = div.bytes;
-	dsaQuotient = quo.bytes;
-	divisorDigitCount = SIZEOF(div);
-
-	/* adjust pointers for base-1 indexing */
-
-	remainderDigitCount = SIZEOF(rem);
-	--dsaRemainder;
-	--dsaDivisor;
-	--dsaQuotient;
-	bigDivideLoop();
-	interpreterProxy.pop(3);
-}
-
-
-/*	Multiple f1 by f2, placing the result into prod. f1, f2, and prod must be LargePositiveIntegers, and the length of prod must be the sum of the lengths of f1 and f2. */
-/*	Assume: prod starts out filled with zeros */
-
-function primitiveBigMultiply() {
-	var carry;
-	var digit;
-	var f1;
-	var f1Len;
-	var f1Ptr;
-	var f2;
-	var f2Len;
-	var f2Ptr;
-	var i;
-	var j;
-	var k;
-	var prod;
-	var prodLen;
-	var prodPtr;
-	var sum;
-
-	prod = interpreterProxy.stackObjectValue(0);
-	f2 = interpreterProxy.stackObjectValue(1);
-	f1 = interpreterProxy.stackObjectValue(2);
-	interpreterProxy.success(interpreterProxy.isBytes(prod));
-	interpreterProxy.success(interpreterProxy.isBytes(f2));
-	interpreterProxy.success(interpreterProxy.isBytes(f1));
-	interpreterProxy.success(CLASSOF(prod) === interpreterProxy.classLargePositiveInteger());
-	interpreterProxy.success(CLASSOF(f2) === interpreterProxy.classLargePositiveInteger());
-	interpreterProxy.success(CLASSOF(f1) === interpreterProxy.classLargePositiveInteger());
-	if (interpreterProxy.failed()) {
-		return null;
-	}
-	prodLen = SIZEOF(prod);
-	f1Len = SIZEOF(f1);
-	f2Len = SIZEOF(f2);
-	interpreterProxy.success(prodLen === (f1Len + f2Len));
-	if (interpreterProxy.failed()) {
-		return null;
-	}
-	prodPtr = prod.bytes;
-	f2Ptr = f2.bytes;
-	f1Ptr = f1.bytes;
-	for (i = 0; i <= (f1Len - 1); i++) {
-		if (((digit = f1Ptr[i])) !== 0) {
-			carry = 0;
-
-			/* Loop invariants: 0 <= carry <= 16rFF, k = i + j - 1 */
-
-			k = i;
-			for (j = 0; j <= (f2Len - 1); j++) {
-				sum = ((f2Ptr[j] * digit) + prodPtr[k]) + carry;
-				carry = sum >>> 8;
-				prodPtr[k] = (sum & 255);
-				++k;
-			}
-			prodPtr[k] = carry;
-		}
-	}
-	interpreterProxy.pop(3);
-}
-
-
-/*	Expand a 64 byte ByteArray (the first argument) into and an Bitmap of 80 32-bit words (the second argument). When reading a 32-bit integer from the ByteArray, consider the first byte to contain the most significant bits of the word (i.e., use big-endian byte ordering). */
-
-function primitiveExpandBlock() {
-	var buf;
-	var bytePtr;
-	var expanded;
-	var i;
-	var src;
-	var v;
-	var wordPtr;
-
-	expanded = interpreterProxy.stackObjectValue(0);
-	buf = interpreterProxy.stackObjectValue(1);
-	interpreterProxy.success(interpreterProxy.isWords(expanded));
-	interpreterProxy.success(interpreterProxy.isBytes(buf));
-	if (interpreterProxy.failed()) {
-		return null;
-	}
-	interpreterProxy.success(SIZEOF(expanded) === 80);
-	interpreterProxy.success(SIZEOF(buf) === 64);
-	if (interpreterProxy.failed()) {
-		return null;
-	}
-	wordPtr = expanded.words;
-	bytePtr = buf.bytes;
-	src = 0;
-	for (i = 0; i <= 15; i++) {
-		v = (((bytePtr[src] << 24) + (bytePtr[src + 1] << 16)) + (bytePtr[src + 2] << 8)) + bytePtr[src + 3];
-		wordPtr[i] = v;
-		src += 4;
-	}
-	for (i = 16; i <= 79; i++) {
-		v = ((wordPtr[i - 3] ^ wordPtr[i - 8]) ^ wordPtr[i - 14]) ^ wordPtr[i - 16];
-		v = leftRotateby(v, 1);
-		wordPtr[i] = v;
-	}
-	interpreterProxy.pop(2);
-}
-
-
-/*	Answer true if the secure hash primitive is implemented. */
-
-function primitiveHasSecureHashPrimitive() {
-	interpreterProxy.pop(1);
-	interpreterProxy.pushBool(true);
-}
-
-
-/*	Hash a Bitmap of 80 32-bit words (the first argument), using the given state (the second argument). */
-
-function primitiveHashBlock() {
-	var a;
-	var b;
-	var buf;
-	var bufPtr;
-	var c;
-	var d;
-	var e;
-	var i;
-	var state;
-	var statePtr;
-	var tmp;
-
-	state = interpreterProxy.stackObjectValue(0);
-	buf = interpreterProxy.stackObjectValue(1);
-	interpreterProxy.success(interpreterProxy.isWords(state));
-	interpreterProxy.success(interpreterProxy.isWords(buf));
-	if (interpreterProxy.failed()) {
-		return null;
-	}
-	interpreterProxy.success(SIZEOF(state) === 5);
-	interpreterProxy.success(SIZEOF(buf) === 80);
-	if (interpreterProxy.failed()) {
-		return null;
-	}
-	statePtr = state.words;
-	bufPtr = buf.words;
-	a = statePtr[0];
-	b = statePtr[1];
-	c = statePtr[2];
-	d = statePtr[3];
-	e = statePtr[4];
-	for (i = 0; i <= 19; i++) {
-		tmp = (((1518500249 + ((b & c) | (~b & d))) + leftRotateby(a, 5)) + e) + bufPtr[i];
-		e = d;
-		d = c;
-		c = leftRotateby(b, 30);
-		b = a;
-		a = tmp;
-	}
-	for (i = 20; i <= 39; i++) {
-		tmp = (((1859775393 + ((b ^ c) ^ d)) + leftRotateby(a, 5)) + e) + bufPtr[i];
-		e = d;
-		d = c;
-		c = leftRotateby(b, 30);
-		b = a;
-		a = tmp;
-	}
-	for (i = 40; i <= 59; i++) {
-		tmp = (((2400959708 + (((b & c) | (b & d)) | (c & d))) + leftRotateby(a, 5)) + e) + bufPtr[i];
-		e = d;
-		d = c;
-		c = leftRotateby(b, 30);
-		b = a;
-		a = tmp;
-	}
-	for (i = 60; i <= 79; i++) {
-		tmp = (((3395469782 + ((b ^ c) ^ d)) + leftRotateby(a, 5)) + e) + bufPtr[i];
-		e = d;
-		d = c;
-		c = leftRotateby(b, 30);
-		b = a;
-		a = tmp;
-	}
-	statePtr[0] = (statePtr[0] + a);
-	statePtr[1] = (statePtr[1] + b);
-	statePtr[2] = (statePtr[2] + c);
-	statePtr[3] = (statePtr[3] + d);
-	statePtr[4] = (statePtr[4] + e);
-	interpreterProxy.pop(2);
-}
-
-
-/*	Called with one LargePositiveInteger argument. Answer the index of the top-most non-zero digit. */
-
-function primitiveHighestNonZeroDigitIndex() {
-	var arg;
-	var bigIntPtr;
-	var i;
-
-	arg = interpreterProxy.stackObjectValue(0);
-	interpreterProxy.success(CLASSOF(arg) === interpreterProxy.classLargePositiveInteger());
-	if (interpreterProxy.failed()) {
-		return null;
-	}
-	bigIntPtr = arg.bytes;
-	i = SIZEOF(arg);
-	while ((i > 0) && (bigIntPtr[(--i)] === 0)) {
-	}
-	interpreterProxy.pop(1);
-	interpreterProxy.pushInteger(i + 1);
-}
-
-
-/*	Note: This is coded so that is can be run from Squeak. */
-
-function setInterpreter(anInterpreter) {
-	var ok;
-
-	interpreterProxy = anInterpreter;
-	ok = interpreterProxy.majorVersion() == VM_PROXY_MAJOR;
-	if (ok === false) {
-		return false;
-	}
-	ok = interpreterProxy.minorVersion() >= VM_PROXY_MINOR;
-	return ok;
-}
-
-
-/*	Multiply the divisor by the given digit (an integer in the range 0..255), shift it left by the given number of digits, and subtract the result from the current remainder. Answer true if there is an excess borrow, indicating that digit was one too large. (This case is quite rare.) */
-
-function subtractDivisorMultipliedByDigitdigitShift(digit, digitShift) {
-	var borrow;
-	var i;
-	var prod;
-	var rIndex;
-	var resultDigit;
-
-	borrow = 0;
-	rIndex = digitShift + 1;
-	for (i = 1; i <= divisorDigitCount; i++) {
-		prod = (dsaDivisor[i] * digit) + borrow;
-		borrow = prod >>> 8;
-		resultDigit = dsaRemainder[rIndex] - (prod & 255);
-		if (resultDigit < 0) {
-
-			/* borrow from the next digit */
-
-			resultDigit += 256;
-			++borrow;
-		}
-		dsaRemainder[rIndex] = resultDigit;
-		++rIndex;
-	}
-	if (borrow === 0) {
-		return false;
-	}
-	resultDigit = dsaRemainder[rIndex] - borrow;
-	if (resultDigit < 0) {
-
-		/* digit was too large (this case is quite rare) */
-
-		dsaRemainder[rIndex] = (resultDigit + 256);
-		return true;
-	} else {
-		dsaRemainder[rIndex] = resultDigit;
-		return false;
-	}
-}
-
-
-Squeak.registerExternalModule("DSAPrims", {
-	primitiveExpandBlock: primitiveExpandBlock,
-	primitiveBigDivide: primitiveBigDivide,
-	primitiveHasSecureHashPrimitive: primitiveHasSecureHashPrimitive,
-	primitiveHashBlock: primitiveHashBlock,
-	primitiveBigMultiply: primitiveBigMultiply,
-	setInterpreter: setInterpreter,
-	getModuleName: getModuleName,
-	primitiveHighestNonZeroDigitIndex: primitiveHighestNonZeroDigitIndex,
-});
-
-}); // end of module
-
 /***** including ../plugins/FFTPlugin.js *****/
 
 /* Smalltalk from Squeak4.5 with VMMaker 4.13.6 translated as JS source on 3 November 2014 1:52:20 pm */
@@ -15038,6 +21972,337 @@ Squeak.registerExternalModule("FloatArrayPlugin", {
 	primitiveLength: primitiveLength,
 	primitiveAddFloatArray: primitiveAddFloatArray,
 	primitiveDivScalar: primitiveDivScalar,
+});
+
+}); // end of module
+
+/***** including ../plugins/GeniePlugin.js *****/
+
+/* Smalltalk from Squeak4.5 with VMMaker 4.13.6 translated as JS source on 14 November 2014 12:21:50 am */
+/* Automatically generated by
+	JSSmartSyntaxPluginCodeGenerator VMMakerJS-bf.17 uuid: 399be48b-95d8-4722-bdcc-39a94a12c486
+   from
+	GeniePlugin VMMaker-bf.353 uuid: 8ae25e7e-8d2c-451e-8277-598b30e9c002
+ */
+
+module("users.bert.SqueakJS.plugins.GeniePlugin").requires("users.bert.SqueakJS.vm").toRun(function() {
+
+var VM_PROXY_MAJOR = 1;
+var VM_PROXY_MINOR = 11;
+
+/*** Functions ***/
+function CLASSOF(obj) { return typeof obj === "number" ? interpreterProxy.classSmallInteger() : obj.sqClass }
+function SIZEOF(obj) { return obj.pointers ? obj.pointers.length : obj.words ? obj.words.length : obj.bytes ? obj.bytes.length : 0 }
+function BYTESIZEOF(obj) { return obj.bytes ? obj.bytes.length : obj.words ? obj.words.length * 4 : 0 }
+function DIV(a, b) { return Math.floor(a / b) | 0; }   // integer division
+function MOD(a, b) { return a - DIV(a, b) * b | 0; }   // signed modulus
+function SHL(a, b) { return b > 31 ? 0 : a << b; }     // fix JS shift
+function SHR(a, b) { return b > 31 ? 0 : a >>> b; }    // fix JS shift
+function SHIFT(a, b) { return b < 0 ? (b < -31 ? 0 : a >>> (0-b) ) : (b > 31 ? 0 : a << b); }
+function PTR_ADD(p, n) { return new Int32Array(p.buffer, p.byteOffset + n * 4); }
+function FPTR_ADD(p, n) { return new Float32Array(p.buffer, p.byteOffset + n * 4); }
+
+/*** Variables ***/
+var interpreterProxy = null;
+var moduleName = "GeniePlugin v2.0 14 November 2014 (e)";
+
+
+
+/*	arguments are pointer to ints paired as x,y coordinates of points */
+
+function cSquaredDistanceFromto(aPoint, bPoint) {
+	var aPointX;
+	var bPointX;
+	var xDiff;
+	var aPointY;
+	var bPointY;
+	var yDiff;
+
+	aPointX = aPoint[0];
+	aPointY = aPoint[1];
+	bPointX = bPoint[0];
+	bPointY = bPoint[1];
+	xDiff = bPointX - aPointX;
+	yDiff = bPointY - aPointY;
+	return (xDiff * xDiff) + (yDiff * yDiff);
+}
+
+function cSubstAngleFactorFromto(startDegreeNumber, endDegreeNumber) {
+	var absDiff;
+
+	absDiff = Math.abs(endDegreeNumber - startDegreeNumber);
+	if (absDiff > 180) {
+		absDiff = 360 - absDiff;
+	}
+	return (absDiff * absDiff) >>> 6;
+}
+
+
+/*	Note: This is hardcoded so it can be run from Squeak.
+	The module name is used for validating a module *after*
+	it is loaded to check if it does really contain the module
+	we're thinking it contains. This is important! */
+
+function getModuleName() {
+	return moduleName;
+}
+
+function halt() {
+	;
+}
+
+function majorNO() {
+	return 2;
+}
+
+function minorNO() {
+	return 0;
+}
+
+function msg(s) {
+	console.log(moduleName + ": " + s);
+}
+
+function primSameClassAbsoluteStrokeDistanceMyPoints_otherPoints_myVectors_otherVectors_mySquaredLengths_otherSquaredLengths_myAngles_otherAngles_maxSizeAndReferenceFlag_rowBase_rowInsertRemove_rowInsertRemoveCount() {
+	var otherAngles;
+	var otherSquaredLengthsSize;
+	var forReference;
+	var jM1;
+	var iM1;
+	var jM1T2;
+	var base;
+	var insert;
+	var otherVectors;
+	var otherVectorsSize;
+	var otherSquaredLengths;
+	var rowBaseSize;
+	var myPoints;
+	var jLimiT;
+	var mySquaredLengths;
+	var additionalMultiInsertRemoveCost;
+	var remove;
+	var otherPoints;
+	var otherPointsSize;
+	var myVectors;
+	var rowInsertRemoveCount;
+	var rowBase;
+	var maxDist;
+	var iM1T2;
+	var j;
+	var insertRemove;
+	var i;
+	var myVectorsSize;
+	var subst;
+	var maxSize;
+	var removeBase;
+	var substBase;
+	var myAngles;
+	var insertRemoveCount;
+	var rowInsertRemove;
+	var insertBase;
+	var myPointsOop;
+	var otherPointsOop;
+	var myVectorsOop;
+	var otherVectorsOop;
+	var mySquaredLengthsOop;
+	var otherSquaredLengthsOop;
+	var myAnglesOop;
+	var otherAnglesOop;
+	var maxSizeAndRefFlag;
+	var rowBaseOop;
+	var rowInsertRemoveOop;
+	var rowInsertRemoveCountOop;
+	var _return_value;
+
+	myPointsOop = interpreterProxy.stackValue(11);
+	otherPointsOop = interpreterProxy.stackValue(10);
+	myVectorsOop = interpreterProxy.stackValue(9);
+	otherVectorsOop = interpreterProxy.stackValue(8);
+	mySquaredLengthsOop = interpreterProxy.stackValue(7);
+	otherSquaredLengthsOop = interpreterProxy.stackValue(6);
+	myAnglesOop = interpreterProxy.stackValue(5);
+	otherAnglesOop = interpreterProxy.stackValue(4);
+	maxSizeAndRefFlag = interpreterProxy.stackIntegerValue(3);
+	rowBaseOop = interpreterProxy.stackValue(2);
+	rowInsertRemoveOop = interpreterProxy.stackValue(1);
+	rowInsertRemoveCountOop = interpreterProxy.stackValue(0);
+	if (interpreterProxy.failed()) {
+		return null;
+	}
+	if (interpreterProxy.failed()) {
+		msg("failed 1");
+		return null;
+	}
+	interpreterProxy.success((((((((((interpreterProxy.isWords(myPointsOop) && interpreterProxy.isWords(otherPointsOop)) && interpreterProxy.isWords(myVectorsOop)) && interpreterProxy.isWords(otherVectorsOop)) && interpreterProxy.isWords(mySquaredLengthsOop)) && interpreterProxy.isWords(otherSquaredLengthsOop)) && interpreterProxy.isWords(myAnglesOop)) && interpreterProxy.isWords(otherAnglesOop)) && interpreterProxy.isWords(rowBaseOop)) && interpreterProxy.isWords(rowInsertRemoveOop)) && interpreterProxy.isWords(rowInsertRemoveCountOop));
+	if (interpreterProxy.failed()) {
+		msg("failed 2");
+		return null;
+	}
+	interpreterProxy.success(interpreterProxy.isMemberOf(myPointsOop, "PointArray") && interpreterProxy.isMemberOf(otherPointsOop, "PointArray"));
+	if (interpreterProxy.failed()) {
+		msg("failed 3");
+		return null;
+	}
+	myPoints = myPointsOop.wordsAsInt32Array();
+	otherPoints = otherPointsOop.wordsAsInt32Array();
+	myVectors = myVectorsOop.wordsAsInt32Array();
+	otherVectors = otherVectorsOop.wordsAsInt32Array();
+	mySquaredLengths = mySquaredLengthsOop.wordsAsInt32Array();
+	otherSquaredLengths = otherSquaredLengthsOop.wordsAsInt32Array();
+	myAngles = myAnglesOop.wordsAsInt32Array();
+	otherAngles = otherAnglesOop.wordsAsInt32Array();
+	rowBase = rowBaseOop.wordsAsInt32Array();
+	rowInsertRemove = rowInsertRemoveOop.wordsAsInt32Array();
+
+	/* Note: myPointsSize and mySquaredLengthsSize variables eliminated to reduce
+	method temporary variable count for closure-enabled images */
+	/* PointArrays */
+	/* myPointsSize := (interpreterProxy stSizeOf: myPointsOop) bitShift: -1. */
+
+	rowInsertRemoveCount = rowInsertRemoveCountOop.wordsAsInt32Array();
+	otherPointsSize = SIZEOF(otherPointsOop) >>> 1;
+	myVectorsSize = SIZEOF(myVectorsOop) >>> 1;
+
+	/* IntegerArrays */
+	/* mySquaredLengthsSize := interpreterProxy stSizeOf: mySquaredLengthsOop. */
+
+	otherVectorsSize = SIZEOF(otherVectorsOop) >>> 1;
+	otherSquaredLengthsSize = SIZEOF(otherSquaredLengthsOop);
+	rowBaseSize = SIZEOF(rowBaseOop);
+	interpreterProxy.success(((rowBaseSize === SIZEOF(rowInsertRemoveOop)) && (rowBaseSize === SIZEOF(rowInsertRemoveCountOop))) && (rowBaseSize > otherVectorsSize));
+	if (interpreterProxy.failed()) {
+		msg("failed 4");
+		return null;
+	}
+	interpreterProxy.success((((((SIZEOF(mySquaredLengthsOop) >= (myVectorsSize - 1)) && ((SIZEOF(myPointsOop) >>> 1) >= myVectorsSize)) && (otherSquaredLengthsSize >= (otherVectorsSize - 1))) && (otherPointsSize >= otherVectorsSize)) && (SIZEOF(myAnglesOop) >= (myVectorsSize - 1))) && (SIZEOF(otherAnglesOop) >= (otherVectorsSize - 1)));
+	if (interpreterProxy.failed()) {
+		msg("failed 5");
+		return null;
+	}
+	forReference = maxSizeAndRefFlag & 1;
+	maxSize = maxSizeAndRefFlag >>> 1;
+	maxDist = 1 << 29;
+	if (forReference) {
+		additionalMultiInsertRemoveCost = 0;
+	} else {
+		additionalMultiInsertRemoveCost = (maxSize * maxSize) >>> 10;
+	}
+	rowBase[0] = 0;
+	rowInsertRemove[0] = 0;
+	rowInsertRemoveCount[0] = 2;
+	insertRemove = 0 - additionalMultiInsertRemoveCost;
+	jLimiT = otherVectorsSize;
+	if (!((otherPointsSize >= (jLimiT - 1)) && (otherSquaredLengthsSize >= (jLimiT - 1)))) {
+		interpreterProxy.primitiveFail();
+		return null;
+	}
+	for (j = 1; j <= jLimiT; j++) {
+		jM1 = j - 1;
+		insertRemove = (insertRemove + ((otherSquaredLengths[jM1] + cSquaredDistanceFromto(PTR_ADD(otherPoints, (jM1 << 1)), myPoints)) >>> 7)) + additionalMultiInsertRemoveCost;
+		rowInsertRemove[j] = insertRemove;
+		rowBase[j] = (insertRemove * j);
+		rowInsertRemoveCount[j] = (j + 1);
+	}
+	insertRemove = rowInsertRemove[0] - additionalMultiInsertRemoveCost;
+	for (i = 1; i <= myVectorsSize; i++) {
+		iM1 = i - 1;
+		iM1T2 = iM1 << 1;
+		substBase = rowBase[0];
+		insertRemove = (insertRemove + ((mySquaredLengths[iM1] + cSquaredDistanceFromto(PTR_ADD(myPoints, iM1T2), otherPoints)) >>> 7)) + additionalMultiInsertRemoveCost;
+		rowInsertRemove[0] = insertRemove;
+		rowBase[0] = (insertRemove * i);
+		rowInsertRemoveCount[0] = (i + 1);
+		jLimiT = otherVectorsSize;
+		for (j = 1; j <= jLimiT; j++) {
+			jM1 = j - 1;
+			jM1T2 = jM1 << 1;
+			removeBase = rowBase[j];
+			insertBase = rowBase[jM1];
+			remove = (mySquaredLengths[iM1] + cSquaredDistanceFromto(PTR_ADD(myPoints, iM1T2), PTR_ADD(otherPoints, (j << 1)))) >>> 7;
+			if (((insertRemove = rowInsertRemove[j])) === 0) {
+				removeBase += remove;
+			} else {
+				removeBase = (removeBase + insertRemove) + (remove * rowInsertRemoveCount[j]);
+				remove += insertRemove;
+			}
+			insert = (otherSquaredLengths[jM1] + cSquaredDistanceFromto(PTR_ADD(otherPoints, jM1T2), PTR_ADD(myPoints, (i << 1)))) >>> 7;
+			if (((insertRemove = rowInsertRemove[jM1])) === 0) {
+				insertBase += insert;
+			} else {
+				insertBase = (insertBase + insertRemove) + (insert * rowInsertRemoveCount[jM1]);
+				insert += insertRemove;
+			}
+			if (forReference) {
+				substBase = maxDist;
+			} else {
+				subst = ((cSquaredDistanceFromto(PTR_ADD(otherVectors, jM1T2), PTR_ADD(myVectors, iM1T2)) + cSquaredDistanceFromto(PTR_ADD(otherPoints, jM1T2), PTR_ADD(myPoints, iM1T2))) * (16 + cSubstAngleFactorFromto(otherAngles[jM1], myAngles[iM1]))) >>> 11;
+				substBase += subst;
+			}
+			if ((substBase <= removeBase) && (substBase <= insertBase)) {
+				base = substBase;
+				insertRemove = 0;
+				insertRemoveCount = 1;
+			} else {
+				if (removeBase <= insertBase) {
+					base = removeBase;
+					insertRemove = remove + additionalMultiInsertRemoveCost;
+					insertRemoveCount = rowInsertRemoveCount[j] + 1;
+				} else {
+					base = insertBase;
+					insertRemove = insert + additionalMultiInsertRemoveCost;
+					insertRemoveCount = rowInsertRemoveCount[jM1] + 1;
+				}
+			}
+			substBase = rowBase[j];
+			rowBase[j] = Math.min(base, maxDist);
+			rowInsertRemove[j] = Math.min(insertRemove, maxDist);
+			rowInsertRemoveCount[j] = insertRemoveCount;
+		}
+		insertRemove = rowInsertRemove[0];
+	}
+	_return_value = base;
+	if (interpreterProxy.failed()) {
+		return null;
+	}
+	interpreterProxy.popthenPush(13, _return_value);
+	return null;
+}
+
+
+/*	majorNO * 1000 + minorNO */
+
+function primVersionNO() {
+	var _return_value;
+
+	_return_value = ((majorNO() * 1000) + minorNO());
+	if (interpreterProxy.failed()) {
+		return null;
+	}
+	interpreterProxy.popthenPush(1, _return_value);
+	return null;
+}
+
+
+/*	Note: This is coded so that is can be run from Squeak. */
+
+function setInterpreter(anInterpreter) {
+	var ok;
+
+	interpreterProxy = anInterpreter;
+	ok = interpreterProxy.majorVersion() == VM_PROXY_MAJOR;
+	if (ok === false) {
+		return false;
+	}
+	ok = interpreterProxy.minorVersion() >= VM_PROXY_MINOR;
+	return ok;
+}
+
+
+Squeak.registerExternalModule("GeniePlugin", {
+	primVersionNO: primVersionNO,
+	setInterpreter: setInterpreter,
+	primSameClassAbsoluteStrokeDistanceMyPoints_otherPoints_myVectors_otherVectors_mySquaredLengths_otherSquaredLengths_myAngles_otherAngles_maxSizeAndReferenceFlag_rowBase_rowInsertRemove_rowInsertRemoveCount: primSameClassAbsoluteStrokeDistanceMyPoints_otherPoints_myVectors_otherVectors_mySquaredLengths_otherSquaredLengths_myAngles_otherAngles_maxSizeAndReferenceFlag_rowBase_rowInsertRemove_rowInsertRemoveCount,
+	getModuleName: getModuleName,
 });
 
 }); // end of module
@@ -18561,9 +25826,9 @@ Squeak.registerExternalModule("KedamaPlugin", {
 
 /***** including ../plugins/KedamaPlugin2.js *****/
 
-/* Smalltalk from Squeak4.5 with VMMaker 4.13.6 translated as JS source on 3 November 2014 1:52:21 pm */
+/* Smalltalk from Squeak4.5 with VMMaker 4.13.6 translated as JS source on 13 November 2014 7:11:01 pm */
 /* Automatically generated by
-	JSPluginCodeGenerator VMMakerJS-bf.15 uuid: fd4e10f2-3773-4e80-8bb5-c4b471a014e5
+	JSPluginCodeGenerator VMMakerJS-bf.16 uuid: aa9fd3da-7901-4c62-ae34-c166f1492d3b
    from
 	KedamaPlugin2 Kedama-Plugins-yo.1 uuid: 3fc7d691-0149-ba4d-a339-5d27cd44a2f8
  */
@@ -18586,7 +25851,7 @@ function SHIFT(a, b) { return b < 0 ? (b < -31 ? 0 : a >>> (0-b) ) : (b > 31 ? 0
 /*** Variables ***/
 var interpreterProxy = null;
 var kedamaRandomSeed = 0;
-var moduleName = "KedamaPlugin2 3 November 2014 (e)";
+var moduleName = "KedamaPlugin2 13 November 2014 (e)";
 var randA = 0;
 var randM = 0;
 var randQ = 0;
@@ -21406,7 +28671,7 @@ function primitivePredicateReplaceWords() {
 		floatReplacement = repOop.wordsAsFloat32Array();
 		for (i = (start - 1); i <= (stop - 1); i++) {
 			if (predicates[i] === 1) {
-				fv = (floatReplacement[(repStart + i) - start]|0);
+				fv = (floatReplacement[(repStart + i) - start]>>>0);
 				;
 				values[i] = fv;
 			}

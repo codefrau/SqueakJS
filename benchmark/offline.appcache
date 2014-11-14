@@ -1,13 +1,14 @@
 CACHE MANIFEST
-# Nov  6 18:45:06 2014
+# Nov 14 15:22:55 2014
 ../squeak.js
 ../vm.js
 ../jit.js
 ../plugins/ADPCMCodecPlugin.js
+../plugins/B2DPlugin.js
 ../plugins/BitBltPlugin.js
-../plugins/DSAPrims.js
 ../plugins/FFTPlugin.js
 ../plugins/FloatArrayPlugin.js
+../plugins/GeniePlugin.js
 ../plugins/JPEGReaderPlugin.js
 ../plugins/KedamaPlugin.js
 ../plugins/KedamaPlugin2.js

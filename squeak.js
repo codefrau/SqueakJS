@@ -84,10 +84,11 @@ Object.extend = function(obj /* + more args */ ) {
     [   "vm.js",
         "jit.js",
         "plugins/ADPCMCodecPlugin.js",
+        "plugins/B2DPlugin.js",
         "plugins/BitBltPlugin.js",
-        "plugins/DSAPrims.js",
         "plugins/FFTPlugin.js",
         "plugins/FloatArrayPlugin.js",
+        "plugins/GeniePlugin.js",
         "plugins/JPEGReaderPlugin.js",
         "plugins/KedamaPlugin.js",
         "plugins/KedamaPlugin2.js",
@@ -112,12 +113,12 @@ module("SqueakJS").requires("users.bert.SqueakJS.vm").toRun(function() {
 
 
 //////////////////////////////////////////////////////////////////////////////
-// display & event setup 
+// display & event setup
 //////////////////////////////////////////////////////////////////////////////
 
 function setupFullscreen(display, canvas, options) {
     // Fullscreen can only be enabled in an event handler. So we check the
-    // fullscreen flag on every mouse down/up and keyboard event.        
+    // fullscreen flag on every mouse down/up and keyboard event.
 
     // If the user canceled fullscreen, turn off the fullscreen flag so
     // we don't try to enable it again in the next event
@@ -175,7 +176,7 @@ function setupFullscreen(display, canvas, options) {
             }
         }
     }
-    
+
     if (options.fullscreenCheckbox) options.fullscreenCheckbox.onclick = function() {
         display.fullscreen = options.fullscreenCheckbox.checked;
         checkFullscreen();
@@ -251,7 +252,7 @@ function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
                 case 0: buttons = Squeak.Mouse_Red; break;      // left
                 case 1: buttons = Squeak.Mouse_Yellow; break;   // middle
                 case 2: buttons = Squeak.Mouse_Blue; break;     // right
-            }; 
+            };
             if (options.swapButtons)
                 if (buttons == Squeak.Mouse_Yellow) buttons = Squeak.Mouse_Blue;
                 else if (buttons == Squeak.Mouse_Blue) buttons = Squeak.Mouse_Yellow;
@@ -295,8 +296,8 @@ function recordKeyboardEvent(key, timestamp, display, eventQueue) {
             timestamp,  // converted to Squeak time in makeSqueakEvent()
             key, // MacRoman
             Squeak.EventKeyChar,
-            display.buttons >> 3, 
-            0,  // Unicode 
+            display.buttons >> 3,
+            0,  // Unicode
         ]);
         if (display.signalInputEvent)
             display.signalInputEvent();
@@ -619,7 +620,7 @@ var spinnerAngle = 0,
     becameBusy = 0;
 function updateSpinner(spinner, idleMS, vm, display) {
     var busy = idleMS === 0,
-        animating = vm.lastTick - display.lastTick < 500; 
+        animating = vm.lastTick - display.lastTick < 500;
     if (!busy || animating) {
         spinner.display = "none";
         becameBusy = 0;
@@ -635,7 +636,7 @@ function updateSpinner(spinner, idleMS, vm, display) {
 }
 
 //////////////////////////////////////////////////////////////////////////////
-// main loop 
+// main loop
 //////////////////////////////////////////////////////////////////////////////
 
 var loop; // holds timeout for main loop
@@ -709,8 +710,6 @@ function processOptions(options) {
     options.root = root;
     if (options.url && options.files && !options.image)
         options.image = options.url + "/" + options.files[0];
-    if (!options.appName) options.appName = options.image ? 
-        options.image.replace(/.*\//, "").replace(/\.image$/, "") : "SqueakJS";
     if (options.templates) {
         if (options.templates.constructor === Array) {
             var templates = {};
@@ -724,10 +723,10 @@ function processOptions(options) {
 
 SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     processOptions(options);
-    SqueakJS.options = options;
-    SqueakJS.appName = options.appName;
     if (options.image) imageUrl = options.image;
     else options.image = imageUrl;
+    SqueakJS.options = options;
+    SqueakJS.appName = options.appName || imageUrl.replace(/.*\//, "").replace(/\.image$/, "");
     Squeak.fsck();
     var display = createSqueakDisplay(canvas, options),
         imageName = Squeak.splitFilePath(imageUrl).basename,
@@ -798,13 +797,13 @@ SqueakJS.onQuit = function(vm, display, options) {
 }); // end module
 
 //////////////////////////////////////////////////////////////////////////////
-// browser stuff 
+// browser stuff
 //////////////////////////////////////////////////////////////////////////////
 
 if (window.applicationCache) {
     applicationCache.addEventListener('updateready', function() {
-        applicationCache.swapCache();
-        var appName = SqueakJS && SqueakJS.appName || "SqueakJS";
+        // use original appName from options
+        var appName = window.SqueakJS && SqueakJS.options && SqueakJS.options.appName || "SqueakJS";
         if (confirm(appName + ' has been updated. Restart now?')) {
             window.onbeforeunload = null;
             window.location.reload();

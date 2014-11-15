@@ -13,7 +13,7 @@ h1 {
 #logo {
     border-radius: 20px;
     box-shadow: 0 0 5px 5px #F90;
-    margin-right: 20px;
+    margin: 0 20px 0 5px;
 }
 div#sqSpinner {
     position: absolute;

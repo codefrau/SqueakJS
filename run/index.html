@@ -98,7 +98,7 @@
             </div>
         </div>
         SqueakJS is an HTML5 runtime engine for <a href="http://squeak.org/" target="_blank">Squeak</a> Smalltalk written in pure JavaScript by Bert Freudenberg.
-        See the <a href="http://bertfreudenberg.github.io/SqueakJS/" target="_blank">SqueakJS Project</a> page for more information.
+        See the <a href="../" target="_blank">SqueakJS Project</a> page for more information.
 
         <h2>Run Squeak images from your local machine</h2>
         Use drag-and-drop to run a Squeak image from your machine: drop the image (perhaps together with a changes and sources file) into this page.
@@ -107,7 +107,7 @@
 
         <h2>Run Squeak images from the internet</h2>
         Construct a URL linking to this page and pass the image and options.
-        <em>Beware that the server needs to allow script access via <a href="http://enable-cors.org/" target="_blank">CORS</a>.</em>
+        <em>Beware that the server needs to allow script access via <a href="http://enable-cors.org/server.html" target="_blank">CORS</a>.</em>
         <br>Here are a few examples with files I copied to my own web server:
         <ul>
         <li>Squeak 1.13 (1996) <a href="#url=http://freudenbergs.de/bert/squeakjs&files=[Squeak1.13u.image,Squeak1.13u.changes,SqueakV1.sources]&swapButtons=true">link</a></li>
@@ -116,6 +116,18 @@
         <li>Squeak 3.9 (2008) <a href="#url=http://freudenbergs.de/bert/squeakjs&files=[Squeak3.9.1-final-7075.image,Squeak3.9.1-final-7075.changes,SqueakV39.sources]&swapButtons=true">link</a></li>
         <li>Squeak 4.5 (2014) <a href="#url=http://freudenbergs.de/bert/squeakjs&files=[Squeak4.5-13680.image,Squeak4.5-13680.changes,SqueakV41.sources]">link</a></li>
         </ul>
+
+        <h2>Run SqueakJS apps</h2>
+        SqueakJS can be used to run Squeak apps. Here are two examples.
+        Note how the two differ when you resize the browser window - Etoys is scaled,
+        whereas Scratch is resized.
+        The apps are configured to use template files (e.g example projects and artwork)
+        that are loaded from a server on demand.
+        <ul>
+            <li><a href="../etoys/#fullscreen=true" target="_blank">Etoys</a></li>
+            <li><a href="../scratch/#fullscreen=true" target="_blank">Scratch</a></li>
+        </ul>
+        On some mobile devices you can save these apps to the home screen, and run them like a real app.
 
         <h2>Use SqueakJS on your own website</h2>
         Instead of passing options by URL to this page, you can
@@ -138,9 +150,9 @@
         </pre>
         Options include display resolution, template file URLs, etc.
         For example usage take a look at the demo pages included in the GitHub repo:
-        <a href="http://bertfreudenberg.github.io/SqueakJS/etoys/">Etoys</a>
+        <a href="../etoys/" target="_blank">Etoys</a>
         (<a href="https://github.com/bertfreudenberg/SqueakJS/tree/master/etoys" target="_blank">source</a>) or
-        <a href="http://bertfreudenberg.github.io/SqueakJS/scratch/">Scratch</a>
+        <a href="../scratch/" target="_blank">Scratch</a>
         (<a href="https://github.com/bertfreudenberg/SqueakJS/tree/master/scratch" target="_blank">source</a>)
     </div>
     <canvas id="sqCanvas"></canvas>

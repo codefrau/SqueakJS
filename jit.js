@@ -189,6 +189,7 @@ to single-step.
         this.sourceLabels = {};     // source pos of generated labels 
         this.needsLabel = {0: true}; // jump targets
         this.needsBreak = false;    // insert break check for previous bytecode
+        this.needsAnyLabel = false; // omit switch/case if not necessary
         if (optClass && optSel)
             this.source.push("// ", optClass, ">>", optSel, "\n");
         this.source.push(
@@ -198,9 +199,11 @@ to single-step.
             "    inst = rcvr.pointers,\n",
             "    temp = vm.homeContext.pointers,\n",
             "    lit = vm.method.pointers,\n",
-            "    bytecodes = 0 - vm.pc;\n",
-            "while (true) switch (vm.pc) {\n"
-        );
+            "    bytecodes = 0 - vm.pc;\n");
+
+        this.labelBootstrapStart = this.source.length;
+        this.source.push("while (true) switch (vm.pc) {\n");
+        
         this.done = false;
         while (!this.done) {
             var byte = method.bytes[this.pc++],
@@ -300,13 +303,24 @@ to single-step.
         var funcName = this.functionNameFor(optClass, optSel);
         if (this.singleStep) {
             if (this.debug) this.source.push("// all valid PCs have a label;\n");
+            this.labelBootstrapEnd = this.source.length;
             this.source.push("default: throw Error('invalid PC'); }"); // all PCs handled
+            this.deleteUnneededLabelBootstrap();
             return new Function("return function " + funcName + "(vm, singleStep) {\n" + this.source.join("") + "\n}")();
         } else {
             if (this.debug) this.source.push("// fall back to single-stepping\n");
             this.source.push("default: bytecodes += vm.pc; vm.interpretOne(true); return bytecodes;}");
             this.deleteUnneededLabels();
             return new Function("return function " + funcName + "(vm) {\n" + this.source.join("") + "\n}")();
+        }
+    },
+    deleteUnneededLabelBootstrap: function() {
+        if(!this.needsAnyLabel){
+            this.source[this.labelBootstrapStart] = "";
+            this.source[this.labelBootstrapEnd] = "";
+            this.source[this.sourceLabels[0]] = "";
+            this.source[this.sourceLabels[0]+1] = "";
+            this.source[this.sourceLabels[0]+2] = "";
         }
     },
     generateExtended: function(bytecode) {
@@ -720,6 +734,9 @@ to single-step.
             if (!this.needsLabel[i])
                 for (var j = 0; j < 3; j++) 
                     this.source[this.sourceLabels[i] + j] = "";
+            else
+                if(i > 0)
+                    this.needsAnyLabel = true;
     },
 });
 

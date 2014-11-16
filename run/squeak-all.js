@@ -1076,7 +1076,6 @@ Object.extend(Squeak,
                 });
             }
         }
-        stats.dirs++;
         // check directories
         var entries = Squeak.dirList(dir);
         for (var name in entries) {
@@ -1084,8 +1083,10 @@ Object.extend(Squeak,
                 isDir = entries[name][3];
             if (isDir) {
                 var exists = "squeak:" + path in localStorage;
-                if (exists) Squeak.fsck(null, path, files, stats);
-                else {
+                if (exists) {
+                    Squeak.fsck(null, path, files, stats);
+                    stats.dirs++;
+                } else {
                     console.log("Deleting stale directory " + path);
                     Squeak.dirDelete(path);
                 }

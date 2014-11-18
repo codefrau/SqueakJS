@@ -36,14 +36,15 @@ Object.extend(Squeak,
     osVersion: navigator.userAgent,     // might want to parse
     windowSystem: "HTML",
 },
-"constants", {
+"object header", {
     // object headers
     HeaderTypeMask: 3,
     HeaderTypeSizeAndClass: 0, //3-word header
     HeaderTypeClass: 1,        //2-word header
     HeaderTypeFree: 2,         //free block
     HeaderTypeShort: 3,        //1-word header
-
+},
+"special objects", {
     // Indices into SpecialObjects array
     splOb_NilObject: 0,
     splOb_FalseObject: 1,
@@ -93,7 +94,8 @@ Object.extend(Squeak,
     splOb_ClassExternalLibrary: 47,
     splOb_SelectorAboutToReturn: 48,
     splOb_SelectorRunWithIn: 49,
-
+},
+"known classes", {
     // Class layout:
     Class_superclass: 0,
     Class_mdict: 1,
@@ -175,8 +177,8 @@ Object.extend(Squeak,
     Form_width: 1,
     Form_height: 2,
     Form_depth: 3,
-
-    // Event constants
+},
+"events", {
     Mouse_Blue: 1,
     Mouse_Yellow: 2,
     Mouse_Red: 4,
@@ -189,11 +191,16 @@ Object.extend(Squeak,
     EventTypeNone: 0,
     EventTypeMouse: 1,
     EventTypeKeyboard: 2,
+    EventTypeDragDropFiles: 3,
     EventKeyChar: 0,
     EventKeyDown: 1,
     EventKeyUp: 2,
-
-    // other constants
+    EventDragEnter: 1,
+    EventDragMove: 2,
+    EventDragLeave: 3,
+    EventDragDrop: 4,
+},
+"constants", {
     MinSmallInt: -0x40000000,
     MaxSmallInt:  0x3FFFFFFF,
     NonSmallInt: -0x50000000,           // non-small and neg (so non pos32 too)
@@ -3117,6 +3124,7 @@ Object.subclass('Squeak.Primitives',
         this.loadedModules = {};
         this.builtinModules = {
             FilePlugin:             this.findPluginFunctions("", "primitive(Disable)?(File|Directory)"),
+            DropPlugin:             this.findPluginFunctions("", "primitiveDropRequest"),
             SoundPlugin:            this.findPluginFunctions("snd_"),
             JPEGReadWriter2Plugin:  this.findPluginFunctions("jpeg2_"),
             SecurityPlugin: {
@@ -5330,6 +5338,30 @@ Object.subclass('Squeak.Primitives',
                 }.bind(this));
         }
         return true;
+    },
+},
+'DropPlugin', {
+    primitiveDropRequestFileHandle: function(argCount) {
+        var index = this.stackInteger(0),
+            fileNames = this.display.droppedFiles || [];
+        if (index < 1 || index > fileNames.length) return false;
+        // same code as primitiveFileOpen()
+        var fileName = fileNames[index - 1],
+            file = this.fileOpen(fileName, false);
+        if (!file) return false;
+        var handle = this.makeStArray([fileName]); // array contents irrelevant
+        handle.file = file;             // shared between handles
+        handle.fileWrite = false;       // specific to this handle
+        handle.filePos = 0;             // specific to this handle
+        this.popNandPushIfOK(argCount+1, handle);
+        return true;
+    },
+    primitiveDropRequestFileName: function(argCount) {
+        var index = this.stackInteger(0),
+            fileNames = this.display.droppedFiles || [];
+        if (index < 1 || index > fileNames.length) return false;
+        var result = this.makeStString(fileNames[index - 1]);
+        return this.popNandPushIfOK(argCount, result);
     },
 },
 'SoundPlugin', {

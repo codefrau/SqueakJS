@@ -199,34 +199,6 @@ function setupSwapButtons(options) {
     }
 }
 
-function setupDragAndDrop(display, options) {
-    // do not use addEventListener, we want to replace any previous drop handler
-    document.body.ondragover = function(evt) {
-        evt.stopPropagation();
-        evt.preventDefault();
-        evt.dataTransfer.dropEffect = 'copy';
-        return false;
-    };
-    document.body.ondrop = function(evt) {
-        evt.stopPropagation();
-        evt.preventDefault();
-        [].slice.call(evt.dataTransfer.files).forEach(function(f) {
-            var reader = new FileReader();
-            reader.onload = function () {
-                var buffer = this.result;
-                Squeak.filePut(f.name, buffer);
-                if (/.*image$/.test(f.name) && confirm("Run " + f.name + " now?\n(cancel to use as file)")) {
-                    SqueakJS.appName = f.name.slice(0, -6);
-                    SqueakJS.runImage(buffer, f.name, display, options);
-                } else {
-                }
-            };
-            reader.readAsArrayBuffer(f);
-        });
-        return false;
-    };
-}
-
 function recordModifiers(evt, display) {
     var modifiers =
         (evt.shiftKey ? Squeak.Keyboard_Shift : 0) +
@@ -236,14 +208,18 @@ function recordModifiers(evt, display) {
     return modifiers;
 }
 
+function updateMousePos(evt, canvas, display) {
+    var x = ((evt.pageX - canvas.offsetLeft) * (canvas.width / canvas.offsetWidth)) | 0,
+        y = ((evt.pageY - canvas.offsetTop) * (canvas.height / canvas.offsetHeight)) | 0;
+        // subtract display offset and clamp to display size
+    display.mouseX = Math.max(0, Math.min(display.width, x - display.offsetX));
+    display.mouseY = Math.max(0, Math.min(display.height, y - display.offsetY));
+}
+
 function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
     if (!display.vm) return;
     if (what != "touchend") {
-        var x = ((evt.pageX - canvas.offsetLeft) * (canvas.width / canvas.offsetWidth)) | 0,
-            y = ((evt.pageY - canvas.offsetTop) * (canvas.height / canvas.offsetHeight)) | 0;
-            // subtract display offset and clamp to display size
-        display.mouseX = Math.max(0, Math.min(display.width, x - display.offsetX));
-        display.mouseY = Math.max(0, Math.min(display.height, y - display.offsetY));
+        updateMousePos(evt, canvas, display);
     }
     var buttons = display.buttons & Squeak.Mouse_All;
     switch (what) {
@@ -311,6 +287,22 @@ function recordKeyboardEvent(key, timestamp, display, eventQueue) {
     if (display.runNow) display.runNow(); // don't wait for timeout to run
 }
 
+function recordDragDropEvent(type, evt, canvas, display, eventQueue) {
+    if (!display.vm || !eventQueue) return;
+    updateMousePos(evt, canvas, display);
+    eventQueue.push([
+        Squeak.EventTypeDragDropFiles,
+        evt.timeStamp,  // converted to Squeak time in makeSqueakEvent()
+        type,
+        display.mouseX,
+        display.mouseY,
+        display.buttons >> 3,
+        display.droppedFiles.length,
+    ]);
+    if (display.signalInputEvent)
+        display.signalInputEvent();
+}
+
 function fakeCmdOrCtrlKey(key, timestamp, display, eventQueue) {
     // set both Cmd and Ctrl bit, because we don't know what the image wants
     display.buttons &= ~Squeak.Keyboard_All;  // remove all modifiers
@@ -347,10 +339,10 @@ function createSqueakDisplay(canvas, options) {
         keys: [],
         clipboardString: '',
         clipboardStringChanged: false,
+        droppedFiles: [],
         signalInputEvent: null, // function set by VM
         // additional functions added below
     };
-    setupDragAndDrop(display, options);
     setupSwapButtons(options);
 
     var eventQueue = null;
@@ -538,6 +530,51 @@ function createSqueakDisplay(canvas, options) {
             alert("paste error " + err);
         }
         evt.preventDefault();
+    };
+    // do not use addEventListener, we want to replace any previous drop handler
+    document.body.ondragover = function(evt) {
+        recordDragDropEvent(Squeak.EventDragMove, evt, canvas, display, eventQueue);
+        evt.stopPropagation();
+        evt.preventDefault();
+        evt.dataTransfer.dropEffect = 'copy';
+        return false;
+    };
+    document.body.ondragenter = function(evt) {
+        recordDragDropEvent(Squeak.EventDragEnter, evt, canvas, display, eventQueue);
+    };
+    document.body.ondragleave = function(evt) {
+        recordDragDropEvent(Squeak.EventDragLeave, evt, canvas, display, eventQueue);
+    };
+    document.body.ondrop = function(evt) {
+        evt.stopPropagation();
+        evt.preventDefault();
+        var files = [].slice.call(evt.dataTransfer.files),
+            loaded = [],
+            image, imageName = null;
+        display.droppedFiles = [];
+        files.forEach(function(f) {
+            display.droppedFiles.push(f.name);
+            var reader = new FileReader();
+            reader.onload = function () {
+                var buffer = this.result;
+                Squeak.filePut(f.name, buffer);
+                loaded.push(f.name);
+                if (!image && /.*image$/.test(f.name) && (!display.vm || confirm("Run " + f.name + " now?\n(cancel to use as file)"))) {
+                    image = buffer;
+                    imageName = f.name;
+                }
+                if (loaded.length == files.length) {                
+                    if (image) {
+                        SqueakJS.appName = imageName.slice(0, -6);
+                        SqueakJS.runImage(image, imageName, display, options);
+                    } else {
+                        recordDragDropEvent(Squeak.EventDragDrop, evt, canvas, display, eventQueue);
+                    }
+                }
+            };
+            reader.readAsArrayBuffer(f);
+        });
+        return false;
     };
     window.onresize = function() {
         // call resizeDone only if window size didn't change for 300ms

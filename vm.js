@@ -5360,7 +5360,7 @@ Object.subclass('Squeak.Primitives',
         var index = this.stackInteger(0),
             fileNames = this.display.droppedFiles || [];
         if (index < 1 || index > fileNames.length) return false;
-        var result = this.makeStString(fileNames[index - 1]);
+        var result = this.makeStString(this.filenameToSqueak(fileNames[index - 1]));
         return this.popNandPushIfOK(argCount, result);
     },
 },

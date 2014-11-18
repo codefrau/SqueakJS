@@ -237,6 +237,7 @@ function recordModifiers(evt, display) {
 }
 
 function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
+    if (!display.vm) return;
     if (what != "touchend") {
         var x = ((evt.pageX - canvas.offsetLeft) * (canvas.width / canvas.offsetWidth)) | 0,
             y = ((evt.pageY - canvas.offsetTop) * (canvas.height / canvas.offsetHeight)) | 0;
@@ -287,6 +288,7 @@ function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
 }
 
 function recordKeyboardEvent(key, timestamp, display, eventQueue) {
+    if (!display.vm) return;
     var code = (display.buttons >> 3) << 8 | key;
     if (code === display.vm.interruptKeycode) {
         display.vm.interruptPending = true;
@@ -454,6 +456,7 @@ function createSqueakDisplay(canvas, options) {
         canvas.ontouchend(evt);
     };
     document.onkeypress = function(evt) {
+        if (!display.vm) return true;
         // check for ctrl-x/c/v/r
         if (/[CXVR]/.test(String.fromCharCode(evt.charCode + 64)))
             return true;  // let browser handle cut/copy/paste/reload
@@ -463,6 +466,7 @@ function createSqueakDisplay(canvas, options) {
     };
     document.onkeydown = function(evt) {
         checkFullscreen();
+        if (!display.vm) return true;
         recordModifiers(evt, display);
         var squeakCode = ({
             8: 8,   // Backspace
@@ -499,9 +503,11 @@ function createSqueakDisplay(canvas, options) {
         }
     };
     document.onkeyup = function(evt) {
+        if (!display.vm) return true;
         recordModifiers(evt, display);
     };
     document.oncopy = function(evt, key) {
+        if (!display.vm) return true;
         // simulate copy event for Squeak so it places its text in clipboard
         display.clipboardStringChanged = false;
         fakeCmdOrCtrlKey((key || 'c').charCodeAt(0), evt.timeStamp, display, eventQueue);
@@ -519,9 +525,11 @@ function createSqueakDisplay(canvas, options) {
         evt.preventDefault();
     };
     document.oncut = function(evt) {
+        if (!display.vm) return true;
         document.oncopy(evt, 'x');
     };
     document.onpaste = function(evt) {
+        if (!display.vm) return true;
         try {
             display.clipboardString = evt.clipboardData.getData('Text');
             // simulate paste event for Squeak
@@ -789,6 +797,7 @@ SqueakJS.quitSqueak = function() {
 
 SqueakJS.onQuit = function(vm, display, options) {
     window.onbeforeunload = null;
+    display.vm = null;
     if (options.spinner) options.spinner.style.display = "none";
     if (options.onQuit) options.onQuit(vm, display, options);
     else display.showBanner(SqueakJS.appName + " stopped.");

@@ -1,4 +1,4 @@
-/* SqueakJS 0.6.5
+/* SqueakJS 0.6.6
  *
  * squeak-all.js assembled from:
  *   ../squeak.js
@@ -225,34 +225,6 @@ function setupSwapButtons(options) {
     }
 }
 
-function setupDragAndDrop(display, options) {
-    // do not use addEventListener, we want to replace any previous drop handler
-    document.body.ondragover = function(evt) {
-        evt.stopPropagation();
-        evt.preventDefault();
-        evt.dataTransfer.dropEffect = 'copy';
-        return false;
-    };
-    document.body.ondrop = function(evt) {
-        evt.stopPropagation();
-        evt.preventDefault();
-        [].slice.call(evt.dataTransfer.files).forEach(function(f) {
-            var reader = new FileReader();
-            reader.onload = function () {
-                var buffer = this.result;
-                Squeak.filePut(f.name, buffer);
-                if (/.*image$/.test(f.name) && confirm("Run " + f.name + " now?\n(cancel to use as file)")) {
-                    SqueakJS.appName = f.name.slice(0, -6);
-                    SqueakJS.runImage(buffer, f.name, display, options);
-                } else {
-                }
-            };
-            reader.readAsArrayBuffer(f);
-        });
-        return false;
-    };
-}
-
 function recordModifiers(evt, display) {
     var modifiers =
         (evt.shiftKey ? Squeak.Keyboard_Shift : 0) +
@@ -262,13 +234,18 @@ function recordModifiers(evt, display) {
     return modifiers;
 }
 
+function updateMousePos(evt, canvas, display) {
+    var x = ((evt.pageX - canvas.offsetLeft) * (canvas.width / canvas.offsetWidth)) | 0,
+        y = ((evt.pageY - canvas.offsetTop) * (canvas.height / canvas.offsetHeight)) | 0;
+        // subtract display offset and clamp to display size
+    display.mouseX = Math.max(0, Math.min(display.width, x - display.offsetX));
+    display.mouseY = Math.max(0, Math.min(display.height, y - display.offsetY));
+}
+
 function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
+    if (!display.vm) return;
     if (what != "touchend") {
-        var x = ((evt.pageX - canvas.offsetLeft) * (canvas.width / canvas.offsetWidth)) | 0,
-            y = ((evt.pageY - canvas.offsetTop) * (canvas.height / canvas.offsetHeight)) | 0;
-            // subtract display offset and clamp to display size
-        display.mouseX = Math.max(0, Math.min(display.width, x - display.offsetX));
-        display.mouseY = Math.max(0, Math.min(display.height, y - display.offsetY));
+        updateMousePos(evt, canvas, display);
     }
     var buttons = display.buttons & Squeak.Mouse_All;
     switch (what) {
@@ -313,6 +290,7 @@ function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
 }
 
 function recordKeyboardEvent(key, timestamp, display, eventQueue) {
+    if (!display.vm) return;
     var code = (display.buttons >> 3) << 8 | key;
     if (code === display.vm.interruptKeycode) {
         display.vm.interruptPending = true;
@@ -333,6 +311,22 @@ function recordKeyboardEvent(key, timestamp, display, eventQueue) {
     }
     display.idle = 0;
     if (display.runNow) display.runNow(); // don't wait for timeout to run
+}
+
+function recordDragDropEvent(type, evt, canvas, display, eventQueue) {
+    if (!display.vm || !eventQueue) return;
+    updateMousePos(evt, canvas, display);
+    eventQueue.push([
+        Squeak.EventTypeDragDropFiles,
+        evt.timeStamp,  // converted to Squeak time in makeSqueakEvent()
+        type,
+        display.mouseX,
+        display.mouseY,
+        display.buttons >> 3,
+        display.droppedFiles.length,
+    ]);
+    if (display.signalInputEvent)
+        display.signalInputEvent();
 }
 
 function fakeCmdOrCtrlKey(key, timestamp, display, eventQueue) {
@@ -371,10 +365,10 @@ function createSqueakDisplay(canvas, options) {
         keys: [],
         clipboardString: '',
         clipboardStringChanged: false,
+        droppedFiles: [],
         signalInputEvent: null, // function set by VM
         // additional functions added below
     };
-    setupDragAndDrop(display, options);
     setupSwapButtons(options);
 
     var eventQueue = null;
@@ -480,6 +474,7 @@ function createSqueakDisplay(canvas, options) {
         canvas.ontouchend(evt);
     };
     document.onkeypress = function(evt) {
+        if (!display.vm) return true;
         // check for ctrl-x/c/v/r
         if (/[CXVR]/.test(String.fromCharCode(evt.charCode + 64)))
             return true;  // let browser handle cut/copy/paste/reload
@@ -489,6 +484,7 @@ function createSqueakDisplay(canvas, options) {
     };
     document.onkeydown = function(evt) {
         checkFullscreen();
+        if (!display.vm) return true;
         recordModifiers(evt, display);
         var squeakCode = ({
             8: 8,   // Backspace
@@ -525,9 +521,11 @@ function createSqueakDisplay(canvas, options) {
         }
     };
     document.onkeyup = function(evt) {
+        if (!display.vm) return true;
         recordModifiers(evt, display);
     };
     document.oncopy = function(evt, key) {
+        if (!display.vm) return true;
         // simulate copy event for Squeak so it places its text in clipboard
         display.clipboardStringChanged = false;
         fakeCmdOrCtrlKey((key || 'c').charCodeAt(0), evt.timeStamp, display, eventQueue);
@@ -545,9 +543,11 @@ function createSqueakDisplay(canvas, options) {
         evt.preventDefault();
     };
     document.oncut = function(evt) {
+        if (!display.vm) return true;
         document.oncopy(evt, 'x');
     };
     document.onpaste = function(evt) {
+        if (!display.vm) return true;
         try {
             display.clipboardString = evt.clipboardData.getData('Text');
             // simulate paste event for Squeak
@@ -556,6 +556,51 @@ function createSqueakDisplay(canvas, options) {
             alert("paste error " + err);
         }
         evt.preventDefault();
+    };
+    // do not use addEventListener, we want to replace any previous drop handler
+    document.body.ondragover = function(evt) {
+        recordDragDropEvent(Squeak.EventDragMove, evt, canvas, display, eventQueue);
+        evt.stopPropagation();
+        evt.preventDefault();
+        evt.dataTransfer.dropEffect = 'copy';
+        return false;
+    };
+    document.body.ondragenter = function(evt) {
+        recordDragDropEvent(Squeak.EventDragEnter, evt, canvas, display, eventQueue);
+    };
+    document.body.ondragleave = function(evt) {
+        recordDragDropEvent(Squeak.EventDragLeave, evt, canvas, display, eventQueue);
+    };
+    document.body.ondrop = function(evt) {
+        evt.stopPropagation();
+        evt.preventDefault();
+        var files = [].slice.call(evt.dataTransfer.files),
+            loaded = [],
+            image, imageName = null;
+        display.droppedFiles = [];
+        files.forEach(function(f) {
+            display.droppedFiles.push(f.name);
+            var reader = new FileReader();
+            reader.onload = function () {
+                var buffer = this.result;
+                Squeak.filePut(f.name, buffer);
+                loaded.push(f.name);
+                if (!image && /.*image$/.test(f.name) && (!display.vm || confirm("Run " + f.name + " now?\n(cancel to use as file)"))) {
+                    image = buffer;
+                    imageName = f.name;
+                }
+                if (loaded.length == files.length) {                
+                    if (image) {
+                        SqueakJS.appName = imageName.slice(0, -6);
+                        SqueakJS.runImage(image, imageName, display, options);
+                    } else {
+                        recordDragDropEvent(Squeak.EventDragDrop, evt, canvas, display, eventQueue);
+                    }
+                }
+            };
+            reader.readAsArrayBuffer(f);
+        });
+        return false;
     };
     window.onresize = function() {
         // call resizeDone only if window size didn't change for 300ms
@@ -815,6 +860,7 @@ SqueakJS.quitSqueak = function() {
 
 SqueakJS.onQuit = function(vm, display, options) {
     window.onbeforeunload = null;
+    display.vm = null;
     if (options.spinner) options.spinner.style.display = "none";
     if (options.onQuit) options.onQuit(vm, display, options);
     else display.showBanner(SqueakJS.appName + " stopped.");
@@ -868,7 +914,7 @@ window.Squeak = users.bert.SqueakJS.vm;
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 0.6.5",
+    vmVersion: "SqueakJS 0.6.6",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -877,14 +923,15 @@ Object.extend(Squeak,
     osVersion: navigator.userAgent,     // might want to parse
     windowSystem: "HTML",
 },
-"constants", {
+"object header", {
     // object headers
     HeaderTypeMask: 3,
     HeaderTypeSizeAndClass: 0, //3-word header
     HeaderTypeClass: 1,        //2-word header
     HeaderTypeFree: 2,         //free block
     HeaderTypeShort: 3,        //1-word header
-
+},
+"special objects", {
     // Indices into SpecialObjects array
     splOb_NilObject: 0,
     splOb_FalseObject: 1,
@@ -934,7 +981,8 @@ Object.extend(Squeak,
     splOb_ClassExternalLibrary: 47,
     splOb_SelectorAboutToReturn: 48,
     splOb_SelectorRunWithIn: 49,
-
+},
+"known classes", {
     // Class layout:
     Class_superclass: 0,
     Class_mdict: 1,
@@ -1016,8 +1064,8 @@ Object.extend(Squeak,
     Form_width: 1,
     Form_height: 2,
     Form_depth: 3,
-
-    // Event constants
+},
+"events", {
     Mouse_Blue: 1,
     Mouse_Yellow: 2,
     Mouse_Red: 4,
@@ -1030,11 +1078,16 @@ Object.extend(Squeak,
     EventTypeNone: 0,
     EventTypeMouse: 1,
     EventTypeKeyboard: 2,
+    EventTypeDragDropFiles: 3,
     EventKeyChar: 0,
     EventKeyDown: 1,
     EventKeyUp: 2,
-
-    // other constants
+    EventDragEnter: 1,
+    EventDragMove: 2,
+    EventDragLeave: 3,
+    EventDragDrop: 4,
+},
+"constants", {
     MinSmallInt: -0x40000000,
     MaxSmallInt:  0x3FFFFFFF,
     NonSmallInt: -0x50000000,           // non-small and neg (so non pos32 too)
@@ -3958,6 +4011,7 @@ Object.subclass('Squeak.Primitives',
         this.loadedModules = {};
         this.builtinModules = {
             FilePlugin:             this.findPluginFunctions("", "primitive(Disable)?(File|Directory)"),
+            DropPlugin:             this.findPluginFunctions("", "primitiveDropRequest"),
             SoundPlugin:            this.findPluginFunctions("snd_"),
             JPEGReadWriter2Plugin:  this.findPluginFunctions("jpeg2_"),
             SecurityPlugin: {
@@ -6171,6 +6225,30 @@ Object.subclass('Squeak.Primitives',
                 }.bind(this));
         }
         return true;
+    },
+},
+'DropPlugin', {
+    primitiveDropRequestFileHandle: function(argCount) {
+        var index = this.stackInteger(0),
+            fileNames = this.display.droppedFiles || [];
+        if (index < 1 || index > fileNames.length) return false;
+        // same code as primitiveFileOpen()
+        var fileName = fileNames[index - 1],
+            file = this.fileOpen(fileName, false);
+        if (!file) return false;
+        var handle = this.makeStArray([fileName]); // array contents irrelevant
+        handle.file = file;             // shared between handles
+        handle.fileWrite = false;       // specific to this handle
+        handle.filePos = 0;             // specific to this handle
+        this.popNandPushIfOK(argCount+1, handle);
+        return true;
+    },
+    primitiveDropRequestFileName: function(argCount) {
+        var index = this.stackInteger(0),
+            fileNames = this.display.droppedFiles || [];
+        if (index < 1 || index > fileNames.length) return false;
+        var result = this.makeStString(this.filenameToSqueak(fileNames[index - 1]));
+        return this.popNandPushIfOK(argCount, result);
     },
 },
 'SoundPlugin', {

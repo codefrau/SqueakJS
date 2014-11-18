@@ -532,22 +532,30 @@ function createSqueakDisplay(canvas, options) {
         evt.preventDefault();
     };
     // do not use addEventListener, we want to replace any previous drop handler
+    function dragEventHasFiles(evt) {
+        for (var i = 0; i < evt.dataTransfer.types.length; i++)
+            if (evt.dataTransfer.types[i] == 'Files') return true;
+        return false;
+    }
     document.body.ondragover = function(evt) {
-        recordDragDropEvent(Squeak.EventDragMove, evt, canvas, display, eventQueue);
-        evt.stopPropagation();
         evt.preventDefault();
+        if (!dragEventHasFiles(evt))
+            return evt.dataTransfer.dropEffect = 'none';
         evt.dataTransfer.dropEffect = 'copy';
+        recordDragDropEvent(Squeak.EventDragMove, evt, canvas, display, eventQueue);
         return false;
     };
     document.body.ondragenter = function(evt) {
+        if (!dragEventHasFiles(evt)) return;
         recordDragDropEvent(Squeak.EventDragEnter, evt, canvas, display, eventQueue);
     };
     document.body.ondragleave = function(evt) {
+        if (!dragEventHasFiles(evt)) return;
         recordDragDropEvent(Squeak.EventDragLeave, evt, canvas, display, eventQueue);
     };
     document.body.ondrop = function(evt) {
-        evt.stopPropagation();
         evt.preventDefault();
+        if (!dragEventHasFiles(evt)) return false;
         var files = [].slice.call(evt.dataTransfer.files),
             loaded = [],
             image, imageName = null;

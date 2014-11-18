@@ -53,17 +53,19 @@
         // also, enable drag-and-drop even if no image loaded yet
         // (squeak.js will replace these when an image is running)
         document.body.ondragover = function(evt) {
-            evt.stopPropagation();
             evt.preventDefault();
-            evt.dataTransfer.dropEffect = "copy";
-            drop.style.borderColor = "#0E0";
+            if (evt.dataTransfer.items[0].kind == "file") {
+                evt.dataTransfer.dropEffect = "copy";
+                drop.style.borderColor = "#0E0";
+            } else {
+                evt.dataTransfer.dropEffect = "none";
+            }
             return false;
         };
         document.body.ondragleave = function(evt) {
             drop.style.borderColor = "";
         };
         document.body.ondrop = function(evt) {
-            evt.stopPropagation();
             evt.preventDefault();
             drop.style.borderColor = "";
             var files = [].slice.call(evt.dataTransfer.files),

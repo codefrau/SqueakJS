@@ -420,6 +420,9 @@ Object.extend(Squeak,
         if (!errorDo) errorDo = function(err) { console.log(err) };
         var path = this.splitFilePath(filepath);
         if (!path.basename) return errorDo("Invalid path: " + filepath);
+        // if we have been writing to memory, return that version
+        if (window.SqueakDBFake && SqueakDBFake.bigFiles[path.fullname])
+            return thenDo(SqueakDBFake.bigFiles[path.fullname]);
         this.dbTransaction("readonly", "get " + filepath, function(fileStore) {
             var getReq = fileStore.get(path.fullname);
             getReq.onerror = function(e) { errorDo(this.errorCode) };

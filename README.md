@@ -5,7 +5,7 @@ SqueakJS is an HTML5 runtime engine for [Squeak][squeak]</a> Smalltalk written i
 
 The interpreter core is in "vm.js" and plugins are in the "plugins" directory. The Just-in-Time compiler is optional ("jit.js") and can be easily replaced with your own. There are two user interfaces: the regular HTML interface lets you use SqueakJS on your own web page. Just include "squeak.js". The other interface provides a visual debugger implemented also in JavaScript using [Lively][lively]. This does not use "squeak.js" but reimplements the UI in Lively Morphic.
 
-Please visit the [project home page][homepage]!
+For discussions, please use the [vm-dev mailing list][vm-dev]. Also, please visit the [project home page][homepage]!
 
 Running it
 ----------
@@ -87,6 +87,7 @@ There's a gazillion exciting things to do :)
 
   [squeak]:   http://squeak.org/
   [repo]:     https://github.com/bertfreudenberg/SqueakJS
+  [vm-dev]:   http://lists.squeakfoundation.org/mailman/listinfo/vm-dev
   [homepage]: http://bertfreudenberg.github.io/SqueakJS/
   [run]:      http://bertfreudenberg.github.io/SqueakJS/run/
   [mini]:     http://bertfreudenberg.github.io/SqueakJS/demo/simple.html

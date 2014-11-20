@@ -77,7 +77,7 @@ SqueakJS is intended to run any Squeak image. It can already load anything from 
 
 As for optimizing I think the way to go is an optimizing JIT compiler. The current JIT is very simple and does not optimize at all. Since we can't access or manipulate the JavaScript stack, we might want that compiler to inline as much as possible, but keep the call sequence flat so we can return to the browser at any time. Even better (but potentially more complicated) is actually using the JavaScript, just like Eliot's Stack VM uses the C stack. To make BitBlt fast, we could probably use WebGL.
 
-To make SqueakJS useful beyond running existing Squeak images, we should add a JavaScript bridge that lets you use JavaScript libraries directly, just like C-Squeak has ObjectiveC and Python bridges. With that you could write a native HTML UI which would certainly be much faster than BitBlt.
+To make SqueakJS useful beyond running existing Squeak images, we should use the JavaScript bridge to write a native HTML UI which would certainly be much faster than BitBlt.
 
 Networking would be interesting, too. How about implementing the SocketPlugin via WebSockets? Parallelize the VM with WebWorkers?
 
@@ -101,6 +101,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2014-11-20: 0.6.7 implement JavaScriptPlugin
     2014-11-18: 0.6.6 implement DropPlugin
     2014-11-14: 0.6.5 add generated Balloon2D plugin
     2014-11-06: 0.6.4 add generic run page

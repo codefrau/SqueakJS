@@ -45,25 +45,28 @@
                     list = "";
                 for (var f in entries) {
                     var entry = entries[f];
-                    if (!entry[3] && entry[0].match(/\.image$/)) list += '<li><a href="#image=' + f + '">' + f + '</li>';
+                    if (!entry[3] && entry[0].match(/\.image$/))
+                        list += '<li><a href="#image=' + f + '">' + f + '</a> (' + (entry[4]/1000000).toFixed(1) + ' MB)</li>';
                 };
-                if (list) images.innerHTML = "Locally stored images:<ul>" + list + "</ul>";
+                if (list) images.innerHTML = "Run locally stored images:<ul>" + list + "</ul>";
             });
         }, 0);
         // also, enable drag-and-drop even if no image loaded yet
         // (squeak.js will replace these when an image is running)
         document.body.ondragover = function(evt) {
-            evt.stopPropagation();
             evt.preventDefault();
-            evt.dataTransfer.dropEffect = "copy";
-            drop.style.borderColor = "#0E0";
+            if (evt.dataTransfer.items[0].kind == "file") {
+                evt.dataTransfer.dropEffect = "copy";
+                drop.style.borderColor = "#0E0";
+            } else {
+                evt.dataTransfer.dropEffect = "none";
+            }
             return false;
         };
         document.body.ondragleave = function(evt) {
             drop.style.borderColor = "";
         };
         document.body.ondrop = function(evt) {
-            evt.stopPropagation();
             evt.preventDefault();
             drop.style.borderColor = "";
             var files = [].slice.call(evt.dataTransfer.files),
@@ -104,6 +107,7 @@
         Use drag-and-drop to run a Squeak image from your machine: drop the image (perhaps together with a changes and sources file) into this page.
         <div id="drop">Drop Squeak images and other files here:</div>
         <div id="images"></div>
+        All files are stored persistently in a database inside your web browser. Use a FileList inside Squeak to manage them.
 
         <h2>Run Squeak images from the internet</h2>
         Construct a URL linking to this page and pass the image and options.
@@ -116,6 +120,7 @@
         <li>Squeak 3.9 (2008) <a href="#url=http://freudenbergs.de/bert/squeakjs&files=[Squeak3.9.1-final-7075.image,Squeak3.9.1-final-7075.changes,SqueakV39.sources]&swapButtons=true">link</a></li>
         <li>Squeak 4.5 (2014) <a href="#url=http://freudenbergs.de/bert/squeakjs&files=[Squeak4.5-13680.image,Squeak4.5-13680.changes,SqueakV41.sources]">link</a></li>
         </ul>
+        On the first run these will be stored locally. Subsequent starts are much faster.
 
         <h2>Run SqueakJS apps</h2>
         SqueakJS can be used to run Squeak apps. Here are two examples.
@@ -154,6 +159,14 @@
         (<a href="https://github.com/bertfreudenberg/SqueakJS/tree/master/etoys" target="_blank">source</a>) or
         <a href="../scratch/" target="_blank">Scratch</a>
         (<a href="https://github.com/bertfreudenberg/SqueakJS/tree/master/scratch" target="_blank">source</a>)
+
+        <h2>Contribute to SqueakJS</h2>
+        SqueakJS is free software (MIT license).
+        You're very welcome to <a href="http://lists.squeakfoundation.org/mailman/listinfo/vm-dev">discuss</a>, 
+        <a href="https://github.com/bertfreudenberg/SqueakJS/issues">report bugs</a>,
+        and <a href="https://github.com/bertfreudenberg/SqueakJS/">contribute code</a>.
+        
+        <p>Have fun! -- Bert Freudenberg</p>
     </div>
     <canvas id="sqCanvas"></canvas>
     <div id="sqSpinner"><div></div></div>

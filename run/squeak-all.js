@@ -1,4 +1,4 @@
-/* SqueakJS 0.6.6
+/* SqueakJS 0.6.7
  *
  * squeak-all.js assembled from:
  *   ../squeak.js
@@ -558,22 +558,30 @@ function createSqueakDisplay(canvas, options) {
         evt.preventDefault();
     };
     // do not use addEventListener, we want to replace any previous drop handler
+    function dragEventHasFiles(evt) {
+        for (var i = 0; i < evt.dataTransfer.types.length; i++)
+            if (evt.dataTransfer.types[i] == 'Files') return true;
+        return false;
+    }
     document.body.ondragover = function(evt) {
-        recordDragDropEvent(Squeak.EventDragMove, evt, canvas, display, eventQueue);
-        evt.stopPropagation();
         evt.preventDefault();
+        if (!dragEventHasFiles(evt))
+            return evt.dataTransfer.dropEffect = 'none';
         evt.dataTransfer.dropEffect = 'copy';
+        recordDragDropEvent(Squeak.EventDragMove, evt, canvas, display, eventQueue);
         return false;
     };
     document.body.ondragenter = function(evt) {
+        if (!dragEventHasFiles(evt)) return;
         recordDragDropEvent(Squeak.EventDragEnter, evt, canvas, display, eventQueue);
     };
     document.body.ondragleave = function(evt) {
+        if (!dragEventHasFiles(evt)) return;
         recordDragDropEvent(Squeak.EventDragLeave, evt, canvas, display, eventQueue);
     };
     document.body.ondrop = function(evt) {
-        evt.stopPropagation();
         evt.preventDefault();
+        if (!dragEventHasFiles(evt)) return false;
         var files = [].slice.call(evt.dataTransfer.files),
             loaded = [],
             image, imageName = null;
@@ -914,7 +922,7 @@ window.Squeak = users.bert.SqueakJS.vm;
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 0.6.6",
+    vmVersion: "SqueakJS 0.6.7",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -1307,6 +1315,9 @@ Object.extend(Squeak,
         if (!errorDo) errorDo = function(err) { console.log(err) };
         var path = this.splitFilePath(filepath);
         if (!path.basename) return errorDo("Invalid path: " + filepath);
+        // if we have been writing to memory, return that version
+        if (window.SqueakDBFake && SqueakDBFake.bigFiles[path.fullname])
+            return thenDo(SqueakDBFake.bigFiles[path.fullname]);
         this.dbTransaction("readonly", "get " + filepath, function(fileStore) {
             var getReq = fileStore.get(path.fullname);
             getReq.onerror = function(e) { errorDo(this.errorCode) };
@@ -4010,6 +4021,7 @@ Object.subclass('Squeak.Primitives',
     initModules: function() {
         this.loadedModules = {};
         this.builtinModules = {
+            JavaScriptPlugin:       this.findPluginFunctions("js_", "", true),
             FilePlugin:             this.findPluginFunctions("", "primitive(Disable)?(File|Directory)"),
             DropPlugin:             this.findPluginFunctions("", "primitiveDropRequest"),
             SoundPlugin:            this.findPluginFunctions("snd_"),
@@ -4808,16 +4820,21 @@ Object.subclass('Squeak.Primitives',
         stString.bytes = bytes;
         return stString;
     },
-    makeStObject: function(obj) {
+    makeStObject: function(obj, proxyClass) {
         if (obj === undefined || obj === null) return this.vm.nilObj;
         if (obj === true) return this.vm.trueObj;
         if (obj === false) return this.vm.falseObj;
         if (obj.stClass) return obj;
-        if (typeof obj === "string" || obj.constructor === Uint8Array) return this.makeStString(obj);
-        if (obj.constructor === Array) return this.makeStArray(obj);
         if (typeof obj === "number")
             if (obj === (obj|0)) return this.makeLargeIfNeeded(obj);
-            else return this.makeFloat(obj)
+            else return this.makeFloat(obj);
+        if (proxyClass) {   // make JSObjectProxy instance 
+            var stObj = this.vm.instantiateClass(proxyClass, 0);
+            stObj.jsObject = obj;
+            return stObj;
+        } 
+        if (typeof obj === "string" || obj.constructor === Uint8Array) return this.makeStString(obj);
+        if (obj.constructor === Array) return this.makeStArray(obj);
         throw Error("cannot make smalltalk object");
     },
     pointsTo: function(rcvr, arg) {
@@ -6671,6 +6688,117 @@ Object.subclass('Squeak.Primitives',
         if (!path) return false;
         this.vm.popNandPush(argCount + 1, this.makeStString(this.filenameToSqueak(path)));
         return true;
+    },
+},
+'JavaScriptPlugin', {
+    js_primitiveCreateInstance: function(argCount) {
+        var rcvr = this.stackNonInteger(1),
+            arg = this.stackNonInteger(0),
+            jsArg = arg.isNil ? Object :
+                arg.bytes ? this.js_global(arg.bytesAsString()) :
+                arg.jsObject;
+        if (typeof jsArg != "function") return false;
+        rcvr.jsObject = new jsArg();
+        return this.popNIfOK(argCount);
+    },
+    js_primitiveLookupGlobal: function(argCount) {
+        var rcvr = this.stackNonInteger(1),
+            arg = this.stackNonInteger(0),
+            jsArg = arg.isNil ? this.vm :
+                arg.bytes ? this.js_global(arg.bytesAsString()) :
+                arg.jsObject;
+        rcvr.jsObject = jsArg;
+        return this.popNIfOK(argCount);
+    },
+    js_primitiveCall: function(argCount) {
+        var rcvr = this.stackNonInteger(1),
+            obj = rcvr.jsObject || window,
+            message = this.stackNonInteger(0).pointers,
+            selector = message[0].bytesAsString(),
+            args = message[1].pointers || [],
+            jsResult = null;
+        try {
+            var propName = selector.match(/([^:]*)/)[0];
+            if (!propName in obj) return false;
+            var propValue = obj[propName];
+            if (typeof propValue == "function") {
+                jsResult = propValue.apply(obj, this.js_makeJSArray(args));
+            } else {
+                if (args.length == 0)
+                    jsResult = propValue;
+                else if (args.length == 1)
+                    obj[propName] = this.js_makeJSObject(args[0]);
+                else return false;
+            }
+        } catch(err) {
+            return false;
+        }
+        var stResult = this.makeStObject(jsResult, rcvr.sqClass);
+        return this.popNandPushIfOK(argCount + 1, stResult);
+    },
+    js_primitivePrintString: function(argCount) {
+        var rcvr = this.stackNonInteger(0).jsObject;
+        return this.popNandPushIfOK(argCount + 1, this.makeStString('' + rcvr));
+    },
+    js_primitiveTypeof: function(argCount) {
+        var rcvr = this.stackNonInteger(0).jsObject;
+        return this.popNandPushIfOK(argCount + 1, this.makeStString(typeof rcvr));
+    },
+    js_primitiveAt: function(argCount) {
+        var rcvr = this.stackNonInteger(1),
+            propName = this.vm.stackValue(0),
+            propValue;
+        try {
+            var jsRcvr = rcvr.jsObject,
+                jsPropName = typeof propName == "number" ? propName : propName.bytesAsString(),
+                jsPropValue = jsRcvr[jsPropName];
+            propValue = this.makeStObject(jsPropValue, rcvr.sqClass);
+        } catch(err) {
+            console.error(err);
+            return false;
+        }
+        return this.popNandPushIfOK(argCount + 1, propValue);
+    },
+    js_primitiveAtPut: function(argCount) {
+        var rcvr = this.stackNonInteger(2),
+            propName = this.vm.stackValue(1),
+            propValue = this.vm.stackValue(0);
+        try {
+            var jsRcvr = rcvr.jsObject,
+                jsPropName = typeof propName == "number" ? propName : propName.bytesAsString(),
+                jsPropValue = this.js_makeJSObject(propValue);
+            jsRcvr[jsPropName] = jsPropValue;
+        } catch(err) {
+            console.error(err);
+            return false;
+        }
+        return this.popNandPushIfOK(argCount + 1, propValue);
+    },
+    js_global: function(pathname) {
+        var path = pathname.split('.'),
+            global = window;
+        for (var i = 0; i < path.length; i++)
+            global = global[path[i]];
+        return global;
+    },
+    js_makeJSObject: function(sqObject) {
+        if (typeof sqObject === "number") return sqObject;
+        if (sqObject.jsObject) return sqObject.jsObject;
+        if (sqObject.isFloat) return sqObject.float;
+        if (sqObject.isNil) return null;
+        if (sqObject.isTrue) return true;
+        if (sqObject.isFalse) return false;
+        if (sqObject.sqClass === this.vm.specialObjects[Squeak.splOb_ClassString])
+            return sqObject.bytesAsString();
+        if (sqObject.sqClass === this.vm.specialObjects[Squeak.splOb_ClassArray])
+            return this.js_makeJSArray(sqObject.pointers || []);
+        return sqObject;
+    },
+    js_makeJSArray: function(sqObjects) {
+        var jsArray = [];
+        for (var i = 0; i < sqObjects.length; i++)
+            jsArray.push(this.js_makeJSObject(sqObjects[i]));
+        return jsArray;
     },
 },
 'Obsolete', {

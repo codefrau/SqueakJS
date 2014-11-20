@@ -3126,6 +3126,7 @@ Object.subclass('Squeak.Primitives',
     initModules: function() {
         this.loadedModules = {};
         this.builtinModules = {
+            JavaScriptPlugin:       this.findPluginFunctions("js_", "", true),
             FilePlugin:             this.findPluginFunctions("", "primitive(Disable)?(File|Directory)"),
             DropPlugin:             this.findPluginFunctions("", "primitiveDropRequest"),
             SoundPlugin:            this.findPluginFunctions("snd_"),
@@ -3924,16 +3925,21 @@ Object.subclass('Squeak.Primitives',
         stString.bytes = bytes;
         return stString;
     },
-    makeStObject: function(obj) {
+    makeStObject: function(obj, proxyClass) {
         if (obj === undefined || obj === null) return this.vm.nilObj;
         if (obj === true) return this.vm.trueObj;
         if (obj === false) return this.vm.falseObj;
         if (obj.stClass) return obj;
-        if (typeof obj === "string" || obj.constructor === Uint8Array) return this.makeStString(obj);
-        if (obj.constructor === Array) return this.makeStArray(obj);
         if (typeof obj === "number")
             if (obj === (obj|0)) return this.makeLargeIfNeeded(obj);
-            else return this.makeFloat(obj)
+            else return this.makeFloat(obj);
+        if (proxyClass) {   // make JSObjectProxy instance 
+            var stObj = this.vm.instantiateClass(proxyClass, 0);
+            stObj.jsObject = obj;
+            return stObj;
+        } 
+        if (typeof obj === "string" || obj.constructor === Uint8Array) return this.makeStString(obj);
+        if (obj.constructor === Array) return this.makeStArray(obj);
         throw Error("cannot make smalltalk object");
     },
     pointsTo: function(rcvr, arg) {
@@ -5787,6 +5793,117 @@ Object.subclass('Squeak.Primitives',
         if (!path) return false;
         this.vm.popNandPush(argCount + 1, this.makeStString(this.filenameToSqueak(path)));
         return true;
+    },
+},
+'JavaScriptPlugin', {
+    js_primitiveCreateInstance: function(argCount) {
+        var rcvr = this.stackNonInteger(1),
+            arg = this.stackNonInteger(0),
+            jsArg = arg.isNil ? Object :
+                arg.bytes ? this.js_global(arg.bytesAsString()) :
+                arg.jsObject;
+        if (typeof jsArg != "function") return false;
+        rcvr.jsObject = new jsArg();
+        return this.popNIfOK(argCount);
+    },
+    js_primitiveLookupGlobal: function(argCount) {
+        var rcvr = this.stackNonInteger(1),
+            arg = this.stackNonInteger(0),
+            jsArg = arg.isNil ? this.vm :
+                arg.bytes ? this.js_global(arg.bytesAsString()) :
+                arg.jsObject;
+        rcvr.jsObject = jsArg;
+        return this.popNIfOK(argCount);
+    },
+    js_primitiveCall: function(argCount) {
+        var rcvr = this.stackNonInteger(1),
+            obj = rcvr.jsObject || window,
+            message = this.stackNonInteger(0).pointers,
+            selector = message[0].bytesAsString(),
+            args = message[1].pointers || [],
+            jsResult = null;
+        try {
+            var propName = selector.match(/([^:]*)/)[0];
+            if (!propName in obj) return false;
+            var propValue = obj[propName];
+            if (typeof propValue == "function") {
+                jsResult = propValue.apply(obj, this.js_makeJSArray(args));
+            } else {
+                if (args.length == 0)
+                    jsResult = propValue;
+                else if (args.length == 1)
+                    obj[propName] = this.js_makeJSObject(args[0]);
+                else return false;
+            }
+        } catch(err) {
+            return false;
+        }
+        var stResult = this.makeStObject(jsResult, rcvr.sqClass);
+        return this.popNandPushIfOK(argCount + 1, stResult);
+    },
+    js_primitivePrintString: function(argCount) {
+        var rcvr = this.stackNonInteger(0).jsObject;
+        return this.popNandPushIfOK(argCount + 1, this.makeStString('' + rcvr));
+    },
+    js_primitiveTypeof: function(argCount) {
+        var rcvr = this.stackNonInteger(0).jsObject;
+        return this.popNandPushIfOK(argCount + 1, this.makeStString(typeof rcvr));
+    },
+    js_primitiveAt: function(argCount) {
+        var rcvr = this.stackNonInteger(1),
+            propName = this.vm.stackValue(0),
+            propValue;
+        try {
+            var jsRcvr = rcvr.jsObject,
+                jsPropName = typeof propName == "number" ? propName : propName.bytesAsString(),
+                jsPropValue = jsRcvr[jsPropName];
+            propValue = this.makeStObject(jsPropValue, rcvr.sqClass);
+        } catch(err) {
+            console.error(err);
+            return false;
+        }
+        return this.popNandPushIfOK(argCount + 1, propValue);
+    },
+    js_primitiveAtPut: function(argCount) {
+        var rcvr = this.stackNonInteger(2),
+            propName = this.vm.stackValue(1),
+            propValue = this.vm.stackValue(0);
+        try {
+            var jsRcvr = rcvr.jsObject,
+                jsPropName = typeof propName == "number" ? propName : propName.bytesAsString(),
+                jsPropValue = this.js_makeJSObject(propValue);
+            jsRcvr[jsPropName] = jsPropValue;
+        } catch(err) {
+            console.error(err);
+            return false;
+        }
+        return this.popNandPushIfOK(argCount + 1, propValue);
+    },
+    js_global: function(pathname) {
+        var path = pathname.split('.'),
+            global = window;
+        for (var i = 0; i < path.length; i++)
+            global = global[path[i]];
+        return global;
+    },
+    js_makeJSObject: function(sqObject) {
+        if (typeof sqObject === "number") return sqObject;
+        if (sqObject.jsObject) return sqObject.jsObject;
+        if (sqObject.isFloat) return sqObject.float;
+        if (sqObject.isNil) return null;
+        if (sqObject.isTrue) return true;
+        if (sqObject.isFalse) return false;
+        if (sqObject.sqClass === this.vm.specialObjects[Squeak.splOb_ClassString])
+            return sqObject.bytesAsString();
+        if (sqObject.sqClass === this.vm.specialObjects[Squeak.splOb_ClassArray])
+            return this.js_makeJSArray(sqObject.pointers || []);
+        return sqObject;
+    },
+    js_makeJSArray: function(sqObjects) {
+        var jsArray = [];
+        for (var i = 0; i < sqObjects.length; i++)
+            jsArray.push(this.js_makeJSObject(sqObjects[i]));
+        return jsArray;
     },
 },
 'Obsolete', {

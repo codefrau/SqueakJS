@@ -3929,11 +3929,11 @@ Object.subclass('Squeak.Primitives',
         if (obj === undefined || obj === null) return this.vm.nilObj;
         if (obj === true) return this.vm.trueObj;
         if (obj === false) return this.vm.falseObj;
-        if (obj.stClass) return obj;
+        if (obj.sqClass) return obj;
         if (typeof obj === "number")
             if (obj === (obj|0)) return this.makeLargeIfNeeded(obj);
             else return this.makeFloat(obj);
-        if (proxyClass) {   // make JSObjectProxy instance 
+        if (proxyClass) {   // wrap in JS proxy instance 
             var stObj = this.vm.instantiateClass(proxyClass, 0);
             stObj.jsObject = obj;
             return stObj;
@@ -5796,52 +5796,61 @@ Object.subclass('Squeak.Primitives',
     },
 },
 'JavaScriptPlugin', {
-    js_primitiveCreateInstance: function(argCount) {
+    js_primitiveDoUnderstand: function(argCount) {
+        // This is JS's doesNotUnderstand handler,
+        // as well as JS class's doesNotUnderstand handler.
+        // Property name is the selector up to first colon. 
+        // If it is 'new', create an instance;
+        // otherwise if the property is a function, call it;
+        // otherwise if the property exists, get/set it;
+        // otherwise, fail.
         var rcvr = this.stackNonInteger(1),
-            arg = this.stackNonInteger(0),
-            jsArg = arg.isNil ? Object :
-                arg.bytes ? this.js_global(arg.bytesAsString()) :
-                arg.jsObject;
-        if (typeof jsArg != "function") return false;
-        rcvr.jsObject = new jsArg();
-        return this.popNIfOK(argCount);
-    },
-    js_primitiveLookupGlobal: function(argCount) {
-        var rcvr = this.stackNonInteger(1),
-            arg = this.stackNonInteger(0),
-            jsArg = arg.isNil ? this.vm :
-                arg.bytes ? this.js_global(arg.bytesAsString()) :
-                arg.jsObject;
-        rcvr.jsObject = jsArg;
-        return this.popNIfOK(argCount);
-    },
-    js_primitiveCall: function(argCount) {
-        var rcvr = this.stackNonInteger(1),
-            obj = rcvr.jsObject || window,
+            isGlobal = !('jsObject' in rcvr),
+            proxyClass = isGlobal ? rcvr : rcvr.sqClass,
+            obj = isGlobal ? window : rcvr.jsObject,
             message = this.stackNonInteger(0).pointers,
             selector = message[0].bytesAsString(),
             args = message[1].pointers || [],
             jsResult = null;
         try {
             var propName = selector.match(/([^:]*)/)[0];
-            if (!propName in obj) return false;
-            var propValue = obj[propName];
-            if (typeof propValue == "function") {
-                jsResult = propValue.apply(obj, this.js_makeJSArray(args));
+            if (!isGlobal && propName === "new") {
+                if (args.length === 0) {
+                    // new this()
+                    jsResult = new obj();
+                } else {
+                    // new this(arg0, arg1, ...)
+                    var inst = Object.create(obj.prototype);
+                    jsResult = obj.apply(inst, this.js_fromStArray(args));
+                    if (Object(jsResult) !== jsResult) jsResult = inst;
+                }
             } else {
-                if (args.length == 0)
-                    jsResult = propValue;
-                else if (args.length == 1)
-                    obj[propName] = this.js_makeJSObject(args[0]);
-                else return false;
+                if (!(propName in obj)) return false;
+                var propValue = obj[propName];
+                if (typeof propValue == "function" && (!isGlobal || args.length > 0)) {
+                    // do this[selector](arg0, arg1, ...)
+                    jsResult = propValue.apply(obj, this.js_fromStArray(args));
+                } else {
+                    if (args.length == 0) {
+                        // do this[selector]
+                        jsResult = propValue;
+                    } else if (args.length == 1) {
+                        // do this[selector] = arg0
+                        obj[propName] = this.js_fromStObject(args[0]);
+                    } else {
+                        // cannot do this[selector] = arg0, arg1, ...
+                        return false;
+                    }
+                }
             }
         } catch(err) {
+            console.error(err);
             return false;
         }
-        var stResult = this.makeStObject(jsResult, rcvr.sqClass);
+        var stResult = this.makeStObject(jsResult, proxyClass);
         return this.popNandPushIfOK(argCount + 1, stResult);
     },
-    js_primitivePrintString: function(argCount) {
+    js_primitiveAsString: function(argCount) {
         var rcvr = this.stackNonInteger(0).jsObject;
         return this.popNandPushIfOK(argCount + 1, this.makeStString('' + rcvr));
     },
@@ -5851,13 +5860,14 @@ Object.subclass('Squeak.Primitives',
     },
     js_primitiveAt: function(argCount) {
         var rcvr = this.stackNonInteger(1),
+            isGlobal = !('jsObject' in rcvr),
             propName = this.vm.stackValue(0),
             propValue;
         try {
-            var jsRcvr = rcvr.jsObject,
-                jsPropName = typeof propName == "number" ? propName : propName.bytesAsString(),
+            var jsRcvr = isGlobal ? window : rcvr.jsObject,
+                jsPropName = propName.jsObject || (typeof propName == "number" ? propName : propName.bytesAsString()),
                 jsPropValue = jsRcvr[jsPropName];
-            propValue = this.makeStObject(jsPropValue, rcvr.sqClass);
+            propValue = this.makeStObject(jsPropValue, isGlobal ? rcvr : rcvr.sqClass);
         } catch(err) {
             console.error(err);
             return false;
@@ -5866,12 +5876,13 @@ Object.subclass('Squeak.Primitives',
     },
     js_primitiveAtPut: function(argCount) {
         var rcvr = this.stackNonInteger(2),
+            isGlobal = !('jsObject' in rcvr),
             propName = this.vm.stackValue(1),
             propValue = this.vm.stackValue(0);
         try {
-            var jsRcvr = rcvr.jsObject,
-                jsPropName = typeof propName == "number" ? propName : propName.bytesAsString(),
-                jsPropValue = this.js_makeJSObject(propValue);
+            var jsRcvr = isGlobal ? window : rcvr.jsObject,
+                jsPropName = propName.jsObject || (typeof propName == "number" ? propName : propName.bytesAsString()),
+                jsPropValue = this.js_fromStObject(propValue);
             jsRcvr[jsPropName] = jsPropValue;
         } catch(err) {
             console.error(err);
@@ -5879,30 +5890,23 @@ Object.subclass('Squeak.Primitives',
         }
         return this.popNandPushIfOK(argCount + 1, propValue);
     },
-    js_global: function(pathname) {
-        var path = pathname.split('.'),
-            global = window;
-        for (var i = 0; i < path.length; i++)
-            global = global[path[i]];
-        return global;
+    js_fromStObject: function(obj) {
+        if (typeof obj === "number") return obj;
+        if (obj.jsObject) return obj.jsObject;
+        if (obj.isFloat) return obj.float;
+        if (obj.isNil) return null;
+        if (obj.isTrue) return true;
+        if (obj.isFalse) return false;
+        if (obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassString])
+            return obj.bytesAsString();
+        if (obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassArray])
+            return this.js_fromStArray(obj.pointers || []);
+        return obj;
     },
-    js_makeJSObject: function(sqObject) {
-        if (typeof sqObject === "number") return sqObject;
-        if (sqObject.jsObject) return sqObject.jsObject;
-        if (sqObject.isFloat) return sqObject.float;
-        if (sqObject.isNil) return null;
-        if (sqObject.isTrue) return true;
-        if (sqObject.isFalse) return false;
-        if (sqObject.sqClass === this.vm.specialObjects[Squeak.splOb_ClassString])
-            return sqObject.bytesAsString();
-        if (sqObject.sqClass === this.vm.specialObjects[Squeak.splOb_ClassArray])
-            return this.js_makeJSArray(sqObject.pointers || []);
-        return sqObject;
-    },
-    js_makeJSArray: function(sqObjects) {
+    js_fromStArray: function(objs) {
         var jsArray = [];
-        for (var i = 0; i < sqObjects.length; i++)
-            jsArray.push(this.js_makeJSObject(sqObjects[i]));
+        for (var i = 0; i < objs.length; i++)
+            jsArray.push(this.js_fromStObject(objs[i]));
         return jsArray;
     },
 },

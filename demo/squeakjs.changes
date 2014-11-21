@@ -1,0 +1,1 @@
+Smalltalk getSystemAttribute: 2.!!SystemDictionary methodsFor: 'as yet unclassified' stamp: 'bf 11/21/2014 16:46' prior: 0!startUp	| document |	self openSourceFiles.	document := self getSystemAttribute: 2.	document ifNil: [^self].	(FileStream readOnlyFileNamed: document) fileIn.! !----QUIT----(21 November 2014 4:47:26 pm ) priorSource: 2326!

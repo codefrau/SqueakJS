@@ -1,5 +1,5 @@
 CACHE MANIFEST
-# Nov 18 16:09:55 2014
+# Nov 21 18:52:24 2014
 ../squeak.js
 ../vm.js
 ../jit.js
@@ -24,11 +24,13 @@ simple.html
 simple.css
 simple.js
 SimplePlugin.js
-mini.image
+squeakjs.image
+squeakjs.changes
+JSBridge.st
 icon.png
 ../lib/lz-string.js
+../lib/gh-fork-ribbon.css
 ../lib/addtohomescreen.css
 ../lib/addtohomescreen.js
-../lib/gh-fork-ribbon.css
 NETWORK:
 *

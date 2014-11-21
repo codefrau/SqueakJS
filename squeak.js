@@ -791,13 +791,13 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     }
     if (options.document) {
         var docName = Squeak.splitFilePath(options.document).basename;
-        files.push({url: options.document, name: docName});
+        files.push({url: options.document, name: docName, forceDownload: true});
         display.documentName = options.root + docName;
     }
     function getNextFile(whenAllDone) {
         if (files.length === 0) return whenAllDone(imageData);
         var file = files.shift();
-        if (Squeak.fileExists(options.root + file.name)) {
+        if (!file.forceDownload && Squeak.fileExists(options.root + file.name)) {
             if (file.name == imageName) {
                 Squeak.fileGet(options.root + file.name, function(data) {
                     imageData = data;

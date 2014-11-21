@@ -5865,7 +5865,7 @@ Object.subclass('Squeak.Primitives',
             propValue;
         try {
             var jsRcvr = isGlobal ? window : rcvr.jsObject,
-                jsPropName = typeof propName == "number" ? propName : propName.bytesAsString(),
+                jsPropName = propName.jsObject || (typeof propName == "number" ? propName : propName.bytesAsString()),
                 jsPropValue = jsRcvr[jsPropName];
             propValue = this.makeStObject(jsPropValue, isGlobal ? rcvr : rcvr.sqClass);
         } catch(err) {
@@ -5881,7 +5881,7 @@ Object.subclass('Squeak.Primitives',
             propValue = this.vm.stackValue(0);
         try {
             var jsRcvr = isGlobal ? window : rcvr.jsObject,
-                jsPropName = typeof propName == "number" ? propName : propName.bytesAsString(),
+                jsPropName = propName.jsObject || (typeof propName == "number" ? propName : propName.bytesAsString()),
                 jsPropValue = this.js_fromStObject(propValue);
             jsRcvr[jsPropName] = jsPropValue;
         } catch(err) {

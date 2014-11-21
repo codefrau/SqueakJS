@@ -6,8 +6,10 @@
 TARGET=../gh-pages/demo
 MANIFEST=$(TARGET)/offline.appcache
 FILES=../squeak.js ../vm.js ../jit.js ../plugins/*.js \
-	simple.html simple.css simple.js SimplePlugin.js squeakjs.image squeakjs.changes icon.png \
-	../lib/lz-string.js ../lib/addtohomescreen.css ../lib/addtohomescreen.js ../lib/gh-fork-ribbon.css
+	simple.html simple.css simple.js SimplePlugin.js \
+	squeakjs.image  squeakjs.changes JSBridge.st icon.png \
+	../lib/lz-string.js ../lib/gh-fork-ribbon.css \
+	../lib/addtohomescreen.css  ../lib/addtohomescreen.js 
 EXTRA=
 
 $(MANIFEST): Makefile $(TARGET)

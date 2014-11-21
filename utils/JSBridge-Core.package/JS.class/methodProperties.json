@@ -1,0 +1,13 @@
+{
+	"class" : {
+		"at:" : "bf 11/20/2014 00:38",
+		"at:put:" : "bf 11/20/2014 00:38",
+		"basicNew" : "bf 11/20/2014 00:38",
+		"doesNotUnderstand:" : "bf 11/20/2014 00:38" },
+	"instance" : {
+		"at:" : "bf 11/20/2014 00:38",
+		"at:put:" : "bf 11/20/2014 00:38",
+		"doesNotUnderstand:" : "bf 11/20/2014 00:38",
+		"printOn:" : "bf 11/20/2014 00:38",
+		"printString" : "bf 11/20/2014 00:38",
+		"typeof" : "bf 11/20/2014 00:38" } }

@@ -1,0 +1,14 @@
+{
+	"category" : "JSBridge-Core",
+	"classinstvars" : [
+		 ],
+	"classvars" : [
+		 ],
+	"commentStamp" : "bf 11/20/2014 12:00",
+	"instvars" : [
+		 ],
+	"name" : "JS",
+	"pools" : [
+		 ],
+	"super" : "Object",
+	"type" : "normal" }

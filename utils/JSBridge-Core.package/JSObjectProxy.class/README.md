@@ -1,4 +1,4 @@
-Instances of this class are proxies for JavaScript objects. This class itself is a proxy for the global JavaScript scope. Sending messages looks up named properties, and calls them if they are functions. Arguments are converted from Squeak to JavaScript objects for nil, Booleans, Integers, Floats, Strings, and Arrays. The result is converted back for numbers and null/true/false, otherwise wrapped as JS instance proxy. In addition, sending #new/#new:... creates an instance of that object.
+A JSObjectProxy is a proxy for JavaScript objects. It intercepts messages to look up named properties, and call them if they are functions. Arguments are converted from Squeak to JavaScript objects for nil, Booleans, SmallIntegers, Floats, Strings, and Arrays. The result is converted back to Squeak objects for numbers and null/true/false, otherwise wrapped in a new JSObjectProxy. To add new properties, or access existing properties without calling them (if they are functions), use at:/at:put:. In addition, sending #new/#new:... creates an instance of that object, and #typeof returns the type as a string. There is a global proxy named JS to allow accessing global JavasScript objects.
 
 "Call global function"
 JS alert: 'Squeak says Hello World!'.
@@ -35,4 +35,3 @@ propNames := JS Object keys: object.
 propValues := (0 to: propNames length - 1) collect: [:i |
 	(propNames at: i) -> (object at: (propNames at: i))].
 (propValues as: Dictionary) inspect
-

@@ -5894,7 +5894,7 @@ Object.subclass('Squeak.Primitives',
         if (obj.isNil) return null;
         if (obj.isTrue) return true;
         if (obj.isFalse) return false;
-        if (obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassString])
+        if (obj.bytes || obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassString])
             return obj.bytesAsString();
         if (obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassArray])
             return this.js_fromStArray(obj.pointers || []);

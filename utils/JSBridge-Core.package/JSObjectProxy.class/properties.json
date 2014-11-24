@@ -7,7 +7,7 @@
 	"commentStamp" : "bf 11/20/2014 12:00",
 	"instvars" : [
 		 ],
-	"name" : "JS",
+	"name" : "JSObjectProxy",
 	"pools" : [
 		 ],
 	"super" : "Object",

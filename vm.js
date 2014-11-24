@@ -5805,12 +5805,11 @@ Object.subclass('Squeak.Primitives',
         // otherwise if the property exists, get/set it;
         // otherwise, fail.
         var rcvr = this.stackNonInteger(1),
-            isGlobal = !('jsObject' in rcvr),
-            proxyClass = isGlobal ? rcvr : rcvr.sqClass,
-            obj = isGlobal ? window : rcvr.jsObject,
+            obj = this.js_objectOrGlobal(rcvr),
             message = this.stackNonInteger(0).pointers,
             selector = message[0].bytesAsString(),
             args = message[1].pointers || [],
+            isGlobal = !('jsObject' in rcvr),
             jsResult = null;
         try {
             var propName = selector.match(/([^:]*)/)[0];
@@ -5847,27 +5846,26 @@ Object.subclass('Squeak.Primitives',
             console.error(err);
             return false;
         }
-        var stResult = this.makeStObject(jsResult, proxyClass);
+        var stResult = this.makeStObject(jsResult, rcvr.sqClass);
         return this.popNandPushIfOK(argCount + 1, stResult);
     },
     js_primitiveAsString: function(argCount) {
-        var rcvr = this.stackNonInteger(0).jsObject;
-        return this.popNandPushIfOK(argCount + 1, this.makeStString('' + rcvr));
+        var obj = this.js_objectOrGlobal(this.stackNonInteger(0));
+        return this.popNandPushIfOK(argCount + 1, this.makeStString('' + obj));
     },
     js_primitiveTypeof: function(argCount) {
-        var rcvr = this.stackNonInteger(0).jsObject;
-        return this.popNandPushIfOK(argCount + 1, this.makeStString(typeof rcvr));
+        var obj = this.js_objectOrGlobal(this.stackNonInteger(0));
+        return this.popNandPushIfOK(argCount + 1, this.makeStString(typeof obj));
     },
     js_primitiveAt: function(argCount) {
         var rcvr = this.stackNonInteger(1),
-            isGlobal = !('jsObject' in rcvr),
             propName = this.vm.stackValue(0),
             propValue;
         try {
-            var jsRcvr = isGlobal ? window : rcvr.jsObject,
+            var jsRcvr = this.js_objectOrGlobal(rcvr),
                 jsPropName = propName.jsObject || (typeof propName == "number" ? propName : propName.bytesAsString()),
                 jsPropValue = jsRcvr[jsPropName];
-            propValue = this.makeStObject(jsPropValue, isGlobal ? rcvr : rcvr.sqClass);
+            propValue = this.makeStObject(jsPropValue, rcvr.sqClass);
         } catch(err) {
             console.error(err);
             return false;
@@ -5876,11 +5874,10 @@ Object.subclass('Squeak.Primitives',
     },
     js_primitiveAtPut: function(argCount) {
         var rcvr = this.stackNonInteger(2),
-            isGlobal = !('jsObject' in rcvr),
             propName = this.vm.stackValue(1),
             propValue = this.vm.stackValue(0);
         try {
-            var jsRcvr = isGlobal ? window : rcvr.jsObject,
+            var jsRcvr = this.js_objectOrGlobal(rcvr),
                 jsPropName = propName.jsObject || (typeof propName == "number" ? propName : propName.bytesAsString()),
                 jsPropValue = this.js_fromStObject(propValue);
             jsRcvr[jsPropName] = jsPropValue;
@@ -5908,6 +5905,9 @@ Object.subclass('Squeak.Primitives',
         for (var i = 0; i < objs.length; i++)
             jsArray.push(this.js_fromStObject(objs[i]));
         return jsArray;
+    },
+    js_objectOrGlobal: function(sqObject) {
+        return 'jsObject' in sqObject ? sqObject.jsObject : window;
     },
 },
 'Obsolete', {

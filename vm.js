@@ -3880,6 +3880,9 @@ Object.subclass('Squeak.Primitives',
         }
         return false;
     },
+    isAssociation: function(obj) {
+        return typeof obj !== "number" && obj.pointersSize() == 2;
+    },
     ensureSmallInt: function(number) {
         if (number === (number|0) && this.vm.canBeSmallInt(number))
             return number;
@@ -5863,7 +5866,7 @@ Object.subclass('Squeak.Primitives',
             propValue;
         try {
             var jsRcvr = this.js_objectOrGlobal(rcvr),
-                jsPropName = propName.jsObject || (typeof propName == "number" ? propName : propName.bytesAsString()),
+                jsPropName = this.js_fromStObject(propName),
                 jsPropValue = jsRcvr[jsPropName];
             propValue = this.makeStObject(jsPropValue, rcvr.sqClass);
         } catch(err) {
@@ -5878,7 +5881,7 @@ Object.subclass('Squeak.Primitives',
             propValue = this.vm.stackValue(0);
         try {
             var jsRcvr = this.js_objectOrGlobal(rcvr),
-                jsPropName = propName.jsObject || (typeof propName == "number" ? propName : propName.bytesAsString()),
+                jsPropName = this.js_fromStObject(propName),
                 jsPropValue = this.js_fromStObject(propValue);
             jsRcvr[jsPropName] = jsPropValue;
         } catch(err) {
@@ -5897,14 +5900,27 @@ Object.subclass('Squeak.Primitives',
         if (obj.bytes || obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassString])
             return obj.bytesAsString();
         if (obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassArray])
-            return this.js_fromStArray(obj.pointers || []);
-        return obj;
+            return this.js_fromStArray(obj.pointers || [], true);
+        throw Error("Cannot convert " + obj + " to JavaScript");
     },
-    js_fromStArray: function(objs) {
+    js_fromStArray: function(objs, maybeDict) {
+        if (objs.length > 0 && maybeDict && this.isAssociation(objs[0]))
+            return this.js_fromStDict(objs);
         var jsArray = [];
         for (var i = 0; i < objs.length; i++)
             jsArray.push(this.js_fromStObject(objs[i]));
         return jsArray;
+    },
+    js_fromStDict: function(objs) {
+        var jsDict = {};
+        for (var i = 0; i < objs.length; i++) {
+            var assoc = objs[i].pointers;
+            if (!assoc || assoc.length !== 2) throw Error(assoc + " is not an Association");
+            var jsKey = this.js_fromStObject(assoc[0]),
+                jsValue = this.js_fromStObject(assoc[1]);
+            jsDict[jsKey] = jsValue;
+        }
+        return jsDict;
     },
     js_objectOrGlobal: function(sqObject) {
         return 'jsObject' in sqObject ? sqObject.jsObject : window;

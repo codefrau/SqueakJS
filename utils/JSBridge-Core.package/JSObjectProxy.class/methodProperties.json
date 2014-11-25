@@ -5,9 +5,11 @@
 		"new" : "bf 11/20/2014 00:38",
 		"openExamples" : "bf 11/21/2014 17:00" },
 	"instance" : {
+		"asJSArgument" : "bf 11/20/2014 00:38",
 		"asString" : "bf 11/20/2014 00:38",
 		"at:" : "bf 11/20/2014 00:38",
 		"at:put:" : "bf 11/20/2014 00:38",
 		"doesNotUnderstand:" : "bf 11/20/2014 00:38",
+		"primGetError" : "bf 11/20/2014 00:38",
 		"printOn:" : "bf 11/20/2014 00:38",
 		"typeof" : "bf 11/20/2014 00:38" } }

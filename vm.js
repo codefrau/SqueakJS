@@ -5827,7 +5827,8 @@ Object.subclass('Squeak.Primitives',
                     if (Object(jsResult) !== jsResult) jsResult = inst;
                 }
             } else {
-                if (!(propName in obj)) return false;
+                if (!(propName in obj))
+                    return this.js_setError("Property not found: " + propName);
                 var propValue = obj[propName];
                 if (typeof propValue == "function" && (!isGlobal || args.length > 0)) {
                     // do this[selector](arg0, arg1, ...)
@@ -5841,20 +5842,19 @@ Object.subclass('Squeak.Primitives',
                         obj[propName] = this.js_fromStObject(args[0]);
                     } else {
                         // cannot do this[selector] = arg0, arg1, ...
-                        return false;
+                        return this.js_setError("Property " + propName + " is not a function");
                     }
                 }
             }
         } catch(err) {
-            console.error(err);
-            return false;
+            return this.js_setError(err.message);
         }
         var stResult = this.makeStObject(jsResult, rcvr.sqClass);
         return this.popNandPushIfOK(argCount + 1, stResult);
     },
     js_primitiveAsString: function(argCount) {
         var obj = this.js_objectOrGlobal(this.stackNonInteger(0));
-        return this.popNandPushIfOK(argCount + 1, this.makeStString('' + obj));
+        return this.popNandPushIfOK(argCount + 1, this.makeStString(String(obj)));
     },
     js_primitiveTypeof: function(argCount) {
         var obj = this.js_objectOrGlobal(this.stackNonInteger(0));
@@ -5870,8 +5870,7 @@ Object.subclass('Squeak.Primitives',
                 jsPropValue = jsRcvr[jsPropName];
             propValue = this.makeStObject(jsPropValue, rcvr.sqClass);
         } catch(err) {
-            console.error(err);
-            return false;
+            return this.js_setError(err.message);
         }
         return this.popNandPushIfOK(argCount + 1, propValue);
     },
@@ -5885,10 +5884,17 @@ Object.subclass('Squeak.Primitives',
                 jsPropValue = this.js_fromStObject(propValue);
             jsRcvr[jsPropName] = jsPropValue;
         } catch(err) {
-            console.error(err);
-            return false;
+            return this.js_setError(err.message);
         }
         return this.popNandPushIfOK(argCount + 1, propValue);
+    },
+    js_primitiveGetError: function(argCount) {
+        var error = this.makeStString(this.js_error);
+        return this.popNandPushIfOK(argCount + 1, error);
+    },
+    js_setError: function(err) {
+        this.js_error = String(err);
+        return false;
     },
     js_fromStObject: function(obj) {
         if (typeof obj === "number") return obj;
@@ -5901,7 +5907,7 @@ Object.subclass('Squeak.Primitives',
             return obj.bytesAsString();
         if (obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassArray])
             return this.js_fromStArray(obj.pointers || [], true);
-        throw Error("Cannot convert " + obj + " to JavaScript");
+        throw Error("asJSArgument needed for " + obj);
     },
     js_fromStArray: function(objs, maybeDict) {
         if (objs.length > 0 && maybeDict && this.isAssociation(objs[0]))

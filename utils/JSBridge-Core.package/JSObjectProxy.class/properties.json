@@ -3,7 +3,8 @@
 	"classinstvars" : [
 		 ],
 	"classvars" : [
-		 ],
+		"CallbackProcess",
+		"CallbackSemaphore" ],
 	"commentStamp" : "bf 11/20/2014 12:00",
 	"instvars" : [
 		 ],

@@ -3914,10 +3914,10 @@ Object.subclass('Squeak.Primitives',
         newPoint.pointers[Squeak.Point_y] = y;
         return newPoint;
     },
-    makeStArray: function(jsArray) {
+    makeStArray: function(jsArray, proxyClass) {
         var array = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassArray], jsArray.length);
         for (var i = 0; i < jsArray.length; i++)
-            array.pointers[i] = this.makeStObject(jsArray[i]);
+            array.pointers[i] = this.makeStObject(jsArray[i], proxyClass);
         return array;
     },
     makeStString: function(jsString) {
@@ -5815,6 +5815,8 @@ Object.subclass('Squeak.Primitives',
             isGlobal = !('jsObject' in rcvr),
             jsResult = null;
         try {
+            // prevent callbacks while running this primitive
+            this.js_activeCallback = "Callbacks must be asynchronous";
             var propName = selector.match(/([^:]*)/)[0];
             if (!isGlobal && propName === "new") {
                 if (args.length === 0) {
@@ -5848,6 +5850,9 @@ Object.subclass('Squeak.Primitives',
             }
         } catch(err) {
             return this.js_setError(err.message);
+        } finally {
+            // allow callbacks
+            this.js_activeCallback = null;
         }
         var stResult = this.makeStObject(jsResult, rcvr.sqClass);
         return this.popNandPushIfOK(argCount + 1, stResult);
@@ -5888,8 +5893,46 @@ Object.subclass('Squeak.Primitives',
         }
         return this.popNandPushIfOK(argCount + 1, propValue);
     },
+    js_primitiveInitCallbacks: function(argCount) {
+        // set callback semaphore for js_fromStBlock()
+        this.js_callbackSema = this.stackInteger(0);
+        this.js_activeCallback = null;
+        return this.popNIfOK(argCount);
+    },
+    js_primitiveGetActiveCallbackBlock: function(argCount) {
+        // we're inside an active callback, get block
+        var callback = this.js_activeCallback;
+        if (!callback) return this.js_setError("No active callback");
+        return this.popNandPushIfOK(argCount, callback.block);
+    },
+    js_primitiveGetActiveCallbackArgs: function(argCount) {
+        // we're inside an active callback, get args
+        var proxyClass = this.stackNonInteger(argCount),
+            callback = this.js_activeCallback;
+        if (!callback) return this.js_setError("No active callback");
+        try {
+            // make array with expected number of arguments for block
+            var numArgs = callback.block.pointers[Squeak.BlockContext_argumentCount],
+                args = [];
+            for (var i = 0; i < numArgs; i++)
+                args.push(callback.args[i]);
+            return this.popNandPushIfOK(argCount, this.makeStArray(args, proxyClass));
+        } catch(err) {
+            return this.js_setError(err.message);
+        }
+    },
+    js_primitiveReturnFromCallback: function(argCount) {
+        if (argCount !== 1) return false;
+        if (!this.js_activeCallback)
+            return this.js_setError("No active callback");
+        // set result so the interpret loop in js_fromStBlock() terminates
+        this.js_activeCallback.result = this.vm.pop();
+        this.vm.breakOut(); // stop interpreting ASAP
+        return true;
+    },
     js_primitiveGetError: function(argCount) {
-        var error = this.makeStString(this.js_error);
+        var error = this.makeStObject(this.js_error);
+        this.js_error = null;
         return this.popNandPushIfOK(argCount + 1, error);
     },
     js_setError: function(err) {
@@ -5907,6 +5950,9 @@ Object.subclass('Squeak.Primitives',
             return obj.bytesAsString();
         if (obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassArray])
             return this.js_fromStArray(obj.pointers || [], true);
+        if (obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassBlockContext] ||
+            obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassBlockClosure])
+            return this.js_fromStBlock(obj);
         throw Error("asJSArgument needed for " + obj);
     },
     js_fromStArray: function(objs, maybeDict) {
@@ -5927,6 +5973,42 @@ Object.subclass('Squeak.Primitives',
             jsDict[jsKey] = jsValue;
         }
         return jsDict;
+    },
+    js_fromStBlock: function(block) {
+        // create callback function from block or closure
+        if (!this.js_callbackSema) // image recognizes error string and will try again
+            throw Error("CallbackSemaphore not set");
+        // block holds onto thisContext
+        this.vm.reclaimableContextCount = 0;
+        var squeak = this;
+        return function evalSqueakBlock(/* arguments */) {
+            return squeak.js_executeCallback(block, arguments);
+        }
+    },
+    js_executeCallback: function(block, args) {
+        if (this.js_activeCallback)
+            if (typeof this.js_activeCallback == "string")
+                throw Error(this.js_activeCallback);
+            else
+                return console.error("Callback: already active");
+        // make block and args available to primitiveGetActiveCallback
+        this.js_activeCallback = {
+            block: block,
+            args: args,
+            result: null,
+        };
+        // switch to callback handler process ASAP
+        this.signalSemaphoreWithIndex(this.js_callbackSema);
+        this.vm.forceInterruptCheck();
+        // interpret until primitiveReturnFromCallback sets result
+        var timeout = Date.now() + 500;
+        while (Date.now() < timeout && !this.js_activeCallback.result)
+            this.vm.interpret();
+        var result = this.js_activeCallback.result;
+        this.js_activeCallback = null;
+        // return result to caller
+        return result ? this.js_fromStObject(result) :
+            console.error("Callback error: " + (this.vm.frozen ? "frozen" : "timeout"));
     },
     js_objectOrGlobal: function(sqObject) {
         return 'jsObject' in sqObject ? sqObject.jsObject : window;

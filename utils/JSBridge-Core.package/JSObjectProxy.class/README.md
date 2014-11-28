@@ -3,30 +3,20 @@ A JSObjectProxy is a proxy for JavaScript objects. It intercepts messages to loo
 "Call global function"
 JS alert: 'Squeak says Hello World!'.
 
-"Call function on global object"
+"Call function on global object (open console to see result)"
 JS console log: 'Squeak says Hello World!'.
 
 "Modify DOM"
 ((JS document getElementsByTagName: 'h1') at: 0)
 	at: 'innerHTML' put: 'Squeak said Hello World at ', Time now asString.
 
-"Create new Object, add and retrieve property"
+"Create new Object, add properties and a method, retrieve property, call method"
 | obj |
 obj := JS Object new.
 obj at: #someProp put: 42.
-obj someProp
-
-"Create a function and call it"
-| func |
-func := JS Function new: 'arg0' and: 'arg1' body: 'return arg0 + arg1'.
-func call: nil with: 3 and: 4.
-
-"Create an object with a literal object property and a method and call it"
-| obj |
-obj := JS Object new.
-obj at: #myProp put: {#a -> 6. #b -> 7}.
-obj at: #myMethod put: (JS Function new: 'return this.myProp.a * this.myProp.b').
-obj myMethod
+obj at: #complexProp put: {#a -> 3. #b -> 4}.
+obj at: #someMethod put: (JS Function new: 'return this.complexProp.a + this.complexProp.b').
+{obj someProp. obj complexProp. obj someMethod}
 
 "Inspect all properties in global navigator object"
 | object propNames propValues |
@@ -35,3 +25,28 @@ propNames := JS Object keys: object.
 propValues := (0 to: propNames length - 1) collect: [:i |
 	(propNames at: i) -> (object at: (propNames at: i))].
 (propValues as: Dictionary) inspect
+
+"A Squeak block becomes a JavaScript callback function"
+JS at: #sqPlus put: [:arg0 :arg1 |
+	Transcript show: 'sqPlus called with ', arg0 asString, ' and ', arg1 asString; cr.
+	arg0 + arg1].
+"JavaScript can call it later"
+JS setTimeout: 'alert("Result: " + sqPlus(3,4))' ms: 1000
+"also try e.g. sqPlus(3.5, 4.5) in the browser's console"
+
+"Load jQuery"
+| script |
+(JS at: #jQuery) ifNil: [
+	script := JS document createElement: 'SCRIPT'.
+	script at: 'src' put: 'https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js'.
+	script at: 'type' put: 'text/javascript'.
+	((JS document getElementsByTagName: 'head') at: 0) appendChild: script.
+].
+
+"Use jQuery"
+((JS jQuery: 'canvas') hide: 'slow') show: 'fast'.
+
+"Make jQuery nicer to use"
+String compile: 'asJQuery ^JS jQuery: self' classified: '*mystuff' notifying: nil.
+
+'h1' asJQuery css: { 'color'->'red'. 'text-shadow' -> '0 2px white, 0 3px #777'}.

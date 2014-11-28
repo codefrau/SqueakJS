@@ -1,5 +1,5 @@
 accessing
-at: aString
+at: aKey
 	"get a property"
 	| error |
 	<primitive: 117> #(JavaScriptPlugin primitiveAt 0 0) at: 1.

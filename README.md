@@ -101,6 +101,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2014-11-28: 0.6.8 JSBridge with callbacks
     2014-11-20: 0.6.7 implement JavaScriptPlugin
     2014-11-18: 0.6.6 implement DropPlugin
     2014-11-14: 0.6.5 add generated Balloon2D plugin

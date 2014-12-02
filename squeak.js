@@ -38,12 +38,15 @@ module = function(dottedPath) {
         requires: function(req) {
             return {
                 toRun: function(code) {
-                    if (req && !module(req).loaded) {
-                        module(req).pending.push(code);
-                    } else {
+                    function load() {
                         code();
                         self.loaded = true;
                         self.pending.forEach(function(f){f()});
+                    }
+                    if (req && !module(req).loaded) {
+                        module(req).pending.push(load);
+                    } else {
+                        load();
                     }
                 }
             }

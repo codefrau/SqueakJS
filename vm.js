@@ -765,7 +765,6 @@ Object.subclass('Squeak.Image',
         this.name = name;
         this.gcCount = 0;
         this.gcTenured = 0;
-        this.gcCompacted = 0;
         this.gcMilliseconds = 0;
         this.allocationCount = 0;
         this.oldSpaceCount = 0;
@@ -956,15 +955,13 @@ Object.subclass('Squeak.Image',
         this.vm.addMessage("fullGC: " + reason);
         var start = Date.now();
         var newObjects = this.markReachableObjects();
-        var removedObjects = this.removeUnmarkedOldObjects();
+        this.removeUnmarkedOldObjects();
         this.appendToOldObjects(newObjects);
-        this.oldSpaceCount += newObjects.length - removedObjects.length;
+        this.finalizeWeakReferences();
         this.allocationCount += this.newSpaceCount;
         this.newSpaceCount = 0;
         this.hasNewInstances = {};
         this.gcCount++;
-        this.gcTenured += newObjects.length;
-        this.gcCompacted += removedObjects.length;
         this.gcMilliseconds += Date.now() - start;
         return newObjects.length > 0 ? newObjects[0] : null;
     },
@@ -973,6 +970,7 @@ Object.subclass('Squeak.Image',
         // Return surviving new objects
         // Contexts are handled specially: they have garbage beyond the stack pointer
         // which must not be traced, and is cleared out here
+        // In weak objects, only the inst vars are traced
         this.vm.storeContextRegisters();        // update active context
         var todo = [this.specialObjectsArray, this.vm.activeContext];
         var newObjects = [];
@@ -987,13 +985,16 @@ Object.subclass('Squeak.Image',
             var body = object.pointers;
             if (body) {                   // trace all unmarked pointers
                 var n = body.length;
-                if (this.vm.isContext(object))      // contexts have garbage beyond SP
+                if (this.vm.isContext(object)) {            // contexts have garbage beyond SP
                     n = object.contextSizeWithStack();
+                    for (var i = n; i < body.length; i++)   // clean up that garbage
+                        body[i] = this.vm.nilObj;
+                } else if (object.sqClass.isWeak()) {       // do not trace the indexed part in weak arrays
+                    n = object.sqClass.classInstSize();
+                }
                 for (var i = 0; i < n; i++)
                     if (typeof body[i] === "object" && !body[i].mark)      // except SmallInts
                         todo.push(body[i]);
-                while (n < body.length)             // clean garbage from contexts
-                    body[n++] = this.vm.nilObj;
             }
         }
         // sort by oop to preserve creation order
@@ -1003,8 +1004,7 @@ Object.subclass('Squeak.Image',
         // Unlink unmarked old objects from the nextObject linked list
         // Reset marks of remaining objects, and adjust their oops
         // Set this.lastOldObject to last old object
-        // Return removed old objects (to support finalization later)
-        var removed = [],
+        var removedCount = 0,
             removedBytes = 0,
             obj = this.firstOldObject;
         obj.mark = false; // we know the first object (nil) was marked
@@ -1013,18 +1013,20 @@ Object.subclass('Squeak.Image',
             if (!next) {// we're done
                 this.lastOldObject = obj;
                 this.oldSpaceBytes -= removedBytes;
-                return removed;
+                this.oldSpaceCount -= removedCount;
+                return;
             }
             // if marked, continue with next object
             if (next.mark) {
-                next.mark = false;     // unmark for next GC
-                next.oop -= removedBytes;
                 obj = next;
+                obj.mark = false;           // unmark for next GC
+                obj.oop -= removedBytes;    // compact oops
             } else { // otherwise, remove it
                 var corpse = next;
-                obj.nextObject = corpse.nextObject; // drop from list
+                obj.nextObject = corpse.nextObject;     // drop from old-space list
+                corpse.oop = -(++this.newSpaceCount);   // move to new-space for finalizing 
                 removedBytes += corpse.totalBytes();
-                removed.push(corpse);
+                removedCount++;
             }
         }
     },
@@ -1040,6 +1042,27 @@ Object.subclass('Squeak.Image',
             oldObj = newObj;
         }
         this.lastOldObject = oldObj;
+        this.oldSpaceCount += newObjects.length;
+        this.gcTenured += newObjects.length;
+    },
+    finalizeWeakReferences: function() {
+        // nil out all weak fields that did not survive GC
+        var obj = this.firstOldObject;
+        while (obj) {
+            if (obj.sqClass.isWeak()) {
+                var pointers = obj.pointers || [];
+                for (var i = obj.sqClass.classInstSize(); i < pointers.length; i++) {
+                    if (pointers[i].oop < 0) {    // ref is not in old-space
+                        pointers[i] = this.vm.nilObj;
+                        this.vm.pendingFinalizationSignals++;
+                    }
+                }
+            }
+            obj = obj.nextObject;
+        };
+        if (this.vm.pendingFinalizationSignals > 0) {
+            this.vm.forceInterruptCheck();                      // run finalizer asap
+        }
     },
 },
 'creating', {
@@ -1555,7 +1578,7 @@ Object.subclass('Squeak.Object',
     },
     instSize: function() {//same as class.classInstSize, but faster from format
         if (this.format>4 || this.format==2) return 0; //indexable fields only
-        if (this.format<2) return this.pointers.length; //indexable fields only
+        if (this.format<2) return this.pointersSize(); //indexable fields only
         return this.sqClass.classInstSize(); //0-255
     },
     floatData: function() {
@@ -1675,6 +1698,10 @@ Object.subclass('Squeak.Object',
         // this is a class, answer number of named inst vars
         var format = this.pointers[Squeak.Class_format];
         return ((format >> 10) & 0xC0) + ((format >> 1) & 0x3F) - 1;
+    },
+    isWeak: function() {
+        var format = this.pointers[Squeak.Class_format];
+        return ((format >> 7) & 0xF) == 4;
     },
     instVarNames: function() {
         var index = this.pointers.length > 12 ? 4 :
@@ -1814,7 +1841,7 @@ Object.subclass('Squeak.Interpreter',
         this.lastTick = 0;
         this.interruptKeycode = 2094;  //"cmd-."
         this.interruptPending = false;
-        //this.pendingFinalizationSignals = 0;
+        this.pendingFinalizationSignals = 0;
         this.freeContexts = this.nilObj;
         this.freeLargeContexts = this.nilObj;
         this.reclaimableContextCount = 0;
@@ -2184,10 +2211,11 @@ Object.subclass('Squeak.Interpreter',
             var sema = this.specialObjects[Squeak.splOb_TheTimerSemaphore];
             if (!sema.isNil) this.primHandler.synchronousSignal(sema);
         }
-        //  if (pendingFinalizationSignals > 0) { //signal any pending finalizations
-        //            sema= getSpecialObject(Squeak.splOb_ThefinalizationSemaphore);
-        //            pendingFinalizationSignals= 0;
-        //            if(sema != nilObj) primHandler.synchronousSignal(sema); }
+        if (this.pendingFinalizationSignals > 0) { //signal any pending finalizations
+            var sema = this.specialObjects[Squeak.splOb_TheFinalizationSemaphore];
+            this.pendingFinalizationSignals = 0;
+            if (!sema.isNil) this.primHandler.synchronousSignal(sema);
+        }
         if (this.primHandler.semaphoresToSignal.length > 0)
             this.primHandler.signalExternalSemaphores();  // signal pending semaphores, if any
         // if this is a long-running do-it, compile it

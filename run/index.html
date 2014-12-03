@@ -57,8 +57,8 @@
                 }
             };
         }
-        function isDir(s) { return (s.replace(/<[^>]*>/gi,'').match(/\//g) || []).length > 1 ? 1 : 0; }
-        function fsort(a, b) { return isDir(a) - isDir(b) || a.localeCompare(b); }
+        function fdir(s) { return s.replace(/<[^>]*>/gi,'').replace(/[^\/]*$/, ''); }
+        function fsort(a, b) { return fdir(a).localeCompare(fdir(b)) || a.localeCompare(b); }
         if (fileList.length) {
             files.innerHTML = "<ul>" + fileList.sort(fsort).join("") + "</ul>";
             filestats.innerHTML = nFiles + " files in " + nDirs + " directories, " +

@@ -216,7 +216,7 @@ Object.extend(Squeak,
 "files", {
     fsck: function(whenDone, dir, files, stats) {
         dir = dir || "";
-        stats = stats || {dirs: 0, files: 0, bytes: 0};
+        stats = stats || {dirs: 0, files: 0, bytes: 0, deleted: 0};
         if (!files) {
             // find existing files
             files = {};
@@ -255,11 +255,13 @@ Object.extend(Squeak,
                 } else {
                     console.log("Deleting stale directory " + path);
                     Squeak.dirDelete(path);
+                    stats.deleted++;
                 }
             } else {
                 if (!files[path]) {
                     console.log("Deleting stale file entry " + path);
                     Squeak.fileDelete(path, true);
+                    stats.deleted++;
                 } else {
                     files[path] = false; // mark as visited
                     stats.files++;
@@ -281,6 +283,7 @@ Object.extend(Squeak,
                     console.log("Deleting orphaned file " + orphaned[i]);
                     delete localStorage["squeak-file:" + orphaned[i]];
                     delete localStorage["squeak-file.lz:" + orphaned[i]];
+                    stats.deleted++;
                 }
                 if (typeof indexedDB !== "undefined") {
                     this.dbTransaction("readwrite", "fsck delete", function(fileStore) {

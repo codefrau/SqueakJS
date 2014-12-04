@@ -34,7 +34,7 @@ JS at: #sqPlus put: [:arg0 :arg1 |
 JS setTimeout: 'alert("Result: " + sqPlus(3,4))' ms: 1000
 "also try e.g. sqPlus(3.5, 4.5) in the browser's console"
 
-"Load jQuery"
+"Load jQuery, and compile a helper method"
 | script |
 (JS at: #jQuery) ifNil: [
 	script := JS document createElement: 'SCRIPT'.
@@ -42,11 +42,11 @@ JS setTimeout: 'alert("Result: " + sqPlus(3,4))' ms: 1000
 	script at: 'type' put: 'text/javascript'.
 	((JS document getElementsByTagName: 'head') at: 0) appendChild: script.
 ].
-
-"Use jQuery"
-((JS jQuery: 'canvas') hide: 'slow') show: 'fast'.
-
-"Make jQuery nicer to use"
 String compile: 'asJQuery ^JS jQuery: self' classified: '*mystuff' notifying: nil.
 
-'h1' asJQuery css: { 'color'->'red'. 'text-shadow' -> '0 2px white, 0 3px #777'}.
+"Use jQuery"
+'canvas' asJQuery hide: 'slow'; show: 'fast'.
+
+'h1' asJQuery css: {'color'->'red'. 'text-shadow' -> '0 2px white, 0 3px #777'}.
+
+'<button>' asJQuery text: 'Hi'; click: [Transcript show: 'hi'; cr]; appendTo: 'h1'.

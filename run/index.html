@@ -17,6 +17,55 @@
             appName: imageName && imageName.replace(/\.image$/, ""),
         });
     }
+    function exportFile(a) {
+        var path = Squeak.splitFilePath(a.innerText);
+        Squeak.fileGet(path.fullname, function(buffer) {
+            var blob = new Blob([buffer], {type: 'application/octet-stream'}),
+                blobURL = URL.createObjectURL(blob);
+            a.setAttribute('href', blobURL);
+            a.setAttribute('download', path.basename);
+            a.onclick = function(){
+                setTimeout(function(){URL.revokeObjectURL(blobURL)}, 0);
+                return true;
+            };
+            a.click();
+        }, alert);
+        return false;
+    }
+    function showFiles() {
+        var imgList = [],
+            fileList = [],
+            dirs = [''],
+            nFiles = nDirs = nBytes = 0;
+        while (dirs.length > 0) {
+            var dir = dirs.pop(),
+                entries = Squeak.dirList(dir);
+            for (var f in entries) {
+                var entry = entries[f],
+                    path = dir + '/' + f;
+                if (!dir && !entry[3] && f.match(/\.image$/))
+                    imgList.push('<li><a href="#image=' + path + '">' + f + '</a> (' + (entry[4]/1000000).toFixed(1) + ' MB)</li>');
+                if (entry[3]) {
+                    dirs.push(path);
+                    nDirs++;
+                } else {
+                    nFiles++;
+                    nBytes += entry[4];
+                    fileList.push('<li><a href="squeak:' + path + '" onclick="return exportFile(this)" target="_blank">' + path + '</a>' +
+                        (entry[4] >= 100000 ? ' (' + (entry[4]/1000000).toFixed(1) + ' MB)' 
+                        : ' (' + (entry[4]/1000).toFixed(1) + ' KB)') + '</li>');
+                }
+            };
+        }
+        function fdir(s) { return s.replace(/<[^>]*>/gi,'').replace(/[^\/]*$/, ''); }
+        function fsort(a, b) { return fdir(a).localeCompare(fdir(b)) || a.localeCompare(b); }
+        if (fileList.length) {
+            files.innerHTML = "<ul>" + fileList.sort(fsort).join("") + "</ul>";
+            filestats.innerHTML = nFiles + " files in " + nDirs + " directories, " +
+                (nBytes/1000000).toFixed(1) + " MBytes total";
+        }          
+        if (imgList.length) images.innerHTML = "<ul>" + imgList.sort(fsort).join("") + "</ul>";
+    }
     window.onhashchange = function() {
         window.location.reload();
     }
@@ -37,19 +86,10 @@
                 })(href);
             }
         }
+        // show stored files and images. Update after fsck (which takes a while)
+        showFiles();
         setTimeout(function() {
-            Squeak.fsck(function(stats) {
-                drop.innerHTML += "<br><br>" + stats.files + " files in " + stats.dirs + " directories, " +
-                    (stats.bytes/1000000).toFixed(1) + " MBytes total";
-                var entries = Squeak.dirList("/"),
-                    list = "";
-                for (var f in entries) {
-                    var entry = entries[f];
-                    if (!entry[3] && entry[0].match(/\.image$/))
-                        list += '<li><a href="#image=' + f + '">' + f + '</a> (' + (entry[4]/1000000).toFixed(1) + ' MB)</li>';
-                };
-                if (list) images.innerHTML = "Run locally stored images:<ul>" + list + "</ul>";
-            });
+            Squeak.fsck(function(stats) { if (stats.deleted) showFiles(); });
         }, 0);
         // also, enable drag-and-drop even if no image loaded yet
         // (squeak.js will replace these when an image is running)
@@ -68,7 +108,7 @@
         };
         document.body.ondrop = function(evt) {
             evt.preventDefault();
-            drop.style.borderColor = "";
+            drop.style.borderColor = "#080";
             var files = [].slice.call(evt.dataTransfer.files),
                 todo = files.length,
                 imageName = null;
@@ -80,7 +120,8 @@
                     if (/.*image$/.test(f.name)) imageName = f.name;
                     Squeak.filePut(f.name, buffer, function success() {
                         if (--todo > 0) return;
-                        if (!imageName) alert("SqueakJS: stored " + files.length + " files");
+                        drop.style.borderColor = "";
+                        if (!imageName) showFiles();
                         else runSqueak(imageName);
                     });
                 }
@@ -105,8 +146,11 @@
 
         <h2>Run Squeak images from your local machine</h2>
         Use drag-and-drop to run a Squeak image from your machine: drop the image (perhaps together with a changes and sources file) into this page.
-        <div id="drop">Drop Squeak images and other files here:</div>
         <div id="images"></div>
+        <div id="drop">Drop Squeak images and other files here (click file to export):
+            <div id="files" class="filelist"></div>
+            <div id="filestats"></div>
+        </div>
         All files are stored persistently in a database inside your web browser. Use a FileList inside Squeak to manage them.
 
         <h2>Run Squeak images from the internet</h2>

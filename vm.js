@@ -94,6 +94,12 @@ Object.extend(Squeak,
     splOb_ClassExternalLibrary: 47,
     splOb_SelectorAboutToReturn: 48,
     splOb_SelectorRunWithIn: 49,
+    splOb_SelectorAttemptToAssign: 50,
+	splOb_PrimErrTableIndex: 51,
+	splOb_ClassAlien: 52,
+	splOb_InvokeCallbackSelector: 53,
+	splOb_ClassUnsafeAlien: 54,
+	splOb_ClassWeakFinalizer: 55,
 },
 "known classes", {
     // Class layout:
@@ -152,7 +158,7 @@ Object.extend(Squeak,
     // Point layout:
     Point_x: 0,
     Point_y: 1,
-    // LargetInteger layout:
+    // LargeInteger layout:
     LargeInteger_bytes: 0,
     LargeInteger_neg: 1,
     // BitBlt layout:
@@ -177,6 +183,11 @@ Object.extend(Squeak,
     Form_width: 1,
     Form_height: 2,
     Form_depth: 3,
+    // WeakFinalizationList layout:
+    WeakFinalizationList_first: 0,
+    // WeakFinalizerItem layout:
+    WeakFinalizerItem_list: 0,
+    WeakFinalizerItem_next: 1,
 },
 "events", {
     Mouse_Blue: 1,
@@ -1047,18 +1058,32 @@ Object.subclass('Squeak.Image',
     },
     finalizeWeakReferences: function() {
         // nil out all weak fields that did not survive GC
-        var obj = this.firstOldObject;
-        while (obj) {
-            if (obj.sqClass.isWeak()) {
-                var pointers = obj.pointers || [];
-                for (var i = obj.sqClass.classInstSize(); i < pointers.length; i++) {
+        var weakObj = this.firstOldObject;
+        while (weakObj) {
+            if (weakObj.sqClass.isWeak()) {
+                var pointers = weakObj.pointers || [],
+                    firstWeak = weakObj.sqClass.classInstSize(),
+                    finalized = false;
+                for (var i = firstWeak; i < pointers.length; i++) {
                     if (pointers[i].oop < 0) {    // ref is not in old-space
                         pointers[i] = this.vm.nilObj;
-                        this.vm.pendingFinalizationSignals++;
+                        finalized = true;
+                    }
+                }
+                if (finalized) {
+                    this.vm.pendingFinalizationSignals++;
+                    if (firstWeak >= 2) { // check if weak obj is a finalizer item
+                        var list = weakObj.pointers[Squeak.WeakFinalizerItem_list];
+                        if (list.sqClass == this.vm.specialObjects[Squeak.splOb_ClassWeakFinalizer]) {
+                            // add weak obj as first in the finalization list
+                            var items = list.pointers[Squeak.WeakFinalizationList_first];
+                            weakObj.pointers[Squeak.WeakFinalizerItem_next] = items;
+                            list.pointers[Squeak.WeakFinalizationList_first] = weakObj;
+                        }
                     }
                 }
             }
-            obj = obj.nextObject;
+            weakObj = weakObj.nextObject;
         };
         if (this.vm.pendingFinalizationSignals > 0) {
             this.vm.forceInterruptCheck();                      // run finalizer asap

@@ -6,6 +6,7 @@
  */
 
 module("users.bert.SqueakJS.plugins.FFTPlugin").requires("users.bert.SqueakJS.vm").toRun(function() {
+"use strict";
 
 var VM_PROXY_MAJOR = 1;
 var VM_PROXY_MINOR = 11;

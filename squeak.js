@@ -20,13 +20,14 @@
  * THE SOFTWARE.
  */
 
+"use strict";    
 
 //////////////////////////////////////////////////////////////////////////////
 // these functions fake the Lively module and class system
 // just enough so the loading of vm.js succeeds
 //////////////////////////////////////////////////////////////////////////////
 
-module = function(dottedPath) {
+window.module = function(dottedPath) {
     if (dottedPath == "") return window;
     var path = dottedPath.split("."),
         name = path.pop(),

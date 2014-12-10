@@ -1,4 +1,5 @@
 module('users.bert.SqueakJS.vm').requires().toRun(function() {
+"use strict";    
 /*
  * Copyright (c) 2013,2014 Bert Freudenberg
  *
@@ -559,19 +560,19 @@ Object.extend(Squeak,
         var path = this.splitFilePath(dirpath),
             localEntries = localStorage["squeak:" + path.fullname],
             template = includeTemplates && localStorage["squeak-template:" + path.fullname];
-        if (localEntries || template) {
-            var dir = {};
-            function addEntries(entries) {
-                for (var key in entries) {
-                    if (entries.hasOwnProperty(key)) {
-                        var entry = entries[key];
-                        dir[entry[0]] = entry;
-                    }
+        function addEntries(dir, entries) {
+            for (var key in entries) {
+                if (entries.hasOwnProperty(key)) {
+                    var entry = entries[key];
+                    dir[entry[0]] = entry;
                 }
             }
+        }
+        if (localEntries || template) {
             // local entries override templates
-            if (template) addEntries(JSON.parse(template).entries);
-            if (localEntries) addEntries(JSON.parse(localEntries));
+            var dir = {};
+            if (template) addEntries(dir, JSON.parse(template).entries);
+            if (localEntries) addEntries(dir, JSON.parse(localEntries));
             return dir;
         }
         if (path.fullname == "/") return {};
@@ -899,17 +900,17 @@ Object.subclass('Squeak.Image',
                 return false;   // don't do more
             }
         };
+        function mapSomeObjectsAsync() {
+            if (mapSomeObjects()) {
+                window.setTimeout(mapSomeObjectsAsync, 0);
+            } else {
+                if (thenDo) thenDo();
+            }
+        };
         if (!progressDo) {
             while (mapSomeObjects());   // do it synchronously
             if (thenDo) thenDo();
         } else {
-            function mapSomeObjectsAsync() {
-                if (mapSomeObjects()) {
-                    window.setTimeout(mapSomeObjectsAsync, 0);
-                } else {
-                    if (thenDo) thenDo();
-                }
-            };
             window.setTimeout(mapSomeObjectsAsync, 0);
         }
      },

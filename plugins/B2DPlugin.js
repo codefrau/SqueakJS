@@ -5734,19 +5734,14 @@ function primitiveSetBitBltPlugin() {
 	}
 	ptr = pluginName.bytes;
 	needReload = false;
-	for (i = 0; i <= (length - 1); i++) {
 
-		/* Compare and store the plugin to be used */
+    // JS hack: can't copy bytes as in the C version
+    var newPluginName = pluginName.bytesAsString();
+    if (newPluginName !== bbPluginName) {
+        bbPluginName = newPluginName;
+        needReload = true;
+    }
 
-		if (bbPluginName[i] !== ptr[i]) {
-			bbPluginName[i] = ptr[i];
-			needReload = true;
-		}
-	}
-	if (bbPluginName[length] !== 0) {
-		bbPluginName[length] = 0;
-		needReload = true;
-	}
 	if (needReload) {
 		if (!initialiseModule()) {
 			return interpreterProxy.primitiveFail();

@@ -3510,6 +3510,19 @@ Object.subclass('Squeak.Primitives',
             248: "return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod); // see findSelectorInClass()",
             249: "return this.primitiveArrayBecome(argCount, false); // one way, opt. copy hash",
             254: "return this.primitiveVMParameter(argCount);",
+            //Quick Returns(255-519)
+            256: "return true; //return self is implicit",
+            257: "this.vm.popNandPush(1, this.vm.trueObj); return true; //return true",
+            258: "this.vm.popNandPush(1, this.vm.falseObj); return true; //return false",
+            259: "this.vm.popNandPush(1, this.vm.nilObj); return true; //return nil",
+            260: "this.vm.popNandPush(1, index - 261); return true;//return -1...2",
+            261: "this.vm.popNandPush(1, index - 261); return true;//return -1...2",
+            262: "this.vm.popNandPush(1, index - 261); return true;//return -1...2",
+            263: "this.vm.popNandPush(1, index - 261); return true;//return -1...2",
+            //Quick Return instvars(264-519)
+            264: "this.vm.popNandPush(1, this.vm.top().pointers[index - 264]); return true;",
+            /*to save space we dispatch 265-519 into 260*/
+            /* */
             //MIDI Primitives (520-539)
             521: "return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIClosePort', argCount);",
             522: "return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIGetClock', argCount);",
@@ -3562,13 +3575,16 @@ Object.subclass('Squeak.Primitives',
         return false;
     },
 
-    getPrimitiveFunc: function(index, argCount, primMethod) {
-        return this.primitiveFunctions[index];
+    getPrimitiveFunc: function(primIndex, argCount, primMethod) {
+        if ((primIndex > 264) && (primIndex < 520)) {
+            return this.primitiveFunctions[260];
+        }
+        return this.primitiveFunctions[primIndex];
     },
 
     doPrimitive: function(index, argCount, primMethod) {
         this.success = true;
-        this.primitiveFunction = this.primitiveFunctions[index];
+        this.primitiveFunction = this.getPrimitiveFunc(index);
         if(this.primitiveFunction) {
             return this.primitiveFunction(index, argCount, primMethod);
         } else {

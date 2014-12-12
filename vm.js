@@ -1947,10 +1947,10 @@ Object.subclass('Squeak.Interpreter',
             // Etoys fallback for missing translation files is hugely inefficient.
             // This speeds up opening a viewer by 10x (!)
             // Remove when we added translation files.
-            {method: "String>>translated", primitive: returnSelf},
-            {method: "String>>translatedInAllDomains", primitive: returnSelf},
+            //{method: "String>>translated", primitive: returnSelf},
+            //{method: "String>>translatedInAllDomains", primitive: returnSelf},
             // Squeak: disable syntax highlighting for speed
-            {method: "PluggableTextMorphPlus>>useDefaultStyler", primitive: returnSelf},
+            //{method: "PluggableTextMorphPlus>>useDefaultStyler", primitive: returnSelf},
         ].forEach(function(each) {
             var m = this.findMethod(each.method);
             if (m) {

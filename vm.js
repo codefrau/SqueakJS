@@ -1039,6 +1039,7 @@ Object.subclass('Squeak.Image',
                 corpse.oop = -(++this.newSpaceCount);   // move to new-space for finalizing 
                 removedBytes += corpse.totalBytes();
                 removedCount++;
+                //console.log("removing " + removedCount + " " + removedBytes + " " + corpse.totalBytes() + " " + corpse.toString())
             }
         }
     },
@@ -1046,12 +1047,14 @@ Object.subclass('Squeak.Image',
         // append new objects to linked list of old objects
         // and unmark them
         var oldObj = this.lastOldObject;
+        //var oldBytes = this.oldSpaceBytes;
         for (var i = 0; i < newObjects.length; i++) {
             var newObj = newObjects[i];
             newObj.mark = false;
             this.oldSpaceBytes = newObj.setAddr(this.oldSpaceBytes);     // add at end of memory
             oldObj.nextObject = newObj;
             oldObj = newObj;
+            //console.log("tenuring " + (i+1) + " " + (this.oldSpaceBytes - oldBytes) + " " + newObj.totalBytes() + " " + newObj.toString());
         }
         this.lastOldObject = oldObj;
         this.oldSpaceCount += newObjects.length;
@@ -6299,6 +6302,8 @@ Object.subclass('Squeak.Primitives',
 Object.subclass('Squeak.InterpreterProxy',
 // provides function names exactly like the C interpreter, for ease of porting
 // but maybe less efficiently because of the indirection
+// only used for plugins translated from Slang (see plugins/*.js)
+// built-in primitives use the interpreter directly
 'initialization', {
     VM_PROXY_MAJOR: 1,
     VM_PROXY_MINOR: 11,

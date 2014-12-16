@@ -184,6 +184,7 @@ Object.extend(Squeak,
     Form_width: 1,
     Form_height: 2,
     Form_depth: 3,
+    Form_offset: 4,
     // WeakFinalizationList layout:
     WeakFinalizationList_first: 0,
     // WeakFinalizerItem layout:
@@ -5001,7 +5002,7 @@ Object.subclass('Squeak.Primitives',
         var supportedDepths =  [1, 2, 4, 8, 16, 32]; // match showOnDisplay()
         return this.pop2andPushBoolIfOK(supportedDepths.indexOf(this.stackInteger(0)) >= 0);
     },
-    loadForm: function(formObj) {
+    loadForm: function(formObj, withOffset) {
         if (formObj.isNil) return null;
         var form = {
             obj: formObj,
@@ -5009,6 +5010,11 @@ Object.subclass('Squeak.Primitives',
             depth: formObj.pointers[Squeak.Form_depth],
             width: formObj.pointers[Squeak.Form_width],
             height: formObj.pointers[Squeak.Form_height],
+        }
+        if (withOffset) {
+            var offset = formObj.pointers[Squeak.Form_offset];
+            form.offsetX = offset.pointers ? offset.pointers[Squeak.Point_x] : 0;
+            form.offsetY = offset.pointers ? offset.pointers[Squeak.Point_y] : 0;
         }
         if (form.width === 0 || form.height === 0) return form;
         if (!(form.width > 0 && form.height > 0)) return null;

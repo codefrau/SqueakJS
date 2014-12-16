@@ -4866,7 +4866,7 @@ Object.subclass('Squeak.Primitives',
         if (bounds.left < bounds.right && bounds.top < bounds.bottom)
             this.displayUpdate(theDisplay, bounds);
     },
-    showForm: function(ctx, form, rect) {
+    showForm: function(ctx, form, rect, colorMap) {
         if (!rect) return;
         var srcX = rect.left,
             srcY = rect.top,
@@ -4883,7 +4883,7 @@ Object.subclass('Squeak.Primitives',
             case 2:
             case 4:
             case 8:
-                var colors = this.swappedColors;
+                var colors = colorMap || this.swappedColors;
                 if (!colors) {
                     colors = [];
                     for (var i = 0; i < 256; i++) {
@@ -4895,7 +4895,7 @@ Object.subclass('Squeak.Primitives',
                     }
                     this.swappedColors = colors;
                 }
-                if (this.reverseDisplay) {
+                if (this.reverseDisplay && !colorMap) {
                     if (!this.reversedColors)
                         this.reversedColors = colors.map(function(c){return c ^ 0x00FFFFFF});
                     colors = this.reversedColors;

@@ -4846,8 +4846,8 @@ Object.subclass('Squeak.Primitives',
         // Force the given rectangular section of the Display to be copied to the screen.
         var rect = {
             left: this.stackInteger(3),
-            right: this.stackInteger(2),
             top: this.stackInteger(1),
+            right: this.stackInteger(2),
             bottom: this.stackInteger(0),
         };
         if (!this.success) return false;
@@ -4947,9 +4947,9 @@ Object.subclass('Squeak.Primitives',
                     for (var x = 0; x < srcW; x++) {
                         var argb = form.bits[srcIndex++];  // convert ARGB -> ABGR
                         var abgr = (argb & 0x0000FF00)     // green is okay
-                            + ((argb & 0x00FF0000) >> 16)  // shift red down
-                            + ((argb & 0x000000FF) << 16)  // shift blue up
-                            + 0xFF000000;                  // set alpha to opaque
+                            | ((argb & 0x00FF0000) >> 16)  // shift red down
+                            | ((argb & 0x000000FF) << 16)  // shift blue up
+                            | 0xFF000000;                  // set alpha to opaque
                         dest[dstIndex++] = abgr;
                     }
                     srcY++;

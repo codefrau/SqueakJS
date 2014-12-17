@@ -4867,7 +4867,7 @@ Object.subclass('Squeak.Primitives',
         if (bounds.left < bounds.right && bounds.top < bounds.bottom)
             this.displayUpdate(theDisplay, bounds);
     },
-    showForm: function(ctx, form, rect, colorMap) {
+    showForm: function(ctx, form, rect, cursorColors) {
         if (!rect) return;
         var srcX = rect.left,
             srcY = rect.top,
@@ -4884,7 +4884,7 @@ Object.subclass('Squeak.Primitives',
             case 2:
             case 4:
             case 8:
-                var colors = colorMap || this.swappedColors;
+                var colors = cursorColors || this.swappedColors;
                 if (!colors) {
                     colors = [];
                     for (var i = 0; i < 256; i++) {
@@ -4896,7 +4896,7 @@ Object.subclass('Squeak.Primitives',
                     }
                     this.swappedColors = colors;
                 }
-                if (this.reverseDisplay && !colorMap) {
+                if (this.reverseDisplay && !cursorColors) {
                     if (!this.reversedColors)
                         this.reversedColors = colors.map(function(c){return c ^ 0x00FFFFFF});
                     colors = this.reversedColors;
@@ -4941,15 +4941,16 @@ Object.subclass('Squeak.Primitives',
                 };
                 break;
             case 32:
+                var opaque = cursorColors ? 0 : 0xFF000000;    // keep alpha for cursors
                 for (var y = 0; y < srcH; y++) {
                     var srcIndex = form.pitch * srcY + srcX;
                     var dstIndex = pixels.width * y;
                     for (var x = 0; x < srcW; x++) {
                         var argb = form.bits[srcIndex++];  // convert ARGB -> ABGR
-                        var abgr = (argb & 0x0000FF00)     // green is okay
+                        var abgr = (argb & 0xFF00FF00)     // green and alpha is okay
                             | ((argb & 0x00FF0000) >> 16)  // shift red down
                             | ((argb & 0x000000FF) << 16)  // shift blue up
-                            | 0xFF000000;                  // set alpha to opaque
+                            | opaque;                      // set alpha to opaque
                         dest[dstIndex++] = abgr;
                     }
                     srcY++;

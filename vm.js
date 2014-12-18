@@ -4961,7 +4961,7 @@ Object.subclass('Squeak.Primitives',
         if (pixels.data !== pixelData) {
             pixels.data.set(pixelData);
         }
-        ctx.putImageData(pixels, rect.left + (rect.offsetX || 0), rect.top + (rect.offsetY || 0));
+        ctx.putImageData(pixels, rect.left, rect.top);
     },
     primitiveDeferDisplayUpdates: function(argCount) {
         var flag = this.stackBoolean(0);
@@ -5038,8 +5038,6 @@ Object.subclass('Squeak.Primitives',
     displayUpdate: function(form, rect, noCursor) {
         this.display.lastTick = this.vm.lastTick;
         this.display.idle = 0;
-        rect.offsetX = this.display.offsetX;
-        rect.offsetY = this.display.offsetY;
         this.showForm(this.display.context, form, rect);
         if (noCursor) return;
         // show cursor if it was just overwritten

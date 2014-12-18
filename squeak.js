@@ -123,49 +123,49 @@ module("SqueakJS").requires("users.bert.SqueakJS.vm").toRun(function() {
 function setupFullscreen(display, canvas, options) {
     // Fullscreen can only be enabled in an event handler. So we check the
     // fullscreen flag on every mouse down/up and keyboard event.
+    var box = canvas.parentElement,
+        fullscreenEvent = "fullscreenchange",
+        fullscreenElement = "fullscreenElement",
+        fullscreenEnabled = "fullscreenEnabled";
+
+    if (!box.requestFullscreen) {
+        [    // Fullscreen support is still very browser-dependent
+            {req: box.webkitRequestFullscreen, exit: document.webkitExitFullscreen,
+                evt: "webkitfullscreenchange", elem: "webkitFullscreenElement", enable: "webkitFullscreenEnabled"},
+            {req: box.mozRequestFullScreen, exit: document.mozCancelFullScreen,
+                evt: "mozfullscreenchange", elem: "mozFullScreenElement", enable: "mozFullScreenEnabled"},
+            {req: box.msRequestFullscreen, exit: document.msExitFullscreen,
+                evt: "MSFullscreenChange", elem: "msFullscreenElement", enable: "msFullscreenEnabled"},
+        ].forEach(function(browser) {
+            if (browser.req) {
+                box.requestFullscreen = browser.req;
+                document.exitFullscreen = browser.exit;
+                fullscreenEvent = browser.evt;
+                fullscreenElement = browser.elem;
+                fullscreenEnabled = browser.enable;
+            }
+        })
+    }
 
     // If the user canceled fullscreen, turn off the fullscreen flag so
     // we don't try to enable it again in the next event
     function fullscreenChange(fullscreen) {
         display.fullscreen = fullscreen;
-        if (options.fullscreenCheckbox)
-            options.fullscreenCheckbox.checked = display.fullscreen;
+        box.style.background = fullscreen ? 'black' : '';
+        if (options.header) options.header.style.display = fullscreen ? 'none' : '';
+        if (options.footer) options.footer.style.display = fullscreen ? 'none' : '';
+        if (options.fullscreenCheckbox) options.fullscreenCheckbox.checked = fullscreen;
         setTimeout(window.onresize, 0);
     };
-
+    
     var checkFullscreen;
-
-    // Fullscreen support is very browser-dependent
-    if (canvas.requestFullscreen) {
-        document.addEventListener("fullscreenchange", function(){fullscreenChange(canvas == document.fullscreenElement)});
+    
+    if (box.requestFullscreen) {
+        document.addEventListener(fullscreenEvent, function(){fullscreenChange(box == document[fullscreenElement])});
         checkFullscreen = function() {
-            if (document.fullscreenEnabled && (canvas == document.fullscreenElement) != display.fullscreen) {
-                if (display.fullscreen) canvas.requestFullscreen();
+            if (document[fullscreenEnabled] && (box == document[fullscreenElement]) != display.fullscreen) {
+                if (display.fullscreen) box.requestFullscreen();
                 else document.exitFullscreen();
-            }
-        }
-    } else if (canvas.webkitRequestFullscreen) {
-        document.addEventListener("webkitfullscreenchange", function(){fullscreenChange(canvas == document.webkitFullscreenElement)});
-        checkFullscreen = function() {
-            if (document.webkitFullscreenEnabled && (canvas == document.webkitFullscreenElement) != display.fullscreen) {
-                if (display.fullscreen) canvas.webkitRequestFullscreen();
-                else document.webkitExitFullscreen();
-            }
-        }
-    } else if (canvas.mozRequestFullScreen) {
-        document.addEventListener("mozfullscreenchange", function(){fullscreenChange(canvas == document.mozFullScreenElement)});
-        checkFullscreen = function() {
-            if (document.mozFullScreenEnabled && (canvas == document.mozFullScreenElement) != display.fullscreen) {
-                if (display.fullscreen) canvas.mozRequestFullScreen();
-                else document.mozCancelFullScreen();
-            }
-        }
-    } else if (canvas.msRequestFullscreen) {
-        document.addEventListener("MSFullscreenChange", function(){fullscreenChange(canvas == document.msFullscreenElement)});
-        checkFullscreen = function() {
-            if (document.msFullscreenEnabled && (canvas == document.msFullscreenElement) != display.fullscreen) {
-                if (display.fullscreen) canvas.msRequestFullscreen();
-                else document.msExitFullscreen();
             }
         }
     } else {
@@ -173,10 +173,7 @@ function setupFullscreen(display, canvas, options) {
         checkFullscreen = function() {
             if ((options.header || options.footer) && isFullscreen != display.fullscreen) {
                 isFullscreen = display.fullscreen;
-                if (options.header) options.header.style.display = isFullscreen ? 'none' : '';
-                if (options.footer) options.footer.style.display = isFullscreen ? 'none' : '';
-                if (options.fullscreenCheckbox) options.fullscreenCheckbox.checked = isFullscreen;
-                window.onresize();
+                fullscreenChange(isFullscreen);
             }
         }
     }
@@ -216,8 +213,8 @@ function updateMousePos(evt, canvas, display) {
     var x = ((evt.pageX - canvas.offsetLeft) * (canvas.width / canvas.offsetWidth)) | 0,
         y = ((evt.pageY - canvas.offsetTop) * (canvas.height / canvas.offsetHeight)) | 0;
         // subtract display offset and clamp to display size
-    display.mouseX = Math.max(0, Math.min(display.width, x - display.offsetX));
-    display.mouseY = Math.max(0, Math.min(display.height, y - display.offsetY));
+    display.mouseX = Math.max(0, Math.min(display.width, x));
+    display.mouseY = Math.max(0, Math.min(display.height, y));
 }
 
 function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
@@ -333,8 +330,6 @@ function createSqueakDisplay(canvas, options) {
     var display = {
         context: canvas.getContext("2d"),
         fullscreen: false,
-        offsetX: 0,
-        offsetY: 0,
         width: 0,   // if 0, VM uses canvas.width
         height: 0,  // if 0, VM uses canvas.height
         mouseX: 0,
@@ -604,18 +599,13 @@ function createSqueakDisplay(canvas, options) {
             return;
         }
         // CSS won't let us do what we want so we will layout the canvas ourselves.
-        // Also, we need to paper over browser differences in fullscreen mode where
-        // Firefox scales the canvas but Webkit does not, which makes a difference
-        // if we do not use actual pixels but are scaling a fixed-resolution canvas.
         var fullscreen = options.fullscreen || display.fullscreen,
             x = 0,
             y = fullscreen ? 0 : options.header.offsetTop + options.header.offsetHeight,
             w = window.innerWidth,
             h = fullscreen ? window.innerHeight : Math.max(100, options.footer.offsetTop - y),
-            innerPadX = 0, // padding inside canvas
-            innerPadY = 0,
-            outerPadX = 0, // padding outside canvas
-            outerPadY = 0;
+            paddingX = 0, // padding outside canvas
+            paddingY = 0;
         // above are the default values for laying out the canvas
         if (!options.fixedWidth) { // set canvas resolution
             display.width = w;
@@ -625,38 +615,24 @@ function createSqueakDisplay(canvas, options) {
             display.height = options.fixedHeight;
             var wantRatio = display.width / display.height,
                 haveRatio = w / h;
-            if (fullscreen) { // need to use inner padding
-                if (haveRatio > wantRatio) {
-                    innerPadX = Math.floor(display.height * haveRatio) - display.width;
-                } else {
-                    innerPadY = Math.floor(display.width / haveRatio) - display.height;
-                }
-            } else { // can control outer padding
-                if (haveRatio > wantRatio) {
-                    outerPadX = w - Math.floor(h * wantRatio);
-                } else {
-                    outerPadY = h - Math.floor(w / wantRatio);
-                }
+            if (haveRatio > wantRatio) {
+                paddingX = w - Math.floor(h * wantRatio);
+            } else {
+                paddingY = h - Math.floor(w / wantRatio);
             }
         }
         // set size and position
-        canvas.style.left = (x + Math.floor(outerPadX / 2)) + "px";
-        canvas.style.top = (y + Math.floor(outerPadY / 2)) + "px";
-        canvas.style.width = (w - outerPadX) + "px";
-        canvas.style.height = (h - outerPadY) + "px";
+        canvas.style.left = (x + Math.floor(paddingX / 2)) + "px";
+        canvas.style.top = (y + Math.floor(paddingY / 2)) + "px";
+        canvas.style.width = (w - paddingX) + "px";
+        canvas.style.height = (h - paddingY) + "px";
         // set resolution
-        var canvasWidth = display.width + innerPadX,
-            canvasHeight = display.height + innerPadY,
-            oldOffsetX = display.offsetX,
-            oldOffsetY = display.offsetY;
-        display.offsetX = Math.floor(innerPadX / 2);
-        display.offsetY = Math.floor(innerPadY / 2);
-        if (canvas.width != canvasWidth || canvas.height != canvasHeight) {
+        if (canvas.width != display.width || canvas.height != display.height) {
             var preserveScreen = options.fixedWidth || !display.resizeTodo, // preserve unless changing fullscreen
-                imgData = preserveScreen && display.context.getImageData(oldOffsetX, oldOffsetY, canvas.width, canvas.height);
-            canvas.width = canvasWidth;
-            canvas.height = canvasHeight;
-            if (imgData) display.context.putImageData(imgData, display.offsetX, display.offsetY);
+                imgData = preserveScreen && display.context.getImageData(0, 0, canvas.width, canvas.height);
+            canvas.width = display.width;
+            canvas.height = display.height;
+            if (imgData) display.context.putImageData(imgData, 0, 0);
         }
     };
     window.onresize();

@@ -101,6 +101,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2014-12-22: 0.7.1 cursor shapes
     2014-12-04: 0.7 support finalization of weak references
     2014-11-28: 0.6.8 JSBridge with callbacks
     2014-11-20: 0.6.7 implement JavaScriptPlugin

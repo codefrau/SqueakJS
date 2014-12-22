@@ -210,18 +210,20 @@ function recordModifiers(evt, display) {
 }
 
 function updateMousePos(evt, canvas, display) {
+    display.cursorCanvas.style.left = (evt.pageX + display.cursorOffsetX) + "px";
+    display.cursorCanvas.style.top = (evt.pageY + display.cursorOffsetY) + "px";
     var x = ((evt.pageX - canvas.offsetLeft) * (canvas.width / canvas.offsetWidth)) | 0,
         y = ((evt.pageY - canvas.offsetTop) * (canvas.height / canvas.offsetHeight)) | 0;
-        // subtract display offset and clamp to display size
+    // clamp to display size
     display.mouseX = Math.max(0, Math.min(display.width, x));
     display.mouseY = Math.max(0, Math.min(display.height, y));
 }
 
 function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
-    if (!display.vm) return;
     if (what != "touchend") {
         updateMousePos(evt, canvas, display);
     }
+    if (!display.vm) return;
     var buttons = display.buttons & Squeak.Mouse_All;
     switch (what) {
         case 'mousedown':
@@ -338,6 +340,9 @@ function createSqueakDisplay(canvas, options) {
         keys: [],
         clipboardString: '',
         clipboardStringChanged: false,
+        cursorCanvas: document.createElement("canvas"),
+        cursorOffsetX: 0,
+        cursorOffsetY: 0,
         droppedFiles: [],
         signalInputEvent: null, // function set by VM
         // additional functions added below
@@ -446,6 +451,17 @@ function createSqueakDisplay(canvas, options) {
     canvas.ontouchcancel = function(evt) {
         canvas.ontouchend(evt);
     };
+    // cursorCanvas shows Squeak cursor
+    display.cursorCanvas.style.display = "block";
+    display.cursorCanvas.style.position = "absolute";
+    display.cursorCanvas.style.cursor = "none";
+    display.cursorCanvas.style.background = "transparent";
+    ['onmousedown', 'onmouseup', 'onmousemove', 'oncontextmenu',
+    'ontouchstart', 'ontouchmove', 'ontouchend', 'ontouchcancel'].
+        forEach(function(handler) { display.cursorCanvas[handler] = canvas[handler]; });
+    canvas.parentElement.appendChild(display.cursorCanvas);
+    canvas.style.cursor = "none";
+    // keyboard stuff
     document.onkeypress = function(evt) {
         if (!display.vm) return true;
         // check for ctrl-x/c/v/r

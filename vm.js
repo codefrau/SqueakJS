@@ -4828,8 +4828,51 @@ Object.subclass('Squeak.Primitives',
 },
 'display', {
     primitiveBeCursor: function(argCount) {
-        this.vm.popN(argCount); // return self
+        if (this.display.cursorCanvas) {
+            var cursorForm = this.loadForm(this.stackNonInteger(argCount), true),
+                maskForm = argCount === 1 ? this.loadForm(this.stackNonInteger(0)) : null;
+            if (!this.success || !cursorForm) return false;
+            var cursorCanvas = this.display.cursorCanvas,
+                context = cursorCanvas.getContext("2d"),
+                bounds = {left: 0, top: 0, right: cursorForm.width, bottom: cursorForm.height};
+            cursorCanvas.width = cursorForm.width;
+            cursorCanvas.height = cursorForm.height;
+            if (cursorForm.depth === 1) {
+                if (maskForm) {
+                    cursorForm = this.cursorMergeMask(cursorForm, maskForm);
+                    this.showForm(context, cursorForm, bounds, [0x00000000, 0xFF0000FF, 0xFFFFFFFF, 0xFF000000]);
+                } else {
+                    this.showForm(context, cursorForm, bounds, [0x00000000, 0xFF000000]);
+                }
+            } else {
+                this.showForm(context, cursorForm, bounds, true);
+            }
+            this.display.cursorOffsetX = cursorForm.offsetX;
+            this.display.cursorOffsetY = cursorForm.offsetY;
+        }
+        this.vm.popN(argCount);
         return true;
+    },
+    cursorMergeMask: function(cursor, mask) {
+        // make 2-bit form from cursor and mask 1-bit forms
+        var bits = new Uint32Array(16);
+        for (var y = 0; y < 16; y++) {
+            var c = cursor.bits[y],
+                m = mask.bits[y],
+                bit = 0x80000000,
+                merged = 0;
+            for (var x = 0; x < 16; x++) {
+                merged = merged | ((m & bit) >> x) | ((c & bit) >> (x + 1));
+                bit = bit >>> 1;
+            }
+            bits[y] = merged; 
+        }
+        return {
+            obj: cursor.obj, bits: bits,
+            depth: 2, width: 16, height: 16,
+            offsetX: cursor.offsetX, offsetY: cursor.offsetY,
+            msb: true, pixPerWord: 16, pitch: 1,
+        }
     },
     primitiveBeDisplay: function(argCount) {
         var displayObj = this.vm.stackValue(0);
@@ -5035,31 +5078,10 @@ Object.subclass('Squeak.Primitives',
             && form == this.vm.specialObjects[Squeak.splOb_TheDisplay])
                 this.displayUpdate(this.theDisplay(), rect);
     },
-    displayUpdate: function(form, rect, noCursor) {
+    displayUpdate: function(form, rect) {
+        this.showForm(this.display.context, form, rect);
         this.display.lastTick = this.vm.lastTick;
         this.display.idle = 0;
-        this.showForm(this.display.context, form, rect);
-        if (noCursor) return;
-        // show cursor if it was just overwritten
-        if (this.cursorX + this.cursorW > rect.left && this.cursorX < rect.right &&
-            this.cursorY + this.cursorH > rect.top && this.cursorY < rect.bottom)
-                this.cursorDraw();
-    },
-    cursorUpdate: function() {
-        var x = this.display.mouseX - this.cursorOffsetX,
-            y = this.display.mouseY - this.cursorOffsetY;
-        if (x === this.cursorX && y === this.cursorY && !force) return;
-        var oldBounds = {left: this.cursorX, top: this.cursorY, right: this.cursorX + this.cursorW, bottom: this.cursorY + this.cursorH };
-        this.cursorX = x;
-        this.cursorY = y;
-        // restore display at old cursor pos
-        this.displayUpdate(this.theDisplay(), oldBounds, true);
-        // draw cursor at new pos
-        this.cursorDraw();
-    },
-    cursorDraw: function() {
-        // TODO: create cursorCanvas in setCursor primitive
-        // this.display.context.drawImage(this.cursorCanvas, this.cursorX, this.cursorY);
     },
     primitiveBeep: function(argCount) {
         var ctx = Squeak.startAudioOut();

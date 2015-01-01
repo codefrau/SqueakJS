@@ -1,6 +1,7 @@
 CACHE MANIFEST
-# Dec 4 21:48:01 2014
-squeak-all.js
+# Jan 1 16:37:46 2015
+squeak.min.js
+squeak.min.js.map
 index.html
 squeakjs.css
 squeakjs.png

@@ -1,4 +1,5 @@
 module('users.bert.SqueakJS.vm').requires().toRun(function() {
+"use strict";    
 /*
  * Copyright (c) 2013,2014 Bert Freudenberg
  *
@@ -27,7 +28,7 @@ window.Squeak = users.bert.SqueakJS.vm;
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 0.7",
+    vmVersion: "SqueakJS 0.7.1",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -183,6 +184,7 @@ Object.extend(Squeak,
     Form_width: 1,
     Form_height: 2,
     Form_depth: 3,
+    Form_offset: 4,
     // WeakFinalizationList layout:
     WeakFinalizationList_first: 0,
     // WeakFinalizerItem layout:
@@ -559,19 +561,19 @@ Object.extend(Squeak,
         var path = this.splitFilePath(dirpath),
             localEntries = localStorage["squeak:" + path.fullname],
             template = includeTemplates && localStorage["squeak-template:" + path.fullname];
-        if (localEntries || template) {
-            var dir = {};
-            function addEntries(entries) {
-                for (var key in entries) {
-                    if (entries.hasOwnProperty(key)) {
-                        var entry = entries[key];
-                        dir[entry[0]] = entry;
-                    }
+        function addEntries(dir, entries) {
+            for (var key in entries) {
+                if (entries.hasOwnProperty(key)) {
+                    var entry = entries[key];
+                    dir[entry[0]] = entry;
                 }
             }
+        }
+        if (localEntries || template) {
             // local entries override templates
-            if (template) addEntries(JSON.parse(template).entries);
-            if (localEntries) addEntries(JSON.parse(localEntries));
+            var dir = {};
+            if (template) addEntries(dir, JSON.parse(template).entries);
+            if (localEntries) addEntries(dir, JSON.parse(localEntries));
             return dir;
         }
         if (path.fullname == "/") return {};
@@ -899,17 +901,17 @@ Object.subclass('Squeak.Image',
                 return false;   // don't do more
             }
         };
+        function mapSomeObjectsAsync() {
+            if (mapSomeObjects()) {
+                window.setTimeout(mapSomeObjectsAsync, 0);
+            } else {
+                if (thenDo) thenDo();
+            }
+        };
         if (!progressDo) {
             while (mapSomeObjects());   // do it synchronously
             if (thenDo) thenDo();
         } else {
-            function mapSomeObjectsAsync() {
-                if (mapSomeObjects()) {
-                    window.setTimeout(mapSomeObjectsAsync, 0);
-                } else {
-                    if (thenDo) thenDo();
-                }
-            };
             window.setTimeout(mapSomeObjectsAsync, 0);
         }
      },
@@ -1038,6 +1040,7 @@ Object.subclass('Squeak.Image',
                 corpse.oop = -(++this.newSpaceCount);   // move to new-space for finalizing 
                 removedBytes += corpse.totalBytes();
                 removedCount++;
+                //console.log("removing " + removedCount + " " + removedBytes + " " + corpse.totalBytes() + " " + corpse.toString())
             }
         }
     },
@@ -1045,12 +1048,14 @@ Object.subclass('Squeak.Image',
         // append new objects to linked list of old objects
         // and unmark them
         var oldObj = this.lastOldObject;
+        //var oldBytes = this.oldSpaceBytes;
         for (var i = 0; i < newObjects.length; i++) {
             var newObj = newObjects[i];
             newObj.mark = false;
             this.oldSpaceBytes = newObj.setAddr(this.oldSpaceBytes);     // add at end of memory
             oldObj.nextObject = newObj;
             oldObj = newObj;
+            //console.log("tenuring " + (i+1) + " " + (this.oldSpaceBytes - oldBytes) + " " + newObj.totalBytes() + " " + newObj.toString());
         }
         this.lastOldObject = oldObj;
         this.oldSpaceCount += newObjects.length;
@@ -1946,10 +1951,10 @@ Object.subclass('Squeak.Interpreter',
             // Etoys fallback for missing translation files is hugely inefficient.
             // This speeds up opening a viewer by 10x (!)
             // Remove when we added translation files.
-            {method: "String>>translated", primitive: returnSelf},
-            {method: "String>>translatedInAllDomains", primitive: returnSelf},
+            //{method: "String>>translated", primitive: returnSelf},
+            //{method: "String>>translatedInAllDomains", primitive: returnSelf},
             // Squeak: disable syntax highlighting for speed
-            {method: "PluggableTextMorphPlus>>useDefaultStyler", primitive: returnSelf},
+            //{method: "PluggableTextMorphPlus>>useDefaultStyler", primitive: returnSelf},
         ].forEach(function(each) {
             var m = this.findMethod(each.method);
             if (m) {
@@ -3447,6 +3452,7 @@ Object.subclass('Squeak.Primitives',
             case 161: if (this.oldPrims) return this.primitiveDirectoryDelimitor(argCount); // new: primitiveSetIdentityHash
             case 162: if (this.oldPrims) return this.primitiveDirectoryLookup(argCount);
             case 163: if (this.oldPrims) return this.primitiveDirectoryDelete(argCount);
+                break;  // fail 150-163 if fell through
             // 164: unused
             case 165:
             case 166: return this.primitiveIntegerAtAndPut(argCount);
@@ -3471,14 +3477,17 @@ Object.subclass('Squeak.Primitives',
             case 183: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveApplyReverb', argCount);
             case 184: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixLoopedSampledSound', argCount);
             case 185: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixSampledSound', argCount);
+                break;  // fail 170-185 if fell through
             // 186-188: was unused
             case 188: if (!this.oldPrims) return this.primitiveExecuteMethodArgsArray(argCount);
+                break;  // fail 188 if fell through
             case 189: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundInsertSamples', argCount);
             case 190: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStartRecording', argCount);
             case 191: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStopRecording', argCount);
             case 192: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundGetRecordingSampleRate', argCount);
             case 193: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundRecordSamples', argCount);
             case 194: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundSetRecordLevel', argCount);
+                break;  // fail 189-194 if fell through
             case 195: return false; // Context.findNextUnwindContextUpTo:
             case 196: return false; // Context.terminateTo:
             case 197: return false; // Context.findNextHandlerContextStarting
@@ -3502,6 +3511,7 @@ Object.subclass('Squeak.Primitives',
             case 207: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverStatus', argCount);
             case 208: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverError', argCount);
             case 209: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketCreate', argCount);
+                break;  // fail 207-209 if fell through
             case 210: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketDestroy', argCount);
                 else return this.popNandPushIfOK(2, this.objectAt(false,false,false)); // contextAt:
             case 211: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectionStatus', argCount);
@@ -3515,12 +3525,14 @@ Object.subclass('Squeak.Primitives',
             case 218: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketListenOnPort', argCount);
             case 219: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketCloseConnection', argCount);
             case 220: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketAbortConnection', argCount);
+                break;  // fail 212-220 if fell through
             case 221: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketReceiveDataBufCount', argCount);
                 else return this.primitiveClosureValueNoContextSwitch(argCount);
             case 222: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketReceiveDataAvailable', argCount);
                 else return this.primitiveClosureValueNoContextSwitch(argCount);
             case 223: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketSendDataBufCount', argCount);
             case 224: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketSendDone', argCount);
+                break;  // fail 223-229 if fell through
             // 225-229: unused
             // Other Primitives (230-249)
             case 230: return this.primitiveRelinquishProcessorForMicroseconds(argCount);
@@ -3533,6 +3545,7 @@ Object.subclass('Squeak.Primitives',
             case 237: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompressToByteArray', argCount);
             case 238: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortOpen', argCount);
             case 239: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortClose', argCount);
+                break;  // fail 234-239 if fell through
             case 240: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortWrite', argCount);
                 else return this.popNandPushIfOK(1, this.microsecondClockUTC());
             case 241: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortRead', argCount);
@@ -3542,6 +3555,7 @@ Object.subclass('Squeak.Primitives',
             case 244: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindFirstInString' , argCount);
             case 245: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveIndexOfAsciiInString', argCount);
             case 246: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount);
+                break;  // fail 243-246 if fell through
             // 247: unused
             case 248: return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod); // see findSelectorInClass()
             case 249: return this.primitiveArrayBecome(argCount, false); // one way, opt. copy hash
@@ -4814,8 +4828,51 @@ Object.subclass('Squeak.Primitives',
 },
 'display', {
     primitiveBeCursor: function(argCount) {
-        this.vm.popN(argCount); // return self
+        if (this.display.cursorCanvas) {
+            var cursorForm = this.loadForm(this.stackNonInteger(argCount), true),
+                maskForm = argCount === 1 ? this.loadForm(this.stackNonInteger(0)) : null;
+            if (!this.success || !cursorForm) return false;
+            var cursorCanvas = this.display.cursorCanvas,
+                context = cursorCanvas.getContext("2d"),
+                bounds = {left: 0, top: 0, right: cursorForm.width, bottom: cursorForm.height};
+            cursorCanvas.width = cursorForm.width;
+            cursorCanvas.height = cursorForm.height;
+            if (cursorForm.depth === 1) {
+                if (maskForm) {
+                    cursorForm = this.cursorMergeMask(cursorForm, maskForm);
+                    this.showForm(context, cursorForm, bounds, [0x00000000, 0xFF0000FF, 0xFFFFFFFF, 0xFF000000]);
+                } else {
+                    this.showForm(context, cursorForm, bounds, [0x00000000, 0xFF000000]);
+                }
+            } else {
+                this.showForm(context, cursorForm, bounds, true);
+            }
+            this.display.cursorOffsetX = cursorForm.offsetX;
+            this.display.cursorOffsetY = cursorForm.offsetY;
+        }
+        this.vm.popN(argCount);
         return true;
+    },
+    cursorMergeMask: function(cursor, mask) {
+        // make 2-bit form from cursor and mask 1-bit forms
+        var bits = new Uint32Array(16);
+        for (var y = 0; y < 16; y++) {
+            var c = cursor.bits[y],
+                m = mask.bits[y],
+                bit = 0x80000000,
+                merged = 0;
+            for (var x = 0; x < 16; x++) {
+                merged = merged | ((m & bit) >> x) | ((c & bit) >> (x + 1));
+                bit = bit >>> 1;
+            }
+            bits[y] = merged; 
+        }
+        return {
+            obj: cursor.obj, bits: bits,
+            depth: 2, width: 16, height: 16,
+            offsetX: cursor.offsetX, offsetY: cursor.offsetY,
+            msb: true, pixPerWord: 16, pitch: 1,
+        }
     },
     primitiveBeDisplay: function(argCount) {
         var displayObj = this.vm.stackValue(0);
@@ -4832,8 +4889,8 @@ Object.subclass('Squeak.Primitives',
         // Force the given rectangular section of the Display to be copied to the screen.
         var rect = {
             left: this.stackInteger(3),
-            right: this.stackInteger(2),
             top: this.stackInteger(1),
+            right: this.stackInteger(2),
             bottom: this.stackInteger(0),
         };
         if (!this.success) return false;
@@ -4853,7 +4910,7 @@ Object.subclass('Squeak.Primitives',
         if (bounds.left < bounds.right && bounds.top < bounds.bottom)
             this.displayUpdate(theDisplay, bounds);
     },
-    showForm: function(ctx, form, rect) {
+    showForm: function(ctx, form, rect, cursorColors) {
         if (!rect) return;
         var srcX = rect.left,
             srcY = rect.top,
@@ -4870,7 +4927,7 @@ Object.subclass('Squeak.Primitives',
             case 2:
             case 4:
             case 8:
-                var colors = this.swappedColors;
+                var colors = cursorColors || this.swappedColors;
                 if (!colors) {
                     colors = [];
                     for (var i = 0; i < 256; i++) {
@@ -4882,7 +4939,7 @@ Object.subclass('Squeak.Primitives',
                     }
                     this.swappedColors = colors;
                 }
-                if (this.reverseDisplay) {
+                if (this.reverseDisplay && !cursorColors) {
                     if (!this.reversedColors)
                         this.reversedColors = colors.map(function(c){return c ^ 0x00FFFFFF});
                     colors = this.reversedColors;
@@ -4927,15 +4984,16 @@ Object.subclass('Squeak.Primitives',
                 };
                 break;
             case 32:
+                var opaque = cursorColors ? 0 : 0xFF000000;    // keep alpha for cursors
                 for (var y = 0; y < srcH; y++) {
                     var srcIndex = form.pitch * srcY + srcX;
                     var dstIndex = pixels.width * y;
                     for (var x = 0; x < srcW; x++) {
                         var argb = form.bits[srcIndex++];  // convert ARGB -> ABGR
-                        var abgr = (argb & 0x0000FF00)     // green is okay
-                            + ((argb & 0x00FF0000) >> 16)  // shift red down
-                            + ((argb & 0x000000FF) << 16)  // shift blue up
-                            + 0xFF000000;                  // set alpha to opaque
+                        var abgr = (argb & 0xFF00FF00)     // green and alpha is okay
+                            | ((argb & 0x00FF0000) >> 16)  // shift red down
+                            | ((argb & 0x000000FF) << 16)  // shift blue up
+                            | opaque;                      // set alpha to opaque
                         dest[dstIndex++] = abgr;
                     }
                     srcY++;
@@ -4946,7 +5004,7 @@ Object.subclass('Squeak.Primitives',
         if (pixels.data !== pixelData) {
             pixels.data.set(pixelData);
         }
-        ctx.putImageData(pixels, rect.left + (rect.offsetX || 0), rect.top + (rect.offsetY || 0));
+        ctx.putImageData(pixels, rect.left, rect.top);
     },
     primitiveDeferDisplayUpdates: function(argCount) {
         var flag = this.stackBoolean(0);
@@ -4988,7 +5046,7 @@ Object.subclass('Squeak.Primitives',
         var supportedDepths =  [1, 2, 4, 8, 16, 32]; // match showOnDisplay()
         return this.pop2andPushBoolIfOK(supportedDepths.indexOf(this.stackInteger(0)) >= 0);
     },
-    loadForm: function(formObj) {
+    loadForm: function(formObj, withOffset) {
         if (formObj.isNil) return null;
         var form = {
             obj: formObj,
@@ -4996,6 +5054,11 @@ Object.subclass('Squeak.Primitives',
             depth: formObj.pointers[Squeak.Form_depth],
             width: formObj.pointers[Squeak.Form_width],
             height: formObj.pointers[Squeak.Form_height],
+        }
+        if (withOffset) {
+            var offset = formObj.pointers[Squeak.Form_offset];
+            form.offsetX = offset.pointers ? offset.pointers[Squeak.Point_x] : 0;
+            form.offsetY = offset.pointers ? offset.pointers[Squeak.Point_y] : 0;
         }
         if (form.width === 0 || form.height === 0) return form;
         if (!(form.width > 0 && form.height > 0)) return null;
@@ -5015,33 +5078,10 @@ Object.subclass('Squeak.Primitives',
             && form == this.vm.specialObjects[Squeak.splOb_TheDisplay])
                 this.displayUpdate(this.theDisplay(), rect);
     },
-    displayUpdate: function(form, rect, noCursor) {
+    displayUpdate: function(form, rect) {
+        this.showForm(this.display.context, form, rect);
         this.display.lastTick = this.vm.lastTick;
         this.display.idle = 0;
-        rect.offsetX = this.display.offsetX;
-        rect.offsetY = this.display.offsetY;
-        this.showForm(this.display.context, form, rect);
-        if (noCursor) return;
-        // show cursor if it was just overwritten
-        if (this.cursorX + this.cursorW > rect.left && this.cursorX < rect.right &&
-            this.cursorY + this.cursorH > rect.top && this.cursorY < rect.bottom)
-                this.cursorDraw();
-    },
-    cursorUpdate: function() {
-        var x = this.display.mouseX - this.cursorOffsetX,
-            y = this.display.mouseY - this.cursorOffsetY;
-        if (x === this.cursorX && y === this.cursorY && !force) return;
-        var oldBounds = {left: this.cursorX, top: this.cursorY, right: this.cursorX + this.cursorW, bottom: this.cursorY + this.cursorH };
-        this.cursorX = x;
-        this.cursorY = y;
-        // restore display at old cursor pos
-        this.displayUpdate(this.theDisplay(), oldBounds, true);
-        // draw cursor at new pos
-        this.cursorDraw();
-    },
-    cursorDraw: function() {
-        // TODO: create cursorCanvas in setCursor primitive
-        // this.display.context.drawImage(this.cursorCanvas, this.cursorX, this.cursorY);
     },
     primitiveBeep: function(argCount) {
         var ctx = Squeak.startAudioOut();
@@ -6289,6 +6329,8 @@ Object.subclass('Squeak.Primitives',
 Object.subclass('Squeak.InterpreterProxy',
 // provides function names exactly like the C interpreter, for ease of porting
 // but maybe less efficiently because of the indirection
+// only used for plugins translated from Slang (see plugins/*.js)
+// built-in primitives use the interpreter directly
 'initialization', {
     VM_PROXY_MAJOR: 1,
     VM_PROXY_MINOR: 11,

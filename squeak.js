@@ -85,6 +85,7 @@ Object.extend = function(obj /* + more args */ ) {
     var scripts = document.getElementsByTagName("script"),
         squeakjs = scripts[scripts.length - 1],
         vmDir = squeakjs.src.replace(/[^\/]*$/, "");
+    if (squeakjs.src.match(/squeak\.min\.js$/)) return;
     [   "vm.js",
         "jit.js",
         "plugins/ADPCMCodecPlugin.js",

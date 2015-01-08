@@ -3581,9 +3581,9 @@ Object.subclass('Squeak.Primitives',
 
     doPrimitive: function(index, argCount, primMethod) {
         this.success = true;
-        this.primitiveFunction = this.getPrimitiveFunc(index);
-        if(this.primitiveFunction) {
-            return this.primitiveFunction(index, argCount, primMethod);
+        var primitiveFunction = this.getPrimitiveFunc(index);
+        if(primitiveFunction) {
+            return primitiveFunction.call(this, index, argCount, primMethod);
         } else {
             console.error("primitive " + index + " not implemented yet");
             return false;

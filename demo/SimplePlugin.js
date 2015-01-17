@@ -6,23 +6,27 @@
  *     ^ self primitiveFailed
  */
  
-var SimplePlugin = function() {
-    var prims;
+function SimplePlugin() {
+    var interpreterProxy,
+        primHandler;
 
-    function initialiseModule(interpreterProxy) {
-        // interpreterProxy interface is not complete yet,
-        // so we use the primHandler methods directly for now
-        prims = interpreterProxy.vm.primHandler;
+    function setInterpreter(anInterpreterProxy) {
+        // Slang interface
+        interpreterProxy = anInterpreterProxy;
+        // PrimHandler methods for convenience
+        primHandler = interpreterProxy.vm.primHandler;
+        // success
+        return true;
     };
 
     function primitiveNavigatorInfo(argCount) {
         if (argCount !== 1) return false; // fail
-        var which = prims.stackInteger(0);
-        if (!prims.success) return false; // fail
+        var which = interpreterProxy.stackIntegerValue(0);
+        if (interpreterProxy.failed()) return false; // fail
         var result = getNavigatorInfo(which);
         if (!result) return false; // fail
-        var resultObj = prims.makeStString(result);
-        prims.popNandPushIfOK(1 + argCount, resultObj);
+        var resultObj = primHandler.makeStString(result);
+        interpreterProxy.popthenPush(1 + argCount, resultObj);
         return true; // success
     };
 
@@ -35,14 +39,14 @@ var SimplePlugin = function() {
 
     // hide private functions
     return {
-        initialiseModule: initialiseModule,
+        setInterpreter: setInterpreter,
         primitiveNavigatorInfo: primitiveNavigatorInfo,
     }
 };
 
 // register plugin in global Squeak object
 window.addEventListener("load", function() {
-    Squeak.registerExternalModule('SimplePlugin', new SimplePlugin());
+    Squeak.registerExternalModule('SimplePlugin', SimplePlugin());
 });
 
 /**********************************

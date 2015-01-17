@@ -17,6 +17,55 @@
             appName: imageName && imageName.replace(/\.image$/, ""),
         });
     }
+    function exportFile(a) {
+        var path = Squeak.splitFilePath(a.innerText);
+        Squeak.fileGet(path.fullname, function(buffer) {
+            var blob = new Blob([buffer], {type: 'application/octet-stream'}),
+                blobURL = URL.createObjectURL(blob);
+            a.setAttribute('href', blobURL);
+            a.setAttribute('download', path.basename);
+            a.onclick = function(){
+                setTimeout(function(){URL.revokeObjectURL(blobURL)}, 0);
+                return true;
+            };
+            a.click();
+        }, alert);
+        return false;
+    }
+    function showFiles() {
+        var imgList = [],
+            fileList = [],
+            dirs = [''],
+            nFiles = nDirs = nBytes = 0;
+        while (dirs.length > 0) {
+            var dir = dirs.pop(),
+                entries = Squeak.dirList(dir);
+            for (var f in entries) {
+                var entry = entries[f],
+                    path = dir + '/' + f;
+                if (!dir && !entry[3] && f.match(/\.image$/))
+                    imgList.push('<li><a href="#image=' + path + '">' + f + '</a> (' + (entry[4]/1000000).toFixed(1) + ' MB)</li>');
+                if (entry[3]) {
+                    dirs.push(path);
+                    nDirs++;
+                } else {
+                    nFiles++;
+                    nBytes += entry[4];
+                    fileList.push('<li><a href="squeak:' + path + '" onclick="return exportFile(this)" target="_blank">' + path + '</a>' +
+                        (entry[4] >= 100000 ? ' (' + (entry[4]/1000000).toFixed(1) + ' MB)' 
+                        : ' (' + (entry[4]/1000).toFixed(1) + ' KB)') + '</li>');
+                }
+            };
+        }
+        function fdir(s) { return s.replace(/<[^>]*>/gi,'').replace(/[^\/]*$/, ''); }
+        function fsort(a, b) { return fdir(a).localeCompare(fdir(b)) || a.localeCompare(b); }
+        if (fileList.length) {
+            files.innerHTML = "<ul>" + fileList.sort(fsort).join("") + "</ul>";
+            filestats.innerHTML = nFiles + " files in " + nDirs + " directories, " +
+                (nBytes/1000000).toFixed(1) + " MBytes total";
+        }          
+        if (imgList.length) images.innerHTML = "<ul>" + imgList.sort(fsort).join("") + "</ul>";
+    }
     window.onhashchange = function() {
         window.location.reload();
     }
@@ -37,35 +86,29 @@
                 })(href);
             }
         }
+        // show stored files and images. Update after fsck (which takes a while)
+        showFiles();
         setTimeout(function() {
-            Squeak.fsck(function(stats) {
-                drop.innerHTML += "<br><br>" + stats.files + " files in " + stats.dirs + " directories, " +
-                    (stats.bytes/1000000).toFixed(1) + " MBytes total";
-                var entries = Squeak.dirList("/"),
-                    list = "";
-                for (var f in entries) {
-                    var entry = entries[f];
-                    if (!entry[3] && entry[0].match(/\.image$/)) list += '<li><a href="#image=' + f + '">' + f + '</li>';
-                };
-                if (list) images.innerHTML = "Locally stored images:<ul>" + list + "</ul>";
-            });
+            Squeak.fsck(function(stats) { if (stats.deleted) showFiles(); });
         }, 0);
         // also, enable drag-and-drop even if no image loaded yet
         // (squeak.js will replace these when an image is running)
         document.body.ondragover = function(evt) {
-            evt.stopPropagation();
             evt.preventDefault();
-            evt.dataTransfer.dropEffect = "copy";
-            drop.style.borderColor = "#0E0";
+            if (evt.dataTransfer.items[0].kind == "file") {
+                evt.dataTransfer.dropEffect = "copy";
+                drop.style.borderColor = "#0E0";
+            } else {
+                evt.dataTransfer.dropEffect = "none";
+            }
             return false;
         };
         document.body.ondragleave = function(evt) {
             drop.style.borderColor = "";
         };
         document.body.ondrop = function(evt) {
-            evt.stopPropagation();
             evt.preventDefault();
-            drop.style.borderColor = "";
+            drop.style.borderColor = "#080";
             var files = [].slice.call(evt.dataTransfer.files),
                 todo = files.length,
                 imageName = null;
@@ -77,7 +120,8 @@
                     if (/.*image$/.test(f.name)) imageName = f.name;
                     Squeak.filePut(f.name, buffer, function success() {
                         if (--todo > 0) return;
-                        if (!imageName) alert("SqueakJS: stored " + files.length + " files");
+                        drop.style.borderColor = "";
+                        if (!imageName) showFiles();
                         else runSqueak(imageName);
                     });
                 }
@@ -102,8 +146,12 @@
 
         <h2>Run Squeak images from your local machine</h2>
         Use drag-and-drop to run a Squeak image from your machine: drop the image (perhaps together with a changes and sources file) into this page.
-        <div id="drop">Drop Squeak images and other files here:</div>
         <div id="images"></div>
+        <div id="drop">Drop Squeak images and other files here (click file to export):
+            <div id="files" class="filelist"></div>
+            <div id="filestats"></div>
+        </div>
+        All files are stored persistently in a database inside your web browser. Use a FileList inside Squeak to manage them.
 
         <h2>Run Squeak images from the internet</h2>
         Construct a URL linking to this page and pass the image and options.
@@ -116,16 +164,18 @@
         <li>Squeak 3.9 (2008) <a href="#url=http://freudenbergs.de/bert/squeakjs&files=[Squeak3.9.1-final-7075.image,Squeak3.9.1-final-7075.changes,SqueakV39.sources]&swapButtons=true">link</a></li>
         <li>Squeak 4.5 (2014) <a href="#url=http://freudenbergs.de/bert/squeakjs&files=[Squeak4.5-13680.image,Squeak4.5-13680.changes,SqueakV41.sources]">link</a></li>
         </ul>
+        On the first run these will be stored locally. Subsequent starts are much faster.
 
         <h2>Run SqueakJS apps</h2>
-        SqueakJS can be used to run Squeak apps. Here are two examples.
-        Note how the two differ when you resize the browser window - Etoys is scaled,
+        SqueakJS can be used to run Squeak apps. Here are some examples.
+        Note how they differ when you resize the browser window—Etoys is scaled,
         whereas Scratch is resized.
-        The apps are configured to use template files (e.g example projects and artwork)
+        The apps are configured to use template files (e.g. example projects and artwork)
         that are loaded from a server on demand.
         <ul>
             <li><a href="../etoys/#fullscreen=true" target="_blank">Etoys</a></li>
             <li><a href="../scratch/#fullscreen=true" target="_blank">Scratch</a></li>
+            <li>demo of the <a href="../demo/simple.html#document=JSBridge.st" target="_blank">JavaScript bridge</a> (not really an app)</li>
         </ul>
         On some mobile devices you can save these apps to the home screen, and run them like a real app.
 
@@ -154,6 +204,22 @@
         (<a href="https://github.com/bertfreudenberg/SqueakJS/tree/master/etoys" target="_blank">source</a>) or
         <a href="../scratch/" target="_blank">Scratch</a>
         (<a href="https://github.com/bertfreudenberg/SqueakJS/tree/master/scratch" target="_blank">source</a>)
+
+        <h2>Modify SqueakJS</h2>
+        I am developing SqueakJS using “Lively”, a browser-based development environment for JavaScript inspired by Smalltalk.
+        Instead of having to constantly reload the page after every source code change,
+        I am executing Squeak in my <a href= "http://lively-web.org/users/bert/squeak.html">Lively SqueakJS Debugger</a>
+        and can change its code while it is running.
+        That's why the SqueakJS source code has a somewhat unusual layout, it fits the Lively way of developing.
+        You can still use a plain text editor if you feel that's simpler.
+
+        <h2>Contribute to SqueakJS</h2>
+        SqueakJS is free software (MIT license).
+        You're very welcome to <a href="http://lists.squeakfoundation.org/mailman/listinfo/vm-dev">discuss</a>, 
+        <a href="https://github.com/bertfreudenberg/SqueakJS/issues">report bugs</a>,
+        and <a href="https://github.com/bertfreudenberg/SqueakJS/">contribute code</a>.
+        
+        <p>Have fun! — Bert Freudenberg</p>
     </div>
     <canvas id="sqCanvas"></canvas>
     <div id="sqSpinner"><div></div></div>

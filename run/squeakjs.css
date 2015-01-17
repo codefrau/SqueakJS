@@ -43,3 +43,9 @@ div#sqSpinner > div {
     margin: 10px 0;
     padding: 10px;
 }
+.filelist > ul {
+    max-height: 75px;
+    overflow: scroll;
+    margin: 10px 0;
+    padding: 10px;
+}

@@ -29,62 +29,77 @@
     </style>
 <script>
 
-function setupFullscreen(display, canvas) {
-    function fullscreenChange(fullscreenElement) {
-        display.fullscreen = canvas == fullscreenElement;
-        window.onresize();
-    };
+function setupFullscreen(display, canvas, options) {
+    var box = canvas.parentElement,
+        fullscreenEvent = "fullscreenchange",
+        fullscreenElement = "fullscreenElement",
+        fullscreenEnabled = "fullscreenEnabled";
 
     // Fullscreen support is very browser-dependent
-    if (canvas.requestFullscreen) {
-        document.addEventListener("fullscreenchange", function(){fullscreenChange(document.fullscreenElement)});
-        return function checkFullscreen() {
-            if (document.fullscreenEnabled && !document.fullscreenElement == display.fullscreen) {
-                if (display.fullscreen) canvas.requestFullscreen();
+    if (!box.requestFullscreen) {
+        [
+            {req: box.webkitRequestFullscreen, exit: document.webkitExitFullscreen,
+                evt: "webkitfullscreenchange", elem: "webkitFullscreenElement", enable: "webkitFullscreenEnabled"},
+            {req: box.mozRequestFullScreen, exit: document.mozCancelFullScreen,
+                evt: "mozfullscreenchange", elem: "mozFullScreenElement", enable: "mozFullScreenEnabled"},
+            {req: box.msRequestFullscreen, exit: document.msExitFullscreen,
+                evt: "MSFullscreenChange", elem: "msFullscreenElement", enable: "msFullscreenEnabled"},
+        ].forEach(function(browser) {
+            if (browser.req) {
+                box.requestFullscreen = browser.req;
+                document.exitFullscreen = browser.exit;
+                fullscreenEvent = browser.evt;
+                fullscreenElement = browser.elem;
+                fullscreenEnabled = browser.enable;
+            }
+        })
+    }
+
+    function fullscreenChange(fullscreen) {
+        display.fullscreen = fullscreen;
+        if (options.header) options.header.style.display = fullscreen ? 'none' : '';
+        if (options.footer) options.footer.style.display = fullscreen ? 'none' : '';
+        if (options.fullscreenCheckbox) options.fullscreenCheckbox.checked = fullscreen;
+        box.style.background = fullscreen ? 'black' : '';
+        setTimeout(window.onresize, 0);
+    };
+    
+    var checkFullscreen;
+    
+    if (box.requestFullscreen) {
+        document.addEventListener(fullscreenEvent, function(){fullscreenChange(box == document[fullscreenElement])});
+        checkFullscreen = function() {
+            if (document[fullscreenEnabled] && (box == document[fullscreenElement]) != display.fullscreen) {
+                if (display.fullscreen) box.requestFullscreen();
                 else document.exitFullscreen();
             }
         }
-    } else if (canvas.webkitRequestFullscreen) {
-        document.addEventListener("webkitfullscreenchange", function(){fullscreenChange(document.webkitFullscreenElement)});
-        return function checkFullscreen() {
-            if (document.webkitFullscreenEnabled && !document.webkitFullscreenElement == display.fullscreen) {
-                if (display.fullscreen) canvas.webkitRequestFullscreen();
-                else document.webkitExitFullscreen();
-            }
-        }
-    } else if (canvas.mozRequestFullScreen) {
-        document.addEventListener("mozfullscreenchange", function(){fullscreenChange(document.mozFullScreenElement)});
-        return function checkFullscreen() {
-            if (document.mozFullScreenEnabled && !document.mozFullScreenElement == display.fullscreen) {
-                if (display.fullscreen) canvas.mozRequestFullScreen();
-                else document.mozCancelFullScreen();
-            }
-        }
-    } else if (canvas.msRequestFullscreen) {
-        document.addEventListener("MSFullscreenChange", function(){fullscreenChange(document.msFullscreenElement)});
-        return function checkFullscreen() {
-            if (document.msFullscreenEnabled && !document.msFullscreenElement == display.fullscreen) {
-                if (display.fullscreen) canvas.msRequestFullscreen();
-                else document.msExitFullscreen();
-            }
-        }
     } else {
-        return function checkFullscreen() {}
+        var isFullscreen = false;
+        checkFullscreen = function() {
+            if ((options.header || options.footer) && isFullscreen != display.fullscreen) {
+                isFullscreen = display.fullscreen;
+                fullscreenChange(isFullscreen);
+            }
+        }
     }
+
+    return checkFullscreen;
 }
 
 window.onload = function() {
-    var options = {};
+    var options = {
+        header: header,
+        footer: footer,
+    };
     var display = {
         fullscreen: false,
-        offsetX: 0,
-        offsetY: 0,
         width: 10,
         height: 10,
         mouseX: 0,
         mouseY: 0,
     };
-    var checkFullscreen = setupFullscreen(display, canvas);
+    var checkFullscreen = setupFullscreen(display, canvas, options);
     toggleFull.onclick = function() {
         display.fullscreen = !display.fullscreen;
         checkFullscreen();
@@ -135,17 +150,12 @@ window.onload = function() {
     };
     window.onresize = function() {
         // CSS won't let us do what we want so we will layout the canvas ourselves.
-        // Also, we need to paper over browser differences in fullscreen mode where
-        // Firefox scales the canvas but Webkit does not, which makes a difference
-        // if we do not use actual pixels but are scaling a fixed-resolution canvas.
         var x = 0,
             y = display.fullscreen ? 0 : header.offsetTop + header.offsetHeight,
             w = window.innerWidth,
             h = display.fullscreen ? window.innerHeight : Math.max(100, footer.offsetTop - y),
-            innerPadX = 0, // padding inside canvas
-            innerPadY = 0,
-            outerPadX = 0, // padding outside canvas
-            outerPadY = 0;
+            padX = 0,
+            padY = 0;
         // above are the default values for laying out the canvas
         if (!options.fixedWidth) { // set canvas resolution
             display.width = w;
@@ -155,33 +165,21 @@ window.onload = function() {
             display.height = options.fixedHeight;
             var wantRatio = display.width / display.height,
                 haveRatio = w / h;
-            if (display.fullscreen) { // need to use inner padding
-                if (haveRatio > wantRatio) {
-                    innerPadX = Math.floor(display.height * haveRatio) - display.width;
-                } else {
-                    innerPadY = Math.floor(display.width / haveRatio) - display.height;
-                }
-            } else { // can control outer padding
-                if (haveRatio > wantRatio) {
-                    outerPadX = w - Math.floor(h * wantRatio);
-                } else {
-                    outerPadY = h - Math.floor(w / wantRatio);
-                }
+            if (haveRatio > wantRatio) {
+                padX = w - Math.floor(h * wantRatio);
+            } else {
+                padY = h - Math.floor(w / wantRatio);
             }
         }
         // set size and position
-        canvas.style.left = x + Math.floor(outerPadX / 2);
-        canvas.style.top = y + Math.floor(outerPadY / 2);;
-        canvas.style.width = w - outerPadX;
-        canvas.style.height = h - outerPadY;
+        canvas.style.left = x + Math.floor(padX / 2);
+        canvas.style.top = y + Math.floor(padY / 2);;
+        canvas.style.width = w - padX;
+        canvas.style.height = h - padY;
         // set resolution
-        display.offsetX = Math.floor(innerPadX / 2);
-        display.offsetY = Math.floor(innerPadY / 2);
-        var canvasWidth = display.width + innerPadX;
-            canvasHeight = display.height + innerPadY;
-        if (canvas.width != canvasWidth || canvas.height != canvasHeight) {
-            canvas.width = canvasWidth;
-            canvas.height = canvasHeight;
+        if (canvas.width != display.width || canvas.height != display.height) {
+            canvas.width = display.width;
+            canvas.height = display.height;
             draw();
         }
     }

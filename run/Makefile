@@ -11,7 +11,7 @@ MANIFEST=$(TARGET)/offline.appcache
 SQUEAKJS=../squeak.js
 SQUEAKJSLIBS=../vm.js ../jit.js ../plugins/*.js ../lib/lz-string.js
 ORGFILES=$(SQUEAKJS) $(SQUEAKJSLIBS) index.html
-GENFILES=$(BUILD)/squeak-all.js $(BUILD)/index.html
+GENFILES=squeak.min.js squeak.min.js.map $(BUILD)/index.html
 CPFILES=squeakjs.css squeakjs.png
 
 OS=$(shell uname)
@@ -35,7 +35,7 @@ $(MANIFEST): Makefile $(TARGET) $(GENFILES) $(CPFILES)
 	@echo 'NETWORK:' >> $@
 	@echo '*' >> $@
 	@# remove temp files
-	@rm -rf $(BUILD)
+	@rm -rf $(GENFILES) $(BUILD)
 
 $(TARGET):
 	@mkdir -pv $@
@@ -43,20 +43,14 @@ $(TARGET):
 $(BUILD):
 	@mkdir -pv $@
 
-$(BUILD)/squeak-all.js: $(BUILD) Makefile $(SQUEAKJS) $(SQUEAKJSLIBS)
-	@# generate header comment
-	@echo "/* $(VERSION)" > $@
-	@echo " *" >> $@
-	@echo " * squeak-all.js assembled from:" >> $@
-	@for f in $(SQUEAKJS) $(SQUEAKJSLIBS); do echo " *   $$f" >> $@ ; done
-	@echo " */\n" >> $@
-	@# append squeak.js, replacing .js includes with comments
-	@sed 's|"\(.*\.js\)",|/* \1 (squeak-all.js) */|' $(SQUEAKJS) >> $@
-	@# append all .js files
-	@for f in $(SQUEAKJSLIBS); do (echo "\n/***** including $$f *****/\n"; cat $$f) >> $@ ; done
+squeak.min.js: Makefile $(SQUEAKJS) $(SQUEAKJSLIBS)
+	uglifyjs $(SQUEAKJS) $(SQUEAKJSLIBS) -c warnings=false -m sort \
+		-o squeak.min.js --source-map squeak.min.js.map --source-map-include-sources
 
-$(BUILD)/index.html: $(BUILD) index.html
-	@# replace ../squeak.js with squeak-all.js
-	@sed 's|../squeak.js|squeak-all.js|' $^ > $@
+squeak.min.js.map: squeak.min.js
+
+$(BUILD)/index.html: index.html $(BUILD)
+	@# replace ../squeak.js with squeak.min.js
+	@sed 's|../squeak.js|squeak.min.js|' $< > $@
 
 .SECONDARY: $(BUILD) $(GENFILES)

@@ -1,4 +1,5 @@
 module('users.bert.SqueakJS.vm').requires().toRun(function() {
+"use strict";    
 /*
  * Copyright (c) 2013,2014 Bert Freudenberg
  *
@@ -27,7 +28,7 @@ window.Squeak = users.bert.SqueakJS.vm;
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 0.6.5",
+    vmVersion: "SqueakJS 0.7.1",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -36,14 +37,15 @@ Object.extend(Squeak,
     osVersion: navigator.userAgent,     // might want to parse
     windowSystem: "HTML",
 },
-"constants", {
+"object header", {
     // object headers
     HeaderTypeMask: 3,
     HeaderTypeSizeAndClass: 0, //3-word header
     HeaderTypeClass: 1,        //2-word header
     HeaderTypeFree: 2,         //free block
     HeaderTypeShort: 3,        //1-word header
-
+},
+"special objects", {
     // Indices into SpecialObjects array
     splOb_NilObject: 0,
     splOb_FalseObject: 1,
@@ -93,7 +95,14 @@ Object.extend(Squeak,
     splOb_ClassExternalLibrary: 47,
     splOb_SelectorAboutToReturn: 48,
     splOb_SelectorRunWithIn: 49,
-
+    splOb_SelectorAttemptToAssign: 50,
+	splOb_PrimErrTableIndex: 51,
+	splOb_ClassAlien: 52,
+	splOb_InvokeCallbackSelector: 53,
+	splOb_ClassUnsafeAlien: 54,
+	splOb_ClassWeakFinalizer: 55,
+},
+"known classes", {
     // Class layout:
     Class_superclass: 0,
     Class_mdict: 1,
@@ -150,7 +159,7 @@ Object.extend(Squeak,
     // Point layout:
     Point_x: 0,
     Point_y: 1,
-    // LargetInteger layout:
+    // LargeInteger layout:
     LargeInteger_bytes: 0,
     LargeInteger_neg: 1,
     // BitBlt layout:
@@ -175,8 +184,14 @@ Object.extend(Squeak,
     Form_width: 1,
     Form_height: 2,
     Form_depth: 3,
-
-    // Event constants
+    Form_offset: 4,
+    // WeakFinalizationList layout:
+    WeakFinalizationList_first: 0,
+    // WeakFinalizerItem layout:
+    WeakFinalizerItem_list: 0,
+    WeakFinalizerItem_next: 1,
+},
+"events", {
     Mouse_Blue: 1,
     Mouse_Yellow: 2,
     Mouse_Red: 4,
@@ -189,11 +204,16 @@ Object.extend(Squeak,
     EventTypeNone: 0,
     EventTypeMouse: 1,
     EventTypeKeyboard: 2,
+    EventTypeDragDropFiles: 3,
     EventKeyChar: 0,
     EventKeyDown: 1,
     EventKeyUp: 2,
-
-    // other constants
+    EventDragEnter: 1,
+    EventDragMove: 2,
+    EventDragLeave: 3,
+    EventDragDrop: 4,
+},
+"constants", {
     MinSmallInt: -0x40000000,
     MaxSmallInt:  0x3FFFFFFF,
     NonSmallInt: -0x50000000,           // non-small and neg (so non pos32 too)
@@ -209,7 +229,7 @@ Object.extend(Squeak,
 "files", {
     fsck: function(whenDone, dir, files, stats) {
         dir = dir || "";
-        stats = stats || {dirs: 0, files: 0, bytes: 0};
+        stats = stats || {dirs: 0, files: 0, bytes: 0, deleted: 0};
         if (!files) {
             // find existing files
             files = {};
@@ -248,11 +268,13 @@ Object.extend(Squeak,
                 } else {
                     console.log("Deleting stale directory " + path);
                     Squeak.dirDelete(path);
+                    stats.deleted++;
                 }
             } else {
                 if (!files[path]) {
                     console.log("Deleting stale file entry " + path);
                     Squeak.fileDelete(path, true);
+                    stats.deleted++;
                 } else {
                     files[path] = false; // mark as visited
                     stats.files++;
@@ -274,6 +296,7 @@ Object.extend(Squeak,
                     console.log("Deleting orphaned file " + orphaned[i]);
                     delete localStorage["squeak-file:" + orphaned[i]];
                     delete localStorage["squeak-file.lz:" + orphaned[i]];
+                    stats.deleted++;
                 }
                 if (typeof indexedDB !== "undefined") {
                     this.dbTransaction("readwrite", "fsck delete", function(fileStore) {
@@ -413,6 +436,9 @@ Object.extend(Squeak,
         if (!errorDo) errorDo = function(err) { console.log(err) };
         var path = this.splitFilePath(filepath);
         if (!path.basename) return errorDo("Invalid path: " + filepath);
+        // if we have been writing to memory, return that version
+        if (window.SqueakDBFake && SqueakDBFake.bigFiles[path.fullname])
+            return thenDo(SqueakDBFake.bigFiles[path.fullname]);
         this.dbTransaction("readonly", "get " + filepath, function(fileStore) {
             var getReq = fileStore.get(path.fullname);
             getReq.onerror = function(e) { errorDo(this.errorCode) };
@@ -535,19 +561,19 @@ Object.extend(Squeak,
         var path = this.splitFilePath(dirpath),
             localEntries = localStorage["squeak:" + path.fullname],
             template = includeTemplates && localStorage["squeak-template:" + path.fullname];
-        if (localEntries || template) {
-            var dir = {};
-            function addEntries(entries) {
-                for (var key in entries) {
-                    if (entries.hasOwnProperty(key)) {
-                        var entry = entries[key];
-                        dir[entry[0]] = entry;
-                    }
+        function addEntries(dir, entries) {
+            for (var key in entries) {
+                if (entries.hasOwnProperty(key)) {
+                    var entry = entries[key];
+                    dir[entry[0]] = entry;
                 }
             }
+        }
+        if (localEntries || template) {
             // local entries override templates
-            if (template) addEntries(JSON.parse(template).entries);
-            if (localEntries) addEntries(JSON.parse(localEntries));
+            var dir = {};
+            if (template) addEntries(dir, JSON.parse(template).entries);
+            if (localEntries) addEntries(dir, JSON.parse(localEntries));
             return dir;
         }
         if (path.fullname == "/") return {};
@@ -752,7 +778,6 @@ Object.subclass('Squeak.Image',
         this.name = name;
         this.gcCount = 0;
         this.gcTenured = 0;
-        this.gcCompacted = 0;
         this.gcMilliseconds = 0;
         this.allocationCount = 0;
         this.oldSpaceCount = 0;
@@ -876,17 +901,17 @@ Object.subclass('Squeak.Image',
                 return false;   // don't do more
             }
         };
+        function mapSomeObjectsAsync() {
+            if (mapSomeObjects()) {
+                window.setTimeout(mapSomeObjectsAsync, 0);
+            } else {
+                if (thenDo) thenDo();
+            }
+        };
         if (!progressDo) {
             while (mapSomeObjects());   // do it synchronously
             if (thenDo) thenDo();
         } else {
-            function mapSomeObjectsAsync() {
-                if (mapSomeObjects()) {
-                    window.setTimeout(mapSomeObjectsAsync, 0);
-                } else {
-                    if (thenDo) thenDo();
-                }
-            };
             window.setTimeout(mapSomeObjectsAsync, 0);
         }
      },
@@ -943,15 +968,13 @@ Object.subclass('Squeak.Image',
         this.vm.addMessage("fullGC: " + reason);
         var start = Date.now();
         var newObjects = this.markReachableObjects();
-        var removedObjects = this.removeUnmarkedOldObjects();
+        this.removeUnmarkedOldObjects();
         this.appendToOldObjects(newObjects);
-        this.oldSpaceCount += newObjects.length - removedObjects.length;
+        this.finalizeWeakReferences();
         this.allocationCount += this.newSpaceCount;
         this.newSpaceCount = 0;
         this.hasNewInstances = {};
         this.gcCount++;
-        this.gcTenured += newObjects.length;
-        this.gcCompacted += removedObjects.length;
         this.gcMilliseconds += Date.now() - start;
         return newObjects.length > 0 ? newObjects[0] : null;
     },
@@ -960,6 +983,7 @@ Object.subclass('Squeak.Image',
         // Return surviving new objects
         // Contexts are handled specially: they have garbage beyond the stack pointer
         // which must not be traced, and is cleared out here
+        // In weak objects, only the inst vars are traced
         this.vm.storeContextRegisters();        // update active context
         var todo = [this.specialObjectsArray, this.vm.activeContext];
         var newObjects = [];
@@ -974,13 +998,16 @@ Object.subclass('Squeak.Image',
             var body = object.pointers;
             if (body) {                   // trace all unmarked pointers
                 var n = body.length;
-                if (this.vm.isContext(object))      // contexts have garbage beyond SP
+                if (this.vm.isContext(object)) {            // contexts have garbage beyond SP
                     n = object.contextSizeWithStack();
+                    for (var i = n; i < body.length; i++)   // clean up that garbage
+                        body[i] = this.vm.nilObj;
+                } else if (object.sqClass.isWeak()) {       // do not trace the indexed part in weak arrays
+                    n = object.sqClass.classInstSize();
+                }
                 for (var i = 0; i < n; i++)
                     if (typeof body[i] === "object" && !body[i].mark)      // except SmallInts
                         todo.push(body[i]);
-                while (n < body.length)             // clean garbage from contexts
-                    body[n++] = this.vm.nilObj;
             }
         }
         // sort by oop to preserve creation order
@@ -990,8 +1017,7 @@ Object.subclass('Squeak.Image',
         // Unlink unmarked old objects from the nextObject linked list
         // Reset marks of remaining objects, and adjust their oops
         // Set this.lastOldObject to last old object
-        // Return removed old objects (to support finalization later)
-        var removed = [],
+        var removedCount = 0,
             removedBytes = 0,
             obj = this.firstOldObject;
         obj.mark = false; // we know the first object (nil) was marked
@@ -1000,18 +1026,21 @@ Object.subclass('Squeak.Image',
             if (!next) {// we're done
                 this.lastOldObject = obj;
                 this.oldSpaceBytes -= removedBytes;
-                return removed;
+                this.oldSpaceCount -= removedCount;
+                return;
             }
             // if marked, continue with next object
             if (next.mark) {
-                next.mark = false;     // unmark for next GC
-                next.oop -= removedBytes;
                 obj = next;
+                obj.mark = false;           // unmark for next GC
+                obj.oop -= removedBytes;    // compact oops
             } else { // otherwise, remove it
                 var corpse = next;
-                obj.nextObject = corpse.nextObject; // drop from list
+                obj.nextObject = corpse.nextObject;     // drop from old-space list
+                corpse.oop = -(++this.newSpaceCount);   // move to new-space for finalizing 
                 removedBytes += corpse.totalBytes();
-                removed.push(corpse);
+                removedCount++;
+                //console.log("removing " + removedCount + " " + removedBytes + " " + corpse.totalBytes() + " " + corpse.toString())
             }
         }
     },
@@ -1019,14 +1048,51 @@ Object.subclass('Squeak.Image',
         // append new objects to linked list of old objects
         // and unmark them
         var oldObj = this.lastOldObject;
+        //var oldBytes = this.oldSpaceBytes;
         for (var i = 0; i < newObjects.length; i++) {
             var newObj = newObjects[i];
             newObj.mark = false;
             this.oldSpaceBytes = newObj.setAddr(this.oldSpaceBytes);     // add at end of memory
             oldObj.nextObject = newObj;
             oldObj = newObj;
+            //console.log("tenuring " + (i+1) + " " + (this.oldSpaceBytes - oldBytes) + " " + newObj.totalBytes() + " " + newObj.toString());
         }
         this.lastOldObject = oldObj;
+        this.oldSpaceCount += newObjects.length;
+        this.gcTenured += newObjects.length;
+    },
+    finalizeWeakReferences: function() {
+        // nil out all weak fields that did not survive GC
+        var weakObj = this.firstOldObject;
+        while (weakObj) {
+            if (weakObj.sqClass.isWeak()) {
+                var pointers = weakObj.pointers || [],
+                    firstWeak = weakObj.sqClass.classInstSize(),
+                    finalized = false;
+                for (var i = firstWeak; i < pointers.length; i++) {
+                    if (pointers[i].oop < 0) {    // ref is not in old-space
+                        pointers[i] = this.vm.nilObj;
+                        finalized = true;
+                    }
+                }
+                if (finalized) {
+                    this.vm.pendingFinalizationSignals++;
+                    if (firstWeak >= 2) { // check if weak obj is a finalizer item
+                        var list = weakObj.pointers[Squeak.WeakFinalizerItem_list];
+                        if (list.sqClass == this.vm.specialObjects[Squeak.splOb_ClassWeakFinalizer]) {
+                            // add weak obj as first in the finalization list
+                            var items = list.pointers[Squeak.WeakFinalizationList_first];
+                            weakObj.pointers[Squeak.WeakFinalizerItem_next] = items;
+                            list.pointers[Squeak.WeakFinalizationList_first] = weakObj;
+                        }
+                    }
+                }
+            }
+            weakObj = weakObj.nextObject;
+        };
+        if (this.vm.pendingFinalizationSignals > 0) {
+            this.vm.forceInterruptCheck();                      // run finalizer asap
+        }
     },
 },
 'creating', {
@@ -1542,7 +1608,7 @@ Object.subclass('Squeak.Object',
     },
     instSize: function() {//same as class.classInstSize, but faster from format
         if (this.format>4 || this.format==2) return 0; //indexable fields only
-        if (this.format<2) return this.pointers.length; //indexable fields only
+        if (this.format<2) return this.pointersSize(); //indexable fields only
         return this.sqClass.classInstSize(); //0-255
     },
     floatData: function() {
@@ -1662,6 +1728,10 @@ Object.subclass('Squeak.Object',
         // this is a class, answer number of named inst vars
         var format = this.pointers[Squeak.Class_format];
         return ((format >> 10) & 0xC0) + ((format >> 1) & 0x3F) - 1;
+    },
+    isWeak: function() {
+        var format = this.pointers[Squeak.Class_format];
+        return ((format >> 7) & 0xF) == 4;
     },
     instVarNames: function() {
         var index = this.pointers.length > 12 ? 4 :
@@ -1801,7 +1871,7 @@ Object.subclass('Squeak.Interpreter',
         this.lastTick = 0;
         this.interruptKeycode = 2094;  //"cmd-."
         this.interruptPending = false;
-        //this.pendingFinalizationSignals = 0;
+        this.pendingFinalizationSignals = 0;
         this.freeContexts = this.nilObj;
         this.freeLargeContexts = this.nilObj;
         this.reclaimableContextCount = 0;
@@ -1881,10 +1951,10 @@ Object.subclass('Squeak.Interpreter',
             // Etoys fallback for missing translation files is hugely inefficient.
             // This speeds up opening a viewer by 10x (!)
             // Remove when we added translation files.
-            {method: "String>>translated", primitive: returnSelf},
-            {method: "String>>translatedInAllDomains", primitive: returnSelf},
+            //{method: "String>>translated", primitive: returnSelf},
+            //{method: "String>>translatedInAllDomains", primitive: returnSelf},
             // Squeak: disable syntax highlighting for speed
-            {method: "PluggableTextMorphPlus>>useDefaultStyler", primitive: returnSelf},
+            //{method: "PluggableTextMorphPlus>>useDefaultStyler", primitive: returnSelf},
         ].forEach(function(each) {
             var m = this.findMethod(each.method);
             if (m) {
@@ -2171,10 +2241,11 @@ Object.subclass('Squeak.Interpreter',
             var sema = this.specialObjects[Squeak.splOb_TheTimerSemaphore];
             if (!sema.isNil) this.primHandler.synchronousSignal(sema);
         }
-        //  if (pendingFinalizationSignals > 0) { //signal any pending finalizations
-        //            sema= getSpecialObject(Squeak.splOb_ThefinalizationSemaphore);
-        //            pendingFinalizationSignals= 0;
-        //            if(sema != nilObj) primHandler.synchronousSignal(sema); }
+        if (this.pendingFinalizationSignals > 0) { //signal any pending finalizations
+            var sema = this.specialObjects[Squeak.splOb_TheFinalizationSemaphore];
+            this.pendingFinalizationSignals = 0;
+            if (!sema.isNil) this.primHandler.synchronousSignal(sema);
+        }
         if (this.primHandler.semaphoresToSignal.length > 0)
             this.primHandler.signalExternalSemaphores();  // signal pending semaphores, if any
         // if this is a long-running do-it, compile it
@@ -3116,7 +3187,9 @@ Object.subclass('Squeak.Primitives',
     initModules: function() {
         this.loadedModules = {};
         this.builtinModules = {
+            JavaScriptPlugin:       this.findPluginFunctions("js_", "", true),
             FilePlugin:             this.findPluginFunctions("", "primitive(Disable)?(File|Directory)"),
+            DropPlugin:             this.findPluginFunctions("", "primitiveDropRequest"),
             SoundPlugin:            this.findPluginFunctions("snd_"),
             JPEGReadWriter2Plugin:  this.findPluginFunctions("jpeg2_"),
             SecurityPlugin: {
@@ -3379,6 +3452,7 @@ Object.subclass('Squeak.Primitives',
             case 161: if (this.oldPrims) return this.primitiveDirectoryDelimitor(argCount); // new: primitiveSetIdentityHash
             case 162: if (this.oldPrims) return this.primitiveDirectoryLookup(argCount);
             case 163: if (this.oldPrims) return this.primitiveDirectoryDelete(argCount);
+                break;  // fail 150-163 if fell through
             // 164: unused
             case 165:
             case 166: return this.primitiveIntegerAtAndPut(argCount);
@@ -3403,14 +3477,17 @@ Object.subclass('Squeak.Primitives',
             case 183: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveApplyReverb', argCount);
             case 184: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixLoopedSampledSound', argCount);
             case 185: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixSampledSound', argCount);
+                break;  // fail 170-185 if fell through
             // 186-188: was unused
             case 188: if (!this.oldPrims) return this.primitiveExecuteMethodArgsArray(argCount);
+                break;  // fail 188 if fell through
             case 189: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundInsertSamples', argCount);
             case 190: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStartRecording', argCount);
             case 191: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStopRecording', argCount);
             case 192: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundGetRecordingSampleRate', argCount);
             case 193: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundRecordSamples', argCount);
             case 194: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundSetRecordLevel', argCount);
+                break;  // fail 189-194 if fell through
             case 195: return false; // Context.findNextUnwindContextUpTo:
             case 196: return false; // Context.terminateTo:
             case 197: return false; // Context.findNextHandlerContextStarting
@@ -3434,6 +3511,7 @@ Object.subclass('Squeak.Primitives',
             case 207: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverStatus', argCount);
             case 208: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverError', argCount);
             case 209: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketCreate', argCount);
+                break;  // fail 207-209 if fell through
             case 210: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketDestroy', argCount);
                 else return this.popNandPushIfOK(2, this.objectAt(false,false,false)); // contextAt:
             case 211: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectionStatus', argCount);
@@ -3447,12 +3525,14 @@ Object.subclass('Squeak.Primitives',
             case 218: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketListenOnPort', argCount);
             case 219: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketCloseConnection', argCount);
             case 220: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketAbortConnection', argCount);
+                break;  // fail 212-220 if fell through
             case 221: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketReceiveDataBufCount', argCount);
                 else return this.primitiveClosureValueNoContextSwitch(argCount);
             case 222: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketReceiveDataAvailable', argCount);
                 else return this.primitiveClosureValueNoContextSwitch(argCount);
             case 223: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketSendDataBufCount', argCount);
             case 224: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketSendDone', argCount);
+                break;  // fail 223-229 if fell through
             // 225-229: unused
             // Other Primitives (230-249)
             case 230: return this.primitiveRelinquishProcessorForMicroseconds(argCount);
@@ -3465,6 +3545,7 @@ Object.subclass('Squeak.Primitives',
             case 237: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompressToByteArray', argCount);
             case 238: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortOpen', argCount);
             case 239: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortClose', argCount);
+                break;  // fail 234-239 if fell through
             case 240: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortWrite', argCount);
                 else return this.popNandPushIfOK(1, this.microsecondClockUTC());
             case 241: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortRead', argCount);
@@ -3474,6 +3555,7 @@ Object.subclass('Squeak.Primitives',
             case 244: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindFirstInString' , argCount);
             case 245: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveIndexOfAsciiInString', argCount);
             case 246: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount);
+                break;  // fail 243-246 if fell through
             // 247: unused
             case 248: return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod); // see findSelectorInClass()
             case 249: return this.primitiveArrayBecome(argCount, false); // one way, opt. copy hash
@@ -3868,6 +3950,9 @@ Object.subclass('Squeak.Primitives',
         }
         return false;
     },
+    isAssociation: function(obj) {
+        return typeof obj !== "number" && obj.pointersSize() == 2;
+    },
     ensureSmallInt: function(number) {
         if (number === (number|0) && this.vm.canBeSmallInt(number))
             return number;
@@ -3899,10 +3984,10 @@ Object.subclass('Squeak.Primitives',
         newPoint.pointers[Squeak.Point_y] = y;
         return newPoint;
     },
-    makeStArray: function(jsArray) {
+    makeStArray: function(jsArray, proxyClass) {
         var array = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassArray], jsArray.length);
         for (var i = 0; i < jsArray.length; i++)
-            array.pointers[i] = this.makeStObject(jsArray[i]);
+            array.pointers[i] = this.makeStObject(jsArray[i], proxyClass);
         return array;
     },
     makeStString: function(jsString) {
@@ -3913,16 +3998,21 @@ Object.subclass('Squeak.Primitives',
         stString.bytes = bytes;
         return stString;
     },
-    makeStObject: function(obj) {
+    makeStObject: function(obj, proxyClass) {
         if (obj === undefined || obj === null) return this.vm.nilObj;
         if (obj === true) return this.vm.trueObj;
         if (obj === false) return this.vm.falseObj;
-        if (obj.stClass) return obj;
-        if (typeof obj === "string" || obj.constructor === Uint8Array) return this.makeStString(obj);
-        if (obj.constructor === Array) return this.makeStArray(obj);
+        if (obj.sqClass) return obj;
         if (typeof obj === "number")
             if (obj === (obj|0)) return this.makeLargeIfNeeded(obj);
-            else return this.makeFloat(obj)
+            else return this.makeFloat(obj);
+        if (proxyClass) {   // wrap in JS proxy instance 
+            var stObj = this.vm.instantiateClass(proxyClass, 0);
+            stObj.jsObject = obj;
+            return stObj;
+        } 
+        if (typeof obj === "string" || obj.constructor === Uint8Array) return this.makeStString(obj);
+        if (obj.constructor === Array) return this.makeStArray(obj);
         throw Error("cannot make smalltalk object");
     },
     pointsTo: function(rcvr, arg) {
@@ -4738,8 +4828,51 @@ Object.subclass('Squeak.Primitives',
 },
 'display', {
     primitiveBeCursor: function(argCount) {
-        this.vm.popN(argCount); // return self
+        if (this.display.cursorCanvas) {
+            var cursorForm = this.loadForm(this.stackNonInteger(argCount), true),
+                maskForm = argCount === 1 ? this.loadForm(this.stackNonInteger(0)) : null;
+            if (!this.success || !cursorForm) return false;
+            var cursorCanvas = this.display.cursorCanvas,
+                context = cursorCanvas.getContext("2d"),
+                bounds = {left: 0, top: 0, right: cursorForm.width, bottom: cursorForm.height};
+            cursorCanvas.width = cursorForm.width;
+            cursorCanvas.height = cursorForm.height;
+            if (cursorForm.depth === 1) {
+                if (maskForm) {
+                    cursorForm = this.cursorMergeMask(cursorForm, maskForm);
+                    this.showForm(context, cursorForm, bounds, [0x00000000, 0xFF0000FF, 0xFFFFFFFF, 0xFF000000]);
+                } else {
+                    this.showForm(context, cursorForm, bounds, [0x00000000, 0xFF000000]);
+                }
+            } else {
+                this.showForm(context, cursorForm, bounds, true);
+            }
+            this.display.cursorOffsetX = cursorForm.offsetX;
+            this.display.cursorOffsetY = cursorForm.offsetY;
+        }
+        this.vm.popN(argCount);
         return true;
+    },
+    cursorMergeMask: function(cursor, mask) {
+        // make 2-bit form from cursor and mask 1-bit forms
+        var bits = new Uint32Array(16);
+        for (var y = 0; y < 16; y++) {
+            var c = cursor.bits[y],
+                m = mask.bits[y],
+                bit = 0x80000000,
+                merged = 0;
+            for (var x = 0; x < 16; x++) {
+                merged = merged | ((m & bit) >> x) | ((c & bit) >> (x + 1));
+                bit = bit >>> 1;
+            }
+            bits[y] = merged; 
+        }
+        return {
+            obj: cursor.obj, bits: bits,
+            depth: 2, width: 16, height: 16,
+            offsetX: cursor.offsetX, offsetY: cursor.offsetY,
+            msb: true, pixPerWord: 16, pitch: 1,
+        }
     },
     primitiveBeDisplay: function(argCount) {
         var displayObj = this.vm.stackValue(0);
@@ -4756,8 +4889,8 @@ Object.subclass('Squeak.Primitives',
         // Force the given rectangular section of the Display to be copied to the screen.
         var rect = {
             left: this.stackInteger(3),
-            right: this.stackInteger(2),
             top: this.stackInteger(1),
+            right: this.stackInteger(2),
             bottom: this.stackInteger(0),
         };
         if (!this.success) return false;
@@ -4777,7 +4910,7 @@ Object.subclass('Squeak.Primitives',
         if (bounds.left < bounds.right && bounds.top < bounds.bottom)
             this.displayUpdate(theDisplay, bounds);
     },
-    showForm: function(ctx, form, rect) {
+    showForm: function(ctx, form, rect, cursorColors) {
         if (!rect) return;
         var srcX = rect.left,
             srcY = rect.top,
@@ -4794,7 +4927,7 @@ Object.subclass('Squeak.Primitives',
             case 2:
             case 4:
             case 8:
-                var colors = this.swappedColors;
+                var colors = cursorColors || this.swappedColors;
                 if (!colors) {
                     colors = [];
                     for (var i = 0; i < 256; i++) {
@@ -4806,7 +4939,7 @@ Object.subclass('Squeak.Primitives',
                     }
                     this.swappedColors = colors;
                 }
-                if (this.reverseDisplay) {
+                if (this.reverseDisplay && !cursorColors) {
                     if (!this.reversedColors)
                         this.reversedColors = colors.map(function(c){return c ^ 0x00FFFFFF});
                     colors = this.reversedColors;
@@ -4851,15 +4984,16 @@ Object.subclass('Squeak.Primitives',
                 };
                 break;
             case 32:
+                var opaque = cursorColors ? 0 : 0xFF000000;    // keep alpha for cursors
                 for (var y = 0; y < srcH; y++) {
                     var srcIndex = form.pitch * srcY + srcX;
                     var dstIndex = pixels.width * y;
                     for (var x = 0; x < srcW; x++) {
                         var argb = form.bits[srcIndex++];  // convert ARGB -> ABGR
-                        var abgr = (argb & 0x0000FF00)     // green is okay
-                            + ((argb & 0x00FF0000) >> 16)  // shift red down
-                            + ((argb & 0x000000FF) << 16)  // shift blue up
-                            + 0xFF000000;                  // set alpha to opaque
+                        var abgr = (argb & 0xFF00FF00)     // green and alpha is okay
+                            | ((argb & 0x00FF0000) >> 16)  // shift red down
+                            | ((argb & 0x000000FF) << 16)  // shift blue up
+                            | opaque;                      // set alpha to opaque
                         dest[dstIndex++] = abgr;
                     }
                     srcY++;
@@ -4870,7 +5004,7 @@ Object.subclass('Squeak.Primitives',
         if (pixels.data !== pixelData) {
             pixels.data.set(pixelData);
         }
-        ctx.putImageData(pixels, rect.left + (rect.offsetX || 0), rect.top + (rect.offsetY || 0));
+        ctx.putImageData(pixels, rect.left, rect.top);
     },
     primitiveDeferDisplayUpdates: function(argCount) {
         var flag = this.stackBoolean(0);
@@ -4912,7 +5046,7 @@ Object.subclass('Squeak.Primitives',
         var supportedDepths =  [1, 2, 4, 8, 16, 32]; // match showOnDisplay()
         return this.pop2andPushBoolIfOK(supportedDepths.indexOf(this.stackInteger(0)) >= 0);
     },
-    loadForm: function(formObj) {
+    loadForm: function(formObj, withOffset) {
         if (formObj.isNil) return null;
         var form = {
             obj: formObj,
@@ -4920,6 +5054,11 @@ Object.subclass('Squeak.Primitives',
             depth: formObj.pointers[Squeak.Form_depth],
             width: formObj.pointers[Squeak.Form_width],
             height: formObj.pointers[Squeak.Form_height],
+        }
+        if (withOffset) {
+            var offset = formObj.pointers[Squeak.Form_offset];
+            form.offsetX = offset.pointers ? offset.pointers[Squeak.Point_x] : 0;
+            form.offsetY = offset.pointers ? offset.pointers[Squeak.Point_y] : 0;
         }
         if (form.width === 0 || form.height === 0) return form;
         if (!(form.width > 0 && form.height > 0)) return null;
@@ -4939,33 +5078,10 @@ Object.subclass('Squeak.Primitives',
             && form == this.vm.specialObjects[Squeak.splOb_TheDisplay])
                 this.displayUpdate(this.theDisplay(), rect);
     },
-    displayUpdate: function(form, rect, noCursor) {
+    displayUpdate: function(form, rect) {
+        this.showForm(this.display.context, form, rect);
         this.display.lastTick = this.vm.lastTick;
         this.display.idle = 0;
-        rect.offsetX = this.display.offsetX;
-        rect.offsetY = this.display.offsetY;
-        this.showForm(this.display.context, form, rect);
-        if (noCursor) return;
-        // show cursor if it was just overwritten
-        if (this.cursorX + this.cursorW > rect.left && this.cursorX < rect.right &&
-            this.cursorY + this.cursorH > rect.top && this.cursorY < rect.bottom)
-                this.cursorDraw();
-    },
-    cursorUpdate: function() {
-        var x = this.display.mouseX - this.cursorOffsetX,
-            y = this.display.mouseY - this.cursorOffsetY;
-        if (x === this.cursorX && y === this.cursorY && !force) return;
-        var oldBounds = {left: this.cursorX, top: this.cursorY, right: this.cursorX + this.cursorW, bottom: this.cursorY + this.cursorH };
-        this.cursorX = x;
-        this.cursorY = y;
-        // restore display at old cursor pos
-        this.displayUpdate(this.theDisplay(), oldBounds, true);
-        // draw cursor at new pos
-        this.cursorDraw();
-    },
-    cursorDraw: function() {
-        // TODO: create cursorCanvas in setCursor primitive
-        // this.display.context.drawImage(this.cursorCanvas, this.cursorX, this.cursorY);
     },
     primitiveBeep: function(argCount) {
         var ctx = Squeak.startAudioOut();
@@ -5330,6 +5446,30 @@ Object.subclass('Squeak.Primitives',
                 }.bind(this));
         }
         return true;
+    },
+},
+'DropPlugin', {
+    primitiveDropRequestFileHandle: function(argCount) {
+        var index = this.stackInteger(0),
+            fileNames = this.display.droppedFiles || [];
+        if (index < 1 || index > fileNames.length) return false;
+        // same code as primitiveFileOpen()
+        var fileName = fileNames[index - 1],
+            file = this.fileOpen(fileName, false);
+        if (!file) return false;
+        var handle = this.makeStArray([fileName]); // array contents irrelevant
+        handle.file = file;             // shared between handles
+        handle.fileWrite = false;       // specific to this handle
+        handle.filePos = 0;             // specific to this handle
+        this.popNandPushIfOK(argCount+1, handle);
+        return true;
+    },
+    primitiveDropRequestFileName: function(argCount) {
+        var index = this.stackInteger(0),
+            fileNames = this.display.droppedFiles || [];
+        if (index < 1 || index > fileNames.length) return false;
+        var result = this.makeStString(this.filenameToSqueak(fileNames[index - 1]));
+        return this.popNandPushIfOK(argCount, result);
     },
 },
 'SoundPlugin', {
@@ -5754,6 +5894,222 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
 },
+'JavaScriptPlugin', {
+    js_primitiveDoUnderstand: function(argCount) {
+        // This is JS's doesNotUnderstand handler,
+        // as well as JS class's doesNotUnderstand handler.
+        // Property name is the selector up to first colon. 
+        // If it is 'new', create an instance;
+        // otherwise if the property is a function, call it;
+        // otherwise if the property exists, get/set it;
+        // otherwise, fail.
+        var rcvr = this.stackNonInteger(1),
+            obj = this.js_objectOrGlobal(rcvr),
+            message = this.stackNonInteger(0).pointers,
+            selector = message[0].bytesAsString(),
+            args = message[1].pointers || [],
+            isGlobal = !('jsObject' in rcvr),
+            jsResult = null;
+        try {
+            // prevent callbacks while running this primitive
+            this.js_activeCallback = "Callbacks must be asynchronous";
+            var propName = selector.match(/([^:]*)/)[0];
+            if (!isGlobal && propName === "new") {
+                if (args.length === 0) {
+                    // new this()
+                    jsResult = new obj();
+                } else {
+                    // new this(arg0, arg1, ...)
+                    var inst = Object.create(obj.prototype);
+                    jsResult = obj.apply(inst, this.js_fromStArray(args));
+                    if (Object(jsResult) !== jsResult) jsResult = inst;
+                }
+            } else {
+                if (!(propName in obj))
+                    return this.js_setError("Property not found: " + propName);
+                var propValue = obj[propName];
+                if (typeof propValue == "function" && (!isGlobal || args.length > 0)) {
+                    // do this[selector](arg0, arg1, ...)
+                    jsResult = propValue.apply(obj, this.js_fromStArray(args));
+                } else {
+                    if (args.length == 0) {
+                        // do this[selector]
+                        jsResult = propValue;
+                    } else if (args.length == 1) {
+                        // do this[selector] = arg0
+                        obj[propName] = this.js_fromStObject(args[0]);
+                    } else {
+                        // cannot do this[selector] = arg0, arg1, ...
+                        return this.js_setError("Property " + propName + " is not a function");
+                    }
+                }
+            }
+        } catch(err) {
+            return this.js_setError(err.message);
+        } finally {
+            // allow callbacks
+            this.js_activeCallback = null;
+        }
+        var stResult = this.makeStObject(jsResult, rcvr.sqClass);
+        return this.popNandPushIfOK(argCount + 1, stResult);
+    },
+    js_primitiveAsString: function(argCount) {
+        var obj = this.js_objectOrGlobal(this.stackNonInteger(0));
+        return this.popNandPushIfOK(argCount + 1, this.makeStString(String(obj)));
+    },
+    js_primitiveTypeof: function(argCount) {
+        var obj = this.js_objectOrGlobal(this.stackNonInteger(0));
+        return this.popNandPushIfOK(argCount + 1, this.makeStString(typeof obj));
+    },
+    js_primitiveAt: function(argCount) {
+        var rcvr = this.stackNonInteger(1),
+            propName = this.vm.stackValue(0),
+            propValue;
+        try {
+            var jsRcvr = this.js_objectOrGlobal(rcvr),
+                jsPropName = this.js_fromStObject(propName),
+                jsPropValue = jsRcvr[jsPropName];
+            propValue = this.makeStObject(jsPropValue, rcvr.sqClass);
+        } catch(err) {
+            return this.js_setError(err.message);
+        }
+        return this.popNandPushIfOK(argCount + 1, propValue);
+    },
+    js_primitiveAtPut: function(argCount) {
+        var rcvr = this.stackNonInteger(2),
+            propName = this.vm.stackValue(1),
+            propValue = this.vm.stackValue(0);
+        try {
+            var jsRcvr = this.js_objectOrGlobal(rcvr),
+                jsPropName = this.js_fromStObject(propName),
+                jsPropValue = this.js_fromStObject(propValue);
+            jsRcvr[jsPropName] = jsPropValue;
+        } catch(err) {
+            return this.js_setError(err.message);
+        }
+        return this.popNandPushIfOK(argCount + 1, propValue);
+    },
+    js_primitiveInitCallbacks: function(argCount) {
+        // set callback semaphore for js_fromStBlock()
+        this.js_callbackSema = this.stackInteger(0);
+        this.js_activeCallback = null;
+        return this.popNIfOK(argCount);
+    },
+    js_primitiveGetActiveCallbackBlock: function(argCount) {
+        // we're inside an active callback, get block
+        var callback = this.js_activeCallback;
+        if (!callback) return this.js_setError("No active callback");
+        return this.popNandPushIfOK(argCount, callback.block);
+    },
+    js_primitiveGetActiveCallbackArgs: function(argCount) {
+        // we're inside an active callback, get args
+        var proxyClass = this.stackNonInteger(argCount),
+            callback = this.js_activeCallback;
+        if (!callback) return this.js_setError("No active callback");
+        try {
+            // make array with expected number of arguments for block
+            var numArgs = callback.block.pointers[Squeak.BlockContext_argumentCount],
+                args = [];
+            for (var i = 0; i < numArgs; i++)
+                args.push(callback.args[i]);
+            return this.popNandPushIfOK(argCount, this.makeStArray(args, proxyClass));
+        } catch(err) {
+            return this.js_setError(err.message);
+        }
+    },
+    js_primitiveReturnFromCallback: function(argCount) {
+        if (argCount !== 1) return false;
+        if (!this.js_activeCallback)
+            return this.js_setError("No active callback");
+        // set result so the interpret loop in js_fromStBlock() terminates
+        this.js_activeCallback.result = this.vm.pop();
+        this.vm.breakOut(); // stop interpreting ASAP
+        return true;
+    },
+    js_primitiveGetError: function(argCount) {
+        var error = this.makeStObject(this.js_error);
+        this.js_error = null;
+        return this.popNandPushIfOK(argCount + 1, error);
+    },
+    js_setError: function(err) {
+        this.js_error = String(err);
+        return false;
+    },
+    js_fromStObject: function(obj) {
+        if (typeof obj === "number") return obj;
+        if (obj.jsObject) return obj.jsObject;
+        if (obj.isFloat) return obj.float;
+        if (obj.isNil) return null;
+        if (obj.isTrue) return true;
+        if (obj.isFalse) return false;
+        if (obj.bytes || obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassString])
+            return obj.bytesAsString();
+        if (obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassArray])
+            return this.js_fromStArray(obj.pointers || [], true);
+        if (obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassBlockContext] ||
+            obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassBlockClosure])
+            return this.js_fromStBlock(obj);
+        throw Error("asJSArgument needed for " + obj);
+    },
+    js_fromStArray: function(objs, maybeDict) {
+        if (objs.length > 0 && maybeDict && this.isAssociation(objs[0]))
+            return this.js_fromStDict(objs);
+        var jsArray = [];
+        for (var i = 0; i < objs.length; i++)
+            jsArray.push(this.js_fromStObject(objs[i]));
+        return jsArray;
+    },
+    js_fromStDict: function(objs) {
+        var jsDict = {};
+        for (var i = 0; i < objs.length; i++) {
+            var assoc = objs[i].pointers;
+            if (!assoc || assoc.length !== 2) throw Error(assoc + " is not an Association");
+            var jsKey = this.js_fromStObject(assoc[0]),
+                jsValue = this.js_fromStObject(assoc[1]);
+            jsDict[jsKey] = jsValue;
+        }
+        return jsDict;
+    },
+    js_fromStBlock: function(block) {
+        // create callback function from block or closure
+        if (!this.js_callbackSema) // image recognizes error string and will try again
+            throw Error("CallbackSemaphore not set");
+        // block holds onto thisContext
+        this.vm.reclaimableContextCount = 0;
+        var squeak = this;
+        return function evalSqueakBlock(/* arguments */) {
+            return squeak.js_executeCallback(block, arguments);
+        }
+    },
+    js_executeCallback: function(block, args) {
+        if (this.js_activeCallback)
+            if (typeof this.js_activeCallback == "string")
+                throw Error(this.js_activeCallback);
+            else
+                return console.error("Callback: already active");
+        // make block and args available to primitiveGetActiveCallback
+        this.js_activeCallback = {
+            block: block,
+            args: args,
+            result: null,
+        };
+        // switch to callback handler process ASAP
+        this.signalSemaphoreWithIndex(this.js_callbackSema);
+        this.vm.forceInterruptCheck();
+        // interpret until primitiveReturnFromCallback sets result
+        var timeout = Date.now() + 500;
+        while (Date.now() < timeout && !this.js_activeCallback.result)
+            this.vm.interpret();
+        var result = this.js_activeCallback.result;
+        this.js_activeCallback = null;
+        // return result to caller
+        return result ? this.js_fromStObject(result) :
+            console.error("Callback error: " + (this.vm.frozen ? "frozen" : "timeout"));
+    },
+    js_objectOrGlobal: function(sqObject) {
+        return 'jsObject' in sqObject ? sqObject.jsObject : window;
+    },
+},
 'Obsolete', {
     primitiveFloatArrayAt: function(argCount) {
         return this.namedPrimitive("FloatArrayPlugin", "primitiveAt", argCount);
@@ -5973,6 +6329,8 @@ Object.subclass('Squeak.Primitives',
 Object.subclass('Squeak.InterpreterProxy',
 // provides function names exactly like the C interpreter, for ease of porting
 // but maybe less efficiently because of the indirection
+// only used for plugins translated from Slang (see plugins/*.js)
+// built-in primitives use the interpreter directly
 'initialization', {
     VM_PROXY_MAJOR: 1,
     VM_PROXY_MINOR: 11,

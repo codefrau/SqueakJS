@@ -1,23 +1,26 @@
-SqueakJS: A Lively Squeak VM
-============================
+SqueakJS: A Squeak VM for the Web
+=================================
 
-This GitHub repository contains mainly the interpreter. The HTML user interface is written using the Lively Kernel.
-The "demo" directory contains a bare-bones html page, just enough to run the VM, and a "mini.image" (a stripped-down Squeak 2.2).
-The "etoys" directory has an html page to run an Etoys image from an external server, and "scratch" runs a Scratch image.
-Please visit the [project home page][homepage]!
+SqueakJS is an HTML5 runtime engine for [Squeak][squeak]</a> Smalltalk written in pure JavaScript by Bert Freudenberg.
+
+The interpreter core is in "vm.js" and plugins are in the "plugins" directory. The Just-in-Time compiler is optional ("jit.js") and can be easily replaced with your own. There are two user interfaces: the regular HTML interface lets you use SqueakJS on your own web page. Just include "squeak.js". The other interface provides a visual debugger implemented also in JavaScript using [Lively][lively]. This does not use "squeak.js" but reimplements the UI in Lively Morphic.
+
+For discussions, please use the [vm-dev mailing list][vm-dev]. Also, please visit the [project home page][homepage]!
 
 Running it
 ----------
 **Simplest**
 
-* [click here][simple] to run a minimal version. This is the simple demo included in this repo.
-* or [click here][etoys] to run Etoys. Everything except the image is in this repo.
-* or [here][scratch] for Scratch, also in here.
-* Go to the [full SqueakJS][full] page with the Lively interface.
+* [Run a minimal image][mini]. This is the simple demo included in this repo.
+* Or run [Etoys][etoys]. Everything except the image and template files is in this repo.
+* Or similarly, [Scratch][scratch], also in here.
+* Go to the [SqueakJS debugger][debug] page with the Lively interface.
 
 **Run your own Squeak image**
 
-* Drag an image from your local files into the [simple][simple] or [Lively][full] page.
+* Drag an image from your local files into the [launcher][run].
+* You can also drag files into the [Lively Debugger][debug] page.
+* ... and all the other demo pages (see above) accept dropped images, too.
 
 **Which Browser**
 
@@ -31,17 +34,17 @@ Installing locally
 
 * download and unpack the [ZIP archive][zip] (or clone the [github repo][repo])
 * serve the SqueakJS directory using a local web server.
-  TIP:If you have python try out something like
-  ```python
+
+  TIP: If you have python try out something like
+  ```
   python -m SimpleHTTPServer 9090
-  ```        
-  
+  ```
 * in your web browser, open the SqueakJS/demo/simple.html file
 
 Now Squeak should be running.
-The reason for having to run from a web server is because the mini.image is loaded with an XMLHttpRequest which does not work with a file URL.
+The reason for having to run from a web server is because the image is loaded with an XMLHttpRequest which does not work with a file URL. Alternatively, you could just open SqueakJS/run/index.html and drop in a local image.
 
-**In Lively (nicer)**
+**In Lively (nicer for debugging)**
 
 * install [Lively][lively]
 * inside the Lively directory, make a "users/bert" folder and put the SqueakJS directory there
@@ -64,30 +67,33 @@ How to modify it
 How to share your changes
 -------------------------
 * easiest for me is if you create a [pull request][pullreq]
-* otherwise, send me patches, or a Lively Changeset
+* otherwise, send me patches
 
 Contributions are very welcome! 
 
 Things to work on
 -----------------
-SqueakJS is intended to run any Squeak image. It can already load anything from the original 1996 Squeak release to the latest 2014 release. But many pieces (primitives in various plugins) are still missing, in particular media support (sound in/output, MIDI, 3D graphics, Scratch effects) and networking (Socket plugin). 
+SqueakJS is intended to run any Squeak image. It can already load anything from the original 1996 Squeak release to the latest 2014 release. But various pieces (primitives in various plugins) are still missing, in particular media support (MIDI, 3D graphics) and networking (Socket plugin). Also, it would be nice to make it work on as many browsers as possible, especially on mobile touch devices.
 
-As for optimizing I think the way to go is an optimizing JIT compiler. Since we can't access or manipulate the JavaScript stack, we might want that compiler to inline as much as possible, but keep the call sequence flat so we can return to the browser at any time. To make BitBlt fast, we could probably use WebGL. Besides, there is the obvious not-yet-implemented primitives which fall back to slow Smalltalk code (LargeIntegers, compression/decompression, string search etc).
+As for optimizing I think the way to go is an optimizing JIT compiler. The current JIT is very simple and does not optimize at all. Since we can't access or manipulate the JavaScript stack, we might want that compiler to inline as much as possible, but keep the call sequence flat so we can return to the browser at any time. Even better (but potentially more complicated) is actually using the JavaScript stack, just like Eliot's Stack VM uses the C stack. To make BitBlt fast, we could probably use WebGL.
 
-There's also interesting stuff I probably won't be working on. Like a kind-of FFI that lets you call Javascript libraries directly. Or a plugin that gives you access to the DOM (I do have the mechanism for VM plugins in place already). With that you could write a native HTML UI which would certainly be much faster than BitBlt.
+To make SqueakJS useful beyond running existing Squeak images, we should use the JavaScript bridge to write a native HTML UI which would certainly be much faster than BitBlt.
 
 Networking would be interesting, too. How about implementing the SocketPlugin via WebSockets? Parallelize the VM with WebWorkers?
 
 There's a gazillion exciting things to do :)
 
-  --  Bert Freudenberg, September 2014
+  --  Bert Freudenberg, November 2014
 
+  [squeak]:   http://squeak.org/
   [repo]:     https://github.com/bertfreudenberg/SqueakJS
+  [vm-dev]:   http://lists.squeakfoundation.org/mailman/listinfo/vm-dev
   [homepage]: http://bertfreudenberg.github.io/SqueakJS/
-  [simple]:   http://bertfreudenberg.github.io/SqueakJS/demo/simple.html
+  [run]:      http://bertfreudenberg.github.io/SqueakJS/run/
+  [mini]:     http://bertfreudenberg.github.io/SqueakJS/demo/simple.html
   [etoys]:    http://bertfreudenberg.github.io/SqueakJS/etoys/
   [scratch]:  http://bertfreudenberg.github.io/SqueakJS/scratch/
-  [full]:     http://lively-web.org/users/bert/squeak.html
+  [debug]:    http://lively-web.org/users/bert/squeak.html
   [zip]:      https://github.com/bertfreudenberg/SqueakJS/archive/master.zip
   [lively]:   https://github.com/LivelyKernel/LivelyKernel
   [pullreq]:  https://help.github.com/articles/using-pull-requests
@@ -95,6 +101,11 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2014-12-22: 0.7.1 cursor shapes
+    2014-12-04: 0.7 support finalization of weak references
+    2014-11-28: 0.6.8 JSBridge with callbacks
+    2014-11-20: 0.6.7 implement JavaScriptPlugin
+    2014-11-18: 0.6.6 implement DropPlugin
     2014-11-14: 0.6.5 add generated Balloon2D plugin
     2014-11-06: 0.6.4 add generic run page
     2014-10-28: 0.6.3 pass options via URL

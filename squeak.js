@@ -20,13 +20,14 @@
  * THE SOFTWARE.
  */
 
+"use strict";    
 
 //////////////////////////////////////////////////////////////////////////////
 // these functions fake the Lively module and class system
 // just enough so the loading of vm.js succeeds
 //////////////////////////////////////////////////////////////////////////////
 
-module = function(dottedPath) {
+window.module = function(dottedPath) {
     if (dottedPath == "") return window;
     var path = dottedPath.split("."),
         name = path.pop(),
@@ -38,12 +39,15 @@ module = function(dottedPath) {
         requires: function(req) {
             return {
                 toRun: function(code) {
-                    if (req && !module(req).loaded) {
-                        module(req).pending.push(code);
-                    } else {
+                    function load() {
                         code();
                         self.loaded = true;
                         self.pending.forEach(function(f){f()});
+                    }
+                    if (req && !module(req).loaded) {
+                        module(req).pending.push(load);
+                    } else {
+                        load();
                     }
                 }
             }
@@ -81,6 +85,7 @@ Object.extend = function(obj /* + more args */ ) {
     var scripts = document.getElementsByTagName("script"),
         squeakjs = scripts[scripts.length - 1],
         vmDir = squeakjs.src.replace(/[^\/]*$/, "");
+    if (squeakjs.src.match(/squeak\.min\.js$/)) return;
     [   "vm.js",
         "jit.js",
         "plugins/ADPCMCodecPlugin.js",
@@ -119,49 +124,49 @@ module("SqueakJS").requires("users.bert.SqueakJS.vm").toRun(function() {
 function setupFullscreen(display, canvas, options) {
     // Fullscreen can only be enabled in an event handler. So we check the
     // fullscreen flag on every mouse down/up and keyboard event.
+    var box = canvas.parentElement,
+        fullscreenEvent = "fullscreenchange",
+        fullscreenElement = "fullscreenElement",
+        fullscreenEnabled = "fullscreenEnabled";
+
+    if (!box.requestFullscreen) {
+        [    // Fullscreen support is still very browser-dependent
+            {req: box.webkitRequestFullscreen, exit: document.webkitExitFullscreen,
+                evt: "webkitfullscreenchange", elem: "webkitFullscreenElement", enable: "webkitFullscreenEnabled"},
+            {req: box.mozRequestFullScreen, exit: document.mozCancelFullScreen,
+                evt: "mozfullscreenchange", elem: "mozFullScreenElement", enable: "mozFullScreenEnabled"},
+            {req: box.msRequestFullscreen, exit: document.msExitFullscreen,
+                evt: "MSFullscreenChange", elem: "msFullscreenElement", enable: "msFullscreenEnabled"},
+        ].forEach(function(browser) {
+            if (browser.req) {
+                box.requestFullscreen = browser.req;
+                document.exitFullscreen = browser.exit;
+                fullscreenEvent = browser.evt;
+                fullscreenElement = browser.elem;
+                fullscreenEnabled = browser.enable;
+            }
+        })
+    }
 
     // If the user canceled fullscreen, turn off the fullscreen flag so
     // we don't try to enable it again in the next event
     function fullscreenChange(fullscreen) {
         display.fullscreen = fullscreen;
-        if (options.fullscreenCheckbox)
-            options.fullscreenCheckbox.checked = display.fullscreen;
+        box.style.background = fullscreen ? 'black' : '';
+        if (options.header) options.header.style.display = fullscreen ? 'none' : '';
+        if (options.footer) options.footer.style.display = fullscreen ? 'none' : '';
+        if (options.fullscreenCheckbox) options.fullscreenCheckbox.checked = fullscreen;
         setTimeout(window.onresize, 0);
     };
-
+    
     var checkFullscreen;
-
-    // Fullscreen support is very browser-dependent
-    if (canvas.requestFullscreen) {
-        document.addEventListener("fullscreenchange", function(){fullscreenChange(canvas == document.fullscreenElement)});
+    
+    if (box.requestFullscreen) {
+        document.addEventListener(fullscreenEvent, function(){fullscreenChange(box == document[fullscreenElement])});
         checkFullscreen = function() {
-            if (document.fullscreenEnabled && (canvas == document.fullscreenElement) != display.fullscreen) {
-                if (display.fullscreen) canvas.requestFullscreen();
+            if (document[fullscreenEnabled] && (box == document[fullscreenElement]) != display.fullscreen) {
+                if (display.fullscreen) box.requestFullscreen();
                 else document.exitFullscreen();
-            }
-        }
-    } else if (canvas.webkitRequestFullscreen) {
-        document.addEventListener("webkitfullscreenchange", function(){fullscreenChange(canvas == document.webkitFullscreenElement)});
-        checkFullscreen = function() {
-            if (document.webkitFullscreenEnabled && (canvas == document.webkitFullscreenElement) != display.fullscreen) {
-                if (display.fullscreen) canvas.webkitRequestFullscreen();
-                else document.webkitExitFullscreen();
-            }
-        }
-    } else if (canvas.mozRequestFullScreen) {
-        document.addEventListener("mozfullscreenchange", function(){fullscreenChange(canvas == document.mozFullScreenElement)});
-        checkFullscreen = function() {
-            if (document.mozFullScreenEnabled && (canvas == document.mozFullScreenElement) != display.fullscreen) {
-                if (display.fullscreen) canvas.mozRequestFullScreen();
-                else document.mozCancelFullScreen();
-            }
-        }
-    } else if (canvas.msRequestFullscreen) {
-        document.addEventListener("MSFullscreenChange", function(){fullscreenChange(canvas == document.msFullscreenElement)});
-        checkFullscreen = function() {
-            if (document.msFullscreenEnabled && (canvas == document.msFullscreenElement) != display.fullscreen) {
-                if (display.fullscreen) canvas.msRequestFullscreen();
-                else document.msExitFullscreen();
             }
         }
     } else {
@@ -169,10 +174,7 @@ function setupFullscreen(display, canvas, options) {
         checkFullscreen = function() {
             if ((options.header || options.footer) && isFullscreen != display.fullscreen) {
                 isFullscreen = display.fullscreen;
-                if (options.header) options.header.style.display = isFullscreen ? 'none' : '';
-                if (options.footer) options.footer.style.display = isFullscreen ? 'none' : '';
-                if (options.fullscreenCheckbox) options.fullscreenCheckbox.checked = isFullscreen;
-                window.onresize();
+                fullscreenChange(isFullscreen);
             }
         }
     }
@@ -199,34 +201,6 @@ function setupSwapButtons(options) {
     }
 }
 
-function setupDragAndDrop(display, options) {
-    // do not use addEventListener, we want to replace any previous drop handler
-    document.body.ondragover = function(evt) {
-        evt.stopPropagation();
-        evt.preventDefault();
-        evt.dataTransfer.dropEffect = 'copy';
-        return false;
-    };
-    document.body.ondrop = function(evt) {
-        evt.stopPropagation();
-        evt.preventDefault();
-        [].slice.call(evt.dataTransfer.files).forEach(function(f) {
-            var reader = new FileReader();
-            reader.onload = function () {
-                var buffer = this.result;
-                Squeak.filePut(f.name, buffer);
-                if (/.*image$/.test(f.name) && confirm("Run " + f.name + " now?\n(cancel to use as file)")) {
-                    SqueakJS.appName = f.name.slice(0, -6);
-                    SqueakJS.runImage(buffer, f.name, display, options);
-                } else {
-                }
-            };
-            reader.readAsArrayBuffer(f);
-        });
-        return false;
-    };
-}
-
 function recordModifiers(evt, display) {
     var modifiers =
         (evt.shiftKey ? Squeak.Keyboard_Shift : 0) +
@@ -236,14 +210,21 @@ function recordModifiers(evt, display) {
     return modifiers;
 }
 
+function updateMousePos(evt, canvas, display) {
+    display.cursorCanvas.style.left = (evt.pageX + display.cursorOffsetX) + "px";
+    display.cursorCanvas.style.top = (evt.pageY + display.cursorOffsetY) + "px";
+    var x = ((evt.pageX - canvas.offsetLeft) * (canvas.width / canvas.offsetWidth)) | 0,
+        y = ((evt.pageY - canvas.offsetTop) * (canvas.height / canvas.offsetHeight)) | 0;
+    // clamp to display size
+    display.mouseX = Math.max(0, Math.min(display.width, x));
+    display.mouseY = Math.max(0, Math.min(display.height, y));
+}
+
 function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
     if (what != "touchend") {
-        var x = ((evt.pageX - canvas.offsetLeft) * (canvas.width / canvas.offsetWidth)) | 0,
-            y = ((evt.pageY - canvas.offsetTop) * (canvas.height / canvas.offsetHeight)) | 0;
-            // subtract display offset and clamp to display size
-        display.mouseX = Math.max(0, Math.min(display.width, x - display.offsetX));
-        display.mouseY = Math.max(0, Math.min(display.height, y - display.offsetY));
+        updateMousePos(evt, canvas, display);
     }
+    if (!display.vm) return;
     var buttons = display.buttons & Squeak.Mouse_All;
     switch (what) {
         case 'mousedown':
@@ -287,6 +268,7 @@ function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
 }
 
 function recordKeyboardEvent(key, timestamp, display, eventQueue) {
+    if (!display.vm) return;
     var code = (display.buttons >> 3) << 8 | key;
     if (code === display.vm.interruptKeycode) {
         display.vm.interruptPending = true;
@@ -307,6 +289,22 @@ function recordKeyboardEvent(key, timestamp, display, eventQueue) {
     }
     display.idle = 0;
     if (display.runNow) display.runNow(); // don't wait for timeout to run
+}
+
+function recordDragDropEvent(type, evt, canvas, display, eventQueue) {
+    if (!display.vm || !eventQueue) return;
+    updateMousePos(evt, canvas, display);
+    eventQueue.push([
+        Squeak.EventTypeDragDropFiles,
+        evt.timeStamp,  // converted to Squeak time in makeSqueakEvent()
+        type,
+        display.mouseX,
+        display.mouseY,
+        display.buttons >> 3,
+        display.droppedFiles.length,
+    ]);
+    if (display.signalInputEvent)
+        display.signalInputEvent();
 }
 
 function fakeCmdOrCtrlKey(key, timestamp, display, eventQueue) {
@@ -335,8 +333,6 @@ function createSqueakDisplay(canvas, options) {
     var display = {
         context: canvas.getContext("2d"),
         fullscreen: false,
-        offsetX: 0,
-        offsetY: 0,
         width: 0,   // if 0, VM uses canvas.width
         height: 0,  // if 0, VM uses canvas.height
         mouseX: 0,
@@ -345,10 +341,13 @@ function createSqueakDisplay(canvas, options) {
         keys: [],
         clipboardString: '',
         clipboardStringChanged: false,
+        cursorCanvas: document.createElement("canvas"),
+        cursorOffsetX: 0,
+        cursorOffsetY: 0,
+        droppedFiles: [],
         signalInputEvent: null, // function set by VM
         // additional functions added below
     };
-    setupDragAndDrop(display, options);
     setupSwapButtons(options);
 
     var eventQueue = null;
@@ -453,7 +452,19 @@ function createSqueakDisplay(canvas, options) {
     canvas.ontouchcancel = function(evt) {
         canvas.ontouchend(evt);
     };
+    // cursorCanvas shows Squeak cursor
+    display.cursorCanvas.style.display = "block";
+    display.cursorCanvas.style.position = "absolute";
+    display.cursorCanvas.style.cursor = "none";
+    display.cursorCanvas.style.background = "transparent";
+    ['onmousedown', 'onmouseup', 'onmousemove', 'oncontextmenu',
+    'ontouchstart', 'ontouchmove', 'ontouchend', 'ontouchcancel'].
+        forEach(function(handler) { display.cursorCanvas[handler] = canvas[handler]; });
+    canvas.parentElement.appendChild(display.cursorCanvas);
+    canvas.style.cursor = "none";
+    // keyboard stuff
     document.onkeypress = function(evt) {
+        if (!display.vm) return true;
         // check for ctrl-x/c/v/r
         if (/[CXVR]/.test(String.fromCharCode(evt.charCode + 64)))
             return true;  // let browser handle cut/copy/paste/reload
@@ -463,6 +474,7 @@ function createSqueakDisplay(canvas, options) {
     };
     document.onkeydown = function(evt) {
         checkFullscreen();
+        if (!display.vm) return true;
         recordModifiers(evt, display);
         var squeakCode = ({
             8: 8,   // Backspace
@@ -499,9 +511,11 @@ function createSqueakDisplay(canvas, options) {
         }
     };
     document.onkeyup = function(evt) {
+        if (!display.vm) return true;
         recordModifiers(evt, display);
     };
     document.oncopy = function(evt, key) {
+        if (!display.vm) return true;
         // simulate copy event for Squeak so it places its text in clipboard
         display.clipboardStringChanged = false;
         fakeCmdOrCtrlKey((key || 'c').charCodeAt(0), evt.timeStamp, display, eventQueue);
@@ -519,9 +533,11 @@ function createSqueakDisplay(canvas, options) {
         evt.preventDefault();
     };
     document.oncut = function(evt) {
+        if (!display.vm) return true;
         document.oncopy(evt, 'x');
     };
     document.onpaste = function(evt) {
+        if (!display.vm) return true;
         try {
             display.clipboardString = evt.clipboardData.getData('Text');
             // simulate paste event for Squeak
@@ -530,6 +546,59 @@ function createSqueakDisplay(canvas, options) {
             alert("paste error " + err);
         }
         evt.preventDefault();
+    };
+    // do not use addEventListener, we want to replace any previous drop handler
+    function dragEventHasFiles(evt) {
+        for (var i = 0; i < evt.dataTransfer.types.length; i++)
+            if (evt.dataTransfer.types[i] == 'Files') return true;
+        return false;
+    }
+    document.body.ondragover = function(evt) {
+        evt.preventDefault();
+        if (!dragEventHasFiles(evt))
+            return evt.dataTransfer.dropEffect = 'none';
+        evt.dataTransfer.dropEffect = 'copy';
+        recordDragDropEvent(Squeak.EventDragMove, evt, canvas, display, eventQueue);
+        return false;
+    };
+    document.body.ondragenter = function(evt) {
+        if (!dragEventHasFiles(evt)) return;
+        recordDragDropEvent(Squeak.EventDragEnter, evt, canvas, display, eventQueue);
+    };
+    document.body.ondragleave = function(evt) {
+        if (!dragEventHasFiles(evt)) return;
+        recordDragDropEvent(Squeak.EventDragLeave, evt, canvas, display, eventQueue);
+    };
+    document.body.ondrop = function(evt) {
+        evt.preventDefault();
+        if (!dragEventHasFiles(evt)) return false;
+        var files = [].slice.call(evt.dataTransfer.files),
+            loaded = [],
+            image, imageName = null;
+        display.droppedFiles = [];
+        files.forEach(function(f) {
+            display.droppedFiles.push(f.name);
+            var reader = new FileReader();
+            reader.onload = function () {
+                var buffer = this.result;
+                Squeak.filePut(f.name, buffer);
+                loaded.push(f.name);
+                if (!image && /.*image$/.test(f.name) && (!display.vm || confirm("Run " + f.name + " now?\n(cancel to use as file)"))) {
+                    image = buffer;
+                    imageName = f.name;
+                }
+                if (loaded.length == files.length) {                
+                    if (image) {
+                        SqueakJS.appName = imageName.slice(0, -6);
+                        SqueakJS.runImage(image, imageName, display, options);
+                    } else {
+                        recordDragDropEvent(Squeak.EventDragDrop, evt, canvas, display, eventQueue);
+                    }
+                }
+            };
+            reader.readAsArrayBuffer(f);
+        });
+        return false;
     };
     window.onresize = function() {
         // call resizeDone only if window size didn't change for 300ms
@@ -547,18 +616,13 @@ function createSqueakDisplay(canvas, options) {
             return;
         }
         // CSS won't let us do what we want so we will layout the canvas ourselves.
-        // Also, we need to paper over browser differences in fullscreen mode where
-        // Firefox scales the canvas but Webkit does not, which makes a difference
-        // if we do not use actual pixels but are scaling a fixed-resolution canvas.
         var fullscreen = options.fullscreen || display.fullscreen,
             x = 0,
             y = fullscreen ? 0 : options.header.offsetTop + options.header.offsetHeight,
             w = window.innerWidth,
             h = fullscreen ? window.innerHeight : Math.max(100, options.footer.offsetTop - y),
-            innerPadX = 0, // padding inside canvas
-            innerPadY = 0,
-            outerPadX = 0, // padding outside canvas
-            outerPadY = 0;
+            paddingX = 0, // padding outside canvas
+            paddingY = 0;
         // above are the default values for laying out the canvas
         if (!options.fixedWidth) { // set canvas resolution
             display.width = w;
@@ -568,38 +632,24 @@ function createSqueakDisplay(canvas, options) {
             display.height = options.fixedHeight;
             var wantRatio = display.width / display.height,
                 haveRatio = w / h;
-            if (fullscreen) { // need to use inner padding
-                if (haveRatio > wantRatio) {
-                    innerPadX = Math.floor(display.height * haveRatio) - display.width;
-                } else {
-                    innerPadY = Math.floor(display.width / haveRatio) - display.height;
-                }
-            } else { // can control outer padding
-                if (haveRatio > wantRatio) {
-                    outerPadX = w - Math.floor(h * wantRatio);
-                } else {
-                    outerPadY = h - Math.floor(w / wantRatio);
-                }
+            if (haveRatio > wantRatio) {
+                paddingX = w - Math.floor(h * wantRatio);
+            } else {
+                paddingY = h - Math.floor(w / wantRatio);
             }
         }
         // set size and position
-        canvas.style.left = (x + Math.floor(outerPadX / 2)) + "px";
-        canvas.style.top = (y + Math.floor(outerPadY / 2)) + "px";
-        canvas.style.width = (w - outerPadX) + "px";
-        canvas.style.height = (h - outerPadY) + "px";
+        canvas.style.left = (x + Math.floor(paddingX / 2)) + "px";
+        canvas.style.top = (y + Math.floor(paddingY / 2)) + "px";
+        canvas.style.width = (w - paddingX) + "px";
+        canvas.style.height = (h - paddingY) + "px";
         // set resolution
-        var canvasWidth = display.width + innerPadX,
-            canvasHeight = display.height + innerPadY,
-            oldOffsetX = display.offsetX,
-            oldOffsetY = display.offsetY;
-        display.offsetX = Math.floor(innerPadX / 2);
-        display.offsetY = Math.floor(innerPadY / 2);
-        if (canvas.width != canvasWidth || canvas.height != canvasHeight) {
+        if (canvas.width != display.width || canvas.height != display.height) {
             var preserveScreen = options.fixedWidth || !display.resizeTodo, // preserve unless changing fullscreen
-                imgData = preserveScreen && display.context.getImageData(oldOffsetX, oldOffsetY, canvas.width, canvas.height);
-            canvas.width = canvasWidth;
-            canvas.height = canvasHeight;
-            if (imgData) display.context.putImageData(imgData, display.offsetX, display.offsetY);
+                imgData = preserveScreen && display.context.getImageData(0, 0, canvas.width, canvas.height);
+            canvas.width = display.width;
+            canvas.height = display.height;
+            if (imgData) display.context.putImageData(imgData, 0, 0);
         }
     };
     window.onresize();
@@ -738,13 +788,13 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     }
     if (options.document) {
         var docName = Squeak.splitFilePath(options.document).basename;
-        files.push({url: options.document, name: docName});
+        files.push({url: options.document, name: docName, forceDownload: true});
         display.documentName = options.root + docName;
     }
     function getNextFile(whenAllDone) {
         if (files.length === 0) return whenAllDone(imageData);
         var file = files.shift();
-        if (Squeak.fileExists(options.root + file.name)) {
+        if (!file.forceDownload && Squeak.fileExists(options.root + file.name)) {
             if (file.name == imageName) {
                 Squeak.fileGet(options.root + file.name, function(data) {
                     imageData = data;
@@ -789,6 +839,7 @@ SqueakJS.quitSqueak = function() {
 
 SqueakJS.onQuit = function(vm, display, options) {
     window.onbeforeunload = null;
+    display.vm = null;
     if (options.spinner) options.spinner.style.display = "none";
     if (options.onQuit) options.onQuit(vm, display, options);
     else display.showBanner(SqueakJS.appName + " stopped.");

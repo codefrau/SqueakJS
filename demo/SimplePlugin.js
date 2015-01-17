@@ -56,6 +56,6 @@ using prim 117:
 
 primNavigatorInfo: anInteger
     <primitive: 117>
-    #(SimplePlugin primitiveNavigatorInfo 0 0).
+    #(SimplePlugin primitiveNavigatorInfo 0 0) at: 1.
     ^ self primitiveFailed
 ***********************************/

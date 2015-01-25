@@ -96,11 +96,11 @@ Object.extend(Squeak,
     splOb_SelectorAboutToReturn: 48,
     splOb_SelectorRunWithIn: 49,
     splOb_SelectorAttemptToAssign: 50,
-	splOb_PrimErrTableIndex: 51,
-	splOb_ClassAlien: 52,
-	splOb_InvokeCallbackSelector: 53,
-	splOb_ClassUnsafeAlien: 54,
-	splOb_ClassWeakFinalizer: 55,
+    splOb_PrimErrTableIndex: 51,
+    splOb_ClassAlien: 52,
+    splOb_InvokeCallbackSelector: 53,
+    splOb_ClassUnsafeAlien: 54,
+    splOb_ClassWeakFinalizer: 55,
 },
 "known classes", {
     // Class layout:
@@ -767,7 +767,7 @@ Object.subclass('Squeak.Image',
     New objects are only referenced by other objects' pointers, and thus can be garbage-collected
     at any time by the Javascript GC.
 
-    There is no support for weak references yet.
+    Weak references are only finalized during a full GC.
 
     */
     }

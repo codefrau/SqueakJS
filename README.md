@@ -83,7 +83,7 @@ Networking would be interesting, too. How about implementing the SocketPlugin vi
 
 There's a gazillion exciting things to do :)
 
-  --  Bert Freudenberg, November 2014
+  --  Bert Freudenberg
 
   [squeak]:   http://squeak.org/
   [repo]:     https://github.com/bertfreudenberg/SqueakJS
@@ -101,6 +101,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2015-01-25: 0.7.2 JSBridge: add asJSObject
     2014-12-22: 0.7.1 cursor shapes
     2014-12-04: 0.7 support finalization of weak references
     2014-11-28: 0.6.8 JSBridge with callbacks

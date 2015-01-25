@@ -28,7 +28,7 @@ window.Squeak = users.bert.SqueakJS.vm;
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 0.7.1",
+    vmVersion: "SqueakJS 0.7.2",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -96,11 +96,11 @@ Object.extend(Squeak,
     splOb_SelectorAboutToReturn: 48,
     splOb_SelectorRunWithIn: 49,
     splOb_SelectorAttemptToAssign: 50,
-	splOb_PrimErrTableIndex: 51,
-	splOb_ClassAlien: 52,
-	splOb_InvokeCallbackSelector: 53,
-	splOb_ClassUnsafeAlien: 54,
-	splOb_ClassWeakFinalizer: 55,
+    splOb_PrimErrTableIndex: 51,
+    splOb_ClassAlien: 52,
+    splOb_InvokeCallbackSelector: 53,
+    splOb_ClassUnsafeAlien: 54,
+    splOb_ClassWeakFinalizer: 55,
 },
 "known classes", {
     // Class layout:
@@ -767,7 +767,7 @@ Object.subclass('Squeak.Image',
     New objects are only referenced by other objects' pointers, and thus can be garbage-collected
     at any time by the Javascript GC.
 
-    There is no support for weak references yet.
+    Weak references are only finalized during a full GC.
 
     */
     }
@@ -5988,6 +5988,12 @@ Object.subclass('Squeak.Primitives',
             return this.js_setError(err.message);
         }
         return this.popNandPushIfOK(argCount + 1, propValue);
+    },
+    js_primitiveSqueakAsJSObject: function(argCount) {
+        var rcvr = this.stackNonInteger(1),
+            arg = this.vm.stackValue(0);
+        if (this.success) rcvr.jsObject = arg;
+        return this.popNIfOK(argCount);
     },
     js_primitiveInitCallbacks: function(argCount) {
         // set callback semaphore for js_fromStBlock()

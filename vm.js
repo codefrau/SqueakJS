@@ -5989,6 +5989,12 @@ Object.subclass('Squeak.Primitives',
         }
         return this.popNandPushIfOK(argCount + 1, propValue);
     },
+    js_primitiveSqueakAsJSObject: function(argCount) {
+        var rcvr = this.stackNonInteger(1),
+            arg = this.vm.stackValue(0);
+        if (this.success) rcvr.jsObject = arg;
+        return this.popNIfOK(argCount);
+    },
     js_primitiveInitCallbacks: function(argCount) {
         // set callback semaphore for js_fromStBlock()
         this.js_callbackSema = this.stackInteger(0);

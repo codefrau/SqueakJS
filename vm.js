@@ -3410,102 +3410,109 @@ Object.subclass('Squeak.Primitives',
             147: function (index, argCount, primMethod) { return this.namedPrimitive('BitBltPlugin', 'primitiveWarpBits', argCount); },
             148: function (index, argCount, primMethod) { return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); /*shallowCopy */ },
             149: function (index, argCount, primMethod) { return this.primitiveGetAttribute(argCount); },
-            // File Primitives (150-169)
-            150: function (index, argCount, primMethod) { if(this.oldPrims) return this.primitiveFileAtEnd(argCount); },
-            151: function (index, argCount, primMethod) { if(this.oldPrims) return this.primitiveFileClose(argCount); },
-            152: function (index, argCount, primMethod) { if(this.oldPrims) return this.primitiveFileGetPosition(argCount); },
-            153: function (index, argCount, primMethod) { if(this.oldPrims) return this.primitiveFileOpen(argCount); },
-            154: function (index, argCount, primMethod) { if(this.oldPrims) return this.primitiveFileRead(argCount); },
-            155: function (index, argCount, primMethod) { if(this.oldPrims) return this.primitiveFileSetPosition(argCount); },
-            156: function (index, argCount, primMethod) { if(this.oldPrims) return this.primitiveFileDelete(argCount); },
-            157: function (index, argCount, primMethod) { if(this.oldPrims) return this.primitiveFileSize(argCount); },
-            158: function (index, argCount, primMethod) { if(this.oldPrims) return this.primitiveFileWrite(argCount); },
-            159: function (index, argCount, primMethod) { if(this.oldPrims) return this.primitiveFileRename(argCount); },
-            160: function (index, argCount, primMethod) { if(this.oldPrims) return this.primitiveDirectoryCreate(argCount); /* new: primitiveAdoptInstance */ },
-            161: function (index, argCount, primMethod) { if(this.oldPrims) return this.primitiveDirectoryDelimitor(argCount); /* new: primitiveSetIdentityHash */ },
-            162: function (index, argCount, primMethod) { if(this.oldPrims) return this.primitiveDirectoryLookup(argCount); },
-            163: function (index, argCount, primMethod) { if(this.oldPrims) return this.primitiveDirectoryDelete(argCount); },
+            150: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            151: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            152: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            153: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            154: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            155: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            156: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            157: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            158: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            159: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            160: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            161: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            162: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            163: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
             // 164: unused
             165: function (index, argCount, primMethod) { return this.primitiveIntegerAtAndPut(argCount); },
             166: function (index, argCount, primMethod) { return this.primitiveIntegerAtAndPut(argCount); },
             167: function (index, argCount, primMethod) { return false; /* Processor.yield */ },
             168: function (index, argCount, primMethod) { return this.primitiveCopyObject(argCount); },
-            169: function (index, argCount, primMethod) { if(this.oldPrims) return this.primitiveDirectorySetMacTypeAndCreator(argCount); else return this.primitiveNotIdentical(argCount); },
-            // Sound Primitives (170-199)
-            170: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStart', argCount); },
-            171: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStartWithSemaphore', argCount); },
-            172: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStop', argCount); },
-            173: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundAvailableSpace', argCount); },
-            174: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySamples', argCount); },
-            175: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySilence', argCount); },
-            176: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primWaveTableSoundmixSampleCountintostartingAtpan', argCount); },
-            177: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primFMSoundmixSampleCountintostartingAtpan', argCount); },
-            178: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primPluckedSoundmixSampleCountintostartingAtpan', argCount); },
-            179: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primSampledSoundmixSampleCountintostartingAtpan', argCount); },
-            180: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixFMSound', argCount); },
-            181: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixPluckedSound', argCount); },
-            182: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'oldprimSampledSoundmixSampleCountintostartingAtleftVolrightVol', argCount); },
-            183: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveApplyReverb', argCount); },
-            184: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixLoopedSampledSound', argCount); },
-            185: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixSampledSound', argCount); },
-            // 186-188: was unused",
-            188: function (index, argCount, primMethod) { if(!this.oldPrims) return this.primitiveExecuteMethodArgsArray(argCount); },
-            189: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundInsertSamples', argCount); },
-            190: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStartRecording', argCount); },
-            191: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStopRecording', argCount); },
-            192: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundGetRecordingSampleRate', argCount); },
-            193: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundRecordSamples', argCount); },
-            194: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundSetRecordLevel', argCount); },
+
+            169: function (index, argCount, primMethod) { return this.primitiveNotIdentical(argCount); }, // NOOP might be overridden by oldPrims feature switch
+            170: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            171: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            172: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            173: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            174: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            175: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            176: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            177: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            178: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            179: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            180: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            181: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            182: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            183: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            184: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            185: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            186: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            187: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            188: function (index, argCount, primMethod) { return this.primitiveExecuteMethodArgsArray(argCount); }, // might be overridden by oldPrims feature switch
+            189: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            190: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            191: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            192: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            193: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            194: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+
             195: function (index, argCount, primMethod) { return false; /* Context.findNextUnwindContextUpTo: */ },
             196: function (index, argCount, primMethod) { return false; /* Context.terminateTo: */ },
             197: function (index, argCount, primMethod) { return false; /* Context.findNextHandlerContextStarting */ },
             198: function (index, argCount, primMethod) { return false; /* MarkUnwindMethod (must fail) */ },
             199: function (index, argCount, primMethod) { return false; /* MarkHandlerMethod (must fail) */ },
-            // Networking Primitives (200-229)",
-            200: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveInitializeNetwork', argCount); else return this.primitiveClosureCopyWithCopiedValues(argCount); },
-            201: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverStartNameLookup', argCount); else return this.primitiveClosureValue(argCount); },
-            202: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverNameLookupResult', argCount); else return this.primitiveClosureValue(argCount); },
-            203: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverStartAddressLookup', argCount); else return this.primitiveClosureValue(argCount); },
-            204: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverAddressLookupResult', argCount); else return this.primitiveClosureValue(argCount); },
-            205: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverAbortLookup', argCount); else return this.primitiveClosureValue(argCount); },
-            206: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverLocalAddress', argCount); else return  this.primitiveClosureValueWithArgs(argCount); },
-            207: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverStatus', argCount); },
-            208: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverError', argCount); },
-            209: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketCreate', argCount); },
-            210: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketDestroy', argCount); else return this.popNandPushIfOK(2, this.objectAt(false,false,false)); /* contextAt: */ },
-            211: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectionStatus', argCount); else return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); /* contextAt:put: */ },
-            212: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketError', argCount); },
-            213: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketLocalAddress', argCount); },
-            214: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketLocalPort', argCount); },
-            215: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketRemoteAddress', argCount); },
-            216: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketRemotePort', argCount); },
-            217: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectToPort', argCount); },
-            218: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketListenOnPort', argCount); },
-            219: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketCloseConnection', argCount); },
-            220: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketAbortConnection', argCount); },
-            221: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketReceiveDataBufCount', argCount); else return this.primitiveClosureValueNoContextSwitch(argCount); },
-            222: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketReceiveDataAvailable', argCount); else return this.primitiveClosureValueNoContextSwitch(argCount); },
-            223: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketSendDataBufCount', argCount); },
-            224: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketSendDone', argCount); },
+
+            200: function (index, argCount, primMethod) { return this.primitiveClosureCopyWithCopiedValues(argCount); }, // might be overridden by oldPrims feature switch
+            201: function (index, argCount, primMethod) { return this.primitiveClosureValue(argCount); }, // might be overridden by oldPrims feature switch
+            202: function (index, argCount, primMethod) { return this.primitiveClosureValue(argCount); }, // might be overridden by oldPrims feature switch
+            203: function (index, argCount, primMethod) { return this.primitiveClosureValue(argCount); }, // might be overridden by oldPrims feature switch
+            204: function (index, argCount, primMethod) { return this.primitiveClosureValue(argCount); }, // might be overridden by oldPrims feature switch
+            205: function (index, argCount, primMethod) { return this.primitiveClosureValue(argCount); }, // might be overridden by oldPrims feature switch
+            206: function (index, argCount, primMethod) { return  this.primitiveClosureValueWithArgs(argCount); }, // might be overridden by oldPrims feature switch
+            207: function (index, argCount, primMethod) { return this.popNandPushIfOK(2, this.objectAt(false,false,false)); /* contextAt: */ }, // might be overridden by oldPrims feature switch
+            208: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            209: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            210: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            211: function (index, argCount, primMethod) { return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); /* contextAt:put: */ }, // might be overridden by oldPrims feature switch
+            212: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            213: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            214: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            215: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            216: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            217: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            218: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            219: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            220: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            221: function (index, argCount, primMethod) { return this.primitiveClosureValueNoContextSwitch(argCount); }, // might be overridden by oldPrims feature switch
+            222: function (index, argCount, primMethod) { return this.primitiveClosureValueNoContextSwitch(argCount); }, // might be overridden by oldPrims feature switch
+            223: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            224: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+
+            225: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            226: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            227: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            228: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            229: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
             // 225-229: unused",
             // Other Primitives (230-249)",
             230: function (index, argCount, primMethod) { return this.primitiveRelinquishProcessorForMicroseconds(argCount); },
             231: function (index, argCount, primMethod) { return this.primitiveForceDisplayUpdate(argCount); },
             // 232:  return this.primitiveFormPrint(argCount);",
             233: function (index, argCount, primMethod) { this.primitiveSetFullScreen(argCount); },
-            234: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveDecompressFromByteArray', argCount); },
-            235: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompareString', argCount); },
-            236: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveConvert8BitSigned', argCount); },
-            237: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompressToByteArray', argCount); },
-            238: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortOpen', argCount); },
-            239: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortClose', argCount); },
-            240: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortWrite', argCount);else return this.popNandPushIfOK(1, this.microsecondClockUTC()); },
-            241: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortRead', argCount); else return this.popNandPushIfOK(1, this.microsecondClockLocal()); },
+            234: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            235: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            236: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            237: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            238: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            239: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            240: function (index, argCount, primMethod) { return this.popNandPushIfOK(1, this.microsecondClockUTC()); }, // might be overridden by oldPrims feature switch
+            241: function (index, argCount, primMethod) { return this.popNandPushIfOK(1, this.microsecondClockLocal()); }, // might be overridden by oldPrims feature switch
             // 242: unused
-            243: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveTranslateStringWithTable', argCount); },
-            244: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindFirstInString' , argCount); },
-            245: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveIndexOfAsciiInString', argCount); },
-            246: function (index, argCount, primMethod) { if(this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount); },
+            243: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            244: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            245: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            246: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
             // 247: unused",
             248: function (index, argCount, primMethod) { return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod); /* see findSelectorInClass() */ },
             249: function (index, argCount, primMethod) { return this.primitiveArrayBecome(argCount, false); /* one way, opt. copy hash */ },
@@ -3545,6 +3552,88 @@ Object.subclass('Squeak.Primitives',
             572: function (index, argCount, primMethod) { return this.primitiveListBuiltinModule(argCount); },
             573: function (index, argCount, primMethod) { return this.primitiveListLoadedModule(argCount) }
         };
+
+        if(this.oldPrims) {
+            // File Primitives (150-169)
+            this.primitiveFunctions[150] = function (index, argCount, primMethod) { return this.primitiveFileAtEnd(argCount); };
+            this.primitiveFunctions[151] = function (index, argCount, primMethod) { return this.primitiveFileClose(argCount); };
+            this.primitiveFunctions[152] = function (index, argCount, primMethod) { return this.primitiveFileGetPosition(argCount); };
+            this.primitiveFunctions[153] = function (index, argCount, primMethod) { return this.primitiveFileOpen(argCount); };
+            this.primitiveFunctions[154] = function (index, argCount, primMethod) { return this.primitiveFileRead(argCount); };
+            this.primitiveFunctions[155] = function (index, argCount, primMethod) { return this.primitiveFileSetPosition(argCount); };
+            this.primitiveFunctions[156] = function (index, argCount, primMethod) { return this.primitiveFileDelete(argCount); };
+            this.primitiveFunctions[157] = function (index, argCount, primMethod) { return this.primitiveFileSize(argCount); };
+            this.primitiveFunctions[158] = function (index, argCount, primMethod) { return this.primitiveFileWrite(argCount); };
+            this.primitiveFunctions[159] = function (index, argCount, primMethod) { return this.primitiveFileRename(argCount); };
+            this.primitiveFunctions[160] = function (index, argCount, primMethod) { return this.primitiveDirectoryCreate(argCount); /* new: primitiveAdoptInstance */ };
+            this.primitiveFunctions[161] = function (index, argCount, primMethod) { return this.primitiveDirectoryDelimitor(argCount); /* new: primitiveSetIdentityHash */ };
+            this.primitiveFunctions[162] = function (index, argCount, primMethod) { return this.primitiveDirectoryLookup(argCount); };
+            this.primitiveFunctions[163] = function (index, argCount, primMethod) { return this.primitiveDirectoryDelete(argCount); };
+            this.primitiveFunctions[169] = function (index, argCount, primMethod) { return this.primitiveDirectorySetMacTypeAndCreator(argCount);};
+            // Sound Primitives (170-199)
+            this.primitiveFunctions[170] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundStart', argCount); };
+            this.primitiveFunctions[171] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundStartWithSemaphore', argCount); };
+            this.primitiveFunctions[172] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundStop', argCount); };
+            this.primitiveFunctions[173] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundAvailableSpace', argCount); };
+            this.primitiveFunctions[174] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySamples', argCount); };
+            this.primitiveFunctions[175] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySilence', argCount); };
+            this.primitiveFunctions[176] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundGenerationPlugin', 'primWaveTableSoundmixSampleCountintostartingAtpan', argCount); };
+            this.primitiveFunctions[177] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundGenerationPlugin', 'primFMSoundmixSampleCountintostartingAtpan', argCount); };
+            this.primitiveFunctions[178] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundGenerationPlugin', 'primPluckedSoundmixSampleCountintostartingAtpan', argCount); };
+            this.primitiveFunctions[179] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundGenerationPlugin', 'primSampledSoundmixSampleCountintostartingAtpan', argCount); };
+            this.primitiveFunctions[180] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixFMSound', argCount); };
+            this.primitiveFunctions[181] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixPluckedSound', argCount); };
+            this.primitiveFunctions[182] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundGenerationPlugin', 'oldprimSampledSoundmixSampleCountintostartingAtleftVolrightVol', argCount); };
+            this.primitiveFunctions[183] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundGenerationPlugin', 'primitiveApplyReverb', argCount); };
+            this.primitiveFunctions[184] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixLoopedSampledSound', argCount); };
+            this.primitiveFunctions[185] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixSampledSound', argCount); };
+            // =186-188: was unused";
+            this.primitiveFunctions[188] = function (index, argCount, primMethod) {  }; //NOOP
+            this.primitiveFunctions[189] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundInsertSamples', argCount); };
+            this.primitiveFunctions[190] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundStartRecording', argCount); };
+            this.primitiveFunctions[191] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundStopRecording', argCount); };
+            this.primitiveFunctions[192] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundGetRecordingSampleRate', argCount); };
+            this.primitiveFunctions[193] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundRecordSamples', argCount); };
+            this.primitiveFunctions[194] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundSetRecordLevel', argCount); };
+            // Networking Primitives (200-229)";
+            this.primitiveFunctions[200] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveInitializeNetwork', argCount); };
+            this.primitiveFunctions[201] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveResolverStartNameLookup', argCount); };
+            this.primitiveFunctions[202] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveResolverNameLookupResult', argCount); };
+            this.primitiveFunctions[203] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveResolverStartAddressLookup', argCount); };
+            this.primitiveFunctions[204] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveResolverAddressLookupResult', argCount); };
+            this.primitiveFunctions[205] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveResolverAbortLookup', argCount); };
+            this.primitiveFunctions[206] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveResolverLocalAddress', argCount); };
+            this.primitiveFunctions[207] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveResolverStatus', argCount); };
+            this.primitiveFunctions[208] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveResolverError', argCount); };
+            this.primitiveFunctions[209] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketCreate', argCount); };
+            this.primitiveFunctions[210] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketDestroy', argCount); };
+            this.primitiveFunctions[211] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectionStatus', argCount); };
+            this.primitiveFunctions[212] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketError', argCount); };
+            this.primitiveFunctions[213] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketLocalAddress', argCount); };
+            this.primitiveFunctions[214] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketLocalPort', argCount); };
+            this.primitiveFunctions[215] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketRemoteAddress', argCount); };
+            this.primitiveFunctions[216] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketRemotePort', argCount); };
+            this.primitiveFunctions[217] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectToPort', argCount); };
+            this.primitiveFunctions[218] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketListenOnPort', argCount); };
+            this.primitiveFunctions[219] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketCloseConnection', argCount); };
+            this.primitiveFunctions[220] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketAbortConnection', argCount); };
+            this.primitiveFunctions[221] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketReceiveDataBufCount', argCount); };
+            this.primitiveFunctions[222] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketReceiveDataAvailable', argCount); };
+            this.primitiveFunctions[223] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketSendDataBufCount', argCount); };
+            this.primitiveFunctions[224] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketSendDone', argCount); };
+            this.primitiveFunctions[234] = function (index, argCount, primMethod) { return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveDecompressFromByteArray', argCount); };
+            this.primitiveFunctions[235] = function (index, argCount, primMethod) { return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompareString', argCount); };
+            this.primitiveFunctions[236] = function (index, argCount, primMethod) { return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveConvert8BitSigned', argCount); };
+            this.primitiveFunctions[237] = function (index, argCount, primMethod) { return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompressToByteArray', argCount); };
+            this.primitiveFunctions[238] = function (index, argCount, primMethod) { return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortOpen', argCount); };
+            this.primitiveFunctions[239] = function (index, argCount, primMethod) { return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortClose', argCount); };
+            this.primitiveFunctions[240] = function (index, argCount, primMethod) { return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortWrite', argCount); };
+            this.primitiveFunctions[241] = function (index, argCount, primMethod) { return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortRead', argCount); };
+            this.primitiveFunctions[243] = function (index, argCount, primMethod) { return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveTranslateStringWithTable', argCount); };
+            this.primitiveFunctions[244] = function (index, argCount, primMethod) { return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindFirstInString' , argCount); };
+            this.primitiveFunctions[245] = function (index, argCount, primMethod) { return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveIndexOfAsciiInString', argCount); };
+            this.primitiveFunctions[246] = function (index, argCount, primMethod) { return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount); };
+        }
     }
 },
 'dispatch', {

@@ -1362,11 +1362,16 @@ Object.subclass('Squeak.Object',
                         this.float = 0.0;
                     } else
                         this.words = new Uint32Array(indexableSize);
-        } else // Bytes
+        } else { // Bytes
+            if (this.format >= 12) {
+                this.compiled = false;
+                this.ic = new Array();
+            }
             if (indexableSize > 0) {
                 // this.format |= -indexableSize & 3;       //deferred to writeTo()
                 this.bytes = new Uint8Array(indexableSize); //Methods require further init of pointers
             }
+        }
 
 //      Definition of Squeak's format code...
 //
@@ -1429,6 +1434,8 @@ Object.subclass('Squeak.Object',
                 oops = this.decodeWords(numLits+1, this.bits, littleEndian);
             this.pointers = this.decodePointers(numLits+1, oops, oopMap); //header+lits
             this.bytes = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this.format & 3);
+            this.compiled = false;
+            this.ic = new Array(this.bytes.byteLength);
         } else if (this.format >= 8) {
             //Formats 8..11 -- ByteArrays (and ByteStrings)
             if (nWords > 0)
@@ -1877,6 +1884,8 @@ Object.subclass('Squeak.Interpreter',
         this.reclaimableContextCount = 0;
         this.nRecycledContexts = 0;
         this.nAllocatedContexts = 0;
+        this.lastFlush = 0;
+        this.mayBeFlushed = 0;
         this.methodCacheSize = 1024;
         this.methodCacheMask = this.methodCacheSize - 1;
         this.methodCacheRandomish = 0;
@@ -2359,18 +2368,42 @@ Object.subclass('Squeak.Interpreter',
 'sending', {
     send: function(selector, argCount, doSuper) {
         var newRcvr = this.stackValue(argCount);
+
+        var ic = this.method.ic[this.pc];
+        var entry;
+
         var lookupClass = this.getClass(newRcvr);
         if (doSuper) {
             lookupClass = this.method.methodClassForSuper();
             lookupClass = lookupClass.pointers[Squeak.Class_superclass];
         }
-        var entry = this.findSelectorInClass(selector, argCount, lookupClass);
+
+        if (!ic || (ic.added < this.mayBeFlushed && ic.added < Math.max(this.lastFlush, selector.lastFlush, ic.method.lastFlush))) {
+            entry = this.findSelectorInClass(selector, argCount, lookupClass);
+
+            entry.method.lastFlush = entry.method.lastFlush || 1;
+            selector.lastFlush = selector.lastFlush || 1;
+
+            this.method.ic[this.pc] = {
+                added: new Date().getTime(),
+                method: entry.method,
+                primIndex: entry.primIndex,
+                mClass: entry.mClass,
+                lkupClass: entry.lkupClass
+            }
+        } else if (ic.lkupClass !== lookupClass) {
+            entry = this.findSelectorInClass(selector, argCount, lookupClass);            
+        } else {
+            entry = ic;
+        }
+
         if (entry.primIndex) {
             //note details for verification of at/atput primitives
             this.verifyAtSelector = selector;
             this.verifyAtClass = lookupClass;
         }
-        this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
+
+        this.executeNewMethod(newRcvr, entry.method, argCount, entry.primIndex, entry.mClass, selector);
     },
     sendAsPrimitiveFailure: function(rcvr, method, argCount) {
         this.executeNewMethod(rcvr, method, argCount, 0);
@@ -2647,6 +2680,8 @@ Object.subclass('Squeak.Interpreter',
         return entry;
     },
     flushMethodCache: function() { //clear all cache entries (prim 89)
+        this.lastFlush = new Date().getTime();
+        this.mayBeFlushed = new Date().getTime();
         for (var i = 0; i < this.methodCacheSize; i++) {
             this.methodCache[i].selector = null;   // mark it free
             this.methodCache[i].method = null;  // release the method
@@ -2654,6 +2689,8 @@ Object.subclass('Squeak.Interpreter',
         return true;
     },
     flushMethodCacheForSelector: function(selector) { //clear cache entries for selector (prim 119)
+        selector.lastFlush = new Date().getTime();
+        this.mayBeFlushed = new Date().getTime();
         for (var i = 0; i < this.methodCacheSize; i++)
             if (this.methodCache[i].selector === selector) {
                 this.methodCache[i].selector = null;   // mark it free
@@ -2662,6 +2699,8 @@ Object.subclass('Squeak.Interpreter',
         return true;
     },
     flushMethodCacheForMethod: function(method) { //clear cache entries for method (prim 116)
+        method.lastFlush = new Date().getTime();
+        this.mayBeFlushed = new Date().getTime();
         for (var i = 0; i < this.methodCacheSize; i++)
             if (this.methodCache[i].method === method) {
                 this.methodCache[i].selector = null;   // mark it free

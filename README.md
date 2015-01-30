@@ -101,6 +101,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2015-01-30: 0.7.3 JSBridge: fix closure callbacks
     2015-01-25: 0.7.2 JSBridge: add asJSObject
     2014-12-22: 0.7.1 cursor shapes
     2014-12-04: 0.7 support finalization of weak references

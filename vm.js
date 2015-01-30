@@ -6016,6 +6016,8 @@ Object.subclass('Squeak.Primitives',
             // make array with expected number of arguments for block
             var numArgs = callback.block.pointers[Squeak.BlockContext_argumentCount],
                 args = [];
+            if (typeof numArgs !== 'number')
+                numArgs = callback.block.pointers[Squeak.Closure_numArgs];
             for (var i = 0; i < numArgs; i++)
                 args.push(callback.args[i]);
             return this.popNandPushIfOK(argCount, this.makeStArray(args, proxyClass));

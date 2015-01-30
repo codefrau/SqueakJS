@@ -1,7 +1,7 @@
 module('users.bert.SqueakJS.vm').requires().toRun(function() {
 "use strict";    
 /*
- * Copyright (c) 2013,2014 Bert Freudenberg
+ * Copyright (c) 2013-2015 Bert Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -28,7 +28,7 @@ window.Squeak = users.bert.SqueakJS.vm;
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 0.7.2",
+    vmVersion: "SqueakJS 0.7.3",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -6016,6 +6016,8 @@ Object.subclass('Squeak.Primitives',
             // make array with expected number of arguments for block
             var numArgs = callback.block.pointers[Squeak.BlockContext_argumentCount],
                 args = [];
+            if (typeof numArgs !== 'number')
+                numArgs = callback.block.pointers[Squeak.Closure_numArgs];
             for (var i = 0; i < numArgs; i++)
                 args.push(callback.args[i]);
             return this.popNandPushIfOK(argCount, this.makeStArray(args, proxyClass));

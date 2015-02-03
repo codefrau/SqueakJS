@@ -1886,12 +1886,6 @@ Object.subclass('Squeak.Interpreter',
         this.nAllocatedContexts = 0;
         this.lastFlush = 0;
         this.mayBeFlushed = 0;
-        this.methodCacheSize = 1024;
-        this.methodCacheMask = this.methodCacheSize - 1;
-        this.methodCacheRandomish = 0;
-        this.methodCache = [];
-        for (var i = 0; i < this.methodCacheSize; i++)
-            this.methodCache[i] = {lkupClass: null, selector: null, method: null, primIndex: 0, argCount: 0, mClass: null};
         this.breakOutOfInterpreter = false;
         this.breakOutTick = 0;
         this.breakOnMethod = null; // method to break on
@@ -2409,8 +2403,11 @@ Object.subclass('Squeak.Interpreter',
         this.executeNewMethod(rcvr, method, argCount, 0);
     },
     findSelectorInClass: function(selector, argCount, startingClass) {
-        var cacheEntry = this.findMethodCacheEntry(selector, startingClass);
-        if (cacheEntry.method) return cacheEntry; // Found it in the method cache
+        var cacheEntry = {
+            selector: selector,
+            lkupClass: startingClass
+        };
+
         var currentClass = startingClass;
         var mDict;
         while (!currentClass.isNil) {
@@ -2656,56 +2653,19 @@ Object.subclass('Squeak.Interpreter',
         this.send(runWithIn, 3, false);
         return true;
     },
-    findMethodCacheEntry: function(selector, lkupClass) {
-        //Probe the cache, and return the matching entry if found
-        //Otherwise return one that can be used (selector and class set) with method == null.
-        //Initial probe is class xor selector, reprobe delta is selector
-        //We do not try to optimize probe time -- all are equally 'fast' compared to lookup
-        //Instead we randomize the reprobe so two or three very active conflicting entries
-        //will not keep dislodging each other
-        var entry;
-        this.methodCacheRandomish = (this.methodCacheRandomish + 1) & 3;
-        var firstProbe = (selector.hash ^ lkupClass.hash) & this.methodCacheMask;
-        var probe = firstProbe;
-        for (var i = 0; i < 4; i++) { // 4 reprobes for now
-            entry = this.methodCache[probe];
-            if (entry.selector === selector && entry.lkupClass === lkupClass) return entry;
-            if (i === this.methodCacheRandomish) firstProbe = probe;
-            probe = (probe + selector.hash) & this.methodCacheMask;
-        }
-        entry = this.methodCache[firstProbe];
-        entry.lkupClass = lkupClass;
-        entry.selector = selector;
-        entry.method = null;
-        return entry;
-    },
     flushMethodCache: function() { //clear all cache entries (prim 89)
         this.lastFlush = new Date().getTime();
         this.mayBeFlushed = new Date().getTime();
-        for (var i = 0; i < this.methodCacheSize; i++) {
-            this.methodCache[i].selector = null;   // mark it free
-            this.methodCache[i].method = null;  // release the method
-        }
         return true;
     },
     flushMethodCacheForSelector: function(selector) { //clear cache entries for selector (prim 119)
         selector.lastFlush = new Date().getTime();
         this.mayBeFlushed = new Date().getTime();
-        for (var i = 0; i < this.methodCacheSize; i++)
-            if (this.methodCache[i].selector === selector) {
-                this.methodCache[i].selector = null;   // mark it free
-                this.methodCache[i].method = null;  // release the method
-            }
         return true;
     },
     flushMethodCacheForMethod: function(method) { //clear cache entries for method (prim 116)
         method.lastFlush = new Date().getTime();
         this.mayBeFlushed = new Date().getTime();
-        for (var i = 0; i < this.methodCacheSize; i++)
-            if (this.methodCache[i].method === method) {
-                this.methodCache[i].selector = null;   // mark it free
-                this.methodCache[i].method = null;  // release the method
-            }
         return true;
     },
     flushMethodCacheAfterBecome: function(mutations) {

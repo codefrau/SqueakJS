@@ -164,7 +164,98 @@ to single-step.
         p76: 1,
         p77: 2
     },
+    generateStartOfNumericOp: function(bytes){
+        var push1 = this.getPush(bytes[0]);
+        var push2 = this.getPush(bytes[1]);
+
+        var op = {
+            nb0: "vm.primHandler.signed32BitIntegerFor(push1 + push2)",
+            nb1: "vm.primHandler.signed32BitIntegerFor(push1 - push2)",
+            nb2: "push1 < push2 ? vm.trueObj : vm.falseObj",
+            nb3: "push1 > push2 ? vm.trueObj : vm.falseObj",
+            nb4: "push1 <= push2 ? vm.trueObj : vm.falseObj",
+            nb5: "push1 >= push2 ? vm.trueObj : vm.falseObj",
+            nb6: "push1 === push2 ? vm.trueObj : vm.falseObj",
+            nb7: "push1 !== push2 ? vm.trueObj : vm.falseObj"
+        };
+
+        var operation = op["n" + bytes[2].toString(16)].replace("push1", push1).replace("push2", push2);
+
+
+        if (typeof push1 === "number" && typeof push2 === "number") {
+            this.source.push("if (true) {");
+        } else if (typeof push1 === "number") {
+            this.source.push("if (typeof ", push2, " === 'number') {");
+        } else if (typeof push2 === "number") {
+            this.source.push("if (typeof ", push1, "  === 'number') {");
+        } else {
+            this.source.push("if (typeof ", push1, "  === 'number' && typeof ", push2, " === 'number') {");    
+        }
+        return operation;
+    },
+
     peepholes: [
+        { // push push numericOp conditionalJump
+            matches: function (counter, byte) {
+                var pushCodes = [0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38, 0x40, 0x48, 0x50, 0x58, 0x70];
+                var flag = (byte & 0xF8);
+                switch (counter) {
+                    case 0:
+                        return pushCodes.indexOf(flag) > -1;
+                    case 1:
+                        return pushCodes.indexOf(flag) > -1;
+                    case 2:
+                        return flag === 0xB0;
+                    case 3:
+                        return byte === 0xA8 || byte === 0x98;
+                }
+            },
+            byteCount: 4,
+            generate: function (bytes) {
+                // // 0x98: short conditional jump
+                // // 0xA8: long conditional jump
+
+                var jumpByte = bytes[3];
+                var isShort = jumpByte === 0x98;
+                var condition = !isShort && jumpByte < 0xAC;
+                var pcOfNextByte = this.pc + 3 + (isShort?0:1);
+                var distance = isShort ? (jumpByte & 0x07) + 1 : ((jumpByte & 3) * 256 + this.method.bytes[pcOfNextByte-1]);
+                var destination = pcOfNextByte + distance;
+
+                if (this.debug) { this.generateDebugCode("peephole-optimized push push numericOp "+ (isShort?"short":"long")+ "ConditionalJump by "+distance+" to " + destination); }
+                this.generateLabel();
+                this.suppressNextLabel = true;
+                //we need a label at the destination!
+                this.needsLabel[destination] = true;
+                this.needsLabel[pcOfNextByte] = true;
+
+                var operation = this.generateStartOfNumericOp(bytes);
+
+                this.source.push("var cond = "+operation+";\n");
+
+                // true?
+                this.source.push("if(cond === vm."+condition+"Obj)\n",
+                    "{",
+                    "vm.pc = ", destination, ";\n",
+                    "bytecodes -= ", distance, ";\n",
+                    "}");
+
+                this.source.push(
+                    // not true nor false?
+                    "else if(cond !== vm.", !condition, "Obj){vm.sp++; vm.pc = ", pcOfNextByte, "; vm.send(vm.specialObjects[", Squeak.splOb_SelectorMustBeBoolean, "], 0, false); return bytecodes + ", pcOfNextByte, "}\n",
+                    // false!
+                    "else {vm.pc = ", pcOfNextByte, "; }\n");
+
+                if (this.singleStep) this.source.push(
+                    "if (vm.breakOutOfInterpreter) return bytecodes + ", destination,";\n",
+                    "else ");
+                this.source.push("continue;\n",
+                "}"
+                );
+
+                return;
+            }
+        },
         { // push push numericOp
             matches: function (counter, byte) {
                 var pushCodes = [0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38, 0x40, 0x48, 0x50, 0x58, 0x70];
@@ -180,23 +271,7 @@ to single-step.
             },
             byteCount: 3,
             generate: function (bytes) {
-                var push1 = this.getPush(bytes[0]);
-                var push2 = this.getPush(bytes[1]);
-
-                var op = {
-                    nb0: "vm.primHandler.signed32BitIntegerFor(push1 + push2)",
-                    nb1: "vm.primHandler.signed32BitIntegerFor(push1 - push2)",
-                    nb2: "push1 < push2 ? vm.trueObj : vm.falseObj",
-                    nb3: "push1 > push2 ? vm.trueObj : vm.falseObj",
-                    nb4: "push1 <= push2 ? vm.trueObj : vm.falseObj",
-                    nb5: "push1 >= push2 ? vm.trueObj : vm.falseObj",
-                    nb6: "push1 === push2 ? vm.trueObj : vm.falseObj",
-                    nb7: "push1 !== push2 ? vm.trueObj : vm.falseObj"
-                };
-
-                var operation = op["n" + bytes[2].toString(16)].replace("push1", push1).replace("push2", push2);
-
-                if (this.debug) { this.generateDebugCode("optimized push push numericop"); }
+                if (this.debug) { this.generateDebugCode("peephole-optimized push push numericop"); }
                 this.generateLabel();
                 this.suppressNextLabel = true;
 
@@ -204,25 +279,24 @@ to single-step.
                 //we need a label at the destination!
                 this.needsLabel[jumpOver] = true; // obviously
 
-                if (typeof push1 === "number" && typeof push2 === "number") {
-                    this.source.push("if (true) {");
-                } else if (typeof push1 === "number") {
-                    this.source.push("if (typeof ", push2, " === 'number') {");
-                } else if (typeof push2 === "number") {
-                    this.source.push("if (typeof ", push1, "  === 'number') {");
-                } else {
-                    this.source.push("if (typeof ", push1, "  === 'number' && typeof ", push2, " === 'number') {");    
-                }
+                var operation = this.generateStartOfNumericOp(bytes);
 
                 this.source.push(
                     "stack[++vm.sp] = ", operation ,";",
-                    "vm.pc = ", jumpOver, "; continue;",
+                    "vm.pc = ", jumpOver, ";"
+                );
+                if (this.singleStep) this.source.push(
+                    "if (vm.breakOutOfInterpreter) return bytecodes + ", destination,";\n",
+                    "else ");
+                this.source.push("continue;\n",
                 "}"
                 );
 
+
                 return;
             }
-        }, { // push popReturn
+        },
+        { // push popReturn
             matches: function (counter, byte) {
                 var pushCodes = [0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38, 0x40, 0x48, 0x50, 0x58, 0x70];
                 switch (counter) {
@@ -234,7 +308,7 @@ to single-step.
             },
             byteCount: 2,
             generate: function (bytes) {
-                if (this.debug) { this.generateDebugCode("optimized push popReturn"); }
+                if (this.debug) { this.generateDebugCode("peephole-optimized push popReturn"); }
                 this.generateLabel();
                 this.suppressNextLabel = true;
                 this.source.push(

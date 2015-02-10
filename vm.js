@@ -3251,388 +3251,390 @@ Object.subclass('Squeak.Primitives',
     },
 
     initPrimitives: function() {
+
+        var notImplemented = function (index, argCount, primMethod, primHandler) { console.error("primitive " + index + " not implemented yet"); return false; };
         this.primitiveFunctions = {
-            1: function (index, argCount, primMethod) { return this.popNandPushIntIfOK(2,this.stackInteger(1) + this.stackInteger(0));  /* Integer.add */ },
-            2: function (index, argCount, primMethod) { return this.popNandPushIntIfOK(2,this.stackInteger(1) - this.stackInteger(0));  /* Integer.subtract */ },
-            3: function (index, argCount, primMethod) { return this.pop2andPushBoolIfOK(this.stackInteger(1) < this.stackInteger(0));   /* Integer.less */ },
-            4: function (index, argCount, primMethod) { return this.pop2andPushBoolIfOK(this.stackInteger(1) > this.stackInteger(0));   /* Integer.greater */ },
-            5: function (index, argCount, primMethod) { return this.pop2andPushBoolIfOK(this.stackInteger(1) <= this.stackInteger(0));  /* Integer.leq */ },
-            6: function (index, argCount, primMethod) { return this.pop2andPushBoolIfOK(this.stackInteger(1) >= this.stackInteger(0));  /* Integer.geq */ },
-            7: function (index, argCount, primMethod) { return this.pop2andPushBoolIfOK(this.stackInteger(1) === this.stackInteger(0)); /* Integer.equal */ },
-            8: function (index, argCount, primMethod) { return this.pop2andPushBoolIfOK(this.stackInteger(1) !== this.stackInteger(0)); /* Integer.notequal */ },
-            9: function (index, argCount, primMethod) { return this.popNandPushIntIfOK(2,this.stackInteger(1) * this.stackInteger(0));  /* Integer.multiply * */ },
-            10: function (index, argCount, primMethod) { return this.popNandPushIntIfOK(2,this.vm.quickDivide(this.stackInteger(1),this.stackInteger(0)));  /* Integer.divide /  (fails unless exa) */ },
-            11: function (index, argCount, primMethod) { return this.popNandPushIntIfOK(2,this.vm.mod(this.stackInteger(1),this.stackInteger(0)));  /* Integer.mod \\ */ },
-            12: function (index, argCount, primMethod) { return this.popNandPushIntIfOK(2,this.vm.div(this.stackInteger(1),this.stackInteger(0)));  /* Integer.div /* */ },
-            13: function (index, argCount, primMethod) { return this.popNandPushIntIfOK(2,this.stackInteger(1) / this.stackInteger(0) | 0);  /* Integer.quo */ },
-            14: function (index, argCount, primMethod) { return this.popNandPushIfOK(2,this.doBitAnd());  /* SmallInt.bitAnd */ },
-            15: function (index, argCount, primMethod) { return this.popNandPushIfOK(2,this.doBitOr());  /* SmallInt.bitOr */ },
-            16: function (index, argCount, primMethod) { return this.popNandPushIfOK(2,this.doBitXor());  /* SmallInt.bitXor */ },
-            17: function (index, argCount, primMethod) { return this.popNandPushIfOK(2,this.doBitShift());  /* SmallInt.bitShift */ },
-            18: function (index, argCount, primMethod) { return this.primitiveMakePoint(argCount, false); },
-            19: function (index, argCount, primMethod) { return false;                                 /* Guard primitive for simulation -- *must* fail */ },
+            1: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIntIfOK(2,primHandler.stackInteger(1) + primHandler.stackInteger(0));  /* Integer.add */ },
+            2: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIntIfOK(2,primHandler.stackInteger(1) - primHandler.stackInteger(0));  /* Integer.subtract */ },
+            3: function (index, argCount, primMethod, primHandler) { return primHandler.pop2andPushBoolIfOK(primHandler.stackInteger(1) < primHandler.stackInteger(0));   /* Integer.less */ },
+            4: function (index, argCount, primMethod, primHandler) { return primHandler.pop2andPushBoolIfOK(primHandler.stackInteger(1) > primHandler.stackInteger(0));   /* Integer.greater */ },
+            5: function (index, argCount, primMethod, primHandler) { return primHandler.pop2andPushBoolIfOK(primHandler.stackInteger(1) <= primHandler.stackInteger(0));  /* Integer.leq */ },
+            6: function (index, argCount, primMethod, primHandler) { return primHandler.pop2andPushBoolIfOK(primHandler.stackInteger(1) >= primHandler.stackInteger(0));  /* Integer.geq */ },
+            7: function (index, argCount, primMethod, primHandler) { return primHandler.pop2andPushBoolIfOK(primHandler.stackInteger(1) === primHandler.stackInteger(0)); /* Integer.equal */ },
+            8: function (index, argCount, primMethod, primHandler) { return primHandler.pop2andPushBoolIfOK(primHandler.stackInteger(1) !== primHandler.stackInteger(0)); /* Integer.notequal */ },
+            9: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIntIfOK(2,primHandler.stackInteger(1) * primHandler.stackInteger(0));  /* Integer.multiply * */ },
+            10: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIntIfOK(2,primHandler.vm.quickDivide(primHandler.stackInteger(1),primHandler.stackInteger(0)));  /* Integer.divide /  (fails unless exa) */ },
+            11: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIntIfOK(2,primHandler.vm.mod(primHandler.stackInteger(1),primHandler.stackInteger(0)));  /* Integer.mod \\ */ },
+            12: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIntIfOK(2,primHandler.vm.div(primHandler.stackInteger(1),primHandler.stackInteger(0)));  /* Integer.div /* */ },
+            13: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIntIfOK(2,primHandler.stackInteger(1) / primHandler.stackInteger(0) | 0);  /* Integer.quo */ },
+            14: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(2,primHandler.doBitAnd());  /* SmallInt.bitAnd */ },
+            15: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(2,primHandler.doBitOr());  /* SmallInt.bitOr */ },
+            16: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(2,primHandler.doBitXor());  /* SmallInt.bitXor */ },
+            17: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(2,primHandler.doBitShift());  /* SmallInt.bitShift */ },
+            18: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveMakePoint(argCount, false); },
+            19: function (index, argCount, primMethod, primHandler) { return false;                                 /* Guard primitive for simulation -- *must* fail */ },
             // LargeInteger Primitives (20-39)",
             // 32-bit logic is aliased to Integer prims above",
-            20: function (index, argCount, primMethod) { return false; /* primitiveRemLargeIntegers */ },
-            21: function (index, argCount, primMethod) { return false; /* primitiveAddLargeIntegers */ },
-            22: function (index, argCount, primMethod) { return false; /* primitiveSubtractLargeIntegers */ },
-            23: function (index, argCount, primMethod) { return false; /* primitiveLessThanLargeIntegers */ },
-            24: function (index, argCount, primMethod) { return false; /* primitiveGreaterThanLargeIntegers */ },
-            25: function (index, argCount, primMethod) { return false; /* primitiveLessOrEqualLargeIntegers */ },
-            26: function (index, argCount, primMethod) { return false; /* primitiveGreaterOrEqualLargeIntegers */ },
-            27: function (index, argCount, primMethod) { return false; /* primitiveEqualLargeIntegers */ },
-            28: function (index, argCount, primMethod) { return false; /* primitiveNotEqualLargeIntegers */ },
-            29: function (index, argCount, primMethod) { return false; /* primitiveMultiplyLargeIntegers */ },
-            30: function (index, argCount, primMethod) { return false; /* primitiveDivideLargeIntegers */ },
-            31: function (index, argCount, primMethod) { return false; /* primitiveModLargeIntegers */ },
-            32: function (index, argCount, primMethod) { return false; /* primitiveDivLargeIntegers */ },
-            33: function (index, argCount, primMethod) { return false; /* primitiveQuoLargeIntegers */ },
-            34: function (index, argCount, primMethod) { return false; /* primitiveBitAndLargeIntegers */ },
-            35: function (index, argCount, primMethod) { return false; /* primitiveBitOrLargeIntegers */ },
-            36: function (index, argCount, primMethod) { return false; /* primitiveBitXorLargeIntegers */ },
-            37: function (index, argCount, primMethod) { return false; /* primitiveBitShiftLargeIntegers */ },
-            38: function (index, argCount, primMethod) { return this.popNandPushIfOK(2, this.objectAt(false,false,false)); /* Float basicAt */ },
-            39: function (index, argCount, primMethod) { return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); /* Float basicAtPut */ },
+            20: function (index, argCount, primMethod, primHandler) { return false; /* primitiveRemLargeIntegers */ },
+            21: function (index, argCount, primMethod, primHandler) { return false; /* primitiveAddLargeIntegers */ },
+            22: function (index, argCount, primMethod, primHandler) { return false; /* primitiveSubtractLargeIntegers */ },
+            23: function (index, argCount, primMethod, primHandler) { return false; /* primitiveLessThanLargeIntegers */ },
+            24: function (index, argCount, primMethod, primHandler) { return false; /* primitiveGreaterThanLargeIntegers */ },
+            25: function (index, argCount, primMethod, primHandler) { return false; /* primitiveLessOrEqualLargeIntegers */ },
+            26: function (index, argCount, primMethod, primHandler) { return false; /* primitiveGreaterOrEqualLargeIntegers */ },
+            27: function (index, argCount, primMethod, primHandler) { return false; /* primitiveEqualLargeIntegers */ },
+            28: function (index, argCount, primMethod, primHandler) { return false; /* primitiveNotEqualLargeIntegers */ },
+            29: function (index, argCount, primMethod, primHandler) { return false; /* primitiveMultiplyLargeIntegers */ },
+            30: function (index, argCount, primMethod, primHandler) { return false; /* primitiveDivideLargeIntegers */ },
+            31: function (index, argCount, primMethod, primHandler) { return false; /* primitiveModLargeIntegers */ },
+            32: function (index, argCount, primMethod, primHandler) { return false; /* primitiveDivLargeIntegers */ },
+            33: function (index, argCount, primMethod, primHandler) { return false; /* primitiveQuoLargeIntegers */ },
+            34: function (index, argCount, primMethod, primHandler) { return false; /* primitiveBitAndLargeIntegers */ },
+            35: function (index, argCount, primMethod, primHandler) { return false; /* primitiveBitOrLargeIntegers */ },
+            36: function (index, argCount, primMethod, primHandler) { return false; /* primitiveBitXorLargeIntegers */ },
+            37: function (index, argCount, primMethod, primHandler) { return false; /* primitiveBitShiftLargeIntegers */ },
+            38: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(2, primHandler.objectAt(false,false,false)); /* Float basicAt */ },
+            39: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(3, primHandler.objectAtPut(false,false,false)); /* Float basicAtPut */ },
             // Float Primitives (40-59)
-            40: function (index, argCount, primMethod) { return this.popNandPushFloatIfOK(1,this.stackInteger(0)); /* primitiveAsFloat */ },
-            41: function (index, argCount, primMethod) { return this.popNandPushFloatIfOK(2,this.stackFloat(1)+this.stackFloat(0));  /* Float + */ },
-            42: function (index, argCount, primMethod) { return this.popNandPushFloatIfOK(2,this.stackFloat(1)-this.stackFloat(0));  /* Float - */ },
-            43: function (index, argCount, primMethod) { return this.pop2andPushBoolIfOK(this.stackFloat(1)<this.stackFloat(0));  /* Float < */ },
-            44: function (index, argCount, primMethod) { return this.pop2andPushBoolIfOK(this.stackFloat(1)>this.stackFloat(0));  /* Float > */ },
-            45: function (index, argCount, primMethod) { return this.pop2andPushBoolIfOK(this.stackFloat(1)<=this.stackFloat(0));  /* Float <= */ },
-            46: function (index, argCount, primMethod) { return this.pop2andPushBoolIfOK(this.stackFloat(1)>=this.stackFloat(0));  /* Float >= */ },
-            47: function (index, argCount, primMethod) { return this.pop2andPushBoolIfOK(this.stackFloat(1)===this.stackFloat(0));  /* Float = */ },
-            48: function (index, argCount, primMethod) { return this.pop2andPushBoolIfOK(this.stackFloat(1)!==this.stackFloat(0));  /* Float != */ },
-            49: function (index, argCount, primMethod) { return this.popNandPushFloatIfOK(2,this.stackFloat(1)*this.stackFloat(0));  /* Float.mul */ },
-            50: function (index, argCount, primMethod) { return this.popNandPushFloatIfOK(2,this.safeFDiv(this.stackFloat(1),this.stackFloat(0)));  /* Float.div */ },
-            51: function (index, argCount, primMethod) { return this.popNandPushIfOK(1,this.floatAsSmallInt(this.stackFloat(0)));  /* Float.asInteger */ },
-            52: function (index, argCount, primMethod) { return false; /* Float.fractionPart (modf) */ },
-            53: function (index, argCount, primMethod) { return this.popNandPushIntIfOK(1, this.frexp_exponent(this.stackFloat(0)) - 1); /* Float.exponent */ },
-            54: function (index, argCount, primMethod) { return this.popNandPushFloatIfOK(2, this.ldexp(this.stackFloat(1), this.stackFloat(0))); /* Float.timesTwoPower */ },
-            55: function (index, argCount, primMethod) { return this.popNandPushFloatIfOK(1, Math.sqrt(this.stackFloat(0))); /* SquareRoot */ },
-            56: function (index, argCount, primMethod) { return this.popNandPushFloatIfOK(1, Math.sin(this.stackFloat(0))); /* Sine */ },
-            57: function (index, argCount, primMethod) { return this.popNandPushFloatIfOK(1, Math.atan(this.stackFloat(0))); /* Arctan */ },
-            58: function (index, argCount, primMethod) { return this.popNandPushFloatIfOK(1, Math.log(this.stackFloat(0))); /* LogN */ },
-            59: function (index, argCount, primMethod) { return this.popNandPushFloatIfOK(1, Math.exp(this.stackFloat(0))); /* Exp */ },
+            40: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushFloatIfOK(1,primHandler.stackInteger(0)); /* primitiveAsFloat */ },
+            41: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushFloatIfOK(2,primHandler.stackFloat(1)+primHandler.stackFloat(0));  /* Float + */ },
+            42: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushFloatIfOK(2,primHandler.stackFloat(1)-primHandler.stackFloat(0));  /* Float - */ },
+            43: function (index, argCount, primMethod, primHandler) { return primHandler.pop2andPushBoolIfOK(primHandler.stackFloat(1)<primHandler.stackFloat(0));  /* Float < */ },
+            44: function (index, argCount, primMethod, primHandler) { return primHandler.pop2andPushBoolIfOK(primHandler.stackFloat(1)>primHandler.stackFloat(0));  /* Float > */ },
+            45: function (index, argCount, primMethod, primHandler) { return primHandler.pop2andPushBoolIfOK(primHandler.stackFloat(1)<=primHandler.stackFloat(0));  /* Float <= */ },
+            46: function (index, argCount, primMethod, primHandler) { return primHandler.pop2andPushBoolIfOK(primHandler.stackFloat(1)>=primHandler.stackFloat(0));  /* Float >= */ },
+            47: function (index, argCount, primMethod, primHandler) { return primHandler.pop2andPushBoolIfOK(primHandler.stackFloat(1)===primHandler.stackFloat(0));  /* Float = */ },
+            48: function (index, argCount, primMethod, primHandler) { return primHandler.pop2andPushBoolIfOK(primHandler.stackFloat(1)!==primHandler.stackFloat(0));  /* Float != */ },
+            49: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushFloatIfOK(2,primHandler.stackFloat(1)*primHandler.stackFloat(0));  /* Float.mul */ },
+            50: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushFloatIfOK(2,primHandler.safeFDiv(primHandler.stackFloat(1),primHandler.stackFloat(0)));  /* Float.div */ },
+            51: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(1,primHandler.floatAsSmallInt(primHandler.stackFloat(0)));  /* Float.asInteger */ },
+            52: function (index, argCount, primMethod, primHandler) { return false; /* Float.fractionPart (modf) */ },
+            53: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIntIfOK(1, primHandler.frexp_exponent(primHandler.stackFloat(0)) - 1); /* Float.exponent */ },
+            54: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushFloatIfOK(2, primHandler.ldexp(primHandler.stackFloat(1), primHandler.stackFloat(0))); /* Float.timesTwoPower */ },
+            55: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushFloatIfOK(1, Math.sqrt(primHandler.stackFloat(0))); /* SquareRoot */ },
+            56: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushFloatIfOK(1, Math.sin(primHandler.stackFloat(0))); /* Sine */ },
+            57: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushFloatIfOK(1, Math.atan(primHandler.stackFloat(0))); /* Arctan */ },
+            58: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushFloatIfOK(1, Math.log(primHandler.stackFloat(0))); /* LogN */ },
+            59: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushFloatIfOK(1, Math.exp(primHandler.stackFloat(0))); /* Exp */ },
             // Subscript and Stream Primitives (60-67)
-            60: function (index, argCount, primMethod) { return this.popNandPushIfOK(2, this.objectAt(false,false,false)); /* basicAt: */ },
-            61: function (index, argCount, primMethod) { return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); /* basicAt:put: */ },
-            62: function (index, argCount, primMethod) { return this.popNandPushIfOK(1, this.objectSize(false)); /* size */ },
-            63: function (index, argCount, primMethod) { return this.popNandPushIfOK(2, this.objectAt(false,true,false)); /* String.basicAt: */ },
-            64: function (index, argCount, primMethod) { return this.popNandPushIfOK(3, this.objectAtPut(false,true,false)); /* String.basicAt:put: */ },
-            65: function (index, argCount, primMethod) { return false; /* primitiveNext */ },
-            66: function (index, argCount, primMethod) { return false; /* primitiveNextPut */ },
-            67: function (index, argCount, primMethod) { return false; /* primitiveAtEnd */ },
+            60: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(2, primHandler.objectAt(false,false,false)); /* basicAt: */ },
+            61: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(3, primHandler.objectAtPut(false,false,false)); /* basicAt:put: */ },
+            62: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(1, primHandler.objectSize(false)); /* size */ },
+            63: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(2, primHandler.objectAt(false,true,false)); /* String.basicAt: */ },
+            64: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(3, primHandler.objectAtPut(false,true,false)); /* String.basicAt:put: */ },
+            65: function (index, argCount, primMethod, primHandler) { return false; /* primitiveNext */ },
+            66: function (index, argCount, primMethod, primHandler) { return false; /* primitiveNextPut */ },
+            67: function (index, argCount, primMethod, primHandler) { return false; /* primitiveAtEnd */ },
             // StorageManagement Primitives (68-79)
-            68: function (index, argCount, primMethod) { return this.popNandPushIfOK(2, this.objectAt(false,false,true)); /* Method.objectAt: */ },
-            69: function (index, argCount, primMethod) { return this.popNandPushIfOK(3, this.objectAtPut(false,false,true)); /* Method.objectAt:put: */ },
-            70: function (index, argCount, primMethod) { return this.popNandPushIfOK(1, this.instantiateClass(this.stackNonInteger(0), 0)); /* Class.new */ },
-            71: function (index, argCount, primMethod) { return this.popNandPushIfOK(2, this.instantiateClass(this.stackNonInteger(1), this.stackPos32BitInt(0))); /* Class.new: */ },
-            72: function (index, argCount, primMethod) { return this.primitiveArrayBecome(argCount, false); /* one way */ },
-            73: function (index, argCount, primMethod) { return this.popNandPushIfOK(2, this.objectAt(false,false,true)); /* instVarAt: */ },
-            74: function (index, argCount, primMethod) { return this.popNandPushIfOK(3, this.objectAtPut(false,false,true)); /* instVarAt:put: */ },
-            75: function (index, argCount, primMethod) { return this.popNandPushIfOK(1, this.stackNonInteger(0).hash); /* Object.identityHash */ },
-            76: function (index, argCount, primMethod) { return this.primitiveStoreStackp(argCount);  /* (Blue Book: primitiveAsObject) */ },
-            77: function (index, argCount, primMethod) { return this.popNandPushIfOK(1, this.someInstanceOf(this.stackNonInteger(0))); /* Class.someInstance */ },
-            78: function (index, argCount, primMethod) { return this.popNandPushIfOK(1, this.nextInstanceAfter(this.stackNonInteger(0))); /* Object.nextInstance */ },
-            79: function (index, argCount, primMethod) { return this.primitiveNewMethod(argCount); /* Compiledmethod.new */ },
+            68: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(2, primHandler.objectAt(false,false,true)); /* Method.objectAt: */ },
+            69: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(3, primHandler.objectAtPut(false,false,true)); /* Method.objectAt:put: */ },
+            70: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(1, primHandler.instantiateClass(primHandler.stackNonInteger(0), 0)); /* Class.new */ },
+            71: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(2, primHandler.instantiateClass(primHandler.stackNonInteger(1), primHandler.stackPos32BitInt(0))); /* Class.new: */ },
+            72: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveArrayBecome(argCount, false); /* one way */ },
+            73: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(2, primHandler.objectAt(false,false,true)); /* instVarAt: */ },
+            74: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(3, primHandler.objectAtPut(false,false,true)); /* instVarAt:put: */ },
+            75: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(1, primHandler.stackNonInteger(0).hash); /* Object.identityHash */ },
+            76: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveStoreStackp(argCount);  /* (Blue Book: primitiveAsObject) */ },
+            77: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(1, primHandler.someInstanceOf(primHandler.stackNonInteger(0))); /* Class.someInstance */ },
+            78: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(1, primHandler.nextInstanceAfter(primHandler.stackNonInteger(0))); /* Object.nextInstance */ },
+            79: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveNewMethod(argCount); /* Compiledmethod.new */ },
             // Control Primitives (80-89)
-            80: function (index, argCount, primMethod) { return this.popNandPushIfOK(2,this.doBlockCopy()); /* blockCopy: */ },
-            81: function (index, argCount, primMethod) { return this.primitiveBlockValue(argCount); /* BlockContext.value */ },
-            82: function (index, argCount, primMethod) { return this.primitiveBlockValueWithArgs(argCount); /* BlockContext.valueWithArguments: */ },
-            83: function (index, argCount, primMethod) { return this.vm.primitivePerform(argCount); /* Object.perform:(with:)* */ },
-            84: function (index, argCount, primMethod) { return this.vm.primitivePerformWithArgs(argCount, false); /*  Object.perform:withArguments: */ },
-            85: function (index, argCount, primMethod) { return this.primitiveSignal(); /* Semaphore.wait */ },
-            86: function (index, argCount, primMethod) { return this.primitiveWait(); /* Semaphore.wait */ },
-            87: function (index, argCount, primMethod) { return this.primitiveResume(); /* Process.resume */ },
-            88: function (index, argCount, primMethod) { return this.primitiveSuspend(); /* Process.suspend */ },
-            89: function (index, argCount, primMethod) { return this.vm.flushMethodCache(); /*primitiveFlushCache */ },
+            80: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(2,primHandler.doBlockCopy()); /* blockCopy: */ },
+            81: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveBlockValue(argCount); /* BlockContext.value */ },
+            82: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveBlockValueWithArgs(argCount); /* BlockContext.valueWithArguments: */ },
+            83: function (index, argCount, primMethod, primHandler) { return primHandler.vm.primitivePerform(argCount); /* Object.perform:(with:)* */ },
+            84: function (index, argCount, primMethod, primHandler) { return primHandler.vm.primitivePerformWithArgs(argCount, false); /*  Object.perform:withArguments: */ },
+            85: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveSignal(); /* Semaphore.wait */ },
+            86: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveWait(); /* Semaphore.wait */ },
+            87: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveResume(); /* Process.resume */ },
+            88: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveSuspend(); /* Process.suspend */ },
+            89: function (index, argCount, primMethod, primHandler) { return primHandler.vm.flushMethodCache(); /*primitiveFlushCache */ },
             // Input/Output Primitives (90-109)",
-            90: function (index, argCount, primMethod) { return this.primitiveMousePoint(argCount); /* mousePoint */ },
-            91: function (index, argCount, primMethod) { return this.primitiveTestDisplayDepth(argCount); /* cursorLocPut in old images */ },
-            // 92: function (index, argCount, primMethod) { return false; /* primitiveSetDisplayMode */ },
-            93: function (index, argCount, primMethod) { return this.primitiveInputSemaphore(argCount); },
-            94: function (index, argCount, primMethod) { return this.primitiveGetNextEvent(argCount); },
-            95: function (index, argCount, primMethod) { return this.primitiveInputWord(argCount); },
-            96: function (index, argCount, primMethod) { return this.namedPrimitive('BitBltPlugin', 'primitiveCopyBits', argCount); },
-            97: function (index, argCount, primMethod) { return this.primitiveSnapshot(argCount); },
-            //98: function (index, argCount, primMethod) { return false; /* primitiveStoreImageSegment */ },
-            99: function (index, argCount, primMethod) { return this.primitiveLoadImageSegment(argCount); },
-            100: function (index, argCount, primMethod) { return this.vm.primitivePerformWithArgs(argCount, true); /* Object.perform:withArguments:inSuperclass: (Blue Book: primitiveSignalAtTick) */ },
-            101: function (index, argCount, primMethod) { return this.primitiveBeCursor(argCount); /* Cursor.beCursor */ },
-            102: function (index, argCount, primMethod) { return this.primitiveBeDisplay(argCount); /* DisplayScreen.beDisplay */ },
-            103: function (index, argCount, primMethod) { return false; /* primitiveScanCharacters */ },
-            104: function (index, argCount, primMethod) { return false; /* primitiveDrawLoop */ },
-            105: function (index, argCount, primMethod) { return this.popNandPushIfOK(5, this.doStringReplace()); /* string and array replace */ },
-            106: function (index, argCount, primMethod) { return this.primitiveScreenSize(argCount); /* actualScreenSize */ },
-            107: function (index, argCount, primMethod) { return this.primitiveMouseButtons(argCount); /* Sensor mouseButtons */ },
-            108: function (index, argCount, primMethod) { return this.primitiveKeyboardNext(argCount); /* Sensor kbdNext */ },
-            109: function (index, argCount, primMethod) { return this.primitiveKeyboardPeek(argCount); /* Sensor kbdPeek */ },
+            90: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveMousePoint(argCount); /* mousePoint */ },
+            91: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveTestDisplayDepth(argCount); /* cursorLocPut in old images */ },
+            // 92: function (index, argCount, primMethod, primHandler) { return false; /* primitiveSetDisplayMode */ },
+            93: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveInputSemaphore(argCount); },
+            94: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveGetNextEvent(argCount); },
+            95: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveInputWord(argCount); },
+            96: function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('BitBltPlugin', 'primitiveCopyBits', argCount); },
+            97: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveSnapshot(argCount); },
+            //98: function (index, argCount, primMethod, primHandler) { return false; /* primitiveStoreImageSegment */ },
+            99: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveLoadImageSegment(argCount); },
+            100: function (index, argCount, primMethod, primHandler) { return primHandler.vm.primitivePerformWithArgs(argCount, true); /* Object.perform:withArguments:inSuperclass: (Blue Book: primitiveSignalAtTick) */ },
+            101: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveBeCursor(argCount); /* Cursor.beCursor */ },
+            102: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveBeDisplay(argCount); /* DisplayScreen.beDisplay */ },
+            103: function (index, argCount, primMethod, primHandler) { return false; /* primitiveScanCharacters */ },
+            104: function (index, argCount, primMethod, primHandler) { return false; /* primitiveDrawLoop */ },
+            105: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(5, primHandler.doStringReplace()); /* string and array replace */ },
+            106: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveScreenSize(argCount); /* actualScreenSize */ },
+            107: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveMouseButtons(argCount); /* Sensor mouseButtons */ },
+            108: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveKeyboardNext(argCount); /* Sensor kbdNext */ },
+            109: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveKeyboardPeek(argCount); /* Sensor kbdPeek */ },
             // System Primitives (110-119)",
-            110: function (index, argCount, primMethod) { return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); /* == */ },
-            111: function (index, argCount, primMethod) { return this.popNandPushIfOK(1, this.vm.getClass(this.vm.top())); /* Object.class */ },
-            112: function (index, argCount, primMethod) { return this.popNandPushIfOK(1, this.vm.image.bytesLeft()); /*primitiveBytesLeft */ },
-            113: function (index, argCount, primMethod) { return this.primitiveQuit(argCount); },
-            114: function (index, argCount, primMethod) { return this.primitiveExitToDebugger(argCount); },
-            115: function (index, argCount, primMethod) { return this.primitiveChangeClass(argCount); },
-            116: function (index, argCount, primMethod) { return this.vm.flushMethodCacheForMethod(this.vm.top());  /* after Squeak 2.2 uses 119 */ },
-            117: function (index, argCount, primMethod) { return this.doNamedPrimitive(argCount, primMethod); /* named prims */ },
-            118: function (index, argCount, primMethod) { return this.primitiveDoPrimitiveWithArgs(argCount); },
-            119: function (index, argCount, primMethod) { return this.vm.flushMethodCacheForSelector(this.vm.top()); /* before Squeak 2.3 uses 116 */ },
+            110: function (index, argCount, primMethod, primHandler) { return primHandler.pop2andPushBoolIfOK(primHandler.vm.stackValue(1) === primHandler.vm.stackValue(0)); /* == */ },
+            111: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(1, primHandler.vm.getClass(primHandler.vm.top())); /* Object.class */ },
+            112: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(1, primHandler.vm.image.bytesLeft()); /*primitiveBytesLeft */ },
+            113: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveQuit(argCount); },
+            114: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveExitToDebugger(argCount); },
+            115: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveChangeClass(argCount); },
+            116: function (index, argCount, primMethod, primHandler) { return primHandler.vm.flushMethodCacheForMethod(primHandler.vm.top());  /* after Squeak 2.2 uses 119 */ },
+            117: function (index, argCount, primMethod, primHandler) { return primHandler.doNamedPrimitive(argCount, primMethod); /* named prims */ },
+            118: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveDoPrimitiveWithArgs(argCount); },
+            119: function (index, argCount, primMethod, primHandler) { return primHandler.vm.flushMethodCacheForSelector(primHandler.vm.top()); /* before Squeak 2.3 uses 116 */ },
             // Miscellaneous Primitives (120-149)
-            120: function (index, argCount, primMethod) { return false; /* primitiveCalloutToFFI */ },
-            121: function (index, argCount, primMethod) { return this.primitiveImageName(argCount); /* get+set imageName */ },
-            122: function (index, argCount, primMethod) { return this.primitiveReverseDisplay(argCount); /*  Blue Book: primitiveImageVolume */ },
-            //123: function (index, argCount, primMethod) { return false; /*TODO primitiveValueUninterruptab*/ }
-            124: function (index, argCount, primMethod) { return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore)); },
-            125: function (index, argCount, primMethod) { return this.popNandPushIfOK(2, this.setLowSpaceThreshold()); },
-            126: function (index, argCount, primMethod) { return this.primitiveDeferDisplayUpdates(argCount); },
-            127: function (index, argCount, primMethod) { return this.primitiveShowDisplayRect(argCount); },
-            128: function (index, argCount, primMethod) { return this.primitiveArrayBecome(argCount, true); /* both ways */ },
-            129: function (index, argCount, primMethod) { return this.popNandPushIfOK(1, this.vm.image.specialObjectsArray); /*specialObjectsOop */ },
-            130: function (index, argCount, primMethod) { return this.primitiveFullGC(argCount); },
-            131: function (index, argCount, primMethod) { return this.popNandPushIfOK(1, this.vm.image.partialGC()); /* GCmost */ },
-            132: function (index, argCount, primMethod) { return this.pop2andPushBoolIfOK(this.pointsTo(this.stackNonInteger(1), this.vm.top())); /*Object.pointsTo */ },
-            133: function (index, argCount, primMethod) { return true; /*TODO primitiveSetInterruptKey */ },
-            134: function (index, argCount, primMethod) { return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheInterruptSemaphore)); },
-            135: function (index, argCount, primMethod) { return this.popNandPushIfOK(1, this.millisecondClockValue()); },
-            136: function (index, argCount, primMethod) { return this.primitiveSignalAtMilliseconds(argCount); /*Delay signal:atMs:()); */ },
-            137: function (index, argCount, primMethod) { return this.popNandPushIfOK(1, this.secondClock()); /* seconds since Jan 1, 1901 */ },
-            138: function (index, argCount, primMethod) { return this.popNandPushIfOK(1, this.someObject()); /* Object.someObject */ },
-            139: function (index, argCount, primMethod) { return this.popNandPushIfOK(1, this.nextObject(this.vm.top())); /* Object.nextObject */ },
-            140: function (index, argCount, primMethod) { return this.primitiveBeep(argCount); },
-            141: function (index, argCount, primMethod) { return this.primitiveClipboardText(argCount); },
-            142: function (index, argCount, primMethod) { return this.popNandPushIfOK(1, this.makeStString(this.filenameToSqueak(Squeak.vmPath))); },
-            143: function (index, argCount, primMethod) { return this.primitiveShortAtAndPut(argCount); /* short at and shortAtP */ },
-            144: function (index, argCount, primMethod) { return this.primitiveShortAtAndPut(argCount); /* short at and shortAtP */ },
-            145: function (index, argCount, primMethod) { return this.primitiveConstantFill(argCount); },
-            146: function (index, argCount, primMethod) { return this.namedPrimitive('JoystickTabletPlugin', 'primitiveReadJoystick', argCount); },
-            147: function (index, argCount, primMethod) { return this.namedPrimitive('BitBltPlugin', 'primitiveWarpBits', argCount); },
-            148: function (index, argCount, primMethod) { return this.popNandPushIfOK(1, this.vm.image.clone(this.vm.top())); /*shallowCopy */ },
-            149: function (index, argCount, primMethod) { return this.primitiveGetAttribute(argCount); },
-            150: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            151: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            152: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            153: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            154: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            155: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            156: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            157: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            158: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            159: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            160: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            161: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            162: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            163: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            120: function (index, argCount, primMethod, primHandler) { return false; /* primitiveCalloutToFFI */ },
+            121: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveImageName(argCount); /* get+set imageName */ },
+            122: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveReverseDisplay(argCount); /*  Blue Book: primitiveImageVolume */ },
+            //123: function (index, argCount, primMethod, primHandler) { return false; /*TODO primitiveValueUninterruptab*/ }
+            124: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(2, primHandler.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore)); },
+            125: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(2, primHandler.setLowSpaceThreshold()); },
+            126: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveDeferDisplayUpdates(argCount); },
+            127: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveShowDisplayRect(argCount); },
+            128: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveArrayBecome(argCount, true); /* both ways */ },
+            129: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(1, primHandler.vm.image.specialObjectsArray); /*specialObjectsOop */ },
+            130: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveFullGC(argCount); },
+            131: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(1, primHandler.vm.image.partialGC()); /* GCmost */ },
+            132: function (index, argCount, primMethod, primHandler) { return primHandler.pop2andPushBoolIfOK(primHandler.pointsTo(primHandler.stackNonInteger(1), primHandler.vm.top())); /*Object.pointsTo */ },
+            133: function (index, argCount, primMethod, primHandler) { return true; /*TODO primitiveSetInterruptKey */ },
+            134: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(2, primHandler.registerSemaphore(Squeak.splOb_TheInterruptSemaphore)); },
+            135: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(1, primHandler.millisecondClockValue()); },
+            136: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveSignalAtMilliseconds(argCount); /*Delay signal:atMs:()); */ },
+            137: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(1, primHandler.secondClock()); /* seconds since Jan 1, 1901 */ },
+            138: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(1, primHandler.someObject()); /* Object.someObject */ },
+            139: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(1, primHandler.nextObject(primHandler.vm.top())); /* Object.nextObject */ },
+            140: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveBeep(argCount); },
+            141: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveClipboardText(argCount); },
+            142: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(1, primHandler.makeStString(primHandler.filenameToSqueak(Squeak.vmPath))); },
+            143: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveShortAtAndPut(argCount); /* short at and shortAtP */ },
+            144: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveShortAtAndPut(argCount); /* short at and shortAtP */ },
+            145: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveConstantFill(argCount); },
+            146: function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('JoystickTabletPlugin', 'primitiveReadJoystick', argCount); },
+            147: function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('BitBltPlugin', 'primitiveWarpBits', argCount); },
+            148: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(1, primHandler.vm.image.clone(primHandler.vm.top())); /*shallowCopy */ },
+            149: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveGetAttribute(argCount); },
+            150: notImplemented,
+            151: notImplemented,
+            152: notImplemented,
+            153: notImplemented,
+            154: notImplemented,
+            155: notImplemented,
+            156: notImplemented,
+            157: notImplemented,
+            158: notImplemented,
+            159: notImplemented,
+            160: notImplemented,
+            161: notImplemented,
+            162: notImplemented,
+            163: notImplemented,
             // 164: unused
-            165: function (index, argCount, primMethod) { return this.primitiveIntegerAtAndPut(argCount); },
-            166: function (index, argCount, primMethod) { return this.primitiveIntegerAtAndPut(argCount); },
-            167: function (index, argCount, primMethod) { return false; /* Processor.yield */ },
-            168: function (index, argCount, primMethod) { return this.primitiveCopyObject(argCount); },
+            165: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveIntegerAtAndPut(argCount); },
+            166: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveIntegerAtAndPut(argCount); },
+            167: function (index, argCount, primMethod, primHandler) { return false; /* Processor.yield */ },
+            168: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveCopyObject(argCount); },
 
-            169: function (index, argCount, primMethod) { return this.primitiveNotIdentical(argCount); }, // NOOP might be overridden by oldPrims feature switch
-            170: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            171: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            172: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            173: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            174: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            175: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            176: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            177: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            178: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            179: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            180: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            181: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            182: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            183: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            184: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            185: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            186: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            187: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            188: function (index, argCount, primMethod) { return this.primitiveExecuteMethodArgsArray(argCount); }, // might be overridden by oldPrims feature switch
-            189: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            190: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            191: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            192: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            193: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            194: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            169: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveNotIdentical(argCount); }, // NOOP might be overridden by oldPrims feature switch
+            170: notImplemented,
+            171: notImplemented,
+            172: notImplemented,
+            173: notImplemented,
+            174: notImplemented,
+            175: notImplemented,
+            176: notImplemented,
+            177: notImplemented,
+            178: notImplemented,
+            179: notImplemented,
+            180: notImplemented,
+            181: notImplemented,
+            182: notImplemented,
+            183: notImplemented,
+            184: notImplemented,
+            185: notImplemented,
+            186: notImplemented,
+            187: notImplemented,
+            188: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveExecuteMethodArgsArray(argCount); }, // might be overridden by oldPrims feature switch
+            189: notImplemented,
+            190: notImplemented,
+            191: notImplemented,
+            192: notImplemented,
+            193: notImplemented,
+            194: notImplemented,
 
-            195: function (index, argCount, primMethod) { return false; /* Context.findNextUnwindContextUpTo: */ },
-            196: function (index, argCount, primMethod) { return false; /* Context.terminateTo: */ },
-            197: function (index, argCount, primMethod) { return false; /* Context.findNextHandlerContextStarting */ },
-            198: function (index, argCount, primMethod) { return false; /* MarkUnwindMethod (must fail) */ },
-            199: function (index, argCount, primMethod) { return false; /* MarkHandlerMethod (must fail) */ },
+            195: function (index, argCount, primMethod, primHandler) { return false; /* Context.findNextUnwindContextUpTo: */ },
+            196: function (index, argCount, primMethod, primHandler) { return false; /* Context.terminateTo: */ },
+            197: function (index, argCount, primMethod, primHandler) { return false; /* Context.findNextHandlerContextStarting */ },
+            198: function (index, argCount, primMethod, primHandler) { return false; /* MarkUnwindMethod (must fail) */ },
+            199: function (index, argCount, primMethod, primHandler) { return false; /* MarkHandlerMethod (must fail) */ },
 
-            200: function (index, argCount, primMethod) { return this.primitiveClosureCopyWithCopiedValues(argCount); }, // might be overridden by oldPrims feature switch
-            201: function (index, argCount, primMethod) { return this.primitiveClosureValue(argCount); }, // might be overridden by oldPrims feature switch
-            202: function (index, argCount, primMethod) { return this.primitiveClosureValue(argCount); }, // might be overridden by oldPrims feature switch
-            203: function (index, argCount, primMethod) { return this.primitiveClosureValue(argCount); }, // might be overridden by oldPrims feature switch
-            204: function (index, argCount, primMethod) { return this.primitiveClosureValue(argCount); }, // might be overridden by oldPrims feature switch
-            205: function (index, argCount, primMethod) { return this.primitiveClosureValue(argCount); }, // might be overridden by oldPrims feature switch
-            206: function (index, argCount, primMethod) { return  this.primitiveClosureValueWithArgs(argCount); }, // might be overridden by oldPrims feature switch
-            207: function (index, argCount, primMethod) { return this.popNandPushIfOK(2, this.objectAt(false,false,false)); /* contextAt: */ }, // might be overridden by oldPrims feature switch
-            208: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            209: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            210: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            211: function (index, argCount, primMethod) { return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); /* contextAt:put: */ }, // might be overridden by oldPrims feature switch
-            212: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            213: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            214: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            215: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            216: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            217: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            218: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            219: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            220: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            221: function (index, argCount, primMethod) { return this.primitiveClosureValueNoContextSwitch(argCount); }, // might be overridden by oldPrims feature switch
-            222: function (index, argCount, primMethod) { return this.primitiveClosureValueNoContextSwitch(argCount); }, // might be overridden by oldPrims feature switch
-            223: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            224: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            200: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveClosureCopyWithCopiedValues(argCount); }, // might be overridden by oldPrims feature switch
+            201: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveClosureValue(argCount); }, // might be overridden by oldPrims feature switch
+            202: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveClosureValue(argCount); }, // might be overridden by oldPrims feature switch
+            203: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveClosureValue(argCount); }, // might be overridden by oldPrims feature switch
+            204: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveClosureValue(argCount); }, // might be overridden by oldPrims feature switch
+            205: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveClosureValue(argCount); }, // might be overridden by oldPrims feature switch
+            206: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveClosureValueWithArgs(argCount); }, // might be overridden by oldPrims feature switch
+            207: notImplemented,
+            208: notImplemented,
+            209: notImplemented,
+            210: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(2, primHandler.objectAt(false,false,false)); /* contextAt: */ }, // might be overridden by oldPrims feature switch
+            211: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(3, primHandler.objectAtPut(false,false,false)); /* contextAt:put: */ }, // might be overridden by oldPrims feature switch
+            212: notImplemented,
+            213: notImplemented,
+            214: notImplemented,
+            215: notImplemented,
+            216: notImplemented,
+            217: notImplemented,
+            218: notImplemented,
+            219: notImplemented,
+            220: notImplemented,
+            221: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveClosureValueNoContextSwitch(argCount); }, // might be overridden by oldPrims feature switch
+            222: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveClosureValueNoContextSwitch(argCount); }, // might be overridden by oldPrims feature switch
+            223: notImplemented,
+            224: notImplemented,
 
-            225: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            226: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            227: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            228: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            229: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            // 225-229: unused",
-            // Other Primitives (230-249)",
-            230: function (index, argCount, primMethod) { return this.primitiveRelinquishProcessorForMicroseconds(argCount); },
-            231: function (index, argCount, primMethod) { return this.primitiveForceDisplayUpdate(argCount); },
-            // 232:  return this.primitiveFormPrint(argCount);",
-            233: function (index, argCount, primMethod) { this.primitiveSetFullScreen(argCount); },
-            234: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            235: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            236: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            237: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            238: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            239: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            240: function (index, argCount, primMethod) { return this.popNandPushIfOK(1, this.microsecondClockUTC()); }, // might be overridden by oldPrims feature switch
-            241: function (index, argCount, primMethod) { return this.popNandPushIfOK(1, this.microsecondClockLocal()); }, // might be overridden by oldPrims feature switch
+            225: notImplemented,
+            226: notImplemented,
+            227: notImplemented,
+            228: notImplemented,
+            229: notImplemented,
+            // 225-229: unused
+            // Other Primitives (230-249)
+            230: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveRelinquishProcessorForMicroseconds(argCount); },
+            231: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveForceDisplayUpdate(argCount); },
+            // 232:  return primHandler.primitiveFormPrint(argCount);",
+            233: function (index, argCount, primMethod, primHandler) { primHandler.primitiveSetFullScreen(argCount); },
+            234: notImplemented,
+            235: notImplemented,
+            236: notImplemented,
+            237: notImplemented,
+            238: notImplemented,
+            239: notImplemented,
+            240: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(1, primHandler.microsecondClockUTC()); }, // might be overridden by oldPrims feature switch
+            241: function (index, argCount, primMethod, primHandler) { return primHandler.popNandPushIfOK(1, primHandler.microsecondClockLocal()); }, // might be overridden by oldPrims feature switch
             // 242: unused
-            243: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            244: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            245: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
-            246: function (index, argCount, primMethod) {}, // NOOP might be overridden by oldPrims feature switch
+            243: notImplemented,
+            244: notImplemented,
+            245: notImplemented,
+            246: notImplemented,
             // 247: unused",
-            248: function (index, argCount, primMethod) { return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod); /* see findSelectorInClass() */ },
-            249: function (index, argCount, primMethod) { return this.primitiveArrayBecome(argCount, false); /* one way, opt. copy hash */ },
-            254: function (index, argCount, primMethod) { return this.primitiveVMParameter(argCount); },
+            248: function (index, argCount, primMethod, primHandler) { return primHandler.vm.primitiveInvokeObjectAsMethod(argCount, primMethod); /* see findSelectorInClass() */ },
+            249: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveArrayBecome(argCount, false); /* one way, opt. copy hash */ },
+            254: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveVMParameter(argCount); },
             //Quick Returns(255-519)
-            256: function (index, argCount, primMethod) { return true; /*return self is implicit */ },
-            257: function (index, argCount, primMethod) { this.vm.popNandPush(1, this.vm.trueObj); return true; /*return true */ },
-            258: function (index, argCount, primMethod) { this.vm.popNandPush(1, this.vm.falseObj); return true; /*return false */ },
-            259: function (index, argCount, primMethod) { this.vm.popNandPush(1, this.vm.nilObj); return true; /*return nil */ },
-            260: function (index, argCount, primMethod) { this.vm.popNandPush(1, index - 261); return true;/*return -1...2 */ },
-            261: function (index, argCount, primMethod) { this.vm.popNandPush(1, index - 261); return true;/*return -1...2 */ },
-            262: function (index, argCount, primMethod) { this.vm.popNandPush(1, index - 261); return true;/*return -1...2 */ },
-            263: function (index, argCount, primMethod) { this.vm.popNandPush(1, index - 261); return true;/*return -1...2 */ },
+            256: function (index, argCount, primMethod, primHandler) { return true; /*return self is implicit */ },
+            257: function (index, argCount, primMethod, primHandler) { primHandler.vm.popNandPush(1, primHandler.vm.trueObj); return true; /*return true */ },
+            258: function (index, argCount, primMethod, primHandler) { primHandler.vm.popNandPush(1, primHandler.vm.falseObj); return true; /*return false */ },
+            259: function (index, argCount, primMethod, primHandler) { primHandler.vm.popNandPush(1, primHandler.vm.nilObj); return true; /*return nil */ },
+            260: function (index, argCount, primMethod, primHandler) { primHandler.vm.popNandPush(1, index - 261); return true;/*return -1...2 */ },
+            261: function (index, argCount, primMethod, primHandler) { primHandler.vm.popNandPush(1, index - 261); return true;/*return -1...2 */ },
+            262: function (index, argCount, primMethod, primHandler) { primHandler.vm.popNandPush(1, index - 261); return true;/*return -1...2 */ },
+            263: function (index, argCount, primMethod, primHandler) { primHandler.vm.popNandPush(1, index - 261); return true;/*return -1...2 */ },
             //Quick Return instvars(264-519)
-            264: function (index, argCount, primMethod) { this.vm.popNandPush(1, this.vm.top().pointers[index - 264]); return true; },
+            264: function (index, argCount, primMethod, primHandler) { primHandler.vm.popNandPush(1, primHandler.vm.top().pointers[index - 264]); return true; },
             /*to save space we dispatch 265-519 into 260*/
             /* */
             //MIDI Primitives (520-539)
-            521: function (index, argCount, primMethod) { return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIClosePort', argCount); },
-            522: function (index, argCount, primMethod) { return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIGetClock', argCount); },
-            523: function (index, argCount, primMethod) { return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIGetPortCount', argCount); },
-            524: function (index, argCount, primMethod) { return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIGetPortDirectionality', argCount); },
-            525: function (index, argCount, primMethod) { return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIGetPortName', argCount); },
-            526: function (index, argCount, primMethod) { return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIOpenPort', argCount); },
-            527: function (index, argCount, primMethod) { return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIParameterGetOrSet', argCount); },
-            528: function (index, argCount, primMethod) { return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIRead', argCount); },
-            529: function (index, argCount, primMethod) { return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIWrite', argCount); },
+            521: function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('MIDIPlugin', 'primitiveMIDIClosePort', argCount); },
+            522: function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('MIDIPlugin', 'primitiveMIDIGetClock', argCount); },
+            523: function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('MIDIPlugin', 'primitiveMIDIGetPortCount', argCount); },
+            524: function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('MIDIPlugin', 'primitiveMIDIGetPortDirectionality', argCount); },
+            525: function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('MIDIPlugin', 'primitiveMIDIGetPortName', argCount); },
+            526: function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('MIDIPlugin', 'primitiveMIDIOpenPort', argCount); },
+            527: function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('MIDIPlugin', 'primitiveMIDIParameterGetOrSet', argCount); },
+            528: function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('MIDIPlugin', 'primitiveMIDIRead', argCount); },
+            529: function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('MIDIPlugin', 'primitiveMIDIWrite', argCount); },
             // 530-539: reserved for extended MIDI primitives
             // Sound Codec Primitives",
-            550: function (index, argCount, primMethod) { return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveDecodeMono', argCount); },
-            551: function (index, argCount, primMethod) { return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveDecodeStereo', argCount); },
-            552: function (index, argCount, primMethod) { return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveEncodeMono', argCount); },
-            553: function (index, argCount, primMethod) { return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveEncodeStereo', argCount); },
+            550: function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('ADPCMCodecPlugin', 'primitiveDecodeMono', argCount); },
+            551: function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('ADPCMCodecPlugin', 'primitiveDecodeStereo', argCount); },
+            552: function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('ADPCMCodecPlugin', 'primitiveEncodeMono', argCount); },
+            553: function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('ADPCMCodecPlugin', 'primitiveEncodeStereo', argCount); },
             // External primitive support primitives (570-574)
-            // 570: function (index, argCount, primMethod) { this.primitiveFlushExternalPrimitives(argCount); },
-            571: function (index, argCount, primMethod) { return this.primitiveUnloadModule(argCount); },
-            572: function (index, argCount, primMethod) { return this.primitiveListBuiltinModule(argCount); },
-            573: function (index, argCount, primMethod) { return this.primitiveListLoadedModule(argCount) }
+            // 570: function (index, argCount, primMethod, primHandler) { primHandler.primitiveFlushExternalPrimitives(argCount); },
+            571: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveUnloadModule(argCount); },
+            572: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveListBuiltinModule(argCount); },
+            573: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveListLoadedModule(argCount) }
         };
 
         if(this.oldPrims) {
             // File Primitives (150-169)
-            this.primitiveFunctions[150] = function (index, argCount, primMethod) { return this.primitiveFileAtEnd(argCount); };
-            this.primitiveFunctions[151] = function (index, argCount, primMethod) { return this.primitiveFileClose(argCount); };
-            this.primitiveFunctions[152] = function (index, argCount, primMethod) { return this.primitiveFileGetPosition(argCount); };
-            this.primitiveFunctions[153] = function (index, argCount, primMethod) { return this.primitiveFileOpen(argCount); };
-            this.primitiveFunctions[154] = function (index, argCount, primMethod) { return this.primitiveFileRead(argCount); };
-            this.primitiveFunctions[155] = function (index, argCount, primMethod) { return this.primitiveFileSetPosition(argCount); };
-            this.primitiveFunctions[156] = function (index, argCount, primMethod) { return this.primitiveFileDelete(argCount); };
-            this.primitiveFunctions[157] = function (index, argCount, primMethod) { return this.primitiveFileSize(argCount); };
-            this.primitiveFunctions[158] = function (index, argCount, primMethod) { return this.primitiveFileWrite(argCount); };
-            this.primitiveFunctions[159] = function (index, argCount, primMethod) { return this.primitiveFileRename(argCount); };
-            this.primitiveFunctions[160] = function (index, argCount, primMethod) { return this.primitiveDirectoryCreate(argCount); /* new: primitiveAdoptInstance */ };
-            this.primitiveFunctions[161] = function (index, argCount, primMethod) { return this.primitiveDirectoryDelimitor(argCount); /* new: primitiveSetIdentityHash */ };
-            this.primitiveFunctions[162] = function (index, argCount, primMethod) { return this.primitiveDirectoryLookup(argCount); };
-            this.primitiveFunctions[163] = function (index, argCount, primMethod) { return this.primitiveDirectoryDelete(argCount); };
-            this.primitiveFunctions[169] = function (index, argCount, primMethod) { return this.primitiveDirectorySetMacTypeAndCreator(argCount);};
+            this.primitiveFunctions[150] = function (index, argCount, primMethod, primHandler) { return primHandler.primitiveFileAtEnd(argCount); };
+            this.primitiveFunctions[151] = function (index, argCount, primMethod, primHandler) { return primHandler.primitiveFileClose(argCount); };
+            this.primitiveFunctions[152] = function (index, argCount, primMethod, primHandler) { return primHandler.primitiveFileGetPosition(argCount); };
+            this.primitiveFunctions[153] = function (index, argCount, primMethod, primHandler) { return primHandler.primitiveFileOpen(argCount); };
+            this.primitiveFunctions[154] = function (index, argCount, primMethod, primHandler) { return primHandler.primitiveFileRead(argCount); };
+            this.primitiveFunctions[155] = function (index, argCount, primMethod, primHandler) { return primHandler.primitiveFileSetPosition(argCount); };
+            this.primitiveFunctions[156] = function (index, argCount, primMethod, primHandler) { return primHandler.primitiveFileDelete(argCount); };
+            this.primitiveFunctions[157] = function (index, argCount, primMethod, primHandler) { return primHandler.primitiveFileSize(argCount); };
+            this.primitiveFunctions[158] = function (index, argCount, primMethod, primHandler) { return primHandler.primitiveFileWrite(argCount); };
+            this.primitiveFunctions[159] = function (index, argCount, primMethod, primHandler) { return primHandler.primitiveFileRename(argCount); };
+            this.primitiveFunctions[160] = function (index, argCount, primMethod, primHandler) { return primHandler.primitiveDirectoryCreate(argCount); /* new: primitiveAdoptInstance */ };
+            this.primitiveFunctions[161] = function (index, argCount, primMethod, primHandler) { return primHandler.primitiveDirectoryDelimitor(argCount); /* new: primitiveSetIdentityHash */ };
+            this.primitiveFunctions[162] = function (index, argCount, primMethod, primHandler) { return primHandler.primitiveDirectoryLookup(argCount); };
+            this.primitiveFunctions[163] = function (index, argCount, primMethod, primHandler) { return primHandler.primitiveDirectoryDelete(argCount); };
+            this.primitiveFunctions[169] = function (index, argCount, primMethod, primHandler) { return primHandler.primitiveDirectorySetMacTypeAndCreator(argCount);};
             // Sound Primitives (170-199)
-            this.primitiveFunctions[170] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundStart', argCount); };
-            this.primitiveFunctions[171] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundStartWithSemaphore', argCount); };
-            this.primitiveFunctions[172] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundStop', argCount); };
-            this.primitiveFunctions[173] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundAvailableSpace', argCount); };
-            this.primitiveFunctions[174] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySamples', argCount); };
-            this.primitiveFunctions[175] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySilence', argCount); };
-            this.primitiveFunctions[176] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundGenerationPlugin', 'primWaveTableSoundmixSampleCountintostartingAtpan', argCount); };
-            this.primitiveFunctions[177] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundGenerationPlugin', 'primFMSoundmixSampleCountintostartingAtpan', argCount); };
-            this.primitiveFunctions[178] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundGenerationPlugin', 'primPluckedSoundmixSampleCountintostartingAtpan', argCount); };
-            this.primitiveFunctions[179] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundGenerationPlugin', 'primSampledSoundmixSampleCountintostartingAtpan', argCount); };
-            this.primitiveFunctions[180] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixFMSound', argCount); };
-            this.primitiveFunctions[181] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixPluckedSound', argCount); };
-            this.primitiveFunctions[182] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundGenerationPlugin', 'oldprimSampledSoundmixSampleCountintostartingAtleftVolrightVol', argCount); };
-            this.primitiveFunctions[183] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundGenerationPlugin', 'primitiveApplyReverb', argCount); };
-            this.primitiveFunctions[184] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixLoopedSampledSound', argCount); };
-            this.primitiveFunctions[185] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixSampledSound', argCount); };
+            this.primitiveFunctions[170] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundPlugin', 'primitiveSoundStart', argCount); };
+            this.primitiveFunctions[171] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundPlugin', 'primitiveSoundStartWithSemaphore', argCount); };
+            this.primitiveFunctions[172] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundPlugin', 'primitiveSoundStop', argCount); };
+            this.primitiveFunctions[173] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundPlugin', 'primitiveSoundAvailableSpace', argCount); };
+            this.primitiveFunctions[174] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySamples', argCount); };
+            this.primitiveFunctions[175] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySilence', argCount); };
+            this.primitiveFunctions[176] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundGenerationPlugin', 'primWaveTableSoundmixSampleCountintostartingAtpan', argCount); };
+            this.primitiveFunctions[177] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundGenerationPlugin', 'primFMSoundmixSampleCountintostartingAtpan', argCount); };
+            this.primitiveFunctions[178] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundGenerationPlugin', 'primPluckedSoundmixSampleCountintostartingAtpan', argCount); };
+            this.primitiveFunctions[179] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundGenerationPlugin', 'primSampledSoundmixSampleCountintostartingAtpan', argCount); };
+            this.primitiveFunctions[180] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundGenerationPlugin', 'primitiveMixFMSound', argCount); };
+            this.primitiveFunctions[181] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundGenerationPlugin', 'primitiveMixPluckedSound', argCount); };
+            this.primitiveFunctions[182] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundGenerationPlugin', 'oldprimSampledSoundmixSampleCountintostartingAtleftVolrightVol', argCount); };
+            this.primitiveFunctions[183] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundGenerationPlugin', 'primitiveApplyReverb', argCount); };
+            this.primitiveFunctions[184] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundGenerationPlugin', 'primitiveMixLoopedSampledSound', argCount); };
+            this.primitiveFunctions[185] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundGenerationPlugin', 'primitiveMixSampledSound', argCount); };
             // =186-188: was unused";
-            this.primitiveFunctions[188] = function (index, argCount, primMethod) {  }; //NOOP
-            this.primitiveFunctions[189] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundInsertSamples', argCount); };
-            this.primitiveFunctions[190] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundStartRecording', argCount); };
-            this.primitiveFunctions[191] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundStopRecording', argCount); };
-            this.primitiveFunctions[192] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundGetRecordingSampleRate', argCount); };
-            this.primitiveFunctions[193] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundRecordSamples', argCount); };
-            this.primitiveFunctions[194] = function (index, argCount, primMethod) { return this.namedPrimitive('SoundPlugin', 'primitiveSoundSetRecordLevel', argCount); };
+            this.primitiveFunctions[188] = notImplemented;
+            this.primitiveFunctions[189] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundPlugin', 'primitiveSoundInsertSamples', argCount); };
+            this.primitiveFunctions[190] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundPlugin', 'primitiveSoundStartRecording', argCount); };
+            this.primitiveFunctions[191] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundPlugin', 'primitiveSoundStopRecording', argCount); };
+            this.primitiveFunctions[192] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundPlugin', 'primitiveSoundGetRecordingSampleRate', argCount); };
+            this.primitiveFunctions[193] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundPlugin', 'primitiveSoundRecordSamples', argCount); };
+            this.primitiveFunctions[194] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SoundPlugin', 'primitiveSoundSetRecordLevel', argCount); };
             // Networking Primitives (200-229)";
-            this.primitiveFunctions[200] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveInitializeNetwork', argCount); };
-            this.primitiveFunctions[201] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveResolverStartNameLookup', argCount); };
-            this.primitiveFunctions[202] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveResolverNameLookupResult', argCount); };
-            this.primitiveFunctions[203] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveResolverStartAddressLookup', argCount); };
-            this.primitiveFunctions[204] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveResolverAddressLookupResult', argCount); };
-            this.primitiveFunctions[205] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveResolverAbortLookup', argCount); };
-            this.primitiveFunctions[206] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveResolverLocalAddress', argCount); };
-            this.primitiveFunctions[207] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveResolverStatus', argCount); };
-            this.primitiveFunctions[208] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveResolverError', argCount); };
-            this.primitiveFunctions[209] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketCreate', argCount); };
-            this.primitiveFunctions[210] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketDestroy', argCount); };
-            this.primitiveFunctions[211] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectionStatus', argCount); };
-            this.primitiveFunctions[212] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketError', argCount); };
-            this.primitiveFunctions[213] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketLocalAddress', argCount); };
-            this.primitiveFunctions[214] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketLocalPort', argCount); };
-            this.primitiveFunctions[215] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketRemoteAddress', argCount); };
-            this.primitiveFunctions[216] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketRemotePort', argCount); };
-            this.primitiveFunctions[217] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectToPort', argCount); };
-            this.primitiveFunctions[218] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketListenOnPort', argCount); };
-            this.primitiveFunctions[219] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketCloseConnection', argCount); };
-            this.primitiveFunctions[220] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketAbortConnection', argCount); };
-            this.primitiveFunctions[221] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketReceiveDataBufCount', argCount); };
-            this.primitiveFunctions[222] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketReceiveDataAvailable', argCount); };
-            this.primitiveFunctions[223] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketSendDataBufCount', argCount); };
-            this.primitiveFunctions[224] = function (index, argCount, primMethod) { return this.namedPrimitive('SocketPlugin', 'primitiveSocketSendDone', argCount); };
-            this.primitiveFunctions[234] = function (index, argCount, primMethod) { return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveDecompressFromByteArray', argCount); };
-            this.primitiveFunctions[235] = function (index, argCount, primMethod) { return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompareString', argCount); };
-            this.primitiveFunctions[236] = function (index, argCount, primMethod) { return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveConvert8BitSigned', argCount); };
-            this.primitiveFunctions[237] = function (index, argCount, primMethod) { return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompressToByteArray', argCount); };
-            this.primitiveFunctions[238] = function (index, argCount, primMethod) { return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortOpen', argCount); };
-            this.primitiveFunctions[239] = function (index, argCount, primMethod) { return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortClose', argCount); };
-            this.primitiveFunctions[240] = function (index, argCount, primMethod) { return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortWrite', argCount); };
-            this.primitiveFunctions[241] = function (index, argCount, primMethod) { return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortRead', argCount); };
-            this.primitiveFunctions[243] = function (index, argCount, primMethod) { return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveTranslateStringWithTable', argCount); };
-            this.primitiveFunctions[244] = function (index, argCount, primMethod) { return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindFirstInString' , argCount); };
-            this.primitiveFunctions[245] = function (index, argCount, primMethod) { return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveIndexOfAsciiInString', argCount); };
-            this.primitiveFunctions[246] = function (index, argCount, primMethod) { return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount); };
+            this.primitiveFunctions[200] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveInitializeNetwork', argCount); };
+            this.primitiveFunctions[201] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveResolverStartNameLookup', argCount); };
+            this.primitiveFunctions[202] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveResolverNameLookupResult', argCount); };
+            this.primitiveFunctions[203] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveResolverStartAddressLookup', argCount); };
+            this.primitiveFunctions[204] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveResolverAddressLookupResult', argCount); };
+            this.primitiveFunctions[205] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveResolverAbortLookup', argCount); };
+            this.primitiveFunctions[206] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveResolverLocalAddress', argCount); };
+            this.primitiveFunctions[207] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveResolverStatus', argCount); };
+            this.primitiveFunctions[208] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveResolverError', argCount); };
+            this.primitiveFunctions[209] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveSocketCreate', argCount); };
+            this.primitiveFunctions[210] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveSocketDestroy', argCount); };
+            this.primitiveFunctions[211] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveSocketConnectionStatus', argCount); };
+            this.primitiveFunctions[212] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveSocketError', argCount); };
+            this.primitiveFunctions[213] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveSocketLocalAddress', argCount); };
+            this.primitiveFunctions[214] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveSocketLocalPort', argCount); };
+            this.primitiveFunctions[215] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveSocketRemoteAddress', argCount); };
+            this.primitiveFunctions[216] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveSocketRemotePort', argCount); };
+            this.primitiveFunctions[217] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveSocketConnectToPort', argCount); };
+            this.primitiveFunctions[218] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveSocketListenOnPort', argCount); };
+            this.primitiveFunctions[219] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveSocketCloseConnection', argCount); };
+            this.primitiveFunctions[220] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveSocketAbortConnection', argCount); };
+            this.primitiveFunctions[221] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveSocketReceiveDataBufCount', argCount); };
+            this.primitiveFunctions[222] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveSocketReceiveDataAvailable', argCount); };
+            this.primitiveFunctions[223] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveSocketSendDataBufCount', argCount); };
+            this.primitiveFunctions[224] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SocketPlugin', 'primitiveSocketSendDone', argCount); };
+            this.primitiveFunctions[234] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('MiscPrimitivePlugin', 'primitiveDecompressFromByteArray', argCount); };
+            this.primitiveFunctions[235] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompareString', argCount); };
+            this.primitiveFunctions[236] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('MiscPrimitivePlugin', 'primitiveConvert8BitSigned', argCount); };
+            this.primitiveFunctions[237] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompressToByteArray', argCount); };
+            this.primitiveFunctions[238] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SerialPlugin', 'primitiveSerialPortOpen', argCount); };
+            this.primitiveFunctions[239] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SerialPlugin', 'primitiveSerialPortClose', argCount); };
+            this.primitiveFunctions[240] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SerialPlugin', 'primitiveSerialPortWrite', argCount); };
+            this.primitiveFunctions[241] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('SerialPlugin', 'primitiveSerialPortRead', argCount); };
+            this.primitiveFunctions[243] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('MiscPrimitivePlugin', 'primitiveTranslateStringWithTable', argCount); };
+            this.primitiveFunctions[244] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindFirstInString' , argCount); };
+            this.primitiveFunctions[245] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('MiscPrimitivePlugin', 'primitiveIndexOfAsciiInString', argCount); };
+            this.primitiveFunctions[246] = function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount); };
         }
     }
 },
@@ -3672,7 +3674,7 @@ Object.subclass('Squeak.Primitives',
         this.success = true;
         var primitiveFunction = this.getPrimitiveFunc(index);
         if(primitiveFunction) {
-            return primitiveFunction.call(this, index, argCount, primMethod);
+            return primitiveFunction(index, argCount, primMethod, this);
         } else {
             console.error("primitive " + index + " not implemented yet");
             return false;

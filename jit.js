@@ -151,35 +151,26 @@ to single-step.
             case 0x40: case 0x48: case 0x50: case 0x58:
                 return "lit[" + (1 + (byte & 0x1F)) + "].pointers[1]";
             case 0x70:
-                return this.simplePush["p" + byte.toString(16)];
+                return this.simplePush[byte & 7];
         }
     },
-    simplePush: {
-        p70: "rcvr",
-        p71: "vm.trueObj",
-        p72: "vm.falseObj",
-        p73: "vm.nilObj",
-        p74: -1,
-        p75: 0,
-        p76: 1,
-        p77: 2
-    },
+    simplePush: ["rcvr", "vm.trueObj", "vm.falseObj", "vm.nilObj", -1, 0, 1, 2],
     generateStartOfNumericOp: function(bytes){
         var push1 = this.getPush(bytes[0]);
         var push2 = this.getPush(bytes[1]);
 
-        var op = {
-            nb0: "vm.primHandler.signed32BitIntegerFor(push1 + push2)",
-            nb1: "vm.primHandler.signed32BitIntegerFor(push1 - push2)",
-            nb2: "push1 < push2 ? vm.trueObj : vm.falseObj",
-            nb3: "push1 > push2 ? vm.trueObj : vm.falseObj",
-            nb4: "push1 <= push2 ? vm.trueObj : vm.falseObj",
-            nb5: "push1 >= push2 ? vm.trueObj : vm.falseObj",
-            nb6: "push1 === push2 ? vm.trueObj : vm.falseObj",
-            nb7: "push1 !== push2 ? vm.trueObj : vm.falseObj"
-        };
+        var op = [
+            "vm.primHandler.signed32BitIntegerFor(push1 + push2)",
+            "vm.primHandler.signed32BitIntegerFor(push1 - push2)",
+            "push1 < push2 ? vm.trueObj : vm.falseObj",
+            "push1 > push2 ? vm.trueObj : vm.falseObj",
+            "push1 <= push2 ? vm.trueObj : vm.falseObj",
+            "push1 >= push2 ? vm.trueObj : vm.falseObj",
+            "push1 === push2 ? vm.trueObj : vm.falseObj",
+            "push1 !== push2 ? vm.trueObj : vm.falseObj"
+        ];
 
-        var operation = op["n" + bytes[2].toString(16)].replace("push1", push1).replace("push2", push2);
+        var operation = op[bytes[2] & 7].replace("push1", push1).replace("push2", push2);
 
 
         if (typeof push1 === "number" && typeof push2 === "number") {
@@ -432,7 +423,7 @@ to single-step.
                     break;
                 // Quick push
                 case 0x70:
-                    this.generatePush(this.simplePush["p" + byte.toString(16)]);
+                    this.generatePush(this.simplePush[byte & 7]);
                     break;
                 // Quick return
                 case 0x78:

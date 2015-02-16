@@ -1365,7 +1365,7 @@ Object.subclass('Squeak.Object',
         } else { // Bytes
             if (this.format >= 12) {
                 this.compiled = false;
-                this.ic = new Array();
+                this.ic = null;
             }
             if (indexableSize > 0) {
                 // this.format |= -indexableSize & 3;       //deferred to writeTo()
@@ -1435,7 +1435,7 @@ Object.subclass('Squeak.Object',
             this.pointers = this.decodePointers(numLits+1, oops, oopMap); //header+lits
             this.bytes = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this.format & 3);
             this.compiled = false;
-            this.ic = new Array(this.bytes.byteLength);
+            this.ic = null;
         } else if (this.format >= 8) {
             //Formats 8..11 -- ByteArrays (and ByteStrings)
             if (nWords > 0)
@@ -2362,6 +2362,9 @@ Object.subclass('Squeak.Interpreter',
 'sending', {
     send: function(selector, argCount, doSuper) {
         var newRcvr = this.stackValue(argCount);
+
+        if(!this.method.ic)
+            this.method.ic = new Array(this.method.bytes.byteLength);
 
         var ic = this.method.ic[this.pc];
         var entry;

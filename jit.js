@@ -359,7 +359,6 @@ to single-step.
         this.sourceLabels = {};     // source pos of generated labels 
         this.needsLabel = {0: true}; // jump targets
         this.needsBreak = false;    // insert break check for previous bytecode
-        this.needsAnyLabel = false; // omit switch/case if not necessary
         this.suppressNextLabel = false;
 
         if (optClass && optSel)
@@ -482,24 +481,14 @@ to single-step.
         var funcName = this.functionNameFor(optClass, optSel);
         if (this.singleStep) {
             if (this.debug) this.source.push("// all valid PCs have a label;\n");
-            this.labelBootstrapEnd = this.source.length;
             this.source.push("default: throw Error('invalid PC'); }"); // all PCs handled
-            this.deleteUnneededLabelBootstrap();
             return new Function("return function " + funcName + "(vm, singleStep) {\n" + this.source.join("") + "\n}")();
         } else {
             if (this.debug) this.source.push("// fall back to single-stepping\n");
+            this.labelBootstrapEnd = this.source.length;
             this.source.push("default: bytecodes += vm.pc; vm.interpretOne(true); return bytecodes;}");
             this.deleteUnneededLabels();
             return new Function("return function " + funcName + "(vm) {\n" + this.source.join("") + "\n}")();
-        }
-    },
-    deleteUnneededLabelBootstrap: function() {
-        if(!this.needsAnyLabel){
-            this.source[this.labelBootstrapStart] = "";
-            this.source[this.labelBootstrapEnd] = "";
-            this.source[this.sourceLabels[0]] = "";
-            this.source[this.sourceLabels[0]+1] = "";
-            this.source[this.sourceLabels[0]+2] = "";
         }
     },
     generateExtended: function(bytecode) {
@@ -951,6 +940,7 @@ to single-step.
         this.source.push(instr, ";\n");
     },
     deleteUnneededLabels: function() {
+        var needsAnyLabel = false;
         // switch statement is more efficient with fewer labels
         for (var i in this.sourceLabels) 
             if (!this.needsLabel[i])
@@ -958,7 +948,21 @@ to single-step.
                     this.source[this.sourceLabels[i] + j] = "";
             else
                 if(i > 0)
-                    this.needsAnyLabel = true;
+                    needsAnyLabel = true;
+
+        // remove the whole statement if we don't need any label
+        if(!needsAnyLabel){
+            // remove while(true) switch {
+            this.source[this.labelBootstrapStart] = "";
+
+            // remove default case
+            this.source[this.labelBootstrapEnd] = "";
+
+            // remove case 0:
+            this.source[this.sourceLabels[0]] = "";
+            this.source[this.sourceLabels[0]+1] = "";
+            this.source[this.sourceLabels[0]+2] = "";
+        }
     },
 });
 

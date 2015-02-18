@@ -874,8 +874,9 @@ to single-step.
 
         this.source.push("vm.pc = ", this.pc, ";");
 
+        var ic;
         if (this.method.ic)
-            var ic = this.method.ic[this.pc];
+            ic = this.method.ic[this.pc];
 
         if(ic && ic.primIndex > 0) {
             this.source.push("var sendDone = false;");

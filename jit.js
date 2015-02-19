@@ -468,13 +468,13 @@ to single-step.
                     break;
                 // send literal selector
                 case 0xD0: case 0xD8:
-                    this.generateSend("lit[", 1 + (byte & 0x0F), "]", 0, false, this.method.ic[this.pc]);
+                    this.generateSend("lit[", 1 + (byte & 0x0F), "]", 0, false);
                     break;
                 case 0xE0: case 0xE8:
-                    this.generateSend("lit[", 1 + (byte & 0x0F), "]", 1, false, this.method.ic[this.pc]);
+                    this.generateSend("lit[", 1 + (byte & 0x0F), "]", 1, false);
                     break;
                 case 0xF0: case 0xF8:
-                    this.generateSend("lit[", 1 + (byte & 0x0F), "]", 2, false, this.method.ic[this.pc]);
+                    this.generateSend("lit[", 1 + (byte & 0x0F), "]", 2, false);
                     break;
             }
         }
@@ -848,13 +848,17 @@ to single-step.
 
         this.source.push("}");
     },
-    generateSend: function(prefix, num, suffix, numArgs, superSend, ic) {
+    generateSend: function(prefix, num, suffix, numArgs, superSend) {
         if (this.debug) this.generateDebugCode("send " + (prefix === "lit[" ? this.method.pointers[num].bytesAsString() : "..."));
         this.generateLabel();
 
         this.source.push("vm.pc = ", this.pc, ";");
 
-        if (ic && ic.primIndex > 0) {
+        var ic;
+        if (this.method.ic)
+            ic = this.method.ic[this.pc];
+
+        if(ic && ic.primIndex > 0) {
             this.source.push("var sendDone = false;");
             this.generatePrimitiveSend(ic, prefix, num, suffix, numArgs, superSend);
             this.source.push(

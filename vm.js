@@ -819,7 +819,7 @@ Object.subclass('Squeak.Image',
             }
         };
         // read version and determine endianness
-        var versions = [6502, 6504, 6505, 68000, 68002, 68003],
+        var versions = [6501, 6502, 6504, 6505, 68000, 68002, 68003],
             version = 0,
             fileHeaderSize = 0;
         while (true) {  // try all four endianness + header combos
@@ -830,8 +830,9 @@ Object.subclass('Squeak.Image',
             if (!littleEndian) fileHeaderSize += 512;
             if (fileHeaderSize > 512) throw Error("bad image version");
         };
-        var nativeFloats = (version & 1) != 0;
-        this.hasClosures = version == 6504 || version == 68002 || nativeFloats;
+        this.version = version;
+        var nativeFloats = [6505, 68003].indexOf(version) >= 0;
+        this.hasClosures = [6504, 6505, 68002, 68003].indexOf(version) >= 0;
         if (version >= 68000) throw Error("64 bit images not supported yet");
         // parse image header
         var imageHeaderSize = readWord();
@@ -908,6 +909,7 @@ Object.subclass('Squeak.Image',
             } else { // done
                 self.specialObjectsArray = splObs;
                 self.decorateKnownObjects();
+                self.fixCompiledMethods();
                 self.fixCompactOops();
                 return false;   // don't do more
             }
@@ -961,6 +963,17 @@ Object.subclass('Squeak.Image',
             obj = obj.nextObject;
         }
         this.oldSpaceBytes += adjust;
+    },
+    fixCompiledMethods: function() {
+        // in the 6501 pre-release image, some CompiledMethods
+        // do not have the proper class
+        if (this.version >= 6502) return;
+        var obj = this.firstOldObject,
+            compiledMethodClass = this.specialObjectsArray.pointers[Squeak.splOb_ClassCompiledMethod];
+        while (obj) {
+            if (obj.format >= 12) obj.sqClass = compiledMethodClass;
+            obj = obj.nextObject;
+        }
     },
 },
 'garbage collection', {
@@ -1870,6 +1883,9 @@ Object.subclass('Squeak.Interpreter',
         // hack for old image that does not support Unix files
         if (!this.hasClosures && !this.findMethod("UnixFileDirectory class>>pathNameDelimiter"))
             this.primHandler.emulateMac = true;
+        // pre-release image has inverted colors
+        if (this.image.version == 6501)
+            this.primHandler.reverseDisplay = true;
     },
     initVMState: function() {
         this.byteCodeCount = 0;

@@ -3511,7 +3511,7 @@ Object.subclass('Squeak.Primitives',
             263: function (index, argCount, primMethod, primHandler) { primHandler.vm.popNandPush(1, index - 261); return true;/*return -1...2 */ },
             //Quick Return instvars(264-519)
             264: function (index, argCount, primMethod, primHandler) { primHandler.vm.popNandPush(1, primHandler.vm.top().pointers[index - 264]); return true; },
-            /*to save space we dispatch 265-519 into 260*/
+            /*to save space we dispatch 265-519 into 264*/
             /* */
             //MIDI Primitives (520-539)
             521: function (index, argCount, primMethod, primHandler) { return primHandler.namedPrimitive('MIDIPlugin', 'primitiveMIDIClosePort', argCount); },
@@ -3646,7 +3646,7 @@ Object.subclass('Squeak.Primitives',
 
     getPrimitiveFunc: function(primIndex, argCount, primMethod) {
         if ((primIndex > 264) && (primIndex < 520)) {
-            return this.primitiveFunctions[260];
+            return this.primitiveFunctions[264];
         }
         return this.primitiveFunctions[primIndex];
     },

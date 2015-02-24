@@ -2475,7 +2475,7 @@ Object.subclass('Squeak.Interpreter',
             this.breakNow();
         }
         if (primitiveIndex > 0)
-            if (this.tryPrimitive(primitiveIndex, argumentCount, newMethod))
+            if (this.primHandler.doPrimitive(primitiveIndex, argumentCount, newMethod))
                 return;  //Primitive succeeded -- end of story
         var newContext = this.allocateOrRecycleContext(newMethod.methodNeedsLargeFrame());
         var tempCount = newMethod.methodTempCount();
@@ -2571,28 +2571,6 @@ Object.subclass('Squeak.Interpreter',
         this.push(resultObj);
         var cannotReturnSel = this.specialObjects[Squeak.splOb_SelectorCannotReturn];
         this.send(cannotReturnSel, 1);
-    },
-    tryPrimitive: function(primIndex, argCount, newMethod) {
-        if ((primIndex > 255) && (primIndex < 520)) {
-            if (primIndex >= 264) {//return instvars
-                this.popNandPush(1, this.top().pointers[primIndex - 264]);
-                return true;
-            }
-            switch (primIndex) {
-                case 256: //return self
-                    return true;
-                case 257: this.popNandPush(1, this.trueObj); //return true
-                    return true;
-                case 258: this.popNandPush(1, this.falseObj); //return false
-                    return true;
-                case 259: this.popNandPush(1, this.nilObj); //return nil
-                    return true;
-            }
-            this.popNandPush(1, primIndex - 261); //return -1...2
-            return true;
-        }
-        var success = this.primHandler.doPrimitive(primIndex, argCount, newMethod);
-        return success;
     },
     createActualMessage: function(selector, argCount, cls) {
         //Bundle up receiver, args and selector as a messageObject
@@ -4372,7 +4350,7 @@ Object.subclass('Squeak.Primitives',
         for (var i = 0; i < arraySize; i++)
             this.vm.push(argumentArray.pointers[i]);
         // Run the primitive
-        if (this.vm.tryPrimitive(primIdx, arraySize))
+        if (this.vm.doPrimitive(primIdx, arraySize))
             return true;
         // Primitive failed, restore state for failure code
         this.vm.popN(arraySize);

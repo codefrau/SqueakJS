@@ -237,13 +237,7 @@ to single-step.
                     "   } ");
 
                 this.source.push(
-                    // not true nor false?
-                    "else if (cond !== vm.", !condition, "Obj) {\n",
-                    "      vm.sp++;\n",
-                    "      vm.pc = ", pcOfNextByte, ";\n",
-                    "      vm.send(vm.specialObjects[", Squeak.splOb_SelectorMustBeBoolean, "], 0, false);\n",
-                    "      return bytecodes + ", pcOfNextByte, ";\n",
-                    "   } ",
+                    // no need to check if cond is not trueObj nor falseObj as we are sure, it is one of them
                     // false!
                     "else vm.pc = ", pcOfNextByte, ";\n");
 

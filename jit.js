@@ -218,7 +218,7 @@ to single-step.
                 var distance = isShort ? (jumpByte & 0x07) + 1 : ((jumpByte & 3) * 256 + this.method.bytes[pcOfNextByte-1]);
                 var destination = pcOfNextByte + distance;
 
-                if (this.debug) this.generatePeepholeDebugCode(bytes.length, "peephole-optimized push push numericOp "+ (isShort?"short":"long")+ "ConditionalJump by "+distance+" to " + destination);
+                if (this.debug) this.generatePeepholeDebugCode(bytes.length, "push push numericOp "+ (isShort?"short":"long")+ "ConditionalJump by "+distance+" to " + destination + " (peephole optimized)");
                 this.generatePeepholeLabel();
 
                 //we need a label at the destination!
@@ -273,7 +273,7 @@ to single-step.
             },
             byteCount: 3,
             generate: function (bytes) {
-                if (this.debug) this.generatePeepholeDebugCode(bytes.length, "peephole-optimized push push numeric op " + this.specialSelectors[bytes[2] & 0x0F]);
+                if (this.debug) this.generatePeepholeDebugCode(bytes.length, "push push numericOp " + this.specialSelectors[bytes[2] & 0x0F] + " (peephole optimized)");
                 this.generatePeepholeLabel();
 
                 var jumpOver = this.pc + 3;
@@ -313,7 +313,7 @@ to single-step.
             },
             byteCount: 2,
             generate: function (bytes) {
-                if (this.debug) this.generatePeepholeDebugCode(bytes.length, "peephole-optimized push popReturn");
+                if (this.debug) this.generatePeepholeDebugCode(bytes.length, "push popReturn (peephole optimized)");
                 this.generatePeepholeLabel();
                 this.source.push(
                     "vm.pc = ", this.pc+2, "; vm.doReturn(", this.getPush(bytes[0]), "); return bytecodes + ", this.pc+2, ";\n");

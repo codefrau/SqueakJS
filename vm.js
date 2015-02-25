@@ -28,7 +28,7 @@ window.Squeak = users.bert.SqueakJS.vm;
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 0.7.3",
+    vmVersion: "SqueakJS 0.7.4",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -312,10 +312,13 @@ Object.extend(Squeak,
     dbTransaction: function(mode, description, transactionFunc, completionFunc) {
         // File contents is stored in the IndexedDB named "squeak" in object store "files"
         // and directory entries in localStorage with prefix "squeak:"
-        if (typeof indexedDB == "undefined") {
+        function fakeTransaction() {
             transactionFunc(Squeak.dbFake());
             if (completionFunc) completionFunc();
-            return;
+        }
+    
+        if (typeof indexedDB == "undefined") {
+            return fakeTransaction();
         }
 
         var startTransaction = function() {
@@ -338,24 +341,27 @@ Object.extend(Squeak,
         // otherwise, open SqueakDB first
         var openReq = indexedDB.open("squeak");
         openReq.onsuccess = function(e) {
+            console.log("Opened files database.");
             window.SqueakDB = this.result;
             SqueakDB.onversionchange = function(e) {
                 delete window.SqueakDB;
                 this.close();
             };
             SqueakDB.onerror = function(e) {
-                console.log("Error accessing database: " + e.target.errorCode);
+                console.error("Error accessing database: " + e.target.error.name);
             };
             startTransaction();
         };
         openReq.onupgradeneeded = function (e) {
             // run only first time, or when version changed
-            console.log("Creating database version " + e.newVersion);
+            console.log("Creating files database");
             var db = e.target.result;
             db.createObjectStore("files");
         };
         openReq.onerror = function(e) {
-            console.log("Error opening database: " + e.target.errorCode);
+            console.error(e.target.error.name + ": cannot open files database");
+            console.warn("Falling back to local storage");
+            fakeTransaction();
         };
         openReq.onblocked = function(e) {
             // If some other tab is loaded with the database, then it needs to be closed
@@ -394,10 +400,10 @@ Object.extend(Squeak,
                             buffer = bytes.buffer;
                         }
                     }
-                    var req = {result: buffer};
+                    var req = {result: buffer, error: "file not found"};
                     setTimeout(function(){
-                        if (buffer && req.onsuccess) req.onsuccess();
-                        if (!buffer && req.onerror) req.onerror();
+                        if (buffer && req.onsuccess) req.onsuccess({target: req});
+                        if (!buffer && req.onerror) req.onerror({target: req});
                     }, 0);
                     return req;
                 },
@@ -428,6 +434,11 @@ Object.extend(Squeak,
                     setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
                     return req;
                 },
+                openCursor: function() {
+                    var req = {};
+                    setTimeout(function(){if (req.onsuccess) req.onsuccess({target: req})}, 0);
+                    return req;
+                },
             }
         }
         return SqueakDBFake;
@@ -441,7 +452,7 @@ Object.extend(Squeak,
             return thenDo(SqueakDBFake.bigFiles[path.fullname]);
         this.dbTransaction("readonly", "get " + filepath, function(fileStore) {
             var getReq = fileStore.get(path.fullname);
-            getReq.onerror = function(e) { errorDo(this.errorCode) };
+            getReq.onerror = function(e) { errorDo(e.target.error.name) };
             getReq.onsuccess = function(e) {
                 if (this.result !== undefined) return thenDo(this.result);
                 // might be a template
@@ -808,7 +819,7 @@ Object.subclass('Squeak.Image',
             }
         };
         // read version and determine endianness
-        var versions = [6502, 6504, 6505, 68000, 68002, 68003],
+        var versions = [6501, 6502, 6504, 6505, 68000, 68002, 68003],
             version = 0,
             fileHeaderSize = 0;
         while (true) {  // try all four endianness + header combos
@@ -819,8 +830,9 @@ Object.subclass('Squeak.Image',
             if (!littleEndian) fileHeaderSize += 512;
             if (fileHeaderSize > 512) throw Error("bad image version");
         };
-        var nativeFloats = (version & 1) != 0;
-        this.hasClosures = version == 6504 || version == 68002 || nativeFloats;
+        this.version = version;
+        var nativeFloats = [6505, 68003].indexOf(version) >= 0;
+        this.hasClosures = [6504, 6505, 68002, 68003].indexOf(version) >= 0;
         if (version >= 68000) throw Error("64 bit images not supported yet");
         // parse image header
         var imageHeaderSize = readWord();
@@ -897,6 +909,7 @@ Object.subclass('Squeak.Image',
             } else { // done
                 self.specialObjectsArray = splObs;
                 self.decorateKnownObjects();
+                self.fixCompiledMethods();
                 self.fixCompactOops();
                 return false;   // don't do more
             }
@@ -950,6 +963,17 @@ Object.subclass('Squeak.Image',
             obj = obj.nextObject;
         }
         this.oldSpaceBytes += adjust;
+    },
+    fixCompiledMethods: function() {
+        // in the 6501 pre-release image, some CompiledMethods
+        // do not have the proper class
+        if (this.version >= 6502) return;
+        var obj = this.firstOldObject,
+            compiledMethodClass = this.specialObjectsArray.pointers[Squeak.splOb_ClassCompiledMethod];
+        while (obj) {
+            if (obj.format >= 12) obj.sqClass = compiledMethodClass;
+            obj = obj.nextObject;
+        }
     },
 },
 'garbage collection', {
@@ -1866,6 +1890,9 @@ Object.subclass('Squeak.Interpreter',
         // hack for old image that does not support Unix files
         if (!this.hasClosures && !this.findMethod("UnixFileDirectory class>>pathNameDelimiter"))
             this.primHandler.emulateMac = true;
+        // pre-release image has inverted colors
+        if (this.image.version == 6501)
+            this.primHandler.reverseDisplay = true;
     },
     initVMState: function() {
         this.byteCodeCount = 0;

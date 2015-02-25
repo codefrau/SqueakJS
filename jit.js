@@ -823,28 +823,28 @@ to single-step.
     },
     generateSpecialPrimitiveSend: function (primIndex) {
         if (primIndex >= 264) {//return instvars
-            return "this.popNandPush(1, this.top().pointers[" + (primIndex - 264) +"]);";
+            return "vm.popNandPush(1, vm.top().pointers[" + (primIndex - 264) +"]);";
         }
         switch (primIndex) {
             case 256: return ""; //return self
-            case 257: return "this.popNandPush(1, this.trueObj);"; //return true
-            case 258: return "this.popNandPush(1, this.falseObj);"; //return false
-            case 259: return "this.popNandPush(1, this.nilObj);"; //return nil
+            case 257: return "vm.popNandPush(1, vm.trueObj);"; //return true
+            case 258: return "vm.popNandPush(1, vm.falseObj);"; //return false
+            case 259: return "vm.popNandPush(1, vm.nilObj);"; //return nil
         }
-        return "this.popNandPush(1, " + (primIndex - 261) + ");"; //return -1...2
+        return "vm.popNandPush(1, " + (primIndex - 261) + ");"; //return -1...2
     },
     generatePrimitiveSend: function (ic, prefix, num, suffix, numArgs) {
         this.source.push(
             "var ic = vm.method.ic[", this.pc ,"];",
-            "if (ic.sqClass === vm.getClass(vm.stackValue(", numArgs ,"))) {"
+            "if (ic.lkupClass === vm.getClass(vm.stackValue(", numArgs ,"))) {"
         );
 
-            if ((ic.primIndex > 255) && (ic.primIndex < 520)) {
-                this.source.push(this.generateSpecialPrimitiveSend(ic.primIndex));
-                this.source.push("sendDone = true;");
-            } else {
-                this.source.push("sendDone = vm.primHandler.primitiveFunctions[", ic.primIndex ,"](", ic.primIndex, ", ", numArgs, ", ic.method, vm.primHandler);");
-            }
+        if ((ic.primIndex > 255) && (ic.primIndex < 520)) {
+            this.source.push(this.generateSpecialPrimitiveSend(ic.primIndex));
+            this.source.push("sendDone = true;");
+        } else {
+            this.source.push("sendDone = vm.primHandler.primitiveFunctions[", ic.primIndex ,"](", ic.primIndex, ", ", numArgs, ", ic.method, vm.primHandler);");
+        }
 
         this.source.push("}");
     },

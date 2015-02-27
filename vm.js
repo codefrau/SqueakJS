@@ -2368,7 +2368,6 @@ Object.subclass('Squeak.Interpreter',
 
         var ic = this.method.ic[this.pc];
         var entry;
-        var calleeArgCount;
 
         var lookupClass = this.getClass(newRcvr);
         if (doSuper) {
@@ -2382,21 +2381,21 @@ Object.subclass('Squeak.Interpreter',
             entry.method.lastFlush = entry.method.lastFlush || 1;
             selector.lastFlush = selector.lastFlush || 1;
 
+            // cache only, if the method that we found has as much arguments as the one that we were looking for
+            // i.e.: don't cache doesNotUnderstand:
             if (entry.argCount === argCount)
                 this.method.ic[this.pc] = {
                     added: new Date().getTime(),
                     method: entry.method,
                     primIndex: entry.primIndex,
                     mClass: entry.mClass,
-                    lkupClass: entry.lkupClass
+                    lkupClass: entry.lkupClass,
+                    argCount: argCount
                 }
-            calleeArgCount = entry.argCount;
         } else if (ic.lkupClass !== lookupClass) {
             entry = this.findSelectorInClass(selector, argCount, lookupClass);            
-            calleeArgCount = entry.argCount;
         } else {
             entry = ic;
-            calleeArgCount = argCount;
         }
 
         if (entry.primIndex) {
@@ -2405,7 +2404,10 @@ Object.subclass('Squeak.Interpreter',
             this.verifyAtClass = lookupClass;
         }
 
-        this.executeNewMethod(newRcvr, entry.method, calleeArgCount, entry.primIndex, entry.mClass, selector);
+        if(entry.argCount !== argCount)
+            console.log(entry.lkupClass.className(), "doesNotUnderstand:", selector.bytesAsString());
+
+        this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
     },
     sendAsPrimitiveFailure: function(rcvr, method, argCount) {
         this.executeNewMethod(rcvr, method, argCount, 0);

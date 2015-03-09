@@ -340,6 +340,13 @@ Object.extend(Squeak,
 
         // otherwise, open SqueakDB first
         var openReq = indexedDB.open("squeak");
+
+        // iOS Safari implements the interface but only returns null
+        // https://stackoverflow.com/questions/27415998/indexeddb-open-returns-null-on-safari-ios-8-1-1-and-halts-execution-on-cordova
+        if (openReq === null) {
+            return fakeTransaction();
+        }
+
         openReq.onsuccess = function(e) {
             console.log("Opened files database.");
             window.SqueakDB = this.result;

@@ -2408,13 +2408,16 @@ Object.subclass('Squeak.Interpreter',
             entry.method.lastFlush = entry.method.lastFlush || 1;
             selector.lastFlush = selector.lastFlush || 1;
 
+            // cache only, if the method that we found has as much arguments as the one that we were looking for
+            // i.e.: don't cache doesNotUnderstand:
             if (entry.argCount === argCount)
                 this.method.ic[this.pc] = {
                     added: new Date().getTime(),
                     method: entry.method,
                     primIndex: entry.primIndex,
                     mClass: entry.mClass,
-                    lkupClass: entry.lkupClass
+                    lkupClass: entry.lkupClass,
+                    argCount: argCount
                 }
         } else if (ic.lkupClass !== lookupClass) {
             entry = this.findSelectorInClass(selector, argCount, lookupClass);            
@@ -2428,7 +2431,10 @@ Object.subclass('Squeak.Interpreter',
             this.verifyAtClass = lookupClass;
         }
 
-        this.executeNewMethod(newRcvr, entry.method, entry.argCount || argCount, entry.primIndex, entry.mClass, selector);
+        if(entry.argCount !== argCount)
+            console.log(entry.lkupClass.className(), "doesNotUnderstand:", selector.bytesAsString());
+
+        this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
     },
     sendAsPrimitiveFailure: function(rcvr, method, argCount) {
         this.executeNewMethod(rcvr, method, argCount, 0);
@@ -3509,7 +3515,7 @@ Object.subclass('Squeak.Primitives',
             230: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveRelinquishProcessorForMicroseconds(argCount); },
             231: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveForceDisplayUpdate(argCount); },
             // 232:  return primHandler.primitiveFormPrint(argCount);",
-            233: function (index, argCount, primMethod, primHandler) { primHandler.primitiveSetFullScreen(argCount); },
+            233: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveSetFullScreen(argCount); },
             234: notImplemented,
             235: notImplemented,
             236: notImplemented,

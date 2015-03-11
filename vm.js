@@ -408,7 +408,7 @@ Object.extend(Squeak,
                         }
                     }
                     var req = {result: buffer, error: "file not found"};
-                    setTimeout(function(){
+                    setTimeout(function() {
                         if (buffer && req.onsuccess) req.onsuccess({target: req});
                         if (!buffer && req.onerror) req.onerror({target: req});
                     }, 0);
@@ -430,7 +430,7 @@ Object.extend(Squeak,
                         }
                     }
                     var req = {};
-                    setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
+                    setTimeout(function() {if (req.onsuccess) req.onsuccess()}, 0);
                     return req;
                 },
                 delete: function(filename) {
@@ -438,12 +438,12 @@ Object.extend(Squeak,
                     delete localStorage["squeak-file.lz:" + filename];
                     delete SqueakDBFake.bigFiles[filename];
                     var req = {};
-                    setTimeout(function(){if (req.onsuccess) req.onsuccess()}, 0);
+                    setTimeout(function() {if (req.onsuccess) req.onsuccess()}, 0);
                     return req;
                 },
                 openCursor: function() {
                     var req = {};
-                    setTimeout(function(){if (req.onsuccess) req.onsuccess({target: req})}, 0);
+                    setTimeout(function() {if (req.onsuccess) req.onsuccess({target: req})}, 0);
                     return req;
                 },
             }
@@ -1042,7 +1042,7 @@ Object.subclass('Squeak.Image',
             }
         }
         // sort by oop to preserve creation order
-        return newObjects.sort(function(a,b){return b.oop - a.oop});
+        return newObjects.sort(function(a,b) {return b.oop - a.oop});
     },
     removeUnmarkedOldObjects: function() {
         // Unlink unmarked old objects from the nextObject linked list
@@ -2124,37 +2124,37 @@ Object.subclass('Squeak.Interpreter',
 
             // Arithmetic Ops... + - < > <= >= = ~=    * /  @ lshift: lxor: land: lor:
             case 0xB0: this.success = true; this.resultIsFloat = false;
-                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) + this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // PLUS +
+                if (!this.pop2AndPushNumResult(this.stackIntOrFloat(1) + this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // PLUS +
             case 0xB1: this.success = true; this.resultIsFloat = false;
-                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) - this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // MINUS -
+                if (!this.pop2AndPushNumResult(this.stackIntOrFloat(1) - this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // MINUS -
             case 0xB2: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) < this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LESS <
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) < this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LESS <
             case 0xB3: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) > this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GRTR >
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) > this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GRTR >
             case 0xB4: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) <= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LEQ <=
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) <= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LEQ <=
             case 0xB5: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) >= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GEQ >=
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) >= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GEQ >=
             case 0xB6: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) === this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // EQU =
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) === this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // EQU =
             case 0xB7: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) !== this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // NEQ ~=
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) !== this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // NEQ ~=
             case 0xB8: this.success = true; this.resultIsFloat = false;
-                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) * this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // TIMES *
+                if (!this.pop2AndPushNumResult(this.stackIntOrFloat(1) * this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // TIMES *
             case 0xB9: this.success = true;
-                if(!this.pop2AndPushIntResult(this.quickDivide(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide /
+                if (!this.pop2AndPushIntResult(this.quickDivide(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide /
             case 0xBA: this.success = true;
-                if(!this.pop2AndPushIntResult(this.mod(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // MOD \
+                if (!this.pop2AndPushIntResult(this.mod(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // MOD \
             case 0xBB: this.success = true;
-                if(!this.primHandler.primitiveMakePoint(1, true)) this.sendSpecial(b&0xF); return;  // MakePt int@int
+                if (!this.primHandler.primitiveMakePoint(1, true)) this.sendSpecial(b&0xF); return;  // MakePt int@int
             case 0xBC: this.success = true;
-                if(!this.pop2AndPushIntResult(this.safeShift(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return; // bitShift:
+                if (!this.pop2AndPushIntResult(this.safeShift(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return; // bitShift:
             case 0xBD: this.success = true;
-                if(!this.pop2AndPushIntResult(this.div(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide //
+                if (!this.pop2AndPushIntResult(this.div(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide //
             case 0xBE: this.success = true;
-                if(!this.pop2AndPushIntResult(this.stackInteger(1) & this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitAnd:
+                if (!this.pop2AndPushIntResult(this.stackInteger(1) & this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitAnd:
             case 0xBF: this.success = true;
-                if(!this.pop2AndPushIntResult(this.stackInteger(1) | this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitOr:
+                if (!this.pop2AndPushIntResult(this.stackInteger(1) | this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitOr:
 
             // at:, at:put:, size, next, nextPut:, ...
             case 0xC0: case 0xC1: case 0xC2: case 0xC3: case 0xC4: case 0xC5: case 0xC6: case 0xC7:
@@ -2261,11 +2261,11 @@ Object.subclass('Squeak.Interpreter',
         }
         this.interruptCheckCounter = this.interruptCheckCounterFeedBackReset; //reset the interrupt check counter
         this.lastTick = now; //used to detect wraparound of millisecond clock
-        //  if(signalLowSpace) {
+        //  if (signalLowSpace) {
         //            signalLowSpace= false; //reset flag
         //            sema= getSpecialObject(Squeak.splOb_TheLowSpaceSemaphore);
-        //            if(sema != nilObj) synchronousSignal(sema); }
-        //  if(now >= nextPollTick) {
+        //            if (sema != nilObj) synchronousSignal(sema); }
+        //  if (now >= nextPollTick) {
         //            ioProcessEvents(); //sets interruptPending if interrupt key pressed
         //            nextPollTick= now + 500; } //msecs to wait before next call to ioProcessEvents"
         if (this.interruptPending) {
@@ -2397,7 +2397,7 @@ Object.subclass('Squeak.Interpreter',
     send: function(selector, argCount, doSuper) {
         var newRcvr = this.stackValue(argCount);
 
-        if(!this.method.ic)
+        if (!this.method.ic)
             this.method.ic = new Array(this.method.bytes.byteLength);
 
         var ic = this.method.ic[this.pc];
@@ -2438,7 +2438,7 @@ Object.subclass('Squeak.Interpreter',
             this.verifyAtClass = lookupClass;
         }
 
-        if(entry.argCount !== argCount)
+        if (entry.argCount !== argCount)
             console.log(entry.lkupClass.className(), "doesNotUnderstand:", selector.bytesAsString());
 
         this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
@@ -2980,7 +2980,7 @@ Object.subclass('Squeak.Interpreter',
         return instances;
     },
     globalNamed: function(name) {
-        return this.allGlobalsDo(function(nameObj, globalObj){
+        return this.allGlobalsDo(function(nameObj, globalObj) {
             if (nameObj.bytesAsString() === name) return globalObj;
         });
     },
@@ -3576,7 +3576,7 @@ Object.subclass('Squeak.Primitives',
             573: function (index, argCount, primMethod, primHandler) { return primHandler.primitiveListLoadedModule(argCount) }
         };
 
-        if(this.oldPrims) {
+        if (this.oldPrims) {
             // File Primitives (150-169)
             this.primitiveFunctions[150] = function (index, argCount, primMethod, primHandler) { return primHandler.primitiveFileAtEnd(argCount); };
             this.primitiveFunctions[151] = function (index, argCount, primMethod, primHandler) { return primHandler.primitiveFileClose(argCount); };
@@ -3694,7 +3694,7 @@ Object.subclass('Squeak.Primitives',
     doPrimitive: function(index, argCount, primMethod) {
         this.success = true;
         var primitiveFunction = this.getPrimitiveFunc(index);
-        if(primitiveFunction) {
+        if (primitiveFunction) {
             return primitiveFunction(index, argCount, primMethod, this);
         } else {
             console.error("primitive " + index + " not implemented yet");
@@ -4564,8 +4564,8 @@ Object.subclass('Squeak.Primitives',
         var rcvr = this.vm.stackValue(1);
         var sqArgCount = this.stackInteger(0);
         var homeCtxt = rcvr;
-        if(!this.vm.isContext(homeCtxt)) this.success = false;
-        if(!this.success) return rcvr;
+        if (!this.vm.isContext(homeCtxt)) this.success = false;
+        if (!this.success) return rcvr;
         if (typeof homeCtxt.pointers[Squeak.Context_method] === "number")
             // ctxt is itself a block; get the context for its enclosing method
             homeCtxt = homeCtxt.pointers[Squeak.BlockContext_home];
@@ -5056,7 +5056,7 @@ Object.subclass('Squeak.Primitives',
                 }
                 if (this.reverseDisplay && !cursorColors) {
                     if (!this.reversedColors)
-                        this.reversedColors = colors.map(function(c){return c ^ 0x00FFFFFF});
+                        this.reversedColors = colors.map(function(c) {return c ^ 0x00FFFFFF});
                     colors = this.reversedColors;
                 }
                 var mask = (1 << form.depth) - 1;
@@ -5548,7 +5548,7 @@ Object.subclass('Squeak.Primitives',
                 return false;
             var unfreeze = this.vm.freeze();
             Squeak.fileGet(file.name,
-                function success(contents){
+                function success(contents) {
                     file.contents = this.asUint8Array(contents);
                     unfreeze();
                     func(file);

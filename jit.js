@@ -155,7 +155,7 @@ to single-step.
         }
     },
     simplePush: ["rcvr", "vm.trueObj", "vm.falseObj", "vm.nilObj", -1, 0, 1, 2],
-    generateStartOfNumericOp: function(bytes){
+    generateStartOfNumericOp: function(bytes) {
         var push1 = this.getPush(bytes[0]);
         var push2 = this.getPush(bytes[1]);
 
@@ -316,13 +316,13 @@ to single-step.
             }
         }
     ],
-    generatePeepholeDebugCode: function(length, comment){
+    generatePeepholeDebugCode: function(length, comment) {
         var originalPC = this.pc;
         this.pc += length;
         this.generateDebugCode(comment);
         this.pc = originalPC;
     },
-    generatePeepholeLabel: function(){
+    generatePeepholeLabel: function() {
         this.generateLabel();
         this.prevPC++;
     }
@@ -498,7 +498,7 @@ to single-step.
             return new Function("return function " + funcName + "(vm) {\n" + this.source.join("") + "\n}")();
         }
     },
-    generateOptimized: function(){
+    generateOptimized: function() {
         var peepholes = this.peepholes;
         if (peepholes.length > 0) {
             peepholes = peepholes.filter(function (peephole) {
@@ -822,28 +822,28 @@ to single-step.
                 "} else { vm.pc = ", this.pc, "; vm.sendSpecial(7); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xB8: // TIMES *
-                this.source.push("vm.success = true; vm.resultIsFloat = false; if(!vm.pop2AndPushNumResult(vm.stackIntOrFloat(1) * vm.stackIntOrFloat(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(8); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; vm.resultIsFloat = false; if (!vm.pop2AndPushNumResult(vm.stackIntOrFloat(1) * vm.stackIntOrFloat(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(8); return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xB9: // DIV /
-                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.quickDivide(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(9); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if (!vm.pop2AndPushIntResult(vm.quickDivide(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(9); return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xBA: // MOD \
-                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.mod(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(10); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if (!vm.pop2AndPushIntResult(vm.mod(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(10); return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xBB:  // MakePt int@int
-                this.source.push("vm.success = true; if(!vm.primHandler.primitiveMakePoint(1, true)) { vm.pc = ", this.pc, "; vm.sendSpecial(11); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if (!vm.primHandler.primitiveMakePoint(1, true)) { vm.pc = ", this.pc, "; vm.sendSpecial(11); return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xBC: // bitShift:
-                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.safeShift(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(12); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if (!vm.pop2AndPushIntResult(vm.safeShift(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(12); return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xBD: // Divide //
-                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.div(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(13); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if (!vm.pop2AndPushIntResult(vm.div(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(13); return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xBE: // bitAnd:
-                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.stackInteger(1) & vm.stackInteger(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(14); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if (!vm.pop2AndPushIntResult(vm.stackInteger(1) & vm.stackInteger(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(14); return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xBF: // bitOr:
-                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.stackInteger(1) | vm.stackInteger(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(15); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if (!vm.pop2AndPushIntResult(vm.stackInteger(1) | vm.stackInteger(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(15); return bytecodes + ", this.pc, "}\n");
                 return;
         }
     },
@@ -884,7 +884,7 @@ to single-step.
         if (this.method.ic)
             ic = this.method.ic[this.pc];
 
-        if(ic && ic.primIndex > 0) {
+        if (ic && ic.primIndex > 0) {
             this.source.push("var sendDone = false;");
             this.generatePrimitiveSend(ic, prefix, num, suffix, numArgs, superSend);
             this.source.push(
@@ -976,7 +976,7 @@ to single-step.
 
         // remove the whole statement if we don't need any label
         if (!needsAnyLabel) {
-            // remove while(true) switch {
+            // remove while (true) switch {
             this.source[this.labelBootstrapStart] = "";
 
             // remove default case

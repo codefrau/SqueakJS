@@ -666,7 +666,7 @@ to single-step.
     generateClosureCopy: function(numArgs, numCopied, blockSize) {
         var from = this.pc,
             to = from + blockSize;
-        if (this.debug) this.generateDebugCode("push closure(" + from + "-" + (to-1) + "): " + numArgs + " args, " + numCopied + " captured");
+        if (this.debug) this.generateDebugCode("push closure(" + from + "-" + (to-1) + "): " + numCopied + " copied, " + numArgs + " args");
         this.generateLabel();
         this.source.push(
             "var closure = vm.instantiateClass(vm.specialObjects[36], ", numCopied, ");\n",

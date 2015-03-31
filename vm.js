@@ -6782,7 +6782,7 @@ Object.subclass('Squeak.InstructionPrinter',
     pushClosureCopy: function(numCopied, numArgs, blockSize) {
         var from = this.scanner.pc,
             to = from + blockSize;
-        this.print('closure(' + from + '-' + (to-1) + '): ' + numCopied + ' captured, ' + numArgs + ' args');
+        this.print('closure(' + from + '-' + (to-1) + '): ' + numCopied + ' copied, ' + numArgs + ' args');
         for (var i = from; i < to; i++)
             this.innerIndents[i] = (this.innerIndents[i] || 0) + 1;
         if (to > this.endPC) this.endPC = to;

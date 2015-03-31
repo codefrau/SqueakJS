@@ -669,7 +669,7 @@ to single-step.
         if (this.debug) this.generateDebugCode("push closure(" + from + "-" + (to-1) + "): " + numArgs + " args, " + numCopied + " captured");
         this.generateLabel();
         this.source.push(
-            "var closure = vm.instantiateClass(vm.specialObjects[36], ", numCopied + 3, ");\n",
+            "var closure = vm.instantiateClass(vm.specialObjects[36], ", numCopied, ");\n",
             "closure.pointers[0] = context; vm.reclaimableContextCount = 0;\n",
             "closure.pointers[1] = ", from + this.method.pointers.length * 4 + 1, ";\n",  // encodeSqueakPC
             "closure.pointers[2] = ", numArgs, ";\n");

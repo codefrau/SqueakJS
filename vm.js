@@ -2383,8 +2383,7 @@ Object.subclass('Squeak.Interpreter',
         this.push(closure);
     },
     newClosure: function(numArgs, initialPC, numCopied) {
-        var size = Squeak.Closure_firstCopiedValue + numCopied,
-            closure = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassBlockClosure], size);
+        var closure = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassBlockClosure], numCopied);
         closure.pointers[Squeak.Closure_startpc] = initialPC;
         closure.pointers[Squeak.Closure_numArgs] = numArgs;
         return closure;

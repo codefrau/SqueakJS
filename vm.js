@@ -6795,12 +6795,7 @@ Object.subclass('Squeak.InstructionStream',
         this.vm = vm;
         this.method = method;
         this.pc = 0;
-        this.specialConstants = ['true', 'false', 'nil', '-1', '0', '1', '2'];
-        this.specialSelectors = ['+', '-', '<', '>', '<=', '>=', '=', '~=', '*', '/', '\\', '@',
-            'bitShift:', '//', 'bitAnd:', 'bitOr:', 'at:', 'at:put:', 'size', 'next', 'nextPut:',
-            'atEnd', '==', 'class', 'blockCopy:', 'value', 'value:', 'do:', 'new', 'new:', 'x', 'y'];
-        this.specialSelectorsNArgs = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 0, 0, 1,
-            0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 0];
+        this.specialConstants = [vm.trueObj, vm.falseObj, vm.nilObj, -1, 0, 1, 2];
     },
 },
 'decoding',
@@ -6839,12 +6834,12 @@ Object.subclass('Squeak.InstructionStream',
             else return client.jumpIf(offset<12, (offset & 3)*256 + byte);
         }
         if (type === 11)
-            return client.send(this.specialSelectors[offset],
-                this.specialSelectorsNArgs[offset],
+            return client.send(this.vm.specialSelectors[2 * offset],
+                this.vm.specialSelectors[2 * offset + 1],
                 false);
         if (type === 12)
-            return client.send(this.specialSelectors[offset+16],
-                this.specialSelectorsNArgs[offset+16],
+            return client.send(this.vm.specialSelectors[2 * (offset + 16)],
+                this.vm.specialSelectors[2 * (offset + 16) + 1],
                 false);
         if (type > 12)
             return client.send(method.methodGetLiteral(offset), type-13, false);

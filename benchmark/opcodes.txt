@@ -1,0 +1,50 @@
+70,d0,87			49		push send pop
+76,c8,a4			47		push blockcopy jump
+89,76,c8			47		thisContext push blockcopy
+75,c8,a4			44		push blockcopy jump
+89,75,c8			44		thisContext push blockcopy
+87,78,0				39		pop push
+d0,7c,0				38		send return
+e0,7c,0				36		send return
+7d,cb,87			28		blockreturn do pop
+76,b0,81			25		push numericop store
+73,c6,a8			25		push === long conditional jump
+90,72,ac			24		sjump push long conditional jump
+11,76,b0			23		pushtemp push numeric
+76,b0,82			23		push numeric pop into
+10,e0,7c			22		pushtemp re0 push
+70,10,85			22		push pushtemp r85
+76,b0,6a			21		push numeric r6a
+b6,90,72			21		rb6 sjump push
+87,78,2e			20		pop push r2e
+14,76,b0			20		r14 push numeric
+81,1,78				20		r81 r1 push
+70,10,e0			20		push pushtemp re0
+d0,87,78			19		rd0 pop push
+99,71,92			19		scjump push r92
+12,76,b1			19		r12 push rb1
+70,d0,7c			19		push rd0 push
+76,b0,c0			19		push numeric rc0
+12,76,b0			18		r12 push numeric
+10,85,20			18		pushtemp r85 r20
+9a,70,d0			18		r9a push rd0
+7c,2e,b6			18		push r2e rb6
+73,c6,99			18		push === scjump
+70,10,11			18		push pushtemp pushtemp
+75,75,bb			17		push push advanced numeric
+90,72,7c			17		sjump push push
+70,21,e0			17		push r21 re0
+c6,99,71			17		=== scjump push
+83,60,7c			16		r83 r60 push
+c8,a4,3				16		blockcopy ra4 r3
+70,d1,10			16		push rd1 pushtemp
+70,d1,87			16		push rd1 pop
+75,b6,99			15		push rb6 scjump
+7c,83,24			15		push r83 r24
+b0,6a,a3			15		numeric r6a ra3
+10,11,f0			15		pushtemp pushtemp send
+b4,90,72			14		rb4 sjump push
+78,25,e4			14		push r25 re4
+76,b0,6c			14		push numeric r6c
+e0,87,78			14		re0 pop push
+b2,90,72			14		rb2 sjump push

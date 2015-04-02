@@ -65,9 +65,11 @@ Object.subclass = function(classPath /* + more args */ ) {
     };
     // skip arg 0, copy properties of other args to class proto
     for (var i = 1; i < arguments.length; i++)
-        for (name in arguments[i])
-            newClass.prototype[name] = arguments[i][name];
+        if (typeof arguments[i] == 'object')
+            for (name in arguments[i])
+                newClass.prototype[name] = arguments[i][name];
     module(path.join('.'))[className] = newClass;
+    return newClass;
 };
 
 Object.extend = function(obj /* + more args */ ) {

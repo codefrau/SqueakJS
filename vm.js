@@ -2211,9 +2211,10 @@ Object.subclass('Squeak.Interpreter',
         this.isIdle = hasTimer || !hadTimer;
         this.breakOut();
     },
-    freeze: function() {
+    freeze: function(frozenDo) {
         // Stop the interpreter. Answer a function that can be
         // called to continue interpreting.
+        // Optionally, frozenDo is called asynchronously when frozen
         var continueFunc;
         this.frozen = true;
         this.breakOutOfInterpreter = function(thenDo) {
@@ -2221,11 +2222,13 @@ Object.subclass('Squeak.Interpreter',
             continueFunc = thenDo;
             return "frozen";
         }.bind(this);
-        return function unfreeze() {
+        var unfreeze = function() {
             this.frozen = false;
             if (!continueFunc) throw Error("no continue function");
             continueFunc(0);    //continue without timeout
         }.bind(this);
+        if (frozenDo) window.setTimeout(function(){frozenDo(unfreeze)}, 0);
+        return unfreeze;
     },
     breakOut: function() {
         this.breakOutOfInterpreter = this.breakOutOfInterpreter || true; // do not overwrite break string
@@ -5545,19 +5548,20 @@ Object.subclass('Squeak.Primitives',
         } else {
             if (file.contents === false) // failed to get contents before
                 return false;
-            var unfreeze = this.vm.freeze();
-            Squeak.fileGet(file.name,
-                function success(contents) {
-                    file.contents = this.asUint8Array(contents);
-                    unfreeze();
-                    func(file);
-                }.bind(this),
-                function error(msg) {
-                    console.log("File get failed: " + msg);
-                    file.contents = false;
-                    unfreeze();
-                    func(file);
-                }.bind(this));
+            this.vm.freeze(function(unfreeze) {
+                Squeak.fileGet(file.name,
+                    function success(contents) {
+                        file.contents = this.asUint8Array(contents);
+                        unfreeze();
+                        func(file);
+                    }.bind(this),
+                    function error(msg) {
+                        console.log("File get failed: " + msg);
+                        file.contents = false;
+                        unfreeze();
+                        func(file);
+                    }.bind(this));
+            }.bind(this));
         }
         return true;
     },

@@ -65,9 +65,11 @@ Object.subclass = function(classPath /* + more args */ ) {
     };
     // skip arg 0, copy properties of other args to class proto
     for (var i = 1; i < arguments.length; i++)
-        for (name in arguments[i])
-            newClass.prototype[name] = arguments[i][name];
+        if (typeof arguments[i] == 'object')
+            for (name in arguments[i])
+                newClass.prototype[name] = arguments[i][name];
     module(path.join('.'))[className] = newClass;
+    return newClass;
 };
 
 Object.extend = function(obj /* + more args */ ) {
@@ -742,16 +744,20 @@ SqueakJS.runImage = function(buffer, name, display, options) {
 };
 
 function processOptions(options) {
-    var search = decodeURIComponent(window.location.hash).slice(1),
+    var search = window.location.hash.slice(1),
         args = search && search.split("&");
     if (args) for (var i = 0; i < args.length; i++) {
         var keyAndVal = args[i].split("="),
             key = keyAndVal[0],
-            val = keyAndVal[1];
-        try { val = JSON.parse(val); } catch(e) {
-            if (val[0] === "[") val = val.slice(1,-1).split(","); // handle string arrays
-            // if not JSON use string itself
-         };
+            val = true;
+        if (keyAndVal.length > 1) {
+            val = decodeURIComponent(keyAndVal.slice(1).join("="));
+            if (val.match(/^(true|false|null|[0-9"[{].*)$/))
+                try { val = JSON.parse(val); } catch(e) {
+                    if (val[0] === "[") val = val.slice(1,-1).split(","); // handle string arrays
+                    // if not JSON use string itself
+                };
+        }
         options[key] = val;
     }
     var root = Squeak.splitFilePath(options.root || "/").fullname;

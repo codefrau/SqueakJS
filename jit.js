@@ -139,6 +139,194 @@ to single-step.
             'atEnd', '==', 'class', 'blockCopy:', 'value', 'value:', 'do:', 'new', 'new:', 'x', 'y'];
     },
 },
+'peephole', {
+    getPush: function (byte) {
+        switch (byte & 0xF8) {
+            case 0x00: case 0x08:
+                return "inst[" + (byte & 0x0F) + "]";
+            case 0x10: case 0x18:
+                return "temp[" + (6 + (byte & 0xF)) + "]";
+            case 0x20: case 0x28: case 0x30: case 0x38:
+                return "lit[" + (1 + (byte & 0x1F)) + "]";
+            case 0x40: case 0x48: case 0x50: case 0x58:
+                return "lit[" + (1 + (byte & 0x1F)) + "].pointers[1]";
+            case 0x70:
+                return this.simplePush[byte & 7];
+        }
+    },
+    simplePush: ["rcvr", "vm.trueObj", "vm.falseObj", "vm.nilObj", -1, 0, 1, 2],
+    generateStartOfNumericOp: function(bytes) {
+        var push1 = this.getPush(bytes[0]);
+        var push2 = this.getPush(bytes[1]);
+
+        var op = [
+            "vm.primHandler.signed32BitIntegerFor(push1 + push2)",
+            "vm.primHandler.signed32BitIntegerFor(push1 - push2)",
+            "push1 < push2 ? vm.trueObj : vm.falseObj",
+            "push1 > push2 ? vm.trueObj : vm.falseObj",
+            "push1 <= push2 ? vm.trueObj : vm.falseObj",
+            "push1 >= push2 ? vm.trueObj : vm.falseObj",
+            "push1 === push2 ? vm.trueObj : vm.falseObj",
+            "push1 !== push2 ? vm.trueObj : vm.falseObj"
+        ];
+        var operatorIndex = bytes[2] & 7;
+        var operation = op[operatorIndex].replace("push1", push1).replace("push2", push2);
+
+
+        if (typeof push1 === "number" && typeof push2 === "number") {
+            this.source.push("if (true) {\n");
+        } else if (typeof push1 === "number") {
+            this.source.push("if (typeof ", push2, " === 'number') {\n");
+        } else if (typeof push2 === "number") {
+            this.source.push("if (typeof ", push1, "  === 'number') {\n");
+        } else {
+            this.source.push("if ((typeof ", push1, "  === 'number' && typeof ", push2, " === 'number')");
+            //take care of equality and NaN
+            if (operatorIndex === 6 || operatorIndex === 7)
+                this.source.push(" || ((",push1," === ",push2,") && (",push1,".float === ",push2,".float))");
+            this.source.push(") {\n");    
+        }
+        return operation;
+    },
+
+    peepholes: [
+        { // push push numericOp conditionalJump
+            matches: function (counter, byte) {
+                var pushCodes = [0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38, 0x40, 0x48, 0x50, 0x58, 0x70];
+                var flag = (byte & 0xF8);
+                switch (counter) {
+                    case 0:
+                        return pushCodes.indexOf(flag) > -1;
+                    case 1:
+                        return pushCodes.indexOf(flag) > -1;
+                    case 2:
+                        return flag === 0xB0;
+                    case 3:
+                        return flag === 0xA8 || flag === 0x98;
+                }
+            },
+            byteCount: 4,
+            generate: function (bytes) {
+                // // 0x98: short conditional jump
+                // // 0xA8: long conditional jump
+
+                var jumpByte = bytes[3];
+                var jumpFlag = bytes[3] & 0xF8;
+                var isShort = jumpFlag === 0x98;
+                var condition = !isShort && jumpByte < 0xAC;
+                var pcOfNextByte = this.pc + 4 + (isShort?0:1);
+                var distance = isShort ? (jumpByte & 0x07) + 1 : ((jumpByte & 3) * 256 + this.method.bytes[pcOfNextByte-1]);
+                var destination = pcOfNextByte + distance;
+
+                if (this.debug) this.generatePeepholeDebugCode(bytes.length, "push push numericOp "+ (isShort?"short":"long")+ "ConditionalJump by "+distance+" to " + destination + " (peephole optimized)");
+                this.generatePeepholeLabel();
+
+                //we need a label at the destination!
+                this.needsLabel[destination] = true;
+                this.needsLabel[pcOfNextByte] = true;
+
+                var operation = this.generateStartOfNumericOp(bytes);
+
+                this.source.push("   var cond = "+operation+";\n");
+
+                // true?
+                this.source.push("   if (cond === vm."+condition+"Obj) {\n",
+                    "      vm.pc = ", destination, ";\n",
+                    "      bytecodes -= ", distance, ";\n",
+                    "      continue;\n",
+                    "   } ");
+
+                this.source.push(
+                    // no need to check if cond is not trueObj nor falseObj as we are sure, it is one of them
+                    // false!
+                    "else vm.pc = ", pcOfNextByte, ";\n");
+
+                if (this.singleStep) this.source.push("   if (vm.breakOutOfInterpreter) return bytecodes + ", destination,";\n");
+
+                this.source.push(
+                    "   continue;\n",
+                    "}\n",
+                    // fall back to stack machine
+                    "stack[++vm.sp] = ", this.getPush(bytes[0]), ";\n");
+
+                return;
+            }
+        },
+        { // push push numericOp
+            matches: function (counter, byte) {
+                var pushCodes = [0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38, 0x40, 0x48, 0x50, 0x58, 0x70];
+                var flag = (byte & 0xF8);
+                switch (counter) {
+                    case 0:
+                        return pushCodes.indexOf(flag) > -1;
+                    case 1:
+                        return pushCodes.indexOf(flag) > -1;
+                    case 2:
+                        return flag === 0xB0;
+                }
+            },
+            byteCount: 3,
+            generate: function (bytes) {
+                if (this.debug) this.generatePeepholeDebugCode(bytes.length, "push push numericOp " + this.specialSelectors[bytes[2] & 0x0F] + " (peephole optimized)");
+                this.generatePeepholeLabel();
+
+                var jumpOver = this.pc + 3;
+                // we need a label at the destination!
+                this.needsLabel[jumpOver] = true; // obviously
+
+
+                var operation = this.generateStartOfNumericOp(bytes);
+
+                this.source.push(
+                    "   vm.pc = ", jumpOver, ";\n",
+                    "   stack[++vm.sp] = ", operation ,";\n"
+                );
+
+                if (this.singleStep) this.source.push(
+                    "   if (vm.breakOutOfInterpreter) return bytecodes + ", jumpOver, ";\n");
+
+                this.source.push(
+                    "   continue;\n",
+                    "} else {\n",
+                    // fall back to stack machine
+                    "   stack[++vm.sp] = ", this.getPush(bytes[0]), ";\n",
+                    "}\n");
+
+                return;
+            }
+        },
+        { // push popReturn
+            matches: function (counter, byte) {
+                var pushCodes = [0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38, 0x40, 0x48, 0x50, 0x58, 0x70];
+                switch (counter) {
+                    case 0:
+                        return pushCodes.indexOf(byte & 0xF8) > -1;
+                    case 1:
+                        return byte === 0x7C;
+                }
+            },
+            byteCount: 2,
+            generate: function (bytes) {
+                if (this.debug) this.generatePeepholeDebugCode(bytes.length, "push popReturn (peephole optimized)");
+                this.generatePeepholeLabel();
+                this.source.push(
+                    "vm.pc = ", this.pc+2, "; vm.doReturn(", this.getPush(bytes[0]), "); return bytecodes + ", this.pc+2, ";\n");
+
+                return;
+            }
+        }
+    ],
+    generatePeepholeDebugCode: function(length, comment) {
+        var originalPC = this.pc;
+        this.pc += length;
+        this.generateDebugCode(comment);
+        this.pc = originalPC;
+    },
+    generatePeepholeLabel: function() {
+        this.generateLabel();
+        this.prevPC++;
+    }
+},
 'accessing', {
     compile: function(method, optClass, optSel) {
         if (!method.isHot) {
@@ -189,6 +377,7 @@ to single-step.
         this.sourceLabels = {};     // source pos of generated labels 
         this.needsLabel = {0: true}; // jump targets
         this.needsBreak = false;    // insert break check for previous bytecode
+
         if (optClass && optSel)
             this.source.push("// ", optClass, ">>", optSel, "\n");
         this.source.push(
@@ -198,13 +387,21 @@ to single-step.
             "    inst = rcvr.pointers,\n",
             "    temp = vm.homeContext.pointers,\n",
             "    lit = vm.method.pointers,\n",
-            "    bytecodes = 0 - vm.pc;\n",
-            "while (true) switch (vm.pc) {\n"
-        );
+            "    bytecodes = 0 - vm.pc;\n");
+
+        this.labelBootstrapStart = this.source.length;
+        this.source.push("while (true) switch (vm.pc) {\n");
+        
         this.done = false;
         while (!this.done) {
-            var byte = method.bytes[this.pc++],
-                byte2 = 0;
+            // try peephole-optimization
+            if (this.generateOptimized()) {
+                this.pc++;
+                continue;
+            }
+
+            var byte = method.bytes[this.pc++];
+
             switch (byte & 0xF8) {
                 // load receiver variable
                 case 0x00: case 0x08:
@@ -232,16 +429,7 @@ to single-step.
                     break;
                 // Quick push
                 case 0x70:
-                    switch (byte) {
-                        case 0x70: this.generatePush("rcvr"); break;
-                        case 0x71: this.generatePush("vm.trueObj"); break;
-                        case 0x72: this.generatePush("vm.falseObj"); break;
-                        case 0x73: this.generatePush("vm.nilObj"); break;
-                        case 0x74: this.generatePush("-1"); break;
-                        case 0x75: this.generatePush("0"); break;
-                        case 0x76: this.generatePush("1"); break;
-                        case 0x77: this.generatePush("2"); break;
-                    }
+                    this.generatePush(this.simplePush[byte & 7]);
                     break;
                 // Quick return
                 case 0x78:
@@ -269,12 +457,12 @@ to single-step.
                     break;
                 // long jump, forward and back
                 case 0xA0:
-                    byte2 = method.bytes[this.pc++];
+                    var byte2 = method.bytes[this.pc++];
                     this.generateJump(((byte&7)-4) * 256 + byte2);
                     break;
                 // long conditional jump
                 case 0xA8:
-                    byte2 = method.bytes[this.pc++];
+                    var byte2 = method.bytes[this.pc++];
                     this.generateJumpIf(byte < 0xAC, (byte & 3) * 256 + byte2);
                     break;
                 // SmallInteger ops: + - < > <= >= = ~= * /  @ lshift: lxor: land: lor:
@@ -304,10 +492,30 @@ to single-step.
             return new Function("return function " + funcName + "(vm, singleStep) {\n" + this.source.join("") + "\n}")();
         } else {
             if (this.debug) this.source.push("// fall back to single-stepping\n");
+            this.labelBootstrapEnd = this.source.length;
             this.source.push("default: bytecodes += vm.pc; vm.interpretOne(true); return bytecodes;}");
             this.deleteUnneededLabels();
             return new Function("return function " + funcName + "(vm) {\n" + this.source.join("") + "\n}")();
         }
+    },
+    generateOptimized: function() {
+        var peepholes = this.peepholes;
+        if (peepholes.length > 0) {
+            peepholes = peepholes.filter(function (peephole) {
+                var i;
+                for (i = 0; i < peephole.byteCount; i += 1) {
+                    if (!peephole.matches(i, this.method.bytes[this.pc + i])) {
+                        return false;
+                    }
+                }
+                return true;
+            }, this);
+            if (peepholes.length > 0) {
+                peepholes[0].generate.call(this, this.method.bytes.subarray(this.pc, this.pc + peepholes[0].byteCount));
+                return true;
+            }
+        }
+        return false;
     },
     generateExtended: function(bytecode) {
         switch (bytecode) {
@@ -497,7 +705,7 @@ to single-step.
             "var cond = stack[vm.sp--]; if (cond === vm.", condition, "Obj) {vm.pc = ", destination, "; bytecodes -= ", distance, "; ");
         if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", destination,"; else ");
         this.source.push("continue}\n",
-            "else if (cond !== vm.", !condition, "Obj) {vm.sp++; vm.pc = ", this.pc, "; vm.send(vm.specialObjects[25], 0, false); return bytecodes + ", this.pc, "}\n");
+            "else if (cond !== vm.", !condition, "Obj) {vm.sp++; vm.pc = ", this.pc, "; vm.send(vm.specialObjects["+Squeak.splOb_SelectorMustBeBoolean+"], 0, false); return bytecodes + ", this.pc, "}\n");
         this.needsLabel[this.pc] = true; // for coming back after #mustBeBoolean send
         this.needsLabel[destination] = true; // obviously
         if (destination > this.endPC) this.endPC = destination;
@@ -614,38 +822,80 @@ to single-step.
                 "} else { vm.pc = ", this.pc, "; vm.sendSpecial(7); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xB8: // TIMES *
-                this.source.push("vm.success = true; vm.resultIsFloat = false; if(!vm.pop2AndPushNumResult(vm.stackIntOrFloat(1) * vm.stackIntOrFloat(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(8); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; vm.resultIsFloat = false; if (!vm.pop2AndPushNumResult(vm.stackIntOrFloat(1) * vm.stackIntOrFloat(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(8); return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xB9: // DIV /
-                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.quickDivide(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(9); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if (!vm.pop2AndPushIntResult(vm.quickDivide(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(9); return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xBA: // MOD \
-                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.mod(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(10); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if (!vm.pop2AndPushIntResult(vm.mod(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(10); return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xBB:  // MakePt int@int
-                this.source.push("vm.success = true; if(!vm.primHandler.primitiveMakePoint(1, true)) { vm.pc = ", this.pc, "; vm.sendSpecial(11); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if (!vm.primHandler.primitiveMakePoint(1, true)) { vm.pc = ", this.pc, "; vm.sendSpecial(11); return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xBC: // bitShift:
-                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.safeShift(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(12); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if (!vm.pop2AndPushIntResult(vm.safeShift(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(12); return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xBD: // Divide //
-                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.div(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(13); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if (!vm.pop2AndPushIntResult(vm.div(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(13); return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xBE: // bitAnd:
-                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.stackInteger(1) & vm.stackInteger(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(14); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if (!vm.pop2AndPushIntResult(vm.stackInteger(1) & vm.stackInteger(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(14); return bytecodes + ", this.pc, "}\n");
                 return;
             case 0xBF: // bitOr:
-                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.stackInteger(1) | vm.stackInteger(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(15); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if (!vm.pop2AndPushIntResult(vm.stackInteger(1) | vm.stackInteger(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(15); return bytecodes + ", this.pc, "}\n");
                 return;
         }
+    },
+    generateSpecialPrimitiveSend: function (primIndex) {
+        if (primIndex >= 264) {//return instvars
+            return "vm.popNandPush(1, vm.top().pointers[" + (primIndex - 264) +"]);";
+        }
+        switch (primIndex) {
+            case 256: return ""; //return self
+            case 257: return "vm.popNandPush(1, vm.trueObj);"; //return true
+            case 258: return "vm.popNandPush(1, vm.falseObj);"; //return false
+            case 259: return "vm.popNandPush(1, vm.nilObj);"; //return nil
+        }
+        return "vm.popNandPush(1, " + (primIndex - 261) + ");"; //return -1...2
+    },
+    generatePrimitiveSend: function (ic, prefix, num, suffix, numArgs) {
+        this.source.push(
+            "var ic = vm.method.ic[", this.pc ,"];",
+            "if (ic.lkupClass === vm.getClass(vm.stackValue(", numArgs ,"))) {"
+        );
+
+        if ((ic.primIndex > 255) && (ic.primIndex < 520)) {
+            this.source.push(this.generateSpecialPrimitiveSend(ic.primIndex));
+            this.source.push("sendDone = true;");
+        } else {
+            this.source.push("sendDone = vm.primHandler.primitiveFunctions[", ic.primIndex ,"](", ic.primIndex, ", ", numArgs, ", ic.method, vm.primHandler);");
+        }
+
+        this.source.push("}");
     },
     generateSend: function(prefix, num, suffix, numArgs, superSend) {
         if (this.debug) this.generateDebugCode("send " + (prefix === "lit[" ? this.method.pointers[num].bytesAsString() : "..."));
         this.generateLabel();
+
+        this.source.push("vm.pc = ", this.pc, ";");
+
+        var ic;
+        if (this.method.ic)
+            ic = this.method.ic[this.pc];
+
+        if (ic && ic.primIndex > 0) {
+            this.source.push("var sendDone = false;");
+            this.generatePrimitiveSend(ic, prefix, num, suffix, numArgs, superSend);
+            this.source.push(
+            "if (sendDone) vm.sendCount++;",
+            "else ");
+        }
+
         // set pc, activate new method, and return to main loop
         // unless the method was a successfull primitive call (no context change)
         this.source.push(
-            "vm.pc = ", this.pc, "; vm.send(", prefix, num, suffix, ", ", numArgs, ", ", superSend, "); ",
+            "vm.send(", prefix, num, suffix, ", ", numArgs, ", ", superSend, "); ",
             "if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, ";\n");
         this.needsBreak = false; // already checked
         // need a label for coming back after send
@@ -666,10 +916,10 @@ to single-step.
     generateClosureCopy: function(numArgs, numCopied, blockSize) {
         var from = this.pc,
             to = from + blockSize;
-        if (this.debug) this.generateDebugCode("push closure(" + from + "-" + (to-1) + "): " + numArgs + " args, " + numCopied + " captured");
+        if (this.debug) this.generateDebugCode("push closure(" + from + "-" + (to-1) + "): " + numCopied + " copied, " + numArgs + " args");
         this.generateLabel();
         this.source.push(
-            "var closure = vm.instantiateClass(vm.specialObjects[36], ", numCopied + 3, ");\n",
+            "var closure = vm.instantiateClass(vm.specialObjects[36], ", numCopied, ");\n",
             "closure.pointers[0] = context; vm.reclaimableContextCount = 0;\n",
             "closure.pointers[1] = ", from + this.method.pointers.length * 4 + 1, ";\n",  // encodeSqueakPC
             "closure.pointers[2] = ", numArgs, ";\n");
@@ -715,11 +965,28 @@ to single-step.
         this.source.push(instr, ";\n");
     },
     deleteUnneededLabels: function() {
+        var needsAnyLabel = false;
         // switch statement is more efficient with fewer labels
         for (var i in this.sourceLabels) 
             if (!this.needsLabel[i])
                 for (var j = 0; j < 3; j++) 
                     this.source[this.sourceLabels[i] + j] = "";
+            else
+                needsAnyLabel = true;
+
+        // remove the whole statement if we don't need any label
+        if (!needsAnyLabel) {
+            // remove while (true) switch {
+            this.source[this.labelBootstrapStart] = "";
+
+            // remove default case
+            this.source[this.labelBootstrapEnd] = "";
+
+            // remove case 0:
+            this.source[this.sourceLabels[0]] = "";
+            this.source[this.sourceLabels[0]+1] = "";
+            this.source[this.sourceLabels[0]+2] = "";
+        }
     },
 });
 

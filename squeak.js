@@ -360,9 +360,14 @@ function createSqueakDisplay(canvas, options) {
         display.getNextEvent = function(firstEvtBuf, firstOffset) {
             // might be called from VM to get queued event
             eventQueue = []; // create queue on first call
-            display.getNextEvent = function getNextEvent(evtBuf, timeOffset) {
+            eventQueue.push = function(evt) {
+                eventQueue.offset = Date.now() - evt[1]; // get epoch from first event
+                delete eventQueue.push;                  // use original push from now on
+                eventQueue.push(evt);
+            }
+            display.getNextEvent = function(evtBuf, timeOffset) {
                 var evt = eventQueue.shift();
-                if (evt) makeSqueakEvent(evt, evtBuf, timeOffset);
+                if (evt) makeSqueakEvent(evt, evtBuf, timeOffset - eventQueue.offset);
                 else evtBuf[0] = Squeak.EventTypeNone;
             };
             display.getNextEvent(firstEvtBuf, firstOffset);

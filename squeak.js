@@ -56,20 +56,26 @@ window.module = function(dottedPath) {
     return self;
 };
 
-Object.subclass = function(classPath /* + more args */ ) {
-    var path = classPath.split("."),
-        className = path.pop();
-    var newClass = function() {
+Function.prototype.subclass = function(classPath /* + more args */ ) {
+    // create subclass
+    var subclass = function() {
         if (this.initialize) this.initialize.apply(this, arguments);
         return this;
     };
-    // skip arg 0, copy properties of other args to class proto
+    // set up prototype
+    var protoclass = function() { };
+    protoclass.prototype = this.prototype;
+    subclass.prototype = new protoclass();
+    // skip arg 0, copy properties of other args to prototype
     for (var i = 1; i < arguments.length; i++)
         if (typeof arguments[i] == 'object')
             for (name in arguments[i])
-                newClass.prototype[name] = arguments[i][name];
-    module(path.join('.'))[className] = newClass;
-    return newClass;
+                subclass.prototype[name] = arguments[i][name];
+    // add class to module
+    var modulePath = classPath.split("."),
+        className = modulePath.pop();
+    module(modulePath.join('.'))[className] = subclass;
+    return subclass;
 };
 
 Object.extend = function(obj /* + more args */ ) {

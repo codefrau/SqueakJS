@@ -3553,6 +3553,7 @@ Object.subclass('Squeak.Primitives',
             case 211: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectionStatus', argCount);
                 else return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); // contextAt:put:
             case 212: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketError', argCount);
+                else return this.popNandPushIfOK(1, this.objectSize(false)); // contextSize
             case 213: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketLocalAddress', argCount);
             case 214: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketLocalPort', argCount);
             case 215: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketRemoteAddress', argCount);

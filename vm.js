@@ -2082,7 +2082,7 @@ Object.subclass('Squeak.Interpreter',
             case 0x87: this.pop(); return;  // pop
             case 0x88: this.push(this.top()); return;   // dup
             // thisContext
-            case 0x89: this.push(this.activeContext); this.reclaimableContextCount = 0; return;
+            case 0x89: this.push(this.exportThisContext()); return;
 
             // Closures
             case 0x8A: this.pushNewArray(this.nextByte());   // create new temp vector
@@ -2560,16 +2560,14 @@ Object.subclass('Squeak.Interpreter',
         }
     },
     aboutToReturnThrough: function(resultObj, aContext) {
-        this.reclaimableContextCount = 0;
-        this.push(this.activeContext);
+        this.push(this.exportThisContext());
         this.push(resultObj);
         this.push(aContext);
         var aboutToReturnSel = this.specialObjects[Squeak.splOb_SelectorAboutToReturn];
         this.send(aboutToReturnSel, 2);
     },
     cannotReturn: function(resultObj) {
-        this.reclaimableContextCount = 0;
-        this.push(this.activeContext);
+        this.push(this.exportThisContext());
         this.push(resultObj);
         var cannotReturnSel = this.specialObjects[Squeak.splOb_SelectorCannotReturn];
         this.send(cannotReturnSel, 1);
@@ -2722,6 +2720,11 @@ Object.subclass('Squeak.Interpreter',
         this.storeContextRegisters();
         this.activeContext = newContext; //We're off and running...
         this.fetchContextRegisters(newContext);
+    },
+    exportThisContext: function() {
+        this.storeContextRegisters();
+        this.reclaimableContextCount = 0;
+        return this.activeContext;
     },
     fetchContextRegisters: function(ctxt) {
         var meth = ctxt.pointers[Squeak.Context_method];

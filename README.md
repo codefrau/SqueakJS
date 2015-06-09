@@ -101,6 +101,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2015-06-09: 0.7.7 fix thisContext
     2015-04-27: 0.7.6 revert JIT, minor fixes
     2015-04-14: 0.7.5 JIT optimizations by HPI students (reverted in 0.7.6)
     2015-02-18: 0.7.4 make pre-release image work

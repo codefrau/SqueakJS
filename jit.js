@@ -378,7 +378,7 @@ to single-step.
         	    return;
         	// thisContext
         	case 0x89:
-        	    this.generateInstruction("thisContext", "stack[++vm.sp] = context; vm.reclaimableContextCount = 0");
+        	    this.generateInstruction("thisContext", "stack[++vm.sp] = vm.exportThisContext()");
         	    return;
             // closures
             case 0x8A:

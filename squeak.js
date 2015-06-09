@@ -56,27 +56,32 @@ window.module = function(dottedPath) {
     return self;
 };
 
-Object.subclass = function(classPath /* + more args */ ) {
-    var path = classPath.split("."),
-        className = path.pop();
-    var newClass = function() {
-        if (this.initialize) this.initialize.apply(this, arguments);
-        return this;
-    };
-    // skip arg 0, copy properties of other args to class proto
-    for (var i = 1; i < arguments.length; i++)
-        if (typeof arguments[i] == 'object')
-            for (name in arguments[i])
-                newClass.prototype[name] = arguments[i][name];
-    module(path.join('.'))[className] = newClass;
-    return newClass;
-};
-
 Object.extend = function(obj /* + more args */ ) {
     // skip arg 0, copy properties of other args to obj
     for (var i = 1; i < arguments.length; i++)
-        for (name in arguments[i])
-            obj[name] = arguments[i][name];
+        if (typeof arguments[i] == 'object')
+            for (name in arguments[i])
+                obj[name] = arguments[i][name];
+};
+
+Function.prototype.subclass = function(classPath /* + more args */ ) {
+    // create subclass
+    var subclass = function() {
+        if (this.initialize) this.initialize.apply(this, arguments);
+        return this;
+    };
+    // set up prototype
+    var protoclass = function() { };
+    protoclass.prototype = this.prototype;
+    subclass.prototype = new protoclass();
+    // skip arg 0, copy properties of other args to prototype
+    for (var i = 1; i < arguments.length; i++)
+        Object.extend(subclass.prototype, arguments[i]);
+    // add class to module
+    var modulePath = classPath.split("."),
+        className = modulePath.pop();
+    module(modulePath.join('.'))[className] = subclass;
+    return subclass;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -360,9 +365,14 @@ function createSqueakDisplay(canvas, options) {
         display.getNextEvent = function(firstEvtBuf, firstOffset) {
             // might be called from VM to get queued event
             eventQueue = []; // create queue on first call
-            display.getNextEvent = function getNextEvent(evtBuf, timeOffset) {
+            eventQueue.push = function(evt) {
+                eventQueue.offset = Date.now() - evt[1]; // get epoch from first event
+                delete eventQueue.push;                  // use original push from now on
+                eventQueue.push(evt);
+            }
+            display.getNextEvent = function(evtBuf, timeOffset) {
                 var evt = eventQueue.shift();
-                if (evt) makeSqueakEvent(evt, evtBuf, timeOffset);
+                if (evt) makeSqueakEvent(evt, evtBuf, timeOffset - eventQueue.offset);
                 else evtBuf[0] = Squeak.EventTypeNone;
             };
             display.getNextEvent(firstEvtBuf, firstOffset);

@@ -64,7 +64,8 @@
             filestats.innerHTML = nFiles + " files in " + nDirs + " directories, " +
                 (nBytes/1000000).toFixed(1) + " MBytes total";
         }          
-        if (imgList.length) images.innerHTML = "<ul>" + imgList.sort(fsort).join("") + "</ul>";
+        if (imgList.length) images.innerHTML = "<p>Previously run local images:</p><ul>" + imgList.sort(fsort).join("") + "</ul>";
+        else images.innerHTML = "<ul>[Once you have dropped local images to this page they will be listed here.]</ul>"
     }
     window.onhashchange = function() {
         window.location.reload();
@@ -147,11 +148,14 @@
         <h2>Run Squeak images from your local machine</h2>
         Use drag-and-drop to run a Squeak image from your machine: drop the image (perhaps together with a changes and sources file) into this page.
         <div id="images"></div>
-        <div id="drop">Drop Squeak images and other files here (click file to export):
+        All images and related files are stored persistently in a database inside your browser.
+        The box below shows the files that are currently in your database.  Inside Squeak, you can use a FileList
+        to manage them.
+        <div id="drop">Drop Squeak images and other files here.
             <div id="files" class="filelist"></div>
             <div id="filestats"></div>
         </div>
-        All files are stored persistently in a database inside your web browser. Use a FileList inside Squeak to manage them.
+        Clicking on a name in the box will export that file to your browser's downloads folder.
 
         <h2>Run Squeak images from the internet</h2>
         Construct a URL linking to this page and pass the image and options.

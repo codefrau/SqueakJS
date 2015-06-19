@@ -6151,9 +6151,13 @@ Object.subclass('Squeak.Primitives',
             this.vm.interpret();
         var result = this.js_activeCallback.result;
         this.js_activeCallback = null;
-        // return result to caller
-        return result ? this.js_fromStObject(result) :
+        if (result) {
+            // return result to JS caller as JS object or string
+            try { return this.js_fromStObject(result); }
+            catch(err) { return result.toString(); }
+        } else {
             console.error("Callback error: " + (this.vm.frozen ? "frozen" : "timeout"));
+        }
     },
     js_objectOrGlobal: function(sqObject) {
         return 'jsObject' in sqObject ? sqObject.jsObject : window;

@@ -3341,12 +3341,12 @@ Object.subclass('Squeak.Primitives',
             case 20: return false; // primitiveRemLargeIntegers
             case 21: return false; // primitiveAddLargeIntegers
             case 22: return false; // primitiveSubtractLargeIntegers
-            case 23: return false; // primitiveLessThanLargeIntegers
-            case 24: return false; // primitiveGreaterThanLargeIntegers
-            case 25: return false; // primitiveLessOrEqualLargeIntegers
-            case 26: return false; // primitiveGreaterOrEqualLargeIntegers
-            case 27: return false; // primitiveEqualLargeIntegers
-            case 28: return false; // primitiveNotEqualLargeIntegers
+            case 23: return this.primitiveLessThanLargeIntegers();
+            case 24: return this.primitiveGreaterThanLargeIntegers();
+            case 25: return this.primitiveLessOrEqualLargeIntegers();
+            case 26: return this.primitiveGreaterOrEqualLargeIntegers();
+            case 27: return this.primitiveEqualLargeIntegers();
+            case 28: return this.primitiveNotEqualLargeIntegers();
             case 29: return false; // primitiveMultiplyLargeIntegers
             case 30: return false; // primitiveDivideLargeIntegers
             case 31: return false; // primitiveModLargeIntegers
@@ -3826,8 +3826,8 @@ Object.subclass('Squeak.Primitives',
         }
         var bytes = stackVal.bytes,
             value = 0;
-        for (var i=0; i<4; i++)
-            value += (bytes[i]&255) * (1 << 8*i);
+        for (var i = 0, f = 1; i < 4; i++, f *= 256)
+            value += bytes[i] * f;
         if (this.isA(stackVal, Squeak.splOb_ClassLargePositiveInteger))
             return value;
         if (this.isA(stackVal, Squeak.splOb_ClassLargeNegativeInteger))
@@ -3852,6 +3852,27 @@ Object.subclass('Squeak.Primitives',
     },
     stackBoolean: function(nDeep) {
         return this.checkBoolean(this.vm.stackValue(nDeep));
+    },
+    stackSigned53BitInt:function(nDeep) {
+        var stackVal = this.vm.stackValue(nDeep);
+        if (typeof stackVal === "number") {   // SmallInteger
+            return stackVal;
+        }
+        var n = stackVal.bytesSize();
+        if (n <= 7) {
+            var bytes = stackVal.bytes,
+                value = 0;
+            for (var i = 0, f = 1; i < n; i++, f *= 256)
+                value += bytes[i] * f;
+            if (value < 9007199254740992) {
+                if (this.isA(stackVal, Squeak.splOb_ClassLargePositiveInteger))
+                    return value;
+                if (this.isA(stackVal, Squeak.splOb_ClassLargeNegativeInteger))
+                    return -value;
+            }
+        }
+        this.success = false;
+        return 0;
     },
 },
 'numbers', {
@@ -3918,6 +3939,24 @@ Object.subclass('Squeak.Primitives',
             ? mantissa * Math.pow(2, -1074) * Math.pow(2, exponent + 1074)
             : mantissa * Math.pow(2, exponent);
     },
+    primitiveLessThanLargeIntegers: function() {
+        return this.pop2andPushBoolIfOK(this.stackSigned53BitInt(1) < this.stackSigned53BitInt(0));
+    },
+    primitiveGreaterThanLargeIntegers: function() {
+        return this.pop2andPushBoolIfOK(this.stackSigned53BitInt(1) > this.stackSigned53BitInt(0));
+    },
+    primitiveLessOrEqualLargeIntegers: function() {
+        return this.pop2andPushBoolIfOK(this.stackSigned53BitInt(1) <= this.stackSigned53BitInt(0));
+    },
+    primitiveGreaterOrEqualLargeIntegers: function() {
+        return this.pop2andPushBoolIfOK(this.stackSigned53BitInt(1) >= this.stackSigned53BitInt(0));
+    },
+    primitiveEqualLargeIntegers: function() {
+        return this.pop2andPushBoolIfOK(this.stackSigned53BitInt(1) === this.stackSigned53BitInt(0));
+    },
+    primitiveNotEqualLargeIntegers: function() {
+        return this.pop2andPushBoolIfOK(this.stackSigned53BitInt(1) !== this.stackSigned53BitInt(0));
+    },
 },
 'utils', {
     floatOrInt: function(obj) {
@@ -3936,10 +3975,10 @@ Object.subclass('Squeak.Primitives',
             this.success = false;
             return 0;
         }
-        var bytes = obj.bytes;
-        var value = 0;
-        for (var i=0; i<4; i++)
-            value += (bytes[i]&255) * (1 << 8*i);
+        var bytes = obj.bytes,
+            value = 0;
+        for (var i = 0, f = 1; i < 4; i++, f *= 256)
+            value += bytes[i] * f;
         return value;
     },
     checkFloat: function(maybeFloat) { // returns a number and sets success

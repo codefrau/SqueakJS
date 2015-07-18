@@ -6501,8 +6501,7 @@ Object.subclass('Squeak.InterpreterProxy',
     stackBytes: function(n) {
         var oop = this.vm.stackValue(n);
         if (oop.bytes) return oop.bytes;
-        if (oop.words) return oop.wordsAsUint8Array();
-        if (typeof oop === "number" || !oop.isWordsOrBytes()) this.successFlag = false;
+        if (typeof oop === "number" || !oop.isBytes()) this.successFlag = false;
         return [];
     },
     stackWords: function(n) {

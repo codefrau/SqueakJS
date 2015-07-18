@@ -286,7 +286,7 @@ function recordKeyboardEvent(key, timestamp, display, eventQueue) {
             key, // MacRoman
             Squeak.EventKeyChar,
             display.buttons >> 3,
-            0,  // Unicode
+            key,  // Unicode
         ]);
         if (display.signalInputEvent)
             display.signalInputEvent();

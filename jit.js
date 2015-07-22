@@ -862,7 +862,7 @@ to single-step.
     generatePrimitiveSend: function (ic, prefix, num, suffix, numArgs) {
         this.source.push(
             "var ic = vm.method.ic[", this.pc ,"];",
-            "if (ic.lkupClass === vm.getClass(vm.stackValue(", numArgs ,"))) {"
+            "if (ic.lkupClass === vm.getClass("+prefix+num+suffix+")) {"
         );
 
         if ((ic.primIndex > 255) && (ic.primIndex < 520)) {

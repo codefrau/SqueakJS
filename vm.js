@@ -2417,7 +2417,7 @@ Object.subclass('Squeak.Interpreter',
             entry.method.lastFlush = entry.method.lastFlush || 1;
             selector.lastFlush = selector.lastFlush || 1;
 
-            // cache only, if the method that we found has as much arguments as the one that we were looking for
+            // cache only, if the method that we found has as many arguments as the one that we were looking for
             // i.e.: don't cache doesNotUnderstand:
             if (entry.argCount === argCount)
                 this.method.ic[this.pc] = {

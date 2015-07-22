@@ -56,14 +56,6 @@ window.module = function(dottedPath) {
     return self;
 };
 
-Object.extend = function(obj /* + more args */ ) {
-    // skip arg 0, copy properties of other args to obj
-    for (var i = 1; i < arguments.length; i++)
-        if (typeof arguments[i] == 'object')
-            for (name in arguments[i])
-                obj[name] = arguments[i][name];
-};
-
 Function.prototype.subclass = function(classPath /* + more args */ ) {
     // create subclass
     var subclass = function() {
@@ -76,12 +68,21 @@ Function.prototype.subclass = function(classPath /* + more args */ ) {
     subclass.prototype = new protoclass();
     // skip arg 0, copy properties of other args to prototype
     for (var i = 1; i < arguments.length; i++)
-        Object.extend(subclass.prototype, arguments[i]);
+        if (typeof arguments[i] == 'object')
+            for (name in arguments[i])
+                subclass.prototype[name] = arguments[i][name];
     // add class to module
     var modulePath = classPath.split("."),
         className = modulePath.pop();
     module(modulePath.join('.'))[className] = subclass;
     return subclass;
+};
+
+Object.extend = function(obj /* + more args */ ) {
+    // skip arg 0, copy properties of other args to obj
+    for (var i = 1; i < arguments.length; i++)
+        for (name in arguments[i])
+            obj[name] = arguments[i][name];
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -286,7 +287,7 @@ function recordKeyboardEvent(key, timestamp, display, eventQueue) {
             key, // MacRoman
             Squeak.EventKeyChar,
             display.buttons >> 3,
-            key,  // Unicode
+            0,  // Unicode
         ]);
         if (display.signalInputEvent)
             display.signalInputEvent();

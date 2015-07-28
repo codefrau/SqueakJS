@@ -797,8 +797,13 @@ function processOptions(options) {
 }
 
 function forwardMobileInput() {
+    var inputBox = document.createElement("input");
+    inputBox.id = "touchInput";
+    // hide input box and set big font size to avoid zooming
+    inputBox.style.cssText = "position:fixed;left:0;top:0;height:0;width:0;opacity:0;font-size:100px;color:transparent;";
+    document.body.appendChild(inputBox);
     // Forward keyboard input on mobile devices
-    document.getElementById('touchInput').addEventListener('keydown', function (evt){
+    inputBox.addEventListener("keydown", function (evt){
         var newEvt = document.createEvent("KeyboardEvent");
         newEvt.initKeyboardEvent("keydown",
                             evt.bubbles, evt.cancelable,

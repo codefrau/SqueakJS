@@ -236,6 +236,7 @@ function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
     switch (what) {
         case 'mousedown':
         case 'touchstart':
+            display.touchStart = evt;
             switch (evt.button || 0) {
                 case 0: buttons = Squeak.Mouse_Red; break;      // left
                 case 1: buttons = Squeak.Mouse_Yellow; break;   // middle
@@ -250,6 +251,13 @@ function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
             break; // nothing more to do
         case 'mouseup':
         case 'touchend':
+            if (display.touchStart != null &&
+                    evt.timeStamp - display.touchStart.timeStamp >= 250 &&
+                    Math.abs(evt.pageX - display.touchStart.pageX) <= 50 &&
+                    Math.abs(evt.pageY - display.touchStart.pageY) <= 50) {
+                console.log('press and hold detected');
+                document.querySelector('#touchInput').focus();
+            }
             buttons = 0;
             break;
     }
@@ -353,6 +361,7 @@ function createSqueakDisplay(canvas, options) {
         cursorOffsetY: 0,
         droppedFiles: [],
         signalInputEvent: null, // function set by VM
+        touchStart: null,
         // additional functions added below
     };
     setupSwapButtons(options);
@@ -787,7 +796,22 @@ function processOptions(options) {
     }
 }
 
+function forwardMobileInput() {
+    // Forward keyboard input on mobile devices
+    document.getElementById('touchInput').addEventListener('keydown', function (evt){
+        var newEvt = document.createEvent("KeyboardEvent");
+        newEvt.initKeyboardEvent("keydown",
+                            evt.bubbles, evt.cancelable,
+                            evt.view, evt.charCode, evt.keyCode,
+                            0, 0, 0);
+        document.dispatchEvent(newEvt);
+        // evt.preventDefault();
+        // console.log(evt, newEvt);
+    }, false);
+}
+
 SqueakJS.runSqueak = function(imageUrl, canvas, options) {
+    forwardMobileInput();
     processOptions(options);
     if (options.image) imageUrl = options.image;
     else options.image = imageUrl;

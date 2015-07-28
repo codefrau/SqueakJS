@@ -48,3 +48,8 @@ div#sqSpinner > div {
     border-radius: 5px;
     box-shadow: 0 0 5px 5px #F90;
 }
+textarea#touchInput {
+    height: 0;
+    width: 0;
+    opacity: 0;
+}

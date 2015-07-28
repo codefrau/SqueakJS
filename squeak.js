@@ -251,12 +251,13 @@ function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
             break; // nothing more to do
         case 'mouseup':
         case 'touchend':
+            // detect press and hold for touch input
             if (display.touchStart != null &&
-                    evt.timeStamp - display.touchStart.timeStamp >= 250 &&
-                    Math.abs(evt.pageX - display.touchStart.pageX) <= 50 &&
-                    Math.abs(evt.pageY - display.touchStart.pageY) <= 50) {
-                console.log('press and hold detected');
-                document.querySelector('#touchInput').focus();
+                    evt.timeStamp - display.touchStart.timeStamp >= 250 && /* 250ms threshold */
+                    Math.abs(evt.pageX - display.touchStart.pageX) <= 50 && /* X variance */
+                    Math.abs(evt.pageY - display.touchStart.pageY) <= 50) { /* Y variance */
+                var input = document.getElementById('touchKeyboardInput');
+                if (input) input.focus();
             }
             buttons = 0;
             break;
@@ -796,28 +797,31 @@ function processOptions(options) {
     }
 }
 
-function forwardMobileInput() {
-    var inputBox = document.createElement("input");
-    inputBox.id = "touchInput";
+function isTouchDevice() {
+    // https://github.com/Modernizr/Modernizr/blob/master/feature-detects/touchevents.js
+    if (('ontouchstart' in window) || window.DocumentTouch && document instanceof DocumentTouch) {
+        return true;
+    }
+    return false;
+}
+
+function forwardTouchKeyboardInput() {
+    var input = document.createElement("input");
+    input.id = "touchKeyboardInput";
     // hide input box and set big font size to avoid zooming
-    inputBox.style.cssText = "position:fixed;left:0;top:0;height:0;width:0;opacity:0;font-size:100px;color:transparent;";
-    document.body.appendChild(inputBox);
-    // Forward keyboard input on mobile devices
-    inputBox.addEventListener("keydown", function (evt){
+    input.style.cssText = "position:fixed;left:0;top:0;height:0;width:0;opacity:0;font-size:100px;color:transparent;";
+    document.body.appendChild(input);
+    // Forward keyboard input on touch devices
+    input.addEventListener("keydown", function (evt){
         var newEvt = document.createEvent("KeyboardEvent");
-        newEvt.initKeyboardEvent("keydown",
-                            evt.bubbles, evt.cancelable,
-                            evt.view, evt.charCode, evt.keyCode,
-                            0, 0, 0);
+        newEvt.initKeyboardEvent("keydown", evt.bubbles, evt.cancelable, evt.view, evt.charCode, evt.keyCode, 0, 0, 0);
         document.dispatchEvent(newEvt);
-        // evt.preventDefault();
-        // console.log(evt, newEvt);
     }, false);
 }
 
 SqueakJS.runSqueak = function(imageUrl, canvas, options) {
-    forwardMobileInput();
     processOptions(options);
+    if (isTouchDevice()) forwardTouchKeyboardInput();
     if (options.image) imageUrl = options.image;
     else options.image = imageUrl;
     SqueakJS.options = options;

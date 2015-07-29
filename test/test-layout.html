@@ -138,11 +138,11 @@ window.onload = function() {
     }
     canvas.onmousemove = function(evt) {
         // scale events to actual canvas extent
-        var x = (evt.pageX - this.offsetLeft) * (this.width / this.offsetWidth);
+        var x = (evt.pageX - this.offsetLeft) * (this.width / this.offsetWidth),
             y = (evt.pageY - this.offsetTop) * (this.height / this.offsetHeight);
         // subtract display offset and clamp to display size
-        display.mouseX = Math.max(0, Math.min(display.width, x - display.offsetX));
-        display.mouseY = Math.max(0, Math.min(display.height, y - display.offsetY));
+        display.mouseX = Math.max(0, Math.min(display.width, x - (display.offsetX||0)));
+        display.mouseY = Math.max(0, Math.min(display.height, y - (display.offsetY||0)));
         draw(display.mouseX, display.mouseY);
     };
     canvas.ontouchmove = function(evt) {

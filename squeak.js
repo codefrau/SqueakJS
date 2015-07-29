@@ -256,7 +256,7 @@ function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
                     evt.timeStamp - display.touchStart.timeStamp >= 250 && /* 250ms threshold */
                     Math.abs(evt.pageX - display.touchStart.pageX) <= 50 && /* X variance */
                     Math.abs(evt.pageY - display.touchStart.pageY) <= 50) { /* Y variance */
-                var input = document.getElementById('touchKeyboardInput');
+                var input = document.getElementById("touchKeyboardInput");
                 if (input) input.focus();
             }
             buttons = 0;
@@ -805,23 +805,17 @@ function isTouchDevice() {
     return false;
 }
 
-function forwardTouchKeyboardInput() {
+function initializeTouchKeyboardInput() {
     var input = document.createElement("input");
     input.id = "touchKeyboardInput";
     // hide input box and set big font size to avoid zooming
     input.style.cssText = "position:fixed;left:0;top:0;height:0;width:0;opacity:0;font-size:100px;color:transparent;";
     document.body.appendChild(input);
-    // Forward keyboard input on touch devices
-    input.addEventListener("keydown", function (evt){
-        var newEvt = document.createEvent("KeyboardEvent");
-        newEvt.initKeyboardEvent("keydown", evt.bubbles, evt.cancelable, evt.view, evt.charCode, evt.keyCode, 0, 0, 0);
-        document.dispatchEvent(newEvt);
-    }, false);
 }
 
 SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     processOptions(options);
-    if (isTouchDevice()) forwardTouchKeyboardInput();
+    if (isTouchDevice()) initializeTouchKeyboardInput();
     if (options.image) imageUrl = options.image;
     else options.image = imageUrl;
     SqueakJS.options = options;

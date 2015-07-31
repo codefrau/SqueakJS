@@ -4958,6 +4958,15 @@ Object.subclass('Squeak.Primitives',
     primitiveReverseDisplay: function(argCount) {
         this.reverseDisplay = !this.reverseDisplay;
         this.redrawDisplay();
+        if (this.display.cursorCanvas) {
+            var canvas = this.display.cursorCanvas,
+                context = canvas.getContext("2d"),
+                image = context.getImageData(0, 0, canvas.width, canvas.height),
+                data = new Uint32Array(image.data.buffer);
+            for (var i = 0; i < data.length; i++)
+                data[i] = data[i] ^ 0x00FFFFFF;
+            context.putImageData(image, 0, 0);
+        }
         return true;
     },
     primitiveShowDisplayRect: function(argCount) {
@@ -5014,10 +5023,14 @@ Object.subclass('Squeak.Primitives',
                     }
                     this.swappedColors = colors;
                 }
-                if (this.reverseDisplay && !cursorColors) {
-                    if (!this.reversedColors)
-                        this.reversedColors = colors.map(function(c){return c ^ 0x00FFFFFF});
-                    colors = this.reversedColors;
+                if (this.reverseDisplay) {
+                    if (cursorColors) {
+                        colors = cursorColors.map(function(c){return c ^ 0x00FFFFFF});
+                    } else {
+                        if (!this.reversedColors)
+                            this.reversedColors = colors.map(function(c){return c ^ 0x00FFFFFF});
+                        colors = this.reversedColors;
+                    }
                 }
                 var mask = (1 << form.depth) - 1;
                 var leftSrcShift = 32 - (srcX % form.pixPerWord + 1) * form.depth;

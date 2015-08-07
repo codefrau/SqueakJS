@@ -6,6 +6,8 @@ canvas {
     position: absolute;
     background: #000;
     display: none;
+}
+canvas.pixelated {
     image-rendering: -moz-crisp-edges;
     image-rendering: -webkit-optimize-contrast;
     image-rendering: pixelated;

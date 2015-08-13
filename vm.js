@@ -5563,7 +5563,6 @@ Object.subclass('Squeak.Primitives',
             this.vm.warnOnce("could not initialize audio");
             return false;
         }
-        this.audioContext.sampleRate = samplesPerSec;
         this.audioSema = semaIndex; // signal when ready to accept another buffer of samples
         this.audioNextTimeSlot = 0;
         this.audioBuffersReady = [];
@@ -5683,8 +5682,6 @@ Object.subclass('Squeak.Primitives',
                 self.audioInSema = semaIndex;
                 self.audioInBuffers = [];
                 self.audioInBufferIndex = 0;
-                // try to set sampling rate
-                self.audioInContext.sampleRate = samplesPerSec;
                 self.audioInOverSample = 1;
                 // if sample rate is still too high, adjust oversampling
                 while (samplesPerSec * self.audioInOverSample < self.audioInContext.sampleRate)

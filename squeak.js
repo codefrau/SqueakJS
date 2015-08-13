@@ -337,6 +337,9 @@ function createSqueakDisplay(canvas, options) {
         if (options.header) options.header.style.display = 'none';
         if (options.footer) options.footer.style.display = 'none';
     }
+    if (options.pixelated) {
+        canvas.classList.add("pixelated");
+    }
     var display = {
         context: canvas.getContext("2d"),
         fullscreen: false,
@@ -809,8 +812,9 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     }
     function getNextFile(whenAllDone) {
         if (files.length === 0) return whenAllDone(imageData);
-        var file = files.shift();
-        if (!file.forceDownload && Squeak.fileExists(options.root + file.name)) {
+        var file = files.shift(),
+            forceDownload = options.forceDownload || file.forceDownload;
+        if (!forceDownload && Squeak.fileExists(options.root + file.name)) {
             if (file.name == imageName) {
                 Squeak.fileGet(options.root + file.name, function(data) {
                     imageData = data;

@@ -8,6 +8,12 @@ canvas {
     margin-right: auto;
     cursor: default;
 }
+canvas.pixelated {
+    image-rendering: -moz-crisp-edges;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: pixelated;
+    -ms-interpolation-mode: nearest-neighbor;
+}
 div#sqSpinner {
     position: absolute;
     margin: auto; top: 0; left: 0; bottom: 0; right: 0;

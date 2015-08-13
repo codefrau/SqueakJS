@@ -28,7 +28,7 @@ window.Squeak = users.bert.SqueakJS.vm;
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 0.7.8",
+    vmVersion: "SqueakJS 0.7.9",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -317,7 +317,9 @@ Object.extend(Squeak,
             if (completionFunc) completionFunc();
         }
     
-        if (typeof indexedDB == "undefined") {
+        // check IndexedDB support (UIWebView implements the interface but only returns null)
+        // https://stackoverflow.com/questions/27415998/indexeddb-open-returns-null-on-safari-ios-8-1-1-and-halts-execution-on-cordova
+        if (typeof indexedDB == "undefined" || indexedDB == null) {
             return fakeTransaction();
         }
 
@@ -340,12 +342,6 @@ Object.extend(Squeak,
 
         // otherwise, open SqueakDB first
         var openReq = indexedDB.open("squeak");
-
-        // iOS Safari implements the interface but only returns null
-        // https://stackoverflow.com/questions/27415998/indexeddb-open-returns-null-on-safari-ios-8-1-1-and-halts-execution-on-cordova
-        if (openReq === null) {
-            return fakeTransaction();
-        }
 
         openReq.onsuccess = function(e) {
             console.log("Opened files database.");
@@ -5567,7 +5563,6 @@ Object.subclass('Squeak.Primitives',
             this.vm.warnOnce("could not initialize audio");
             return false;
         }
-        this.audioContext.sampleRate = samplesPerSec;
         this.audioSema = semaIndex; // signal when ready to accept another buffer of samples
         this.audioNextTimeSlot = 0;
         this.audioBuffersReady = [];
@@ -5687,8 +5682,6 @@ Object.subclass('Squeak.Primitives',
                 self.audioInSema = semaIndex;
                 self.audioInBuffers = [];
                 self.audioInBufferIndex = 0;
-                // try to set sampling rate
-                self.audioInContext.sampleRate = samplesPerSec;
                 self.audioInOverSample = 1;
                 // if sample rate is still too high, adjust oversampling
                 while (samplesPerSec * self.audioInOverSample < self.audioInContext.sampleRate)

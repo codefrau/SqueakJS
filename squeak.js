@@ -337,9 +337,6 @@ function createSqueakDisplay(canvas, options) {
         if (options.header) options.header.style.display = 'none';
         if (options.footer) options.footer.style.display = 'none';
     }
-    if (options.pixelated) {
-        canvas.classList.add("pixelated");
-    }
     var display = {
         context: canvas.getContext("2d"),
         fullscreen: false,
@@ -359,6 +356,10 @@ function createSqueakDisplay(canvas, options) {
         // additional functions added below
     };
     setupSwapButtons(options);
+    if (options.pixelated) {
+        canvas.classList.add("pixelated");
+        display.cursorCanvas.classList.add("pixelated");
+    }
 
     var eventQueue = null;
     display.reset = function() {

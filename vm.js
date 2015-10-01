@@ -4922,8 +4922,11 @@ Object.subclass('Squeak.Primitives',
             } else {
                 this.showForm(context, cursorForm, bounds, true);
             }
-            this.display.cursorOffsetX = cursorForm.offsetX;
-            this.display.cursorOffsetY = cursorForm.offsetY;
+            var scale = this.display.scale || 1;
+            cursorCanvas.style.width = (cursorCanvas.width * scale) + "px";
+            cursorCanvas.style.height = (cursorCanvas.height * scale) + "px";
+            this.display.cursorOffsetX = cursorForm.offsetX * scale;
+            this.display.cursorOffsetY = cursorForm.offsetY * scale;
         }
         this.vm.popN(argCount);
         return true;

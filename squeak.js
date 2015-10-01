@@ -342,6 +342,7 @@ function createSqueakDisplay(canvas, options) {
         fullscreen: false,
         width: 0,   // if 0, VM uses canvas.width
         height: 0,  // if 0, VM uses canvas.height
+        scale: 1,   // changed dynamically by VM if fixedWidth is set
         mouseX: 0,
         mouseY: 0,
         buttons: 0,
@@ -666,6 +667,15 @@ function createSqueakDisplay(canvas, options) {
             canvas.width = display.width;
             canvas.height = display.height;
             if (imgData) display.context.putImageData(imgData, 0, 0);
+        }
+        // set cursor scale
+        if (options.fixedWidth) {
+            display.scale = parseInt(canvas.style.width) / canvas.width;
+            var cursorCanvas = display.cursorCanvas;
+            cursorCanvas.style.width = (cursorCanvas.width * display.scale) + "px";
+            cursorCanvas.style.height = (cursorCanvas.height * display.scale) + "px";
+        } else {
+            display.scale = 1;
         }
     };
     window.onresize();

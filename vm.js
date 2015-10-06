@@ -317,13 +317,11 @@ Object.extend(Squeak,
             if (completionFunc) completionFunc();
         }
     
-        // check IndexedDB support (UIWebView implements the interface but only returns null)
-        // https://stackoverflow.com/questions/27415998/indexeddb-open-returns-null-on-safari-ios-8-1-1-and-halts-execution-on-cordova
-        if (typeof indexedDB == "undefined" || indexedDB == null) {
+        if (typeof indexedDB == "undefined") {
             return fakeTransaction();
         }
 
-        var startTransaction = function() {
+        function startTransaction() {
             var trans = SqueakDB.transaction("files", mode),
                 fileStore = trans.objectStore("files");
             trans.oncomplete = function(e) { if (completionFunc) completionFunc(); }
@@ -342,6 +340,12 @@ Object.extend(Squeak,
 
         // otherwise, open SqueakDB first
         var openReq = indexedDB.open("squeak");
+        
+        // UIWebView implements the interface but only returns null
+        // https://stackoverflow.com/questions/27415998/indexeddb-open-returns-null-on-safari-ios-8-1-1-and-halts-execution-on-cordova
+        if (!openReq) {
+            return fakeTransaction();
+        }
 
         openReq.onsuccess = function(e) {
             console.log("Opened files database.");

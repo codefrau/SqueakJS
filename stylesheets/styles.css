@@ -984,11 +984,22 @@ footer {
   }
 
   section {
-    margin-top: 5px;
+    margin-top: 25px;
   }
 
   #banner {
+    top: 60px;
+    height: 30px;
+  }
+  #banner .fork {
     display: none;
+  }
+  #banner span {
+    display: none;
+  }
+  #banner .button {
+    padding: 4px 6px;
+    margin: 2px;
   }
 
   header ul {

@@ -28,7 +28,7 @@ window.Squeak = users.bert.SqueakJS.vm;
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 0.7.9",
+    vmVersion: "SqueakJS 0.8",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -317,13 +317,11 @@ Object.extend(Squeak,
             if (completionFunc) completionFunc();
         }
     
-        // check IndexedDB support (UIWebView implements the interface but only returns null)
-        // https://stackoverflow.com/questions/27415998/indexeddb-open-returns-null-on-safari-ios-8-1-1-and-halts-execution-on-cordova
-        if (typeof indexedDB == "undefined" || indexedDB == null) {
+        if (typeof indexedDB == "undefined") {
             return fakeTransaction();
         }
 
-        var startTransaction = function() {
+        function startTransaction() {
             var trans = SqueakDB.transaction("files", mode),
                 fileStore = trans.objectStore("files");
             trans.oncomplete = function(e) { if (completionFunc) completionFunc(); }
@@ -342,6 +340,12 @@ Object.extend(Squeak,
 
         // otherwise, open SqueakDB first
         var openReq = indexedDB.open("squeak");
+        
+        // UIWebView implements the interface but only returns null
+        // https://stackoverflow.com/questions/27415998/indexeddb-open-returns-null-on-safari-ios-8-1-1-and-halts-execution-on-cordova
+        if (!openReq) {
+            return fakeTransaction();
+        }
 
         openReq.onsuccess = function(e) {
             console.log("Opened files database.");
@@ -4922,8 +4926,11 @@ Object.subclass('Squeak.Primitives',
             } else {
                 this.showForm(context, cursorForm, bounds, true);
             }
-            this.display.cursorOffsetX = cursorForm.offsetX;
-            this.display.cursorOffsetY = cursorForm.offsetY;
+            var scale = this.display.scale || 1;
+            cursorCanvas.style.width = (cursorCanvas.width * scale) + "px";
+            cursorCanvas.style.height = (cursorCanvas.height * scale) + "px";
+            this.display.cursorOffsetX = cursorForm.offsetX * scale;
+            this.display.cursorOffsetY = cursorForm.offsetY * scale;
         }
         this.vm.popN(argCount);
         return true;
@@ -4958,6 +4965,15 @@ Object.subclass('Squeak.Primitives',
     primitiveReverseDisplay: function(argCount) {
         this.reverseDisplay = !this.reverseDisplay;
         this.redrawDisplay();
+        if (this.display.cursorCanvas) {
+            var canvas = this.display.cursorCanvas,
+                context = canvas.getContext("2d"),
+                image = context.getImageData(0, 0, canvas.width, canvas.height),
+                data = new Uint32Array(image.data.buffer);
+            for (var i = 0; i < data.length; i++)
+                data[i] = data[i] ^ 0x00FFFFFF;
+            context.putImageData(image, 0, 0);
+        }
         return true;
     },
     primitiveShowDisplayRect: function(argCount) {
@@ -5014,10 +5030,14 @@ Object.subclass('Squeak.Primitives',
                     }
                     this.swappedColors = colors;
                 }
-                if (this.reverseDisplay && !cursorColors) {
-                    if (!this.reversedColors)
-                        this.reversedColors = colors.map(function(c){return c ^ 0x00FFFFFF});
-                    colors = this.reversedColors;
+                if (this.reverseDisplay) {
+                    if (cursorColors) {
+                        colors = cursorColors.map(function(c){return c ^ 0x00FFFFFF});
+                    } else {
+                        if (!this.reversedColors)
+                            this.reversedColors = colors.map(function(c){return c ^ 0x00FFFFFF});
+                        colors = this.reversedColors;
+                    }
                 }
                 var mask = (1 << form.depth) - 1;
                 var leftSrcShift = 32 - (srcX % form.pixPerWord + 1) * form.depth;

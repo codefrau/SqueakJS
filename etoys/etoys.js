@@ -20,10 +20,6 @@
  * THE SOFTWARE.
  */
 
-// KLUDGE until freudenbergs.de supports https:
-if (location.protocol == 'https:')
-    location.protocol = 'http:';
-
 var fullscreen = navigator.standalone;
 
 window.onload = function() {

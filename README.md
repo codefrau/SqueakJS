@@ -101,6 +101,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2015-11-24: 0.8 minor fixes
     2015-08-13: 0.7.9 make work on iOS again
     2015-07-18: 0.7.8 fix keyboard
     2015-06-09: 0.7.7 fix thisContext

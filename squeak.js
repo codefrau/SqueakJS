@@ -790,6 +790,9 @@ function processOptions(options) {
     options.root = root;
     if (options.url && options.files && !options.image)
         options.image = options.url + "/" + options.files[0];
+}
+
+function fetchTemplates(options) {
     if (options.templates) {
         if (options.templates.constructor === Array) {
             var templates = {};
@@ -807,12 +810,12 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     else options.image = imageUrl;
     if (imageUrl.match(/^http:/) && location.protocol == 'https:') {
         location.protocol = 'http:';
-        alert('Redirecting to "http:" for fetching "' + imageUrl + '"');
-        return
+        return;
     }
     SqueakJS.options = options;
     SqueakJS.appName = options.appName || imageUrl.replace(/.*\//, "").replace(/\.image$/, "");
     Squeak.fsck();
+    fetchTemplates(options);
     var display = createSqueakDisplay(canvas, options),
         imageName = Squeak.splitFilePath(imageUrl).basename,
         imageData = null,

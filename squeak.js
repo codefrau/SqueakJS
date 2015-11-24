@@ -806,7 +806,7 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     if (options.image) imageUrl = options.image;
     else options.image = imageUrl;
     if (imageUrl.match(/^http:/) && location.protocol == 'https:') {
-        location.protocol == 'http:';
+        location.protocol = 'http:';
         alert('Redirecting to "http:" for fetching "' + imageUrl + '"');
         return
     }

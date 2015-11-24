@@ -808,8 +808,8 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     processOptions(options);
     if (options.image) imageUrl = options.image;
     else options.image = imageUrl;
-    if (imageUrl.match(/^http:/) && location.protocol == 'https:') {
-        location.protocol = 'http:';
+    if (imageUrl.match(/^http:/) && location.protocol.match(/^https/) {
+        location.protocol = 'http';
         return;
     }
     SqueakJS.options = options;

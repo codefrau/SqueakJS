@@ -516,7 +516,7 @@ function createSqueakDisplay(canvas, options) {
             recordKeyboardEvent(squeakCode, evt.timeStamp, display, eventQueue);
             return evt.preventDefault();
         }
-        if ((evt.metaKey || evt.altKey)) {
+        if ((evt.metaKey || (evt.altKey && !evt.ctrlKey))) {
             var key = evt.key; // only supported in FireFox, others have keyIdentifier
             if (!key && evt.keyIdentifier && evt.keyIdentifier.slice(0,2) == 'U+')
                 key = String.fromCharCode(parseInt(evt.keyIdentifier.slice(2), 16))

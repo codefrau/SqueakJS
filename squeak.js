@@ -209,10 +209,13 @@ function setupSwapButtons(options) {
 }
 
 function recordModifiers(evt, display) {
-    var modifiers =
-        (evt.shiftKey ? Squeak.Keyboard_Shift : 0) +
-        (evt.ctrlKey ? Squeak.Keyboard_Ctrl : 0) +
-        (evt.altKey || evt.metaKey ? Squeak.Keyboard_Cmd : 0);
+    var shiftPressed = evt.shiftKey,
+        ctrlPressed = evt.ctrlKey && !evt.altKey,
+        cmdPressed = evt.metaKey || (evt.altKey && !evt.ctrlKey),
+        modifiers =
+            (shiftPressed ? Squeak.Keyboard_Shift : 0) +
+            (ctrlPressed ? Squeak.Keyboard_Ctrl : 0) +
+            (cmdPressed ? Squeak.Keyboard_Cmd : 0);
     display.buttons = (display.buttons & ~Squeak.Keyboard_All) | modifiers;
     return modifiers;
 }

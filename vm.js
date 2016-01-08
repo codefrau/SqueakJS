@@ -28,7 +28,7 @@ window.Squeak = users.bert.SqueakJS.vm;
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 0.8",
+    vmVersion: "SqueakJS 0.8.1",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -6013,9 +6013,8 @@ Object.subclass('Squeak.Primitives',
                     jsResult = new obj();
                 } else {
                     // new this(arg0, arg1, ...)
-                    var inst = Object.create(obj.prototype);
-                    jsResult = obj.apply(inst, this.js_fromStArray(args));
-                    if (Object(jsResult) !== jsResult) jsResult = inst;
+                    var newArgs = [null].concat(this.js_fromStArray(args));
+                    jsResult = new (Function.prototype.bind.apply(obj, newArgs));
                 }
             } else {
                 if (!(propName in obj))

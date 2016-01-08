@@ -6013,9 +6013,8 @@ Object.subclass('Squeak.Primitives',
                     jsResult = new obj();
                 } else {
                     // new this(arg0, arg1, ...)
-                    var inst = Object.create(obj.prototype);
-                    jsResult = obj.apply(inst, this.js_fromStArray(args));
-                    if (Object(jsResult) !== jsResult) jsResult = inst;
+                    var newArgs = [null].concat(this.js_fromStArray(args));
+                    jsResult = new (Function.prototype.bind.apply(obj, newArgs));
                 }
             } else {
                 if (!(propName in obj))

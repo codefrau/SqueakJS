@@ -209,10 +209,13 @@ function setupSwapButtons(options) {
 }
 
 function recordModifiers(evt, display) {
-    var modifiers =
-        (evt.shiftKey ? Squeak.Keyboard_Shift : 0) +
-        (evt.ctrlKey ? Squeak.Keyboard_Ctrl : 0) +
-        (evt.altKey || evt.metaKey ? Squeak.Keyboard_Cmd : 0);
+    var shiftPressed = evt.shiftKey,
+        ctrlPressed = evt.ctrlKey && !evt.altKey,
+        cmdPressed = evt.metaKey || (evt.altKey && !evt.ctrlKey),
+        modifiers =
+            (shiftPressed ? Squeak.Keyboard_Shift : 0) +
+            (ctrlPressed ? Squeak.Keyboard_Ctrl : 0) +
+            (cmdPressed ? Squeak.Keyboard_Cmd : 0);
     display.buttons = (display.buttons & ~Squeak.Keyboard_All) | modifiers;
     return modifiers;
 }
@@ -513,7 +516,7 @@ function createSqueakDisplay(canvas, options) {
             recordKeyboardEvent(squeakCode, evt.timeStamp, display, eventQueue);
             return evt.preventDefault();
         }
-        if ((evt.metaKey || evt.altKey)) {
+        if ((evt.metaKey || (evt.altKey && !evt.ctrlKey))) {
             var key = evt.key; // only supported in FireFox, others have keyIdentifier
             if (!key && evt.keyIdentifier && evt.keyIdentifier.slice(0,2) == 'U+')
                 key = String.fromCharCode(parseInt(evt.keyIdentifier.slice(2), 16))

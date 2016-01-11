@@ -113,6 +113,7 @@ Function.prototype.subclass = function(classPath /* + more args */ ) {
         "plugins/StarSqueakPlugin.js",
         "plugins/ZipPlugin.js",
         "lib/lz-string.js",
+        "lib/virtualjoystick.js",
     ].forEach(function(filename) {
         var script = document.createElement('script');
         script.setAttribute("type","text/javascript");
@@ -221,10 +222,14 @@ function recordModifiers(evt, display) {
 }
 
 function updateMousePos(evt, canvas, display) {
-    display.cursorCanvas.style.left = (evt.pageX + display.cursorOffsetX) + "px";
-    display.cursorCanvas.style.top = (evt.pageY + display.cursorOffsetY) + "px";
-    var x = ((evt.pageX - canvas.offsetLeft) * (canvas.width / canvas.offsetWidth)) | 0,
-        y = ((evt.pageY - canvas.offsetTop) * (canvas.height / canvas.offsetHeight)) | 0;
+    moveMouseTo(evt.pageX, evt.pageY, canvas, display);
+}
+
+function moveMouseTo(newX, newY, canvas, display) {
+    display.cursorCanvas.style.left = (newX + display.cursorOffsetX) + "px";
+    display.cursorCanvas.style.top = (newY + display.cursorOffsetY) + "px";
+    var x = ((newX - canvas.offsetLeft) * (canvas.width / canvas.offsetWidth)) | 0,
+        y = ((newY - canvas.offsetTop) * (canvas.height / canvas.offsetHeight)) | 0;
     // clamp to display size
     display.mouseX = Math.max(0, Math.min(display.width, x));
     display.mouseY = Math.max(0, Math.min(display.height, y));
@@ -239,6 +244,7 @@ function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
     switch (what) {
         case 'mousedown':
         case 'touchstart':
+            display.touchStart = evt;
             switch (evt.button || 0) {
                 case 0: buttons = Squeak.Mouse_Red; break;      // left
                 case 1: buttons = Squeak.Mouse_Yellow; break;   // middle
@@ -253,6 +259,14 @@ function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
             break; // nothing more to do
         case 'mouseup':
         case 'touchend':
+            // detect press and hold for touch input
+            if (display.touchStart != null &&
+                    evt.timeStamp - display.touchStart.timeStamp >= 250 && /* 250ms threshold */
+                    Math.abs(evt.pageX - display.touchStart.pageX) <= 50 && /* X variance */
+                    Math.abs(evt.pageY - display.touchStart.pageY) <= 50) { /* Y variance */
+                var input = document.getElementById("touchKeyboardInput");
+                if (input) input.focus();
+            }
             buttons = 0;
             break;
     }
@@ -357,6 +371,7 @@ function createSqueakDisplay(canvas, options) {
         cursorOffsetY: 0,
         droppedFiles: [],
         signalInputEvent: null, // function set by VM
+        touchStart: null,
         // additional functions added below
     };
     setupSwapButtons(options);
@@ -453,23 +468,27 @@ function createSqueakDisplay(canvas, options) {
         return false;
     };
     canvas.ontouchstart = function(evt) {
+        if (joystickActive()) return;
         evt.touches[0].timeStamp = evt.timeStamp;
         recordMouseEvent('touchstart', evt.touches[0], canvas, display, eventQueue, options);
         if (display.runNow) display.runNow(); // don't wait for timeout to run
         evt.preventDefault();
     };
     canvas.ontouchmove = function(evt) {
+        if (joystickActive()) return;
         evt.touches[0].timeStamp = evt.timeStamp;
         recordMouseEvent('touchmove', evt.touches[0], canvas, display, eventQueue, options);
         if (display.runNow) display.runNow(); // don't wait for timeout to run
         evt.preventDefault();
     };
     canvas.ontouchend = function(evt) {
+        if (joystickActive()) return;
         recordMouseEvent('touchend', evt, canvas, display, eventQueue, options);
         if (display.runNow) display.runNow(); // don't wait for timeout to run
         evt.preventDefault();
     };
     canvas.ontouchcancel = function(evt) {
+        if (joystickActive()) return;
         canvas.ontouchend(evt);
     };
     // cursorCanvas shows Squeak cursor
@@ -682,6 +701,27 @@ function createSqueakDisplay(canvas, options) {
         }
     };
     window.onresize();
+
+    if (isTouchDevice()) {
+        document.addEventListener('joystickMove', function(evt) {
+            var newPageX = parseInt(display.cursorCanvas.style.left, 10) + evt.detail.deltaX;
+            var newPageY = parseInt(display.cursorCanvas.style.top, 10) + evt.detail.deltaY;
+
+            if (newPageX < 0 || newPageY < 0 ||
+                newPageX > window.innerWidth || newPageY > window.innerHeight) return;
+
+            moveMouseTo(newPageX, newPageY, canvas, display);
+        }, false);
+
+        document.addEventListener('joystickClick', function(evt) {
+            // simulate mouse click
+            display.buttons = 4;
+            display.runFor(100);
+            display.buttons = 0;
+            display.runNow();
+        }, false);
+    }
+
     return display;
 };
 
@@ -712,6 +752,124 @@ function updateSpinner(spinner, idleMS, vm, display) {
             spinner.webkitTransform = spinner.transform = "rotate(" + spinnerAngle + "deg)";
         }
     }
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// touch device compatibility
+//////////////////////////////////////////////////////////////////////////////
+
+function isTouchDevice() {
+    // https://github.com/Modernizr/Modernizr/blob/master/feature-detects/touchevents.js
+    if (('ontouchstart' in window) || window.DocumentTouch && document instanceof DocumentTouch) {
+        return true;
+    }
+    return false;
+}
+
+function clearNodeById(anID) {
+    var node = document.getElementById(anID);
+    while (node.firstChild) {
+        node.removeChild(node.firstChild);
+    }
+}
+
+function newButton(id, name) {
+    var button = document.createElement( 'input' );
+    button.id = id;
+    button.value = name;
+    button.className = "sqButton";
+    button.type = "button";
+    return button;
+}
+
+function joystickActive() {
+    return document.getElementById('sqJoystick') !== null;
+}
+
+function joystickClick() {
+    document.dispatchEvent(new CustomEvent('joystickClick', {
+        bubbles: true, cancelable: true }));
+}
+
+function joystickMove(deltaX, deltaY) {
+    document.dispatchEvent(new CustomEvent('joystickMove', {
+        detail: { deltaX: deltaX / 8.0, deltaY: deltaY / 8.0},
+        bubbles: true, cancelable: true }));
+}
+
+function showJoystick() {
+    // workaround to make joystick work even if cursor has not been moved yet
+    document.getElementById('sqCanvas').dispatchEvent(new MouseEvent('mousemove'));
+
+    var joystickContainer = document.createElement('div');
+    joystickContainer.id = "sqJoystick";
+    document.body.appendChild(joystickContainer);
+
+    var joystick = new VirtualJoystick({
+        container: joystickContainer,
+        strokeStyle: '#444',
+        // mouseSupport: true,
+        stationaryBase: true,
+        limitStickTravel: true,
+        baseX: 100,
+        baseY: window.innerHeight - 100
+    });
+    // poll joystick
+    var joystickInterval = setInterval(function(){
+        if (!joystick._pressed) return false;
+        if (Math.abs(joystick.deltaX()) < 2 || Math.abs(joystick.deltaY()) < 2) return false;
+        joystickMove(joystick.deltaX(), joystick.deltaY());
+    }, 1/30 * 1000);
+
+    // change buttons
+    var joystickOverlay = document.getElementById('sqJoystickOverlay');
+    clearNodeById('sqJoystickOverlay');
+
+    var closeButton = newButton("sqCloseMouse", "X");
+    closeButton.addEventListener('click', function(evt) {
+        clearInterval(joystickInterval);
+        joystick.destroy();
+        document.body.removeChild(joystickContainer);
+        showJoystickOverlay();
+    }, false);
+    joystickOverlay.appendChild(closeButton);
+
+    var clickButton = newButton("sqMouseClick", "Click");
+    clickButton.addEventListener('click', joystickClick, false);
+    joystickOverlay.appendChild(clickButton);
+}
+
+function showJoystickOverlay() {
+    clearNodeById('sqJoystickOverlay');
+    var joystickOverlay = document.getElementById('sqJoystickOverlay');
+    var openButton = newButton('sqOpenMouse', 'Mouse');
+    openButton.addEventListener('click', showJoystick, false);
+    joystickOverlay.appendChild(openButton);
+}
+
+function initializeJoystickOverlay() {
+    var joystickOverlay = document.createElement('div');
+    joystickOverlay.id = 'sqJoystickOverlay';
+    joystickOverlay.style.cssText = 'position:fixed;bottom:0;right:0;';
+    document.body.appendChild(joystickOverlay);
+    showJoystickOverlay();
+}
+
+function initializeTouchKeyboardInput() {
+    var input = document.createElement('input');
+    input.id = 'touchKeyboardInput';
+    // hide input box and set big font size to avoid zooming
+    input.style.cssText = 'position:fixed;left:0;top:0;height:0;width:0;opacity:0;font-size:100px;color:transparent;';
+    document.body.appendChild(input);
+
+    var keyboardOverlay = document.createElement('div');
+    keyboardOverlay.style.cssText = 'position:fixed;width:100%;text-align:center;bottom:0;';
+    keyboardOverlay.appendChild(newButton('sqOpenKeyboard', 'Keyboard'));
+    keyboardOverlay.addEventListener('click', function(evt) {
+        var input = document.getElementById('touchKeyboardInput');
+        if (input) input.focus();
+    }, false);
+    document.body.appendChild(keyboardOverlay);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -809,6 +967,10 @@ function fetchTemplates(options) {
 
 SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     processOptions(options);
+    if (isTouchDevice()) {
+        initializeTouchKeyboardInput();
+        initializeJoystickOverlay();
+    }
     if (options.image) imageUrl = options.image;
     else options.image = imageUrl;
     if (imageUrl.match(/^http:/) && location.protocol.match(/^https/)) {

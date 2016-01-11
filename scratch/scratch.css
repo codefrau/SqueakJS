@@ -2,7 +2,7 @@ body {
     background-color: #eae6d1;
     font-family: sans-serif;
 }
-canvas {
+canvas#sqCanvas {
     position: absolute;
     background: #000;
     cursor: default;
@@ -48,4 +48,14 @@ div#sqSpinner > div {
     height: 10px;
     border-radius: 5px;
     box-shadow: 0 0 5px 5px #F90;
+}
+
+input.sqButton {
+    -webkit-appearance: none;
+    border: 0;
+    padding: 24px;
+    margin: 0 2px;
+    color: #eee;
+    background-color: #444;
+    font-size: 48px;
 }

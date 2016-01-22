@@ -220,11 +220,15 @@ function recordModifiers(evt, display) {
     return modifiers;
 }
 
+var canUseMouseOffset = navigator.userAgent.match("AppleWebKit/");
+
 function updateMousePos(evt, canvas, display) {
-    display.cursorCanvas.style.left = (evt.pageX + display.cursorOffsetX) + "px";
-    display.cursorCanvas.style.top = (evt.pageY + display.cursorOffsetY) + "px";
-    var x = ((evt.pageX - canvas.offsetLeft) * (canvas.width / canvas.offsetWidth)) | 0,
-        y = ((evt.pageY - canvas.offsetTop) * (canvas.height / canvas.offsetHeight)) | 0;
+    var evtX = canUseMouseOffset ? evt.offsetX : evt.layerX,
+        evtY = canUseMouseOffset ? evt.offsetY : evt.layerY;
+    display.cursorCanvas.style.left = (evtX + canvas.offsetLeft + display.cursorOffsetX) + "px";
+    display.cursorCanvas.style.top = (evtY + canvas.offsetTop + display.cursorOffsetY) + "px";
+    var x = (evtX * canvas.width / canvas.offsetWidth) | 0,
+        y = (evtY * canvas.height / canvas.offsetHeight) | 0;
     // clamp to display size
     display.mouseX = Math.max(0, Math.min(display.width, x));
     display.mouseY = Math.max(0, Math.min(display.height, y));
@@ -477,9 +481,7 @@ function createSqueakDisplay(canvas, options) {
     display.cursorCanvas.style.position = "absolute";
     display.cursorCanvas.style.cursor = "none";
     display.cursorCanvas.style.background = "transparent";
-    ['onmousedown', 'onmouseup', 'onmousemove', 'oncontextmenu',
-    'ontouchstart', 'ontouchmove', 'ontouchend', 'ontouchcancel'].
-        forEach(function(handler) { display.cursorCanvas[handler] = canvas[handler]; });
+    display.cursorCanvas.style.pointerEvents = "none";
     canvas.parentElement.appendChild(display.cursorCanvas);
     canvas.style.cursor = "none";
     // keyboard stuff

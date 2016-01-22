@@ -373,7 +373,9 @@ Object.extend(Squeak,
         openReq.onblocked = function(e) {
             // If some other tab is loaded with the database, then it needs to be closed
             // before we can proceed upgrading the database.
-            alert("Database upgrade needed. Please close all other tabs with this site open!");
+            console.log("Database upgrade needed, but was blocked.");
+            console.warn("Falling back to local storage");
+            fakeTransaction();
         };
     },
     dbFake: function() {

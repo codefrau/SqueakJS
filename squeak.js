@@ -723,8 +723,10 @@ function updateSpinner(spinner, idleMS, vm, display) {
 var loop; // holds timeout for main loop
 
 SqueakJS.runImage = function(buffer, name, display, options) {
-    window.onbeforeunload = function() {
-        return SqueakJS.appName + " is still running";
+    window.onbeforeunload = function(evt) {
+        var msg = SqueakJS.appName + " is still running";  
+        evt.returnValue = msg;
+        return msg;
     };
     window.clearTimeout(loop);
     display.reset();

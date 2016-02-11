@@ -123,6 +123,15 @@ Function.prototype.subclass = function(classPath /* + more args */ ) {
 
 module("SqueakJS").requires("users.bert.SqueakJS.vm").toRun(function() {
 
+// if in private mode set localStorage to a regular dict
+var localStorage = window.localStorage;
+try {
+  localStorage["squeak-foo:"] = "bar";
+  if (localStorage["squeak-foo:"] !== "bar") throw Error();
+  delete localStorage["squeak-foo:"];
+} catch(e) {
+  localStorage = {};
+}
 
 //////////////////////////////////////////////////////////////////////////////
 // display & event setup

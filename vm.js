@@ -25,6 +25,17 @@ module('users.bert.SqueakJS.vm').requires().toRun(function() {
 // shorter name for convenience
 window.Squeak = users.bert.SqueakJS.vm;
 
+// if in private mode set localStorage to a regular dict
+var localStorage = window.localStorage;
+try {
+  localStorage["squeak-foo:"] = "bar";
+  if (localStorage["squeak-foo:"] !== "bar") throw Error();
+  delete localStorage["squeak-foo:"];
+} catch(e) {
+  console.warn("localStorage not available, faking");
+  localStorage = {};
+}
+
 Object.extend(Squeak,
 "version", {
     // system attributes

@@ -584,7 +584,7 @@ function createSqueakDisplay(canvas, options) {
             if (evt.dataTransfer.types[i] == 'Files') return true;
         return false;
     }
-    document.body.ondragover = function(evt) {
+    document.ondragover = function(evt) {
         evt.preventDefault();
         if (!dragEventHasFiles(evt))
             return evt.dataTransfer.dropEffect = 'none';
@@ -592,15 +592,15 @@ function createSqueakDisplay(canvas, options) {
         recordDragDropEvent(Squeak.EventDragMove, evt, canvas, display, eventQueue);
         return false;
     };
-    document.body.ondragenter = function(evt) {
+    document.ondragenter = function(evt) {
         if (!dragEventHasFiles(evt)) return;
         recordDragDropEvent(Squeak.EventDragEnter, evt, canvas, display, eventQueue);
     };
-    document.body.ondragleave = function(evt) {
+    document.ondragleave = function(evt) {
         if (!dragEventHasFiles(evt)) return;
         recordDragDropEvent(Squeak.EventDragLeave, evt, canvas, display, eventQueue);
     };
-    document.body.ondrop = function(evt) {
+    document.ondrop = function(evt) {
         evt.preventDefault();
         if (!dragEventHasFiles(evt)) return false;
         var files = [].slice.call(evt.dataTransfer.files),

@@ -244,14 +244,11 @@ function updateMousePos(evt, canvas, display) {
 }
 
 function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
-    if (what != "touchend") {
-        updateMousePos(evt, canvas, display);
-    }
+    updateMousePos(evt, canvas, display);
     if (!display.vm) return;
     var buttons = display.buttons & Squeak.Mouse_All;
     switch (what) {
         case 'mousedown':
-        case 'touchstart':
             switch (evt.button || 0) {
                 case 0: buttons = Squeak.Mouse_Red; break;      // left
                 case 1: buttons = Squeak.Mouse_Yellow; break;   // middle
@@ -262,10 +259,8 @@ function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
                 else if (buttons == Squeak.Mouse_Blue) buttons = Squeak.Mouse_Yellow;
             break;
         case 'mousemove':
-        case 'touchmove':
             break; // nothing more to do
         case 'mouseup':
-        case 'touchend':
             buttons = 0;
             break;
     }
@@ -465,24 +460,161 @@ function createSqueakDisplay(canvas, options) {
     canvas.oncontextmenu = function() {
         return false;
     };
-    canvas.ontouchstart = function(evt) {
-        evt.touches[0].timeStamp = evt.timeStamp;
-        recordMouseEvent('touchstart', evt.touches[0], canvas, display, eventQueue, options);
-        if (display.runNow) display.runNow(); // don't wait for timeout to run
-        evt.preventDefault();
+    // touch event handling
+    var touch = {
+        state: 'idle',
+        button: 0,
+        x: 0,
+        y: 0,
+        zoom: {},
     };
-    canvas.ontouchmove = function(evt) {
-        evt.touches[0].timeStamp = evt.timeStamp;
-        recordMouseEvent('touchmove', evt.touches[0], canvas, display, eventQueue, options);
-        if (display.runNow) display.runNow(); // don't wait for timeout to run
+    function touchToMouse(evt) {
+        if (evt.touches.length) {
+            touch.x = touch.y = 0;
+            for (var i = 0; i < evt.touches.length; i++) {
+                touch.x += evt.touches[i].pageX / evt.touches.length;
+                touch.y += evt.touches[i].pageY / evt.touches.length;
+            }
+        }
+        return {
+            timeStamp: evt.timeStamp,
+            button: touch.button,
+            offsetX: touch.x - canvas.offsetLeft,
+            offsetY: touch.y - canvas.offsetTop,
+        }
+    }
+    function dist(a, b) {var x = a.pageX - b.pageX, y = a.pageY - b.pageY; return Math.sqrt(x*x + y*y);}
+    function dent(n, l, t, u) { return n < l ? n + t - l : n > u ? n + t - u : t; }
+    function zoomStart(evt) {
+        touch.zoom.x = touch.x;
+        touch.zoom.y = touch.y;
+        touch.zoom.dist = dist(evt.touches[0], evt.touches[1]);
+        touch.zoom.left = parseInt(canvas.style.left);
+        touch.zoom.top = parseInt(canvas.style.top);
+        touch.zoom.width = parseInt(canvas.style.width);
+        touch.zoom.height = parseInt(canvas.style.height);
+        if (!touch.orig) touch.orig = {
+            left: touch.zoom.left,
+            top: touch.zoom.top,
+            right: touch.zoom.left + touch.zoom.width,
+            bottom: touch.zoom.top + touch.zoom.height,
+            width: touch.zoom.width,
+            height: touch.zoom.height,
+        }
+    }
+    function zoomMove(evt) {
+        if (evt.touches.length < 2) return;
+        var s = dist(evt.touches[0], evt.touches[1]) / touch.zoom.dist,
+            scale = dent(s, 0.8, 1, 1.5); 
+        var w = Math.max(Math.min(touch.zoom.width * scale, touch.orig.width * 4), touch.orig.width - 40),
+            h = touch.orig.height * w / touch.orig.width,
+            l = Math.max(Math.min(touch.zoom.left + touch.x - touch.zoom.x, touch.orig.left + 20), touch.orig.right - w - 20),
+            t = Math.max(Math.min(touch.zoom.top + touch.y - touch.zoom.y, touch.orig.top + 20), touch.orig.bottom - h - 20);
+        canvas.style.left = (l|0) + "px";
+        canvas.style.top = (t|0) + "px";
+        canvas.style.width = (w|0) + "px";
+        canvas.style.height = (h|0) + "px";
+    }
+    function zoomEnd(evt) {
+        var l = parseInt(canvas.style.left),
+            t = parseInt(canvas.style.top),
+            w = parseInt(canvas.style.width),
+            h = parseInt(canvas.style.height);
+        if (w < touch.orig.width) {
+            w = touch.orig.width;
+            h = touch.orig.height;
+        }
+        l = Math.max(Math.min(l, touch.orig.left), touch.orig.right - w),
+        t = Math.max(Math.min(t, touch.orig.top), touch.orig.bottom - h);
+        canvas.style.left = (l|0) + "px";
+        canvas.style.top = (t|0) + "px";
+        canvas.style.width = (w|0) + "px";
+        canvas.style.height = (h|0) + "px";
+    }
+    document.ontouchstart = function(evt) {
         evt.preventDefault();
+        var e = touchToMouse(evt);
+        for (var i = 0; i < evt.changedTouches.length; i++) {
+            switch (touch.state) {
+                case 'idle':
+                    touch.state = 'got1stFinger';
+                    touch.first = e;
+                    setTimeout(function(){
+                        if (touch.state !== 'got1stFinger') return;
+                        touch.state = 'mousing';
+                        touch.button = e.button = 0;
+                        recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                        recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                    }, 100);
+                    break;
+                case 'got1stFinger':
+                    touch.state = 'got2ndFinger';
+                    setTimeout(function(){
+                        if (touch.state !== 'got2ndFinger') return;
+                        touch.state = 'mousing';
+                        touch.button = e.button = 2;
+                        recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                        recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                    }, 100);
+                    break;
+            }
+        }
     };
-    canvas.ontouchend = function(evt) {
-        recordMouseEvent('touchend', evt, canvas, display, eventQueue, options);
-        if (display.runNow) display.runNow(); // don't wait for timeout to run
+    document.ontouchmove = function(evt) {
         evt.preventDefault();
+        var e = touchToMouse(evt);
+        switch (touch.state) {
+            case 'got1stFinger': 
+                touch.state = 'mousing';
+                touch.button = e.button = 0;
+                recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                break;
+            case 'mousing':
+                recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                return;
+            case 'got2ndFinger':
+                touch.state = 'zooming';
+                zoomStart(evt);
+                return;
+            case 'zooming':
+                zoomMove(evt);
+                return;
+        }
     };
-    canvas.ontouchcancel = function(evt) {
+    document.ontouchend = function(evt) {
+        evt.preventDefault();
+        checkFullscreen();
+        var e = touchToMouse(evt);
+        for (var i = 0; i < evt.changedTouches.length; i++) {
+            switch (touch.state) {
+                case 'mousing':
+                    if (evt.touches.length > 0) break;
+                    touch.state = 'idle';
+                    recordMouseEvent('mouseup', e, canvas, display, eventQueue, options);
+                    return;
+                case 'got1stFinger': 
+                    touch.state = 'idle';
+                    touch.button = e.button = 0;
+                    recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                    recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                    recordMouseEvent('mouseup', e, canvas, display, eventQueue, options);
+                    return;
+                case 'got2ndFinger':
+                    touch.state = 'mousing';
+                    touch.button = e.button = 2;
+                    recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                    recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                    break;
+                case 'zooming':
+                    if (evt.touches.length > 0) break;
+                    touch.state = 'idle';
+                    zoomEnd(evt);
+                    return;
+            }
+        }
+    };
+    document.ontouchcancel = function(evt) {
         canvas.ontouchend(evt);
     };
     // cursorCanvas shows Squeak cursor
@@ -632,6 +764,7 @@ function createSqueakDisplay(canvas, options) {
         return false;
     };
     window.onresize = function() {
+        if (touch.orig) return; // manually resized
         // call resizeDone only if window size didn't change for 300ms
         var debounceWidth = window.innerWidth,
             debounceHeight = window.innerHeight;
@@ -639,7 +772,6 @@ function createSqueakDisplay(canvas, options) {
             if (debounceWidth == window.innerWidth && debounceHeight == window.innerHeight)
                 display.resizeDone();
         }, 300);
-
         // if no fancy layout, don't bother
         if ((!options.header || !options.footer) && !options.fullscreen) {
             display.width = canvas.width;

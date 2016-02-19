@@ -21,7 +21,8 @@
  */
 
 
-var fullscreen = navigator.standalone;
+var fullscreen = navigator.standalone ||
+    !window.matchMedia('(max-device-width: 800px) or (max-device-height: 800px)').matches;
 
 window.onload = function() {
     SqueakJS.runSqueak('squeakjs.image', sqCanvas, {

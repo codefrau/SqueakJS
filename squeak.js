@@ -484,12 +484,14 @@ function createSqueakDisplay(canvas, options) {
             offsetY: touch.y - canvas.offsetTop,
         }
     }
-    function dist(a, b) {var x = a.pageX - b.pageX, y = a.pageY - b.pageY; return Math.sqrt(x*x + y*y);}
+    function dd(ax, ay, bx, by) {var x = ax - bx, y = ay - by; return Math.sqrt(x*x + y*y);}
+    function dist(a, b) {return dd(a.pageX, a.pageY, b.pageX, b.pageY);}
     function dent(n, l, t, u) { return n < l ? n + t - l : n > u ? n + t - u : t; }
     function zoomStart(evt) {
         touch.zoom.x = touch.x;
         touch.zoom.y = touch.y;
         touch.zoom.dist = dist(evt.touches[0], evt.touches[1]);
+        touch.zoom.dist2 = touch.zoom.dist;
         touch.zoom.left = parseInt(canvas.style.left);
         touch.zoom.top = parseInt(canvas.style.top);
         touch.zoom.width = parseInt(canvas.style.width);
@@ -550,13 +552,20 @@ function createSqueakDisplay(canvas, options) {
                     break;
                 case 'got1stFinger':
                     touch.state = 'got2ndFinger';
+                    zoomStart(evt);
                     setTimeout(function(){
                         if (touch.state !== 'got2ndFinger') return;
-                        touch.state = 'mousing';
-                        touch.button = e.button = 2;
-                        recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
-                        recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
-                    }, 100);
+                        var didMove = Math.abs(touch.zoom.dist - touch.zoom.dist2) > 10 ||
+                            dd(touch.zoom.x, touch.zoom.y, touch.x, touch.y) > 10;
+                        if (didMove) {
+                            touch.state = 'zooming';
+                        } else {
+                            touch.state = 'mousing';
+                            touch.button = e.button = 2;
+                            recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                            recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                        }
+                    }, 200);
                     break;
             }
         }
@@ -575,8 +584,8 @@ function createSqueakDisplay(canvas, options) {
                 recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
                 return;
             case 'got2ndFinger':
-                touch.state = 'zooming';
-                zoomStart(evt);
+                if (evt.touches.length > 1)
+                    touch.zoom.dist2 = dist(evt.touches[0], evt.touches[1]);
                 return;
             case 'zooming':
                 zoomMove(evt);

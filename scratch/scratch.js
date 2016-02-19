@@ -21,7 +21,7 @@
  */
 
 var fullscreen = navigator.standalone ||
-     !window.matchMedia('(max-device-width: 800px) or (max-device-height: 800px)').matches;
+    window.matchMedia('(max-device-width: 800px) and (max-device-height: 800px)').matches;
 
 window.onload = function() {
     var url = "http://freudenbergs.de/bert/squeakjs/scratch/Scratch.image";

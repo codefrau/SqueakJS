@@ -345,6 +345,7 @@ function createSqueakDisplay(canvas, options) {
     if (options.fullscreen) {
         document.body.style.margin = 0;
         document.body.style.backgroundColor = 'black';
+        document.ontouchmove = function(evt) { evt.preventDefault(); };
         if (options.header) options.header.style.display = 'none';
         if (options.footer) options.footer.style.display = 'none';
     }
@@ -531,7 +532,7 @@ function createSqueakDisplay(canvas, options) {
         canvas.style.width = (w|0) + "px";
         canvas.style.height = (h|0) + "px";
     }
-    document.ontouchstart = function(evt) {
+    canvas.ontouchstart = function(evt) {
         evt.preventDefault();
         var e = touchToMouse(evt);
         for (var i = 0; i < evt.changedTouches.length; i++) {
@@ -560,7 +561,7 @@ function createSqueakDisplay(canvas, options) {
             }
         }
     };
-    document.ontouchmove = function(evt) {
+    canvas.ontouchmove = function(evt) {
         evt.preventDefault();
         var e = touchToMouse(evt);
         switch (touch.state) {
@@ -582,7 +583,7 @@ function createSqueakDisplay(canvas, options) {
                 return;
         }
     };
-    document.ontouchend = function(evt) {
+    canvas.ontouchend = function(evt) {
         evt.preventDefault();
         checkFullscreen();
         var e = touchToMouse(evt);
@@ -614,7 +615,7 @@ function createSqueakDisplay(canvas, options) {
             }
         }
     };
-    document.ontouchcancel = function(evt) {
+    canvas.ontouchcancel = function(evt) {
         canvas.ontouchend(evt);
     };
     // cursorCanvas shows Squeak cursor

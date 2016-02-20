@@ -515,6 +515,15 @@ function createSqueakDisplay(canvas, options) {
         cursorCanvas.style.top = (t + display.cursorOffsetY + display.mouseY * scale|0) + "px";
         cursorCanvas.style.width = (cursorCanvas.width * scale|0) + "px";
         cursorCanvas.style.height = (cursorCanvas.height * scale|0) + "px";
+        if (!options.pixelated) {
+            if (window.devicePixelRatio * scale >= 3) {
+                canvas.classList.add("pixelated");
+                display.cursorCanvas.classList.add("pixelated");
+            } else {
+                canvas.classList.remove("pixelated");
+                display.cursorCanvas.classList.remove("pixelated");
+            }
+        }
     }
     function zoomMove(evt) {
         if (evt.touches.length < 2) return;

@@ -354,7 +354,6 @@ function createSqueakDisplay(canvas, options) {
         fullscreen: false,
         width: 0,   // if 0, VM uses canvas.width
         height: 0,  // if 0, VM uses canvas.height
-        scale: 1,   // changed dynamically by VM if fixedWidth is set
         mouseX: 0,
         mouseY: 0,
         buttons: 0,
@@ -492,10 +491,10 @@ function createSqueakDisplay(canvas, options) {
         touch.zoom.y = touch.y;
         touch.zoom.dist = dist(evt.touches[0], evt.touches[1]);
         touch.zoom.dist2 = touch.zoom.dist;
-        touch.zoom.left = parseInt(canvas.style.left);
-        touch.zoom.top = parseInt(canvas.style.top);
-        touch.zoom.width = parseInt(canvas.style.width);
-        touch.zoom.height = parseInt(canvas.style.height);
+        touch.zoom.left = canvas.offsetLeft;
+        touch.zoom.top = canvas.offsetTop;
+        touch.zoom.width = canvas.offsetWidth;
+        touch.zoom.height = canvas.offsetHeight;
         if (!touch.orig) touch.orig = {
             left: touch.zoom.left,
             top: touch.zoom.top,
@@ -505,34 +504,40 @@ function createSqueakDisplay(canvas, options) {
             height: touch.zoom.height,
         }
     }
-    function zoomMove(evt) {
-        if (evt.touches.length < 2) return;
-        var s = dist(evt.touches[0], evt.touches[1]) / touch.zoom.dist,
-            scale = dent(s, 0.8, 1, 1.5); 
-        var w = Math.max(Math.min(touch.zoom.width * scale, touch.orig.width * 4), touch.orig.width - 40),
-            h = touch.orig.height * w / touch.orig.width,
-            l = Math.max(Math.min(touch.zoom.left + touch.x - touch.zoom.x, touch.orig.left + 20), touch.orig.right - w - 20),
-            t = Math.max(Math.min(touch.zoom.top + touch.y - touch.zoom.y, touch.orig.top + 20), touch.orig.bottom - h - 20);
+    function adjustDisplay(l, t, w, h) {
+        var cursorCanvas = display.cursorCanvas,
+            scale = w / canvas.width;
         canvas.style.left = (l|0) + "px";
         canvas.style.top = (t|0) + "px";
         canvas.style.width = (w|0) + "px";
         canvas.style.height = (h|0) + "px";
+        cursorCanvas.style.left = (l + display.cursorOffsetX + display.mouseX * scale|0) + "px";
+        cursorCanvas.style.top = (t + display.cursorOffsetY + display.mouseY * scale|0) + "px";
+        cursorCanvas.style.width = (cursorCanvas.width * scale|0) + "px";
+        cursorCanvas.style.height = (cursorCanvas.height * scale|0) + "px";
+    }
+    function zoomMove(evt) {
+        if (evt.touches.length < 2) return;
+        var s = dist(evt.touches[0], evt.touches[1]) / touch.zoom.dist,
+            scale = dent(s, 0.8, 1, 1.5),
+            w = Math.max(Math.min(touch.zoom.width * scale, touch.orig.width * 4), touch.orig.width - 40),
+            h = touch.orig.height * w / touch.orig.width,
+            l = Math.max(Math.min(touch.zoom.left + touch.x - touch.zoom.x, touch.orig.left + 20), touch.orig.right - w - 20),
+            t = Math.max(Math.min(touch.zoom.top + touch.y - touch.zoom.y, touch.orig.top + 20), touch.orig.bottom - h - 20);
+        adjustDisplay(l, t, w, h);
     }
     function zoomEnd(evt) {
-        var l = parseInt(canvas.style.left),
-            t = parseInt(canvas.style.top),
-            w = parseInt(canvas.style.width),
-            h = parseInt(canvas.style.height);
+        var l = canvas.offsetLeft,
+            t = canvas.offsetTop,
+            w = canvas.offsetWidth,
+            h = canvas.offsetHeight;
         if (w < touch.orig.width) {
             w = touch.orig.width;
             h = touch.orig.height;
         }
         l = Math.max(Math.min(l, touch.orig.left), touch.orig.right - w),
         t = Math.max(Math.min(t, touch.orig.top), touch.orig.bottom - h);
-        canvas.style.left = (l|0) + "px";
-        canvas.style.top = (t|0) + "px";
-        canvas.style.width = (w|0) + "px";
-        canvas.style.height = (h|0) + "px";
+        adjustDisplay(l, t, w, h);
     }
     canvas.ontouchstart = function(evt) {
         evt.preventDefault();
@@ -826,12 +831,10 @@ function createSqueakDisplay(canvas, options) {
         }
         // set cursor scale
         if (options.fixedWidth) {
-            display.scale = parseInt(canvas.style.width) / canvas.width;
-            var cursorCanvas = display.cursorCanvas;
-            cursorCanvas.style.width = (cursorCanvas.width * display.scale) + "px";
-            cursorCanvas.style.height = (cursorCanvas.height * display.scale) + "px";
-        } else {
-            display.scale = 1;
+            var cursorCanvas = display.cursorCanvas,
+                scale = canvas.offsetWidth / canvas.width;
+            cursorCanvas.style.width = (cursorCanvas.width * scale) + "px";
+            cursorCanvas.style.height = (cursorCanvas.height * scale) + "px";
         }
     };
     window.onresize();

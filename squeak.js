@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013,2014 Bert Freudenberg
+ * Copyright (c) 2013-2016 Bert Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -244,14 +244,11 @@ function updateMousePos(evt, canvas, display) {
 }
 
 function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
-    if (what != "touchend") {
-        updateMousePos(evt, canvas, display);
-    }
+    updateMousePos(evt, canvas, display);
     if (!display.vm) return;
     var buttons = display.buttons & Squeak.Mouse_All;
     switch (what) {
         case 'mousedown':
-        case 'touchstart':
             switch (evt.button || 0) {
                 case 0: buttons = Squeak.Mouse_Red; break;      // left
                 case 1: buttons = Squeak.Mouse_Yellow; break;   // middle
@@ -262,10 +259,8 @@ function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
                 else if (buttons == Squeak.Mouse_Blue) buttons = Squeak.Mouse_Yellow;
             break;
         case 'mousemove':
-        case 'touchmove':
             break; // nothing more to do
         case 'mouseup':
-        case 'touchend':
             buttons = 0;
             break;
     }
@@ -350,6 +345,7 @@ function createSqueakDisplay(canvas, options) {
     if (options.fullscreen) {
         document.body.style.margin = 0;
         document.body.style.backgroundColor = 'black';
+        document.ontouchmove = function(evt) { evt.preventDefault(); };
         if (options.header) options.header.style.display = 'none';
         if (options.footer) options.footer.style.display = 'none';
     }
@@ -358,7 +354,6 @@ function createSqueakDisplay(canvas, options) {
         fullscreen: false,
         width: 0,   // if 0, VM uses canvas.width
         height: 0,  // if 0, VM uses canvas.height
-        scale: 1,   // changed dynamically by VM if fixedWidth is set
         mouseX: 0,
         mouseY: 0,
         buttons: 0,
@@ -465,22 +460,183 @@ function createSqueakDisplay(canvas, options) {
     canvas.oncontextmenu = function() {
         return false;
     };
+    // touch event handling
+    var touch = {
+        state: 'idle',
+        button: 0,
+        x: 0,
+        y: 0,
+        zoom: {},
+    };
+    function touchToMouse(evt) {
+        if (evt.touches.length) {
+            touch.x = touch.y = 0;
+            for (var i = 0; i < evt.touches.length; i++) {
+                touch.x += evt.touches[i].pageX / evt.touches.length;
+                touch.y += evt.touches[i].pageY / evt.touches.length;
+            }
+        }
+        return {
+            timeStamp: evt.timeStamp,
+            button: touch.button,
+            offsetX: touch.x - canvas.offsetLeft,
+            offsetY: touch.y - canvas.offsetTop,
+        }
+    }
+    function dd(ax, ay, bx, by) {var x = ax - bx, y = ay - by; return Math.sqrt(x*x + y*y);}
+    function dist(a, b) {return dd(a.pageX, a.pageY, b.pageX, b.pageY);}
+    function dent(n, l, t, u) { return n < l ? n + t - l : n > u ? n + t - u : t; }
+    function zoomStart(evt) {
+        touch.zoom.x = touch.x;
+        touch.zoom.y = touch.y;
+        touch.zoom.dist = dist(evt.touches[0], evt.touches[1]);
+        touch.zoom.dist2 = touch.zoom.dist;
+        touch.zoom.left = canvas.offsetLeft;
+        touch.zoom.top = canvas.offsetTop;
+        touch.zoom.width = canvas.offsetWidth;
+        touch.zoom.height = canvas.offsetHeight;
+        if (!touch.orig) touch.orig = {
+            left: touch.zoom.left,
+            top: touch.zoom.top,
+            right: touch.zoom.left + touch.zoom.width,
+            bottom: touch.zoom.top + touch.zoom.height,
+            width: touch.zoom.width,
+            height: touch.zoom.height,
+        }
+    }
+    function adjustDisplay(l, t, w, h) {
+        var cursorCanvas = display.cursorCanvas,
+            scale = w / canvas.width;
+        canvas.style.left = (l|0) + "px";
+        canvas.style.top = (t|0) + "px";
+        canvas.style.width = (w|0) + "px";
+        canvas.style.height = (h|0) + "px";
+        cursorCanvas.style.left = (l + display.cursorOffsetX + display.mouseX * scale|0) + "px";
+        cursorCanvas.style.top = (t + display.cursorOffsetY + display.mouseY * scale|0) + "px";
+        cursorCanvas.style.width = (cursorCanvas.width * scale|0) + "px";
+        cursorCanvas.style.height = (cursorCanvas.height * scale|0) + "px";
+        if (!options.pixelated) {
+            if (window.devicePixelRatio * scale >= 3) {
+                canvas.classList.add("pixelated");
+                display.cursorCanvas.classList.add("pixelated");
+            } else {
+                canvas.classList.remove("pixelated");
+                display.cursorCanvas.classList.remove("pixelated");
+            }
+        }
+    }
+    function zoomMove(evt) {
+        if (evt.touches.length < 2) return;
+        var s = dist(evt.touches[0], evt.touches[1]) / touch.zoom.dist,
+            scale = dent(s, 0.8, 1, 1.5),
+            w = Math.max(Math.min(touch.zoom.width * scale, touch.orig.width * 4), touch.orig.width - 40),
+            h = touch.orig.height * w / touch.orig.width,
+            l = Math.max(Math.min(touch.zoom.left + touch.x - touch.zoom.x, touch.orig.left + 20), touch.orig.right - w - 20),
+            t = Math.max(Math.min(touch.zoom.top + touch.y - touch.zoom.y, touch.orig.top + 20), touch.orig.bottom - h - 20);
+        adjustDisplay(l, t, w, h);
+    }
+    function zoomEnd(evt) {
+        var l = canvas.offsetLeft,
+            t = canvas.offsetTop,
+            w = canvas.offsetWidth,
+            h = canvas.offsetHeight;
+        if (w < touch.orig.width) {
+            w = touch.orig.width;
+            h = touch.orig.height;
+        }
+        l = Math.max(Math.min(l, touch.orig.left), touch.orig.right - w),
+        t = Math.max(Math.min(t, touch.orig.top), touch.orig.bottom - h);
+        adjustDisplay(l, t, w, h);
+    }
     canvas.ontouchstart = function(evt) {
-        evt.touches[0].timeStamp = evt.timeStamp;
-        recordMouseEvent('touchstart', evt.touches[0], canvas, display, eventQueue, options);
-        if (display.runNow) display.runNow(); // don't wait for timeout to run
         evt.preventDefault();
+        var e = touchToMouse(evt);
+        for (var i = 0; i < evt.changedTouches.length; i++) {
+            switch (touch.state) {
+                case 'idle':
+                    touch.state = 'got1stFinger';
+                    touch.first = e;
+                    setTimeout(function(){
+                        if (touch.state !== 'got1stFinger') return;
+                        touch.state = 'mousing';
+                        touch.button = e.button = 0;
+                        recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                        recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                    }, 100);
+                    break;
+                case 'got1stFinger':
+                    touch.state = 'got2ndFinger';
+                    zoomStart(evt);
+                    setTimeout(function(){
+                        if (touch.state !== 'got2ndFinger') return;
+                        var didMove = Math.abs(touch.zoom.dist - touch.zoom.dist2) > 10 ||
+                            dd(touch.zoom.x, touch.zoom.y, touch.x, touch.y) > 10;
+                        if (didMove) {
+                            touch.state = 'zooming';
+                        } else {
+                            touch.state = 'mousing';
+                            touch.button = e.button = 2;
+                            recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                            recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                        }
+                    }, 200);
+                    break;
+            }
+        }
     };
     canvas.ontouchmove = function(evt) {
-        evt.touches[0].timeStamp = evt.timeStamp;
-        recordMouseEvent('touchmove', evt.touches[0], canvas, display, eventQueue, options);
-        if (display.runNow) display.runNow(); // don't wait for timeout to run
         evt.preventDefault();
+        var e = touchToMouse(evt);
+        switch (touch.state) {
+            case 'got1stFinger': 
+                touch.state = 'mousing';
+                touch.button = e.button = 0;
+                recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                break;
+            case 'mousing':
+                recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                return;
+            case 'got2ndFinger':
+                if (evt.touches.length > 1)
+                    touch.zoom.dist2 = dist(evt.touches[0], evt.touches[1]);
+                return;
+            case 'zooming':
+                zoomMove(evt);
+                return;
+        }
     };
     canvas.ontouchend = function(evt) {
-        recordMouseEvent('touchend', evt, canvas, display, eventQueue, options);
-        if (display.runNow) display.runNow(); // don't wait for timeout to run
         evt.preventDefault();
+        checkFullscreen();
+        var e = touchToMouse(evt);
+        for (var i = 0; i < evt.changedTouches.length; i++) {
+            switch (touch.state) {
+                case 'mousing':
+                    if (evt.touches.length > 0) break;
+                    touch.state = 'idle';
+                    recordMouseEvent('mouseup', e, canvas, display, eventQueue, options);
+                    return;
+                case 'got1stFinger': 
+                    touch.state = 'idle';
+                    touch.button = e.button = 0;
+                    recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                    recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                    recordMouseEvent('mouseup', e, canvas, display, eventQueue, options);
+                    return;
+                case 'got2ndFinger':
+                    touch.state = 'mousing';
+                    touch.button = e.button = 2;
+                    recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                    recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                    break;
+                case 'zooming':
+                    if (evt.touches.length > 0) break;
+                    touch.state = 'idle';
+                    zoomEnd(evt);
+                    return;
+            }
+        }
     };
     canvas.ontouchcancel = function(evt) {
         canvas.ontouchend(evt);
@@ -632,6 +788,7 @@ function createSqueakDisplay(canvas, options) {
         return false;
     };
     window.onresize = function() {
+        if (touch.orig) return; // manually resized
         // call resizeDone only if window size didn't change for 300ms
         var debounceWidth = window.innerWidth,
             debounceHeight = window.innerHeight;
@@ -639,7 +796,6 @@ function createSqueakDisplay(canvas, options) {
             if (debounceWidth == window.innerWidth && debounceHeight == window.innerHeight)
                 display.resizeDone();
         }, 300);
-
         // if no fancy layout, don't bother
         if ((!options.header || !options.footer) && !options.fullscreen) {
             display.width = canvas.width;
@@ -684,12 +840,10 @@ function createSqueakDisplay(canvas, options) {
         }
         // set cursor scale
         if (options.fixedWidth) {
-            display.scale = parseInt(canvas.style.width) / canvas.width;
-            var cursorCanvas = display.cursorCanvas;
-            cursorCanvas.style.width = (cursorCanvas.width * display.scale) + "px";
-            cursorCanvas.style.height = (cursorCanvas.height * display.scale) + "px";
-        } else {
-            display.scale = 1;
+            var cursorCanvas = display.cursorCanvas,
+                scale = canvas.offsetWidth / canvas.width;
+            cursorCanvas.style.width = (cursorCanvas.width * scale) + "px";
+            cursorCanvas.style.height = (cursorCanvas.height * scale) + "px";
         }
     };
     window.onresize();

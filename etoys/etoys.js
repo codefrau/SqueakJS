@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013,2014 Bert Freudenberg
+ * Copyright (c) 2013-2016 Bert Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,7 +20,8 @@
  * THE SOFTWARE.
  */
 
-var fullscreen = navigator.standalone;
+var fullscreen = navigator.standalone ||
+    window.matchMedia('(max-device-width: 800px) and (max-device-height: 800px)').matches;
 
 window.onload = function() {
     var url = "http://freudenbergs.de/bert/squeakjs/etoys.image";

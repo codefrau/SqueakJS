@@ -1,7 +1,7 @@
 module('users.bert.SqueakJS.vm').requires().toRun(function() {
 "use strict";    
 /*
- * Copyright (c) 2013-2015 Bert Freudenberg
+ * Copyright (c) 2013-2016 Bert Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -4946,11 +4946,12 @@ Object.subclass('Squeak.Primitives',
             } else {
                 this.showForm(context, cursorForm, bounds, true);
             }
-            var scale = this.display.scale || 1;
-            cursorCanvas.style.width = (cursorCanvas.width * scale) + "px";
-            cursorCanvas.style.height = (cursorCanvas.height * scale) + "px";
-            this.display.cursorOffsetX = cursorForm.offsetX * scale;
-            this.display.cursorOffsetY = cursorForm.offsetY * scale;
+            var canvas = this.display.context.canvas,
+                scale = canvas.offsetWidth / canvas.width;
+            cursorCanvas.style.width = (cursorCanvas.width * scale|0) + "px";
+            cursorCanvas.style.height = (cursorCanvas.height * scale|0) + "px";
+            this.display.cursorOffsetX = cursorForm.offsetX * scale|0;
+            this.display.cursorOffsetY = cursorForm.offsetY * scale|0;
         }
         this.vm.popN(argCount);
         return true;

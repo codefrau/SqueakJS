@@ -471,11 +471,7 @@ Object.extend(Squeak,
         if (window.SqueakDBFake && SqueakDBFake.bigFiles[path.fullname])
             return thenDo(SqueakDBFake.bigFiles[path.fullname]);
         this.dbTransaction("readonly", "get " + filepath, function(fileStore) {
-            var getReq = fileStore.get(path.fullname);
-            getReq.onerror = function(e) { errorDo(e.target.error.name) };
-            getReq.onsuccess = function(e) {
-                if (this.result !== undefined) return thenDo(this.result);
-                // might be a template
+            var callFetchTemplateFile = function() {
                 Squeak.fetchTemplateFile(path.fullname,
                     function gotTemplate(template) {thenDo(template)},
                     function noTemplate() {
@@ -486,6 +482,17 @@ Object.extend(Squeak,
                         fakeReq.onerror = function(e) { errorDo("file not found: " + path.fullname) };
                         fakeReq.onsuccess = function(e) { thenDo(this.result); }
                     });
+            };
+            if (typeof indexedDB == "undefined") {
+                callFetchTemplateFile();
+                return;
+            }
+            var getReq = fileStore.get(path.fullname);
+            getReq.onerror = function(e) { errorDo(e.target.error.name) };
+            getReq.onsuccess = function(e) {
+                if (this.result !== undefined) return thenDo(this.result);
+                // might be a template
+                callFetchTemplateFile();
             };
         });
     },

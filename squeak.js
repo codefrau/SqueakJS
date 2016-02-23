@@ -28,7 +28,7 @@
 //////////////////////////////////////////////////////////////////////////////
 
 window.module = function(dottedPath) {
-    if (dottedPath == "") return window;
+    if (dottedPath === "") return window;
     var path = dottedPath.split("."),
         name = path.pop(),
         parent = module(path.join(".")),
@@ -42,7 +42,7 @@ window.module = function(dottedPath) {
                     function load() {
                         code();
                         self.loaded = true;
-                        self.pending.forEach(function(f){f()});
+                        self.pending.forEach(function(f){f();});
                     }
                     if (req && !module(req).loaded) {
                         module(req).pending.push(load);
@@ -50,7 +50,7 @@ window.module = function(dottedPath) {
                         load();
                     }
                 }
-            }
+            };
         },
     };
     return self;
@@ -60,7 +60,7 @@ Object.extend = function(obj /* + more args */ ) {
     // skip arg 0, copy properties of other args to obj
     for (var i = 1; i < arguments.length; i++)
         if (typeof arguments[i] == 'object')
-            for (name in arguments[i])
+            for (var name in arguments[i])
                 obj[name] = arguments[i][name];
 };
 
@@ -161,7 +161,7 @@ function setupFullscreen(display, canvas, options) {
                 fullscreenElement = browser.elem;
                 fullscreenEnabled = browser.enable;
             }
-        })
+        });
     }
 
     // If the user canceled fullscreen, turn off the fullscreen flag so
@@ -173,18 +173,18 @@ function setupFullscreen(display, canvas, options) {
         if (options.footer) options.footer.style.display = fullscreen ? 'none' : '';
         if (options.fullscreenCheckbox) options.fullscreenCheckbox.checked = fullscreen;
         setTimeout(window.onresize, 0);
-    };
+    }
     
     var checkFullscreen;
     
     if (box.requestFullscreen) {
-        document.addEventListener(fullscreenEvent, function(){fullscreenChange(box == document[fullscreenElement])});
+        document.addEventListener(fullscreenEvent, function(){fullscreenChange(box == document[fullscreenElement]);});
         checkFullscreen = function() {
             if (document[fullscreenEnabled] && (box == document[fullscreenElement]) != display.fullscreen) {
                 if (display.fullscreen) box.requestFullscreen();
                 else document.exitFullscreen();
             }
-        }
+        };
     } else {
         var isFullscreen = false;
         checkFullscreen = function() {
@@ -192,13 +192,13 @@ function setupFullscreen(display, canvas, options) {
                 isFullscreen = display.fullscreen;
                 fullscreenChange(isFullscreen);
             }
-        }
+        };
     }
 
     if (options.fullscreenCheckbox) options.fullscreenCheckbox.onclick = function() {
         display.fullscreen = options.fullscreenCheckbox.checked;
         checkFullscreen();
-    }
+    };
 
     return checkFullscreen;
 }
@@ -213,7 +213,7 @@ function setupSwapButtons(options) {
             options.swapButtons = options.swapCheckbox.checked;
             settings["swapButtons"] = options.swapButtons;
             localStorage["squeakSettings:" + imageName] = JSON.stringify(settings);
-        }
+        };
     }
 }
 
@@ -253,7 +253,7 @@ function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
                 case 0: buttons = Squeak.Mouse_Red; break;      // left
                 case 1: buttons = Squeak.Mouse_Yellow; break;   // middle
                 case 2: buttons = Squeak.Mouse_Blue; break;     // right
-            };
+            }
             if (options.swapButtons)
                 if (buttons == Squeak.Mouse_Yellow) buttons = Squeak.Mouse_Blue;
                 else if (buttons == Squeak.Mouse_Blue) buttons = Squeak.Mouse_Yellow;
@@ -385,7 +385,7 @@ function createSqueakDisplay(canvas, options) {
                 eventQueue.offset = Date.now() - evt[1]; // get epoch from first event
                 delete eventQueue.push;                  // use original push from now on
                 eventQueue.push(evt);
-            }
+            };
             display.getNextEvent = function(evtBuf, timeOffset) {
                 var evt = eventQueue.shift();
                 if (evt) makeSqueakEvent(evt, evtBuf, timeOffset - eventQueue.offset);
@@ -393,7 +393,7 @@ function createSqueakDisplay(canvas, options) {
             };
             display.getNextEvent(firstEvtBuf, firstOffset);
         };
-    }
+    };
     display.reset();
 
     var checkFullscreen = setupFullscreen(display, canvas, options);
@@ -413,7 +413,7 @@ function createSqueakDisplay(canvas, options) {
             display.resizeTodo = null;
             todo();
         }
-    }
+    };
     display.clear = function() {
         canvas.width = canvas.width;
     };
@@ -441,6 +441,33 @@ function createSqueakDisplay(canvas, options) {
         ctx.strokeRect(x, y, w, h);
         ctx.fillStyle = style.color || "#F90";
         ctx.fillRect(x, y, w * value, h);
+    };
+    display.executeClipboardPaste = function(text, timestamp) {
+        if (!display.vm) return true;
+        try {
+            display.clipboardString = text;
+            // simulate paste event for Squeak
+            fakeCmdOrCtrlKey('v'.charCodeAt(0), timestamp, display, eventQueue);
+        } catch(err) {
+            console.error("paste error " + err);
+        }
+    };
+    display.executeClipboardCopy = function(key, timestamp) {
+        if (!display.vm) return true;
+        // simulate copy event for Squeak so it places its text in clipboard
+        display.clipboardStringChanged = false;
+        fakeCmdOrCtrlKey((key || 'c').charCodeAt(0), timestamp, display, eventQueue);
+        var start = Date.now();
+        // now interpret until Squeak has copied to the clipboard
+        while (!display.clipboardStringChanged && Date.now() - start < 500)
+            display.vm.interpret(20);
+        if (!display.clipboardStringChanged) return;
+        // got it, now copy to the system clipboard
+        try {
+            return display.clipboardString;
+        } catch(err) {
+            console.error("copy error " + err);
+        }
     };
     canvas.onmousedown = function(evt) {
         checkFullscreen();
@@ -481,7 +508,7 @@ function createSqueakDisplay(canvas, options) {
             button: touch.button,
             offsetX: touch.x - canvas.offsetLeft,
             offsetY: touch.y - canvas.offsetTop,
-        }
+        };
     }
     function dd(ax, ay, bx, by) {var x = ax - bx, y = ay - by; return Math.sqrt(x*x + y*y);}
     function dist(a, b) {return dd(a.pageX, a.pageY, b.pageX, b.pageY);}
@@ -502,7 +529,7 @@ function createSqueakDisplay(canvas, options) {
             bottom: touch.zoom.top + touch.zoom.height,
             width: touch.zoom.width,
             height: touch.zoom.height,
-        }
+        };
     }
     function adjustDisplay(l, t, w, h) {
         var cursorCanvas = display.cursorCanvas,
@@ -544,7 +571,7 @@ function createSqueakDisplay(canvas, options) {
             w = touch.orig.width;
             h = touch.orig.height;
         }
-        l = Math.max(Math.min(l, touch.orig.left), touch.orig.right - w),
+        l = Math.max(Math.min(l, touch.orig.left), touch.orig.right - w);
         t = Math.max(Math.min(t, touch.orig.top), touch.orig.bottom - h);
         adjustDisplay(l, t, w, h);
     }
@@ -686,7 +713,7 @@ function createSqueakDisplay(canvas, options) {
         if ((evt.metaKey || (evt.altKey && !evt.ctrlKey))) {
             var key = evt.key; // only supported in FireFox, others have keyIdentifier
             if (!key && evt.keyIdentifier && evt.keyIdentifier.slice(0,2) == 'U+')
-                key = String.fromCharCode(parseInt(evt.keyIdentifier.slice(2), 16))
+                key = String.fromCharCode(parseInt(evt.keyIdentifier.slice(2), 16));
             if (key && key.length == 1) {
                 if (/[CXVR]/i.test(key))
                     return true;  // let browser handle cut/copy/paste/reload
@@ -702,20 +729,9 @@ function createSqueakDisplay(canvas, options) {
         recordModifiers(evt, display);
     };
     document.oncopy = function(evt, key) {
-        if (!display.vm) return true;
-        // simulate copy event for Squeak so it places its text in clipboard
-        display.clipboardStringChanged = false;
-        fakeCmdOrCtrlKey((key || 'c').charCodeAt(0), evt.timeStamp, display, eventQueue);
-        var start = Date.now();
-        // now interpret until Squeak has copied to the clipboard
-        while (!display.clipboardStringChanged && Date.now() - start < 500)
-            display.vm.interpret(20);
-        if (!display.clipboardStringChanged) return;
-        // got it, now copy to the system clipboard
-        try {
-            evt.clipboardData.setData("Text", display.clipboardString);
-        } catch(err) {
-            alert("copy error " + err);
+        var text = display.executeClipboardCopy(key, evt.timeStamp);
+        if (typeof text === 'string') {
+            evt.clipboardData.setData("Text", text);
         }
         evt.preventDefault();
     };
@@ -724,14 +740,8 @@ function createSqueakDisplay(canvas, options) {
         document.oncopy(evt, 'x');
     };
     document.onpaste = function(evt) {
-        if (!display.vm) return true;
-        try {
-            display.clipboardString = evt.clipboardData.getData('Text');
-            // simulate paste event for Squeak
-            fakeCmdOrCtrlKey('v'.charCodeAt(0), evt.timeStamp, display, eventQueue);
-        } catch(err) {
-            alert("paste error " + err);
-        }
+        var text = evt.clipboardData.getData('Text');
+        display.executeClipboardPaste(text, evt.timeStamp);
         evt.preventDefault();
     };
     // do not use addEventListener, we want to replace any previous drop handler
@@ -743,7 +753,7 @@ function createSqueakDisplay(canvas, options) {
     document.ondragover = function(evt) {
         evt.preventDefault();
         if (!dragEventHasFiles(evt))
-            return evt.dataTransfer.dropEffect = 'none';
+            return evt.dataTransfer.dropEffect == 'none';
         evt.dataTransfer.dropEffect = 'copy';
         recordDragDropEvent(Squeak.EventDragMove, evt, canvas, display, eventQueue);
         return false;
@@ -848,7 +858,7 @@ function createSqueakDisplay(canvas, options) {
     };
     window.onresize();
     return display;
-};
+}
 
 function setupSpinner(vm, options) {
     var spinner = options.spinner;
@@ -856,7 +866,7 @@ function setupSpinner(vm, options) {
     spinner.onmousedown = function(evt) {
         if (confirm(SqueakJS.appName + " is busy. Interrupt?"))
             vm.interruptPending = true;
-    }
+    };
     return spinner.style;
 }
 
@@ -920,11 +930,11 @@ SqueakJS.runImage = function(buffer, name, display, options) {
                     console.error(error);
                     alert(error);
                 }
-            };
+            }
             display.runNow = function() {
                 window.clearTimeout(loop);
                 run();
-            }
+            };
             display.runFor = function(milliseconds) {
                 var stoptime = Date.now() + milliseconds;
                 do {
@@ -933,7 +943,7 @@ SqueakJS.runImage = function(buffer, name, display, options) {
             };
             run();
         },
-        function readProgress(value) {display.showProgress(value)});
+        function readProgress(value) {display.showProgress(value);});
     }, 0);
 };
 
@@ -950,7 +960,7 @@ function processOptions(options) {
                 try { val = JSON.parse(val); } catch(e) {
                     if (val[0] === "[") val = val.slice(1,-1).split(","); // handle string arrays
                     // if not JSON use string itself
-                };
+                }
         }
         options[key] = val;
     }
@@ -1022,7 +1032,7 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
         rq.responseType = 'arraybuffer';
         rq.onprogress = function(e) {
             if (e.lengthComputable) display.showProgress(e.loaded / e.total);
-        }
+        };
         rq.onload = function(e) {
             if (rq.status == 200) {
                 if (file.name == imageName) {imageData = rq.response;}
@@ -1034,12 +1044,13 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
         };
         rq.onerror = function(e) {
             alert("Failed to download:\n" + file.url);
-        }
+        };
         rq.send();
-    };
+    }
     getNextFile(function whenAllDone(imageData) {
         SqueakJS.runImage(imageData, options.root + imageName, display, options);
     });
+    return display;
 };
 
 SqueakJS.quitSqueak = function() {

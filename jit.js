@@ -310,10 +310,11 @@ to single-step.
         }
     },
     generateExtended: function(bytecode) {
+        var byte2, byte3;
         switch (bytecode) {
             // extended push
             case 0x80:
-                var byte2 = this.method.bytes[this.pc++];
+                byte2 = this.method.bytes[this.pc++];
                 switch (byte2 >> 6) {
                     case 0: this.generatePush("inst[", byte2 & 0x3F, "]"); return;
                     case 1: this.generatePush("temp[", 6 + (byte2 & 0x3F), "]"); return;
@@ -322,7 +323,7 @@ to single-step.
                 }
             // extended store
             case 0x81:
-                var byte2 = this.method.bytes[this.pc++];
+                byte2 = this.method.bytes[this.pc++];
                 switch (byte2 >> 6) {
                     case 0: this.generateStoreInto("inst[", byte2 & 0x3F, "]"); return;
                     case 1: this.generateStoreInto("temp[", 6 + (byte2 & 0x3F), "]"); return;
@@ -332,57 +333,57 @@ to single-step.
                 return;
             // extended pop into
             case 0x82:
-                var byte2 = this.method.bytes[this.pc++];
+                byte2 = this.method.bytes[this.pc++];
                 switch (byte2 >> 6) {
                     case 0: this.generatePopInto("inst[", byte2 & 0x3F, "]"); return;
                     case 1: this.generatePopInto("temp[", 6 + (byte2 & 0x3F), "]"); return;
                     case 2: throw Error("illegal pop into literal");
                     case 3: this.generatePopInto("lit[", 1 + (byte2 & 0x3F), "].pointers[1]"); return;
-    			}
-    		// Single extended send
-    		case 0x83:
-    		    var byte2 = this.method.bytes[this.pc++];
-    		    this.generateSend("lit[", 1 + (byte2 & 0x1F), "]", byte2 >> 5, false);
-    		    return;
-    		// Double extended do-anything
-    		case 0x84:
-    		    var byte2 = this.method.bytes[this.pc++];
-    			var byte3 = this.method.bytes[this.pc++];
-    			switch (byte2 >> 5) {
-        			case 0: this.generateSend("lit[", 1 + byte3, "]", byte2 & 31, false); return;
-        			case 1: this.generateSend("lit[", 1 + byte3, "]", byte2 & 31, true); return;
-        			case 2: this.generatePush("inst[", byte3, "]"); return;
-        			case 3: this.generatePush("lit[", 1 + byte3, "]"); return;
-        			case 4: this.generatePush("lit[", 1 + byte3, "].pointers[1]"); return;
-        			case 5: this.generateStoreInto("inst[", byte3, "]"); return;
-        			case 6: this.generatePopInto("inst[", byte3, "]"); return;
-        			case 7: this.generateStoreInto("lit[", 1 + byte3, "].pointers[1]"); return;
-    			}
-    		// Single extended send to super
-    	    case 0x85:
-    	        var byte2 = this.method.bytes[this.pc++];
-    	        this.generateSend("lit[", 1 + (byte2 & 0x1F), "]", byte2 >> 5, true);
-    	        return;
-    	    // Second extended send
-    		case 0x86:
-    		     var byte2 = this.method.bytes[this.pc++];
-        		 this.generateSend("lit[", 1 + (byte2 & 0x3F), "]", byte2 >> 6, false);
-        		 return;
-        	// pop
-        	case 0x87:
-        	    this.generateInstruction("pop", "vm.sp--");
-        	    return;
-        	// dup
-        	case 0x88:
-        	    this.generateInstruction("dup", "var dup = stack[vm.sp]; stack[++vm.sp] = dup");
-        	    return;
-        	// thisContext
-        	case 0x89:
-        	    this.generateInstruction("thisContext", "stack[++vm.sp] = vm.exportThisContext()");
-        	    return;
+                }
+            // Single extended send
+            case 0x83:
+                byte2 = this.method.bytes[this.pc++];
+                this.generateSend("lit[", 1 + (byte2 & 0x1F), "]", byte2 >> 5, false);
+                return;
+            // Double extended do-anything
+            case 0x84:
+                byte2 = this.method.bytes[this.pc++];
+                byte3 = this.method.bytes[this.pc++];
+                switch (byte2 >> 5) {
+                    case 0: this.generateSend("lit[", 1 + byte3, "]", byte2 & 31, false); return;
+                    case 1: this.generateSend("lit[", 1 + byte3, "]", byte2 & 31, true); return;
+                    case 2: this.generatePush("inst[", byte3, "]"); return;
+                    case 3: this.generatePush("lit[", 1 + byte3, "]"); return;
+                    case 4: this.generatePush("lit[", 1 + byte3, "].pointers[1]"); return;
+                    case 5: this.generateStoreInto("inst[", byte3, "]"); return;
+                    case 6: this.generatePopInto("inst[", byte3, "]"); return;
+                    case 7: this.generateStoreInto("lit[", 1 + byte3, "].pointers[1]"); return;
+                }
+            // Single extended send to super
+            case 0x85:
+                byte2 = this.method.bytes[this.pc++];
+                this.generateSend("lit[", 1 + (byte2 & 0x1F), "]", byte2 >> 5, true);
+                return;
+            // Second extended send
+            case 0x86:
+                 byte2 = this.method.bytes[this.pc++];
+                 this.generateSend("lit[", 1 + (byte2 & 0x3F), "]", byte2 >> 6, false);
+                 return;
+            // pop
+            case 0x87:
+                this.generateInstruction("pop", "vm.sp--");
+                return;
+            // dup
+            case 0x88:
+                this.generateInstruction("dup", "var dup = stack[vm.sp]; stack[++vm.sp] = dup");
+                return;
+            // thisContext
+            case 0x89:
+                this.generateInstruction("thisContext", "stack[++vm.sp] = vm.exportThisContext()");
+                return;
             // closures
             case 0x8A:
-                var byte2 = this.method.bytes[this.pc++],
+                byte2 = this.method.bytes[this.pc++],
                     popValues = byte2 > 127,
                     count = byte2 & 127;
                 this.generateClosureTemps(count, popValues);
@@ -391,33 +392,33 @@ to single-step.
                 throw Error("unusedBytecode");
             // remote push from temp vector
             case 0x8C:
-                var byte2 = this.method.bytes[this.pc++];
-                var byte3 = this.method.bytes[this.pc++];
+                byte2 = this.method.bytes[this.pc++];
+                byte3 = this.method.bytes[this.pc++];
                 this.generatePush("temp[", 6 + byte3, "].pointers[", byte2, "]");
                 return;
             // remote store into temp vector
             case 0x8D:
-                var byte2 = this.method.bytes[this.pc++];
-                var byte3 = this.method.bytes[this.pc++];
+                byte2 = this.method.bytes[this.pc++];
+                byte3 = this.method.bytes[this.pc++];
                 this.generateStoreInto("temp[", 6 + byte3, "].pointers[", byte2, "]");
                 return;
             // remote store and pop into temp vector
             case 0x8E:
-                var byte2 = this.method.bytes[this.pc++];
-                var byte3 = this.method.bytes[this.pc++];
+                byte2 = this.method.bytes[this.pc++];
+                byte3 = this.method.bytes[this.pc++];
                 this.generatePopInto("temp[", 6 + byte3, "].pointers[", byte2, "]");
                 return;
             // pushClosureCopy
             case 0x8F:
-                var byte2 = this.method.bytes[this.pc++];
-                var byte3 = this.method.bytes[this.pc++];
+                byte2 = this.method.bytes[this.pc++];
+                byte3 = this.method.bytes[this.pc++];
                 var byte4 = this.method.bytes[this.pc++];
                 var numArgs = byte2 & 0xF,
                     numCopied = byte2 >> 4,
                     blockSize = byte3 << 8 | byte4;
                 this.generateClosureCopy(numArgs, numCopied, blockSize);
                 return;
-    	}
+        }
     },
     generatePush: function(value, arg1, suffix1, arg2, suffix2) {
         if (this.debug) this.generateDebugCode("push");
@@ -501,8 +502,7 @@ to single-step.
         this.needsLabel[this.pc] = true; // for coming back after #mustBeBoolean send
         this.needsLabel[destination] = true; // obviously
         if (destination > this.endPC) this.endPC = destination;
-    }
-,
+    },
     generateQuickPrim: function(byte) {
         if (this.debug) this.generateDebugCode("quick prim " + this.specialSelectors[(byte & 0x0F) + 16]);
         this.generateLabel();
@@ -687,7 +687,7 @@ to single-step.
         this.needsBreak = false; // already checked
         this.needsLabel[from] = true;   // initial pc when activated
         this.needsLabel[to] = true;     // for jump over closure
-    	if (to > this.endPC) this.endPC = to;
+        if (to > this.endPC) this.endPC = to;
     },
     generateLabel: function() {
         // remember label position for deleteUnneededLabels()
@@ -723,4 +723,4 @@ to single-step.
     },
 });
 
-}) // end of module
+}); // end of module

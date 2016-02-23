@@ -752,11 +752,12 @@ function createSqueakDisplay(canvas, options) {
     }
     document.ondragover = function(evt) {
         evt.preventDefault();
-        if (!dragEventHasFiles(evt))
-            return evt.dataTransfer.dropEffect == 'none';
-        evt.dataTransfer.dropEffect = 'copy';
-        recordDragDropEvent(Squeak.EventDragMove, evt, canvas, display, eventQueue);
-        return false;
+        if (!dragEventHasFiles(evt)) {
+            evt.dataTransfer.dropEffect = 'none';
+        } else {
+            evt.dataTransfer.dropEffect = 'copy';
+            recordDragDropEvent(Squeak.EventDragMove, evt, canvas, display, eventQueue);
+        }
     };
     document.ondragenter = function(evt) {
         if (!dragEventHasFiles(evt)) return;

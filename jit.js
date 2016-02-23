@@ -383,8 +383,8 @@ to single-step.
                 return;
             // closures
             case 0x8A:
-                byte2 = this.method.bytes[this.pc++],
-                    popValues = byte2 > 127,
+                byte2 = this.method.bytes[this.pc++];
+                var popValues = byte2 > 127,
                     count = byte2 & 127;
                 this.generateClosureTemps(count, popValues);
                 return;

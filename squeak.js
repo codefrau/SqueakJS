@@ -442,6 +442,33 @@ function createSqueakDisplay(canvas, options) {
         ctx.fillStyle = style.color || "#F90";
         ctx.fillRect(x, y, w * value, h);
     };
+    display.executeClipboardPaste = function(text, timestamp) {
+        if (!display.vm) return true;
+        try {
+            display.clipboardString = text;
+            // simulate paste event for Squeak
+            fakeCmdOrCtrlKey('v'.charCodeAt(0), timestamp, display, eventQueue);
+        } catch(err) {
+            console.error("paste error " + err);
+        }
+    };
+    display.executeClipboardCopy = function(key, timestamp) {
+        if (!display.vm) return true;
+        // simulate copy event for Squeak so it places its text in clipboard
+        display.clipboardStringChanged = false;
+        fakeCmdOrCtrlKey((key || 'c').charCodeAt(0), timestamp, display, eventQueue);
+        var start = Date.now();
+        // now interpret until Squeak has copied to the clipboard
+        while (!display.clipboardStringChanged && Date.now() - start < 500)
+            display.vm.interpret(20);
+        if (!display.clipboardStringChanged) return;
+        // got it, now copy to the system clipboard
+        try {
+            return display.clipboardString;
+        } catch(err) {
+            console.error("copy error " + err);
+        }
+    };
     canvas.onmousedown = function(evt) {
         checkFullscreen();
         recordMouseEvent('mousedown', evt, canvas, display, eventQueue, options);
@@ -702,20 +729,9 @@ function createSqueakDisplay(canvas, options) {
         recordModifiers(evt, display);
     };
     document.oncopy = function(evt, key) {
-        if (!display.vm) return true;
-        // simulate copy event for Squeak so it places its text in clipboard
-        display.clipboardStringChanged = false;
-        fakeCmdOrCtrlKey((key || 'c').charCodeAt(0), evt.timeStamp, display, eventQueue);
-        var start = Date.now();
-        // now interpret until Squeak has copied to the clipboard
-        while (!display.clipboardStringChanged && Date.now() - start < 500)
-            display.vm.interpret(20);
-        if (!display.clipboardStringChanged) return;
-        // got it, now copy to the system clipboard
-        try {
-            evt.clipboardData.setData("Text", display.clipboardString);
-        } catch(err) {
-            alert("copy error " + err);
+        var text = display.executeClipboardCopy(key, evt.timeStamp);
+        if (typeof text === 'string') {
+            evt.clipboardData.setData("Text", text);
         }
         evt.preventDefault();
     };
@@ -724,14 +740,8 @@ function createSqueakDisplay(canvas, options) {
         document.oncopy(evt, 'x');
     };
     document.onpaste = function(evt) {
-        if (!display.vm) return true;
-        try {
-            display.clipboardString = evt.clipboardData.getData('Text');
-            // simulate paste event for Squeak
-            fakeCmdOrCtrlKey('v'.charCodeAt(0), evt.timeStamp, display, eventQueue);
-        } catch(err) {
-            alert("paste error " + err);
-        }
+        var text = evt.clipboardData.getData('Text');
+        display.executeClipboardPaste(text, evt.timeStamp);
         evt.preventDefault();
     };
     // do not use addEventListener, we want to replace any previous drop handler
@@ -1040,6 +1050,7 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     getNextFile(function whenAllDone(imageData) {
         SqueakJS.runImage(imageData, options.root + imageName, display, options);
     });
+    return display;
 };
 
 SqueakJS.quitSqueak = function() {

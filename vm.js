@@ -420,10 +420,9 @@ Object.extend(Squeak,
                             buffer = bytes.buffer;
                         }
                     }
-                    var req = {result: buffer, error: "file not found"};
+                    var req = {result: buffer};
                     setTimeout(function(){
-                        if (buffer && req.onsuccess) req.onsuccess({target: req});
-                        if (!buffer && req.onerror) req.onerror({target: req});
+                        if (req.onsuccess) req.onsuccess({target: req});
                     }, 0);
                     return req;
                 },

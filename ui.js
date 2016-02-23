@@ -26,7 +26,7 @@ lively.data.FileUpload.Handler.subclass('users.bert.SqueakJS.ui.ImageLoader', {
         return file.type == 'application/squeak-image' || file.name.match(/\.image$/);
     },
     getUploadSpec: function(evt, file) {
-        return {readMethod: "asArrayBuffer"}
+        return {readMethod: "asArrayBuffer"};
     },
     onLoad: function(evt) {
         console.log("Storing " + this.file.name);
@@ -44,7 +44,7 @@ lively.data.FileUpload.Handler.subclass('users.bert.SqueakJS.ui.ImageLoader', {
         }
     },
     findSqueakMorph: function() {
-        return $world.submorphs.detect(function(morph){return !!morph.loadImageFromBuffer});
+        return $world.submorphs.detect(function(morph){return !!morph.loadImageFromBuffer;});
     },
 });
 
@@ -53,7 +53,7 @@ lively.data.FileUpload.Handler.subclass('users.bert.SqueakJS.ui.FileLoader', {
         return true;
     },
     getUploadSpec: function(evt, file) {
-        return {readMethod: "asArrayBuffer"}
+        return {readMethod: "asArrayBuffer"};
     },
     onLoad: function(evt) {
         console.log("Storing " + this.file.name);
@@ -61,4 +61,4 @@ lively.data.FileUpload.Handler.subclass('users.bert.SqueakJS.ui.FileLoader', {
     },
 });
 
-}) // end of module
+}); // end of module

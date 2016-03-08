@@ -1321,10 +1321,6 @@ Object.subclass('Squeak.Image',
                 return null;
             }
         }
-        if (version >> 16 !== this.vm.image.segmentVersion() >> 16) {
-            console.error("image segment format not supported");
-            return null;
-        }
         // read objects
         var segment = [],
             oopMap = {};
@@ -1372,12 +1368,12 @@ Object.subclass('Squeak.Image',
                 oopMap[--fakeClsOop] = cls; return fakeClsOop; });
         // map objects using oopMap, and assign new oops
         var roots = oopMap[8] || oopMap[12] || oopMap[16],      // might be 1/2/3 header words
-            floatClass = this.specialObjectsArray.pointers[Squeak.splOb_ClassFloat],
-            obj = roots;
+            floatClass = this.specialObjectsArray.pointers[Squeak.splOb_ClassFloat];
         for (var i = 0; i < segment.length; i++) {
             var obj = segment[i];
             obj.installFromImage(oopMap, compactClassOops, floatClass, littleEndian, nativeFloats);
             obj.oop = -(++this.newSpaceCount);  // make this a proper new-space object (see registerObject)
+            this.hasNewInstances[obj.sqClass.oop] = true;   // need GC to find all instances
         }
         // don't truncate segmentWordArray now like the C VM does. It does not seem to be
         // worth the trouble of adjusting the following oops

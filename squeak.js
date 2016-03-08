@@ -1007,7 +1007,7 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     }
     if (options.document) {
         var docName = Squeak.splitFilePath(options.document).basename;
-        files.push({url: options.document, name: docName, forceDownload: true});
+        files.push({url: options.document, name: docName, forceDownload: options.forceDownload !== false});
         display.documentName = options.root + docName;
     }
     function getNextFile(whenAllDone) {

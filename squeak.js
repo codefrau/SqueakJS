@@ -981,7 +981,7 @@ function fetchTemplates(options) {
             options.templates = templates;
         }
         for (var path in options.templates)
-            Squeak.fetchTemplateDir(options.root + path, options.templates[path]);
+            Squeak.fetchTemplateDir(path[0] == "/" ? path : options.root + path, options.templates[path]);
     }
 }
 

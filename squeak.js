@@ -1044,7 +1044,16 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
             else rq.onerror(rq.statusText);
         };
         rq.onerror = function(e) {
-            alert("Failed to download:\n" + file.url);
+            var proxy = options.proxy || 'https://crossorigin.me/',
+                tried = file.url.match('^('+ proxy + ')(.*)');
+            if (tried) {
+                alert("Failed to download:\n" + tried[2]);
+            } else {
+                console.warn('Retrying with CORS proxy: ' + file.url);
+                file.url = proxy + file.url;
+                rq.open('GET', file.url);
+                rq.send();
+            }
         };
         rq.send();
     }

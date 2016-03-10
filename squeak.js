@@ -554,12 +554,15 @@ function createSqueakDisplay(canvas, options) {
     }
     function zoomMove(evt) {
         if (evt.touches.length < 2) return;
-        var s = dist(evt.touches[0], evt.touches[1]) / touch.zoom.dist,
-            scale = dent(s, 0.8, 1, 1.5),
-            w = Math.max(Math.min(touch.zoom.width * scale, touch.orig.width * 4), touch.orig.width - 40),
+        var minScale = touch.orig.width / touch.zoom.width,
+            s = dist(evt.touches[0], evt.touches[1]) / touch.zoom.dist,
+            scale = Math.min(Math.max(dent(s, 0.8, 1, 1.5), minScale * 0.95), minScale * 4),
+            w = touch.zoom.width * scale,
             h = touch.orig.height * w / touch.orig.width,
-            l = Math.max(Math.min(touch.zoom.left + touch.x - touch.zoom.x, touch.orig.left + 20), touch.orig.right - w - 20),
-            t = Math.max(Math.min(touch.zoom.top + touch.y - touch.zoom.y, touch.orig.top + 20), touch.orig.bottom - h - 20);
+            l = touch.zoom.left - (touch.zoom.x - touch.zoom.left) * (scale - 1) + (touch.x - touch.zoom.x),
+            t = touch.zoom.top - (touch.zoom.y - touch.zoom.top) * (scale - 1) + (touch.y - touch.zoom.y);
+        l = Math.max(Math.min(l, touch.orig.left + 20), touch.orig.right - w - 20);
+        t = Math.max(Math.min(t, touch.orig.top + 20), touch.orig.bottom - h - 20);
         adjustDisplay(l, t, w, h);
     }
     function zoomEnd(evt) {
@@ -567,10 +570,8 @@ function createSqueakDisplay(canvas, options) {
             t = canvas.offsetTop,
             w = canvas.offsetWidth,
             h = canvas.offsetHeight;
-        if (w < touch.orig.width) {
-            w = touch.orig.width;
-            h = touch.orig.height;
-        }
+        w = Math.min(Math.max(w, touch.orig.width), touch.orig.width * 4);
+        h = touch.orig.height * w / touch.orig.width;
         l = Math.max(Math.min(l, touch.orig.left), touch.orig.right - w);
         t = Math.max(Math.min(t, touch.orig.top), touch.orig.bottom - h);
         adjustDisplay(l, t, w, h);

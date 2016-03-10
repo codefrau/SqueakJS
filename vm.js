@@ -659,9 +659,10 @@ Object.extend(Squeak,
         }
         function checkSubTemplates(path, url) {
             var template = JSON.parse(localStorage["squeak-template:" + path]);
-            template.entries.forEach(function(entry) {
+            for (var key in template.entries) {
+                var entry = template.entries[key];
                 if (entry[3]) Squeak.fetchTemplateDir(path + "/" + entry[0], url + "/" + entry[0]);
-            });
+            };
         }
         if (localStorage["squeak-template:" + path]) {
             checkSubTemplates(path, url);
@@ -673,7 +674,13 @@ Object.extend(Squeak,
                 if (rq.status == 200) {
                     console.log("adding template " + path);
                     ensureTemplateParent(path);
-                    localStorage["squeak-template:" + path] = '{"url": ' + JSON.stringify(url) + ', "entries": ' + rq.response + '}';
+                    var entries = JSON.parse(rq.response),
+                        template = {url: url, entries: {}};
+                    for (var key in entries) {
+                        var entry = entries[key];
+                        template.entries[entry[0]] = entry;
+                    }
+                    localStorage["squeak-template:" + path] = JSON.stringify(template);
                     checkSubTemplates(path, url);
                 }
                 else rq.onerror(rq.statusText);

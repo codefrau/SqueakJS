@@ -1035,25 +1035,24 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
             if (e.lengthComputable) display.showProgress(e.loaded / e.total);
         };
         rq.onload = function(e) {
-            if (rq.status == 200) {
-                if (file.name == imageName) {imageData = rq.response;}
-                Squeak.filePut(options.root + file.name, rq.response, function() {
+            if (this.status == 200) {
+                if (file.name == imageName) {imageData = this.response;}
+                Squeak.filePut(options.root + file.name, this.response, function() {
                     getNextFile(whenAllDone);
                 });
             }
-            else rq.onerror(rq.statusText);
+            else this.onerror(this.statusText);
         };
         rq.onerror = function(e) {
+            console.warn('Retrying with CORS proxy: ' + file.url);
             var proxy = options.proxy || 'https://crossorigin.me/',
-                tried = file.url.match('^('+ proxy + ')(.*)');
-            if (tried) {
-                alert("Failed to download:\n" + tried[2]);
-            } else {
-                console.warn('Retrying with CORS proxy: ' + file.url);
-                file.url = proxy + file.url;
-                rq.open('GET', file.url);
-                rq.send();
-            }
+                retry = new XMLHttpRequest();
+            retry.open('GET', proxy + file.url);
+            retry.responseType = rq.responseType;
+            retry.onprogress = rq.onprogress;
+            retry.onload = rq.onload;
+            retry.onerror = function() {alert("Failed to download:\n" + file.url)};
+            retry.send();
         };
         rq.send();
     }

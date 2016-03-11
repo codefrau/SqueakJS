@@ -493,10 +493,12 @@ function createSqueakDisplay(canvas, options) {
         button: 0,
         x: 0,
         y: 0,
-        zoom: {},
+        dist: 0,
+        down: {},
     };
     function touchToMouse(evt) {
         if (evt.touches.length) {
+            // average all touch positions
             touch.x = touch.y = 0;
             for (var i = 0; i < evt.touches.length; i++) {
                 touch.x += evt.touches[i].pageX / evt.touches.length;
@@ -513,24 +515,6 @@ function createSqueakDisplay(canvas, options) {
     function dd(ax, ay, bx, by) {var x = ax - bx, y = ay - by; return Math.sqrt(x*x + y*y);}
     function dist(a, b) {return dd(a.pageX, a.pageY, b.pageX, b.pageY);}
     function dent(n, l, t, u) { return n < l ? n + t - l : n > u ? n + t - u : t; }
-    function zoomStart(evt) {
-        touch.zoom.x = touch.x;
-        touch.zoom.y = touch.y;
-        touch.zoom.dist = dist(evt.touches[0], evt.touches[1]);
-        touch.zoom.dist2 = touch.zoom.dist;
-        touch.zoom.left = canvas.offsetLeft;
-        touch.zoom.top = canvas.offsetTop;
-        touch.zoom.width = canvas.offsetWidth;
-        touch.zoom.height = canvas.offsetHeight;
-        if (!touch.orig) touch.orig = {
-            left: touch.zoom.left,
-            top: touch.zoom.top,
-            right: touch.zoom.left + touch.zoom.width,
-            bottom: touch.zoom.top + touch.zoom.height,
-            width: touch.zoom.width,
-            height: touch.zoom.height,
-        };
-    }
     function adjustDisplay(l, t, w, h) {
         var cursorCanvas = display.cursorCanvas,
             scale = w / canvas.width;
@@ -543,7 +527,7 @@ function createSqueakDisplay(canvas, options) {
         cursorCanvas.style.width = (cursorCanvas.width * scale|0) + "px";
         cursorCanvas.style.height = (cursorCanvas.height * scale|0) + "px";
         if (!options.pixelated) {
-            if (window.devicePixelRatio * scale >= 3) {
+            if (scale >= 3) {
                 canvas.classList.add("pixelated");
                 display.cursorCanvas.classList.add("pixelated");
             } else {
@@ -552,15 +536,39 @@ function createSqueakDisplay(canvas, options) {
             }
         }
     }
+    // zooming/panning with two fingers
+    var maxZoom = 5;
+    function zoomStart(evt) {
+        touch.dist = dist(evt.touches[0], evt.touches[1]);
+        touch.down.x = touch.x;
+        touch.down.y = touch.y;
+        touch.down.dist = touch.dist;
+        touch.down.left = canvas.offsetLeft;
+        touch.down.top = canvas.offsetTop;
+        touch.down.width = canvas.offsetWidth;
+        touch.down.height = canvas.offsetHeight;
+        // store original canvas bounds
+        if (!touch.orig) touch.orig = {
+            left: touch.down.left,
+            top: touch.down.top,
+            right: touch.down.left + touch.down.width,
+            bottom: touch.down.top + touch.down.height,
+            width: touch.down.width,
+            height: touch.down.height,
+        };
+    }
     function zoomMove(evt) {
         if (evt.touches.length < 2) return;
-        var minScale = touch.orig.width / touch.zoom.width,
-            s = dist(evt.touches[0], evt.touches[1]) / touch.zoom.dist,
-            scale = Math.min(Math.max(dent(s, 0.8, 1, 1.5), minScale * 0.95), minScale * 4),
-            w = touch.zoom.width * scale,
+        touch.dist = dist(evt.touches[0], evt.touches[1]);
+        var minScale = touch.orig.width / touch.down.width,
+            //nowScale = dent(touch.dist / touch.down.dist, 0.8, 1, 1.5),
+            nowScale = touch.dist / touch.down.dist,
+            scale = Math.min(Math.max(nowScale, minScale * 0.95), minScale * maxZoom),
+            w = touch.down.width * scale,
             h = touch.orig.height * w / touch.orig.width,
-            l = touch.zoom.left - (touch.zoom.x - touch.zoom.left) * (scale - 1) + (touch.x - touch.zoom.x),
-            t = touch.zoom.top - (touch.zoom.y - touch.zoom.top) * (scale - 1) + (touch.y - touch.zoom.y);
+            l = touch.down.left - (touch.down.x - touch.down.left) * (scale - 1) + (touch.x - touch.down.x),
+            t = touch.down.top - (touch.down.y - touch.down.top) * (scale - 1) + (touch.y - touch.down.y);
+        // allow to rubber-band by 20px for feedback
         l = Math.max(Math.min(l, touch.orig.left + 20), touch.orig.right - w - 20);
         t = Math.max(Math.min(t, touch.orig.top + 20), touch.orig.bottom - h - 20);
         adjustDisplay(l, t, w, h);
@@ -570,12 +578,19 @@ function createSqueakDisplay(canvas, options) {
             t = canvas.offsetTop,
             w = canvas.offsetWidth,
             h = canvas.offsetHeight;
-        w = Math.min(Math.max(w, touch.orig.width), touch.orig.width * 4);
+        w = Math.min(Math.max(w, touch.orig.width), touch.orig.width * maxZoom);
         h = touch.orig.height * w / touch.orig.width;
         l = Math.max(Math.min(l, touch.orig.left), touch.orig.right - w);
         t = Math.max(Math.min(t, touch.orig.top), touch.orig.bottom - h);
         adjustDisplay(l, t, w, h);
     }
+    // State machine to distinguish between 1st/2nd mouse button and zoom/pan:
+    // * if moved, or no 2nd finger within 100ms of 1st down, start mousing
+    // * if fingers moved significantly within 200ms of 2nd down, start zooming
+    // * if touch ended within this time, generate click (down+up)
+    // * otherwise, start mousing with 2nd button
+    // When mousing, always generate a move event before down event so that
+    // mouseover eventhandlers in image work better 
     canvas.ontouchstart = function(evt) {
         evt.preventDefault();
         var e = touchToMouse(evt);
@@ -597,8 +612,8 @@ function createSqueakDisplay(canvas, options) {
                     zoomStart(evt);
                     setTimeout(function(){
                         if (touch.state !== 'got2ndFinger') return;
-                        var didMove = Math.abs(touch.zoom.dist - touch.zoom.dist2) > 10 ||
-                            dd(touch.zoom.x, touch.zoom.y, touch.x, touch.y) > 10;
+                        var didMove = Math.abs(touch.down.dist - touch.dist) > 10 ||
+                            dd(touch.down.x, touch.down.y, touch.x, touch.y) > 10;
                         if (didMove) {
                             touch.state = 'zooming';
                         } else {
@@ -627,7 +642,7 @@ function createSqueakDisplay(canvas, options) {
                 return;
             case 'got2ndFinger':
                 if (evt.touches.length > 1)
-                    touch.zoom.dist2 = dist(evt.touches[0], evt.touches[1]);
+                    touch.dist = dist(evt.touches[0], evt.touches[1]);
                 return;
             case 'zooming':
                 zoomMove(evt);

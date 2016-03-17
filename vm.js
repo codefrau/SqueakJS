@@ -1199,6 +1199,7 @@ Object.subclass('Squeak.Image',
         }
         // unless copyHash is false, make hash stay with the reference, not with the object
         if (copyHash) for (var i = 0; i < n; i++) {
+            if (!toArray[i].sqClass) return false; //cannot change hash of non-objects
             var fromHash = fromArray[i].hash;
             fromArray[i].hash = toArray[i].hash;
             toArray[i].hash = fromHash;

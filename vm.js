@@ -913,8 +913,26 @@ Object.subclass('Squeak.Image',
             oopMap[oldBaseAddr + oop] = object;
         }
         this.firstOldObject = oopMap[oldBaseAddr+4];
-        this.lastOldObject = prevObj;
+        this.lastOldObject = object;
         this.oldSpaceBytes = objectMemorySize;
+        
+        if (true) {
+            // For debugging: re-create all objects with properly named prototypes
+            var cc = oopMap[oopMap[specialObjectsOopInt].bits[Squeak.splOb_CompactClasses]].bits;
+            var renamedObj = null;
+            object = this.firstOldObject;
+            prevObj = null;
+            while (object) {
+                prevObj = renamedObj;
+                renamedObj = object.renameFromImage(oopMap, cc);
+                if (prevObj) prevObj.nextObject = renamedObj;
+                oopMap[oldBaseAddr + object.oop] = renamedObj;
+                object = object.nextObject;
+            }
+            this.firstOldObject = oopMap[oldBaseAddr+4];
+            this.lastOldObject = renamedObj;
+        }
+        
         //create proper objects by mapping via oopMap
         var splObs         = oopMap[specialObjectsOopInt];
         var compactClasses = oopMap[splObs.bits[Squeak.splOb_CompactClasses]].bits;
@@ -1155,14 +1173,14 @@ Object.subclass('Squeak.Image',
         return this.lastHash & 0xFFF;
     },
     instantiateClass: function(aClass, indexableSize, filler) {
-        var newObject = new Squeak.Object();
+        var newObject = new (aClass.classInstProto()); // Squeak.Object
         var hash = this.registerObject(newObject);
         newObject.initInstanceOf(aClass, indexableSize, hash, filler);
         this.hasNewInstances[aClass.oop] = true;   // need GC to find all instances
         return newObject;
     },
     clone: function(object) {
-        var newObject = new Squeak.Object();
+        var newObject = new (object.sqClass.classInstProto()); // Squeak.Object
         var hash = this.registerObject(newObject);
         newObject.initAsClone(object, hash);
         this.hasNewInstances[newObject.sqClass.oop] = true;   // need GC to find all instances
@@ -1453,6 +1471,28 @@ Object.subclass('Squeak.Object',
         this.format = fmt;
         this.hash = hsh;
         this.bits = data;
+    },
+    classNameFromImage: function(oopMap) {
+        for (var i = 6; i <= 7; i++) {
+            var name = oopMap[this.bits[6]];
+            if (name && name.format >= 8 && name.format < 12) {
+                var bytes = name.decodeBytes(name.bits.length, name.bits, 0, name.format & 3);
+                return Squeak.bytesAsString(bytes);
+            }
+        }
+        return "Class";
+    },
+    renameFromImage: function(oopMap, ccArray) {
+        var classObj = this.sqClass < 32 ? oopMap[ccArray[this.sqClass-1]] : oopMap[this.sqClass];
+        var instProto = classObj.instProto || classObj.classInstProto(classObj.classNameFromImage(oopMap));
+        if (!instProto) return this;
+        var renamedObj = new instProto; // Squeak.Object
+        renamedObj.oop = this.oop;
+        renamedObj.sqClass = this.sqClass;
+        renamedObj.format = this.format;
+        renamedObj.hash = this.hash;
+        renamedObj.bits = this.bits;
+        return renamedObj;
     },
     installFromImage: function(oopMap, ccArray, floatClass, littleEndian, nativeFloats) {
         //Install this object by decoding format, and rectifying pointers
@@ -1807,13 +1847,30 @@ Object.subclass('Squeak.Object',
         for (var clsIndex = 5; clsIndex <= 6; clsIndex++)
             for (var nameIndex = 6; nameIndex <= 7; nameIndex++) {
                 var cls = this.pointers[clsIndex];
-                if (cls.pointers) {
+                if (cls && cls.pointers) {
                     var name = cls.pointers[nameIndex];
                     if (name && name.bytes) return Squeak.bytesAsString(name.bytes) + " class";
                 }
             }
         return "_SOMECLASS_";
-    }
+    },
+    classInstProto: function(className) {
+        if (this.instProto) return this.instProto;
+        var proto = Squeak.Object;  // in case below fails
+        try {
+            if (!className) className = this.className();
+            var safeName = className.replace(/[^A-Za-z0-9]/g,'_');
+            if (safeName === "UndefinedObject") safeName = "nil";
+            else if (safeName === "True") safeName = "true_";
+            else if (safeName === "False") safeName = "false_";
+            else safeName = ((/^[AEIOU]/.test(safeName)) ? 'an' : 'a') + safeName;
+            // fail okay if no eval()
+            proto = new Function("return function " + safeName + "() {};")();
+            proto.prototype = Squeak.Object.prototype;
+        } catch(e) {}
+        Object.defineProperty(this, 'instProto', { value: proto });
+        return proto;
+    },
 },
 'as method', {
     methodHeader: function() {

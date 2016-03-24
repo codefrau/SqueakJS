@@ -167,7 +167,7 @@ to single-step.
     },
     functionNameFor: function(cls, sel) {
         if (!cls || !sel) return "Squeak_DOIT";
-        if (!/[^a-zA-Z:_]/.test(sel))
+        if (!/[^a-zA-Z0-9:_]/.test(sel))
             return (cls + "_" + sel).replace(/[: ]/g, "_");
         var op = sel.replace(/./g, function(char) {
             var repl = {'|': "OR", '~': "NOT", '<': "LT", '=': "EQ", '>': "GT",

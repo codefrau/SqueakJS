@@ -1473,12 +1473,10 @@ Object.subclass('Squeak.Object',
         this.bits = data;
     },
     classNameFromImage: function(oopMap) {
-        for (var i = 6; i <= 7; i++) {
-            var name = oopMap[this.bits[6]];
-            if (name && name.format >= 8 && name.format < 12) {
-                var bytes = name.decodeBytes(name.bits.length, name.bits, 0, name.format & 3);
-                return Squeak.bytesAsString(bytes);
-            }
+        var name = oopMap[this.bits[Squeak.Class_name]];
+        if (name && name.format >= 8 && name.format < 12) {
+            var bytes = name.decodeBytes(name.bits.length, name.bits, 0, name.format & 3);
+            return Squeak.bytesAsString(bytes);
         }
         return "Class";
     },
@@ -1839,19 +1837,16 @@ Object.subclass('Squeak.Object',
     },
     className: function() {
         if (!this.pointers) return "_NOTACLASS_";
-        var name = this.pointers[6];
-        if (name && name.bytes) return Squeak.bytesAsString(name.bytes);
-        var name = this.pointers[7];
-        if (name && name.bytes) return Squeak.bytesAsString(name.bytes);
+        var name = this.pointers[Squeak.Class_name];
+        if (name && name.bytes) return name.bytesAsString();
         // must be meta class
-        for (var clsIndex = 5; clsIndex <= 6; clsIndex++)
-            for (var nameIndex = 6; nameIndex <= 7; nameIndex++) {
-                var cls = this.pointers[clsIndex];
-                if (cls && cls.pointers) {
-                    var name = cls.pointers[nameIndex];
-                    if (name && name.bytes) return Squeak.bytesAsString(name.bytes) + " class";
-                }
+        for (var clsIndex = 5; clsIndex <= 6; clsIndex++) {
+            var cls = this.pointers[clsIndex];
+            if (cls && cls.pointers) {
+                name = cls.pointers[Squeak.Class_name];
+                if (name && name.bytes) return name.bytesAsString() + " class";
             }
+        }
         return "_SOMECLASS_";
     },
     classInstProto: function(className) {

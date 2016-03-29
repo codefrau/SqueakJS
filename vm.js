@@ -905,22 +905,22 @@ Object.subclass('Squeak.Image',
                 hash = (header>>17) & 4095,
                 bits = readBits(nWords, format);
 
-            let newOop = oldBaseAddr + oop;
-            if(!splObs && (newOop === specialObjectsOopInt)) {
+            let oldOop = oldBaseAddr + oop;
+            if (!splObs && (oldOop === specialObjectsOopInt)) {
                 splObs = bits;
                 floatClassOop = splObs[Squeak.splOb_ClassFloat];
                 compactClassesOop = splObs[Squeak.splOb_CompactClasses];
-            } else if(!compactClasses && (newOop === compactClassesOop)) {
+            } else if (!compactClasses && (oldOop === compactClassesOop)) {
                 compactClasses = bits;
             }
             let previousOop = this.previousOop;
-            this.previousOop = newOop;
-            Object.defineProperty(oopMap, newOop, {configurable: true, get: function(){
-                delete oopMap[newOop];
-                oopMap[newOop] = {bits: bits, format: format};
+            this.previousOop = oldOop;
+            Object.defineProperty(oopMap, oldOop, {configurable: true, get: function(){
+                delete oopMap[oldOop];
+                oopMap[oldOop] = {bits: bits, format: format};
                 var classObj;
                 if (classInt<32) {
-                    if(!compactClasses && (newOop === compactClassesOop)) {
+                    if (!compactClasses && (oldOop === compactClassesOop)) {
                         compactClasses = bits;
                     }
                     classObj = oopMap[compactClasses[classInt - 1]];
@@ -928,15 +928,15 @@ Object.subclass('Squeak.Image',
                 } else
                     classObj = oopMap[classInt];
                 var instConstructor, object;
-                if(!(classObj instanceof Squeak.Object)) {
-                    if(format < 5 && bits.length >= 6) {
-                        if(classObj.bits.length < 6 || classObj.format >= 5)
+                if (!(classObj instanceof Squeak.Object)) {
+                    if (format < 5 && bits.length >= 6) {
+                        if (classObj.bits.length < 6 || classObj.format >= 5)
                             debugger;
-                        if(classObj.bits.length <= 7 && classObj.bits[classObj.bits.length - 1] === newOop) {
+                        if (classObj.bits.length <= 7 && classObj.bits[classObj.bits.length - 1] === oldOop) {
                             //we are here because of faulting forwards - backwards (sqClass.soleInstance)
                             var nameOop = bits[Squeak.Class_name];
                             var name = oopMap[nameOop];
-                            if(name.format >= 8 && name.format < 12) {
+                            if (name.format >= 8 && name.format < 12) {
                                 var bytes = Squeak.Object.prototype.decodeBytes(name.bits.length, name.bits, 0, name.format & 3);
                                 var nameString = Squeak.bytesAsString(bytes);
                                 instConstructor = new Function("return function " + nameString + "_class() {};")();
@@ -949,13 +949,12 @@ Object.subclass('Squeak.Image',
                                 object.constructor = instConstructor;
                                 classObj.instConstructor = instConstructor;
                                 oopMap[classInt] = classObj;
-                                oopMap[newOop] = object;
+                                oopMap[oldOop] = object;
                             } else
                                 debugger;
 
                         } else {
                             //we are here because of faulting forwards - forwards (sqClass.sqClass)
-                            debugger;
                             instConstructor = function Metaclass_class() {};
                             instConstructor.prototype = Squeak.Object.prototype;
                             object = new instConstructor;
@@ -966,10 +965,9 @@ Object.subclass('Squeak.Image',
                             classObj.constructor = instConstructor;
                             object.instConstructor = instConstructor;
                             oopMap[classInt] = classObj;
-                            oopMap[newOop] = object;
+                            oopMap[oldOop] = object;
                         }
-                    } else if(format >= 8 && format < 12 && bits.length > 0) {
-                        debugger;
+                    } else if (format >= 8 && format < 12 && bits.length > 0) {
                         //this should be the concrete symbol class' name
                         var bytes = Squeak.Object.prototype.decodeBytes(bits.length, bits, 0, format & 3);
                         instConstructor = new Function("return function $" + Squeak.bytesAsString(bytes) + "() {};")();
@@ -981,32 +979,32 @@ Object.subclass('Squeak.Image',
                         classObj = new instConstructor;
                         classObj.constructor = instConstructor;
                         oopMap[classInt] = classObj;
-                        oopMap[newOop] = object;
+                        oopMap[oldOop] = object;
                     } else
                         debugger;
                 } else {
-                    object = oopMap[newOop];
-                    if(!(object instanceof Squeak.Object)) {
-                        if(classObj.constructor.name === "Metaclass") {
-                            if(classObj.sqClass.constructor.name !== "Metaclass_class")
+                    object = oopMap[oldOop];
+                    if (!(object instanceof Squeak.Object)) {
+                        if (classObj.constructor.name === "Metaclass") {
+                            if (classObj.sqClass.constructor.name !== "Metaclass_class")
                                 debugger;
-                            if(bits.length !== 6 && bits.length !== 7 || format >= 5)
+                            if (bits.length !== 6 && bits.length !== 7 || format >= 5)
                                 debugger;
                             var thisClassOop = bits[bits.length - 1];
                             var thisClass = oopMap[thisClassOop];   //potentially faulting
-                            object = oopMap[newOop];
-                            if(!(object instanceof Squeak.Object)) {
-                                if(thisClass.bits.length <= Squeak.Class_name || thisClass.format >= 5)
+                            object = oopMap[oldOop];
+                            if (!(object instanceof Squeak.Object)) {
+                                if (thisClass.bits.length <= Squeak.Class_name || thisClass.format >= 5)
                                     debugger;
                                 var nameOop = thisClass.bits[Squeak.Class_name];
                                 var name = oopMap[nameOop];
-                                if(name.format >= 8 && name.format < 12) {
+                                if (name.format >= 8 && name.format < 12) {
                                     var bytes = classObj.decodeBytes(name.bits.length, name.bits, 0, name.format & 3);
                                     instConstructor = new Function("return function " + Squeak.bytesAsString(bytes) + "_class() {};")();
                                     instConstructor.prototype = Squeak.Object.prototype;
                                     object = new instConstructor;
                                     object.constructor = instConstructor;
-                                    oopMap[newOop] = object;
+                                    oopMap[oldOop] = object;
                                 } else
                                     debugger;
                             }
@@ -1014,7 +1012,7 @@ Object.subclass('Squeak.Image',
                             instConstructor = classObj.instConstructor || classObj.classInstConstructor(bits, format, classObj.classNameFromImage(bits, oopMap));
                             object = new instConstructor;
                             object.constructor = instConstructor;
-                            oopMap[newOop] = object;
+                            oopMap[oldOop] = object;
                         }
                     }
                 }
@@ -1027,7 +1025,7 @@ Object.subclass('Squeak.Image',
                 return object}});
             this.oldSpaceCount++;
         }
-        if(!compactClasses && compactClassesOop) {
+        if (!compactClasses && compactClassesOop) {
             compactClasses = oopMap[compactClassesOop].bits;
         }
         this.firstOldObject = oopMap[oldBaseAddr+4];
@@ -1569,16 +1567,16 @@ Object.subclass('Squeak.Object',
         this.bits = data;
     },
     classNameFromImage: function(instanceBits, oopMap) {
-        if((!this.bits || this.bits.length < 6) && (!this.pointers || this.pointers.length < 6) || this.format >= 5)
+        if ((!this.bits || this.bits.length < 6) && (!this.pointers || this.pointers.length < 6) || this.format >= 5)
             debugger;
-        if(this.bits && this.bits.length > Squeak.Class_name) {
+        if (this.bits && this.bits.length > Squeak.Class_name) {
             var oop = this.bits[Squeak.Class_name];
             if ((oop & 1) !== 1) {
                 var prop = Object.getOwnPropertyDescriptor(oopMap, oop);
-                if(!prop.get) {
+                if (!prop.get) {
                     var nameOrCls = prop.value;
-                    if(nameOrCls.format >= 8 && nameOrCls.format < 12) {
-                        if(nameOrCls.bytes)
+                    if (nameOrCls.format >= 8 && nameOrCls.format < 12) {
+                        if (nameOrCls.bytes)
                             return Squeak.bytesAsString(nameOrCls.bytes);
                         var bytes = this.decodeBytes(nameOrCls.bits.length, nameOrCls.bits, 0, nameOrCls.format & 3);
                         return Squeak.bytesAsString(bytes);
@@ -1586,24 +1584,24 @@ Object.subclass('Squeak.Object',
                 }
             }
         }
-        if(this.pointers && this.pointers > Squeak.Class_name) {
+        if (this.pointers && this.pointers.length > Squeak.Class_name) {
             var nameOrCls = this.pointers[Squeak.Class_name];
-            if(nameOrCls.format >= 8 && nameOrCls.format < 12) {
-                if(nameOrCls.bytes)
+            if (nameOrCls.format >= 8 && nameOrCls.format < 12) {
+                if (nameOrCls.bytes)
                     return Squeak.bytesAsString(nameOrCls.bytes);
                 var bytes = this.decodeBytes(nameOrCls.bits.length, nameOrCls.bits, 0, nameOrCls.format & 3);
                 return Squeak.bytesAsString(bytes);
             }
         }
         var name;
-        if(this.bits && this.bits.length < 8 || this.pointers && this.pointers.length < 8) {
+        if (this.bits && this.bits.length < 8 || this.pointers && this.pointers.length < 8) {
             oop = instanceBits[Squeak.Class_name];
             if ((oop & 1) !== 1) {
                 var prop = Object.getOwnPropertyDescriptor(oopMap, oop);
-                if(!prop.get) {
+                if (!prop.get) {
                     name = prop.value;
-                    if(name.format >= 8 && name.format < 12) {
-                        if(name.bytes)
+                    if (name.format >= 8 && name.format < 12) {
+                        if (name.bytes)
                             return Squeak.bytesAsString(name.bytes);
                         var bytes = this.decodeBytes(name.bits.length, name.bits, 0, name.format & 3);
                         return Squeak.bytesAsString(bytes) + " class";
@@ -1614,7 +1612,7 @@ Object.subclass('Squeak.Object',
                 debugger;
         }
         name = this.constructor.name;
-        if(name)
+        if (name)
             return name;
         debugger;
         return "ClassDescription";
@@ -1984,9 +1982,9 @@ Object.subclass('Squeak.Object',
             if (!className) 
                 className = this.className();
             var instanceName;
-            if(/ class/.test(className)) {
+            if (/ class/.test(className)) {
                 instanceName = className.replace(/ class/,'');
-                switch(instanceName) {
+                switch (instanceName) {
                     case "Array":
                         instanceName = "SqArray";
                         break;
@@ -2016,7 +2014,7 @@ Object.subclass('Squeak.Object',
                         break;
                 }
             } else
-                switch(className) {
+                switch (className) {
                     case "UndefinedObject":
                         instanceName = "nil";
                         break;
@@ -2031,21 +2029,19 @@ Object.subclass('Squeak.Object',
                         break;
                     case "Symbol":
                     case "ByteSymbol":
-                    case "WideSymbol":
-                        if(instanceFormat >= 8 && instanceFormat < 12 && instanceBits.length > 0) {
+                        if (instanceFormat >= 8 && instanceFormat < 12 && instanceBits.length > 0) {
                             var bytes = this.decodeBytes(instanceBits.length, instanceBits, 0, instanceFormat & 3);
                             var safeName = Squeak.bytesAsString(bytes).replace(/[^A-Za-z0-9]/g,'_');
                             proto = new Function("return function $" + safeName + "() {};")();
                             proto.prototype = Squeak.Object.prototype;
                             return proto;   //non-singleton instance-specific, not appropriate for the class' instConstructor
-                        } else if(instanceFormat >= 8 && instanceFormat < 12) {
-                            debugger;
+                        } else if (instanceFormat >= 8 && instanceFormat < 12) {
                             proto = new Function("return function the_empty_" + className + "() {};")();
                             proto.prototype = Squeak.Object.prototype;
                             return proto;   //non-singleton instance-specific, not appropriate for the class' instConstructor
                         }
                     default:
-                        if(className === "ByteSymbol")
+                        if (className === "ByteSymbol")
                             debugger;
                         instanceName = ((/^[AEIOU]/.test(className)) ? 'an' : 'a') + className;
                         break;
@@ -2381,37 +2377,37 @@ Object.subclass('Squeak.Interpreter',
 
             // Arithmetic Ops... + - < > <= >= = ~=    * /  @ lshift: lxor: land: lor:
             case 0xB0: this.success = true; this.resultIsFloat = false;
-                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) + this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // PLUS +
+                if (!this.pop2AndPushNumResult(this.stackIntOrFloat(1) + this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // PLUS +
             case 0xB1: this.success = true; this.resultIsFloat = false;
-                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) - this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // MINUS -
+                if (!this.pop2AndPushNumResult(this.stackIntOrFloat(1) - this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // MINUS -
             case 0xB2: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) < this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LESS <
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) < this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LESS <
             case 0xB3: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) > this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GRTR >
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) > this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GRTR >
             case 0xB4: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) <= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LEQ <=
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) <= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LEQ <=
             case 0xB5: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) >= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GEQ >=
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) >= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GEQ >=
             case 0xB6: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) === this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // EQU =
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) === this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // EQU =
             case 0xB7: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) !== this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // NEQ ~=
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) !== this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // NEQ ~=
             case 0xB8: this.success = true; this.resultIsFloat = false;
-                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) * this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // TIMES *
+                if (!this.pop2AndPushNumResult(this.stackIntOrFloat(1) * this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // TIMES *
             case 0xB9: this.success = true;
-                if(!this.pop2AndPushIntResult(this.quickDivide(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide /
+                if (!this.pop2AndPushIntResult(this.quickDivide(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide /
             case 0xBA: this.success = true;
-                if(!this.pop2AndPushIntResult(this.mod(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // MOD \
+                if (!this.pop2AndPushIntResult(this.mod(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // MOD \
             case 0xBB: this.success = true;
-                if(!this.primHandler.primitiveMakePoint(1, true)) this.sendSpecial(b&0xF); return;  // MakePt int@int
+                if (!this.primHandler.primitiveMakePoint(1, true)) this.sendSpecial(b&0xF); return;  // MakePt int@int
             case 0xBC: this.success = true;
-                if(!this.pop2AndPushIntResult(this.safeShift(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return; // bitShift:
+                if (!this.pop2AndPushIntResult(this.safeShift(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return; // bitShift:
             case 0xBD: this.success = true;
-                if(!this.pop2AndPushIntResult(this.div(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide //
+                if (!this.pop2AndPushIntResult(this.div(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide //
             case 0xBE: this.success = true;
-                if(!this.pop2AndPushIntResult(this.stackInteger(1) & this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitAnd:
+                if (!this.pop2AndPushIntResult(this.stackInteger(1) & this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitAnd:
             case 0xBF: this.success = true;
-                if(!this.pop2AndPushIntResult(this.stackInteger(1) | this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitOr:
+                if (!this.pop2AndPushIntResult(this.stackInteger(1) | this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitOr:
 
             // at:, at:put:, size, next, nextPut:, ...
             case 0xC0: case 0xC1: case 0xC2: case 0xC3: case 0xC4: case 0xC5: case 0xC6: case 0xC7:
@@ -2521,11 +2517,11 @@ Object.subclass('Squeak.Interpreter',
         }
         this.interruptCheckCounter = this.interruptCheckCounterFeedBackReset; //reset the interrupt check counter
         this.lastTick = now; //used to detect wraparound of millisecond clock
-        //  if(signalLowSpace) {
+        //  if (signalLowSpace) {
         //            signalLowSpace= false; //reset flag
         //            sema= getSpecialObject(Squeak.splOb_TheLowSpaceSemaphore);
-        //            if(sema != nilObj) synchronousSignal(sema); }
-        //  if(now >= nextPollTick) {
+        //            if (sema != nilObj) synchronousSignal(sema); }
+        //  if (now >= nextPollTick) {
         //            ioProcessEvents(); //sets interruptPending if interrupt key pressed
         //            nextPollTick= now + 500; } //msecs to wait before next call to ioProcessEvents"
         if (this.interruptPending) {
@@ -4788,8 +4784,8 @@ Object.subclass('Squeak.Primitives',
         var rcvr = this.vm.stackValue(1);
         var sqArgCount = this.stackInteger(0);
         var homeCtxt = rcvr;
-        if(!this.vm.isContext(homeCtxt)) this.success = false;
-        if(!this.success) return rcvr;
+        if (!this.vm.isContext(homeCtxt)) this.success = false;
+        if (!this.success) return rcvr;
         if (typeof homeCtxt.pointers[Squeak.Context_method] === "number")
             // ctxt is itself a block; get the context for its enclosing method
             homeCtxt = homeCtxt.pointers[Squeak.BlockContext_home];

@@ -860,6 +860,10 @@ Object.subclass('Squeak.Image',
         var nativeFloats = [6505, 68003].indexOf(version) >= 0;
         this.hasClosures = [6504, 6505, 68002, 68003].indexOf(version) >= 0;
         if (version >= 68000) throw Error("64 bit images not supported yet");
+        function Metaclass_class() {};
+        Metaclass_class.prototype = Squeak.Object.prototype;
+        function Metaclass() {};
+        Metaclass.prototype = Squeak.Object.prototype;
         // parse image header
         var imageHeaderSize = readWord();
         var objectMemorySize = readWord(); //first unused location in heap
@@ -873,7 +877,6 @@ Object.subclass('Squeak.Image',
         var extraVMMemory = readWord();
         pos += imageHeaderSize - (9 * 4); //skip to end of header
         // read objects
-        var prevObj;
         var oopMap = {};
         var headerSize = fileHeaderSize + imageHeaderSize;
         while (pos < headerSize + objectMemorySize) {
@@ -942,11 +945,9 @@ Object.subclass('Squeak.Image',
                                 instConstructor = new Function("return function " + nameString + "_class() {};")();
                                 instConstructor.prototype = Squeak.Object.prototype;
                                 classObj = new instConstructor;
-                                classObj.constructor = instConstructor;
                                 instConstructor = new Function("return function " + nameString + "() {};")();
                                 instConstructor.prototype = Squeak.Object.prototype;
                                 object = new instConstructor;
-                                object.constructor = instConstructor;
                                 classObj.instConstructor = instConstructor;
                                 oopMap[classInt] = classObj;
                                 oopMap[oldOop] = object;
@@ -955,15 +956,11 @@ Object.subclass('Squeak.Image',
 
                         } else {
                             //we are here because of faulting forwards - forwards (sqClass.sqClass)
-                            instConstructor = function Metaclass_class() {};
-                            instConstructor.prototype = Squeak.Object.prototype;
-                            object = new instConstructor;
-                            object.constructor = instConstructor;
-                            instConstructor = function Metaclass() {};
-                            instConstructor.prototype = Squeak.Object.prototype;
-                            classObj = new instConstructor;
-                            classObj.constructor = instConstructor;
-                            object.instConstructor = instConstructor;
+                            object = new Metaclass_class();
+                            object.constructor = Metaclass_class;
+                            object.instConstructor = Metaclass;
+                            classObj = new Metaclass();
+                            classObj.constructor = Metaclass;
                             oopMap[classInt] = classObj;
                             oopMap[oldOop] = object;
                         }
@@ -973,11 +970,9 @@ Object.subclass('Squeak.Image',
                         instConstructor = new Function("return function $" + Squeak.bytesAsString(bytes) + "() {};")();
                         instConstructor.prototype = Squeak.Object.prototype;
                         object = new instConstructor;
-                        object.constructor = instConstructor;
                         instConstructor = new Function("return function " + Squeak.bytesAsString(bytes) + "() {};")();
                         instConstructor.prototype = Squeak.Object.prototype;
                         classObj = new instConstructor;
-                        classObj.constructor = instConstructor;
                         oopMap[classInt] = classObj;
                         oopMap[oldOop] = object;
                     } else
@@ -985,8 +980,8 @@ Object.subclass('Squeak.Image',
                 } else {
                     object = oopMap[oldOop];
                     if (!(object instanceof Squeak.Object)) {
-                        if (classObj.constructor.name === "Metaclass") {
-                            if (classObj.sqClass.constructor.name !== "Metaclass_class")
+                        if (classObj.constructor === Metaclass) {
+                            if (classObj.sqClass.constructor !== Metaclass_class)
                                 debugger;
                             if (bits.length !== 6 && bits.length !== 7 || format >= 5)
                                 debugger;
@@ -1007,7 +1002,6 @@ Object.subclass('Squeak.Image',
                                     instConstructor = new Function("return function " + Squeak.bytesAsString(bytes) + "_class() {};")();
                                     instConstructor.prototype = Squeak.Object.prototype;
                                     object = new instConstructor;
-                                    object.constructor = instConstructor;
                                     oopMap[oldOop] = object;
                                 } else
                                     debugger;
@@ -1015,7 +1009,6 @@ Object.subclass('Squeak.Image',
                         } else {
                             instConstructor = classObj.instConstructor || classObj.classInstConstructor(bits, format, classObj.classNameFromImage(bits, oopMap));
                             object = new instConstructor;
-                            object.constructor = instConstructor;
                             oopMap[oldOop] = object;
                         }
                     }
@@ -1615,9 +1608,6 @@ Object.subclass('Squeak.Object',
             } else
                 debugger;
         }
-        name = this.constructor.name;
-        if (name)
-            return name;
         debugger;
         return "ClassDescription";
     },

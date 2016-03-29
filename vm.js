@@ -932,32 +932,29 @@ Object.subclass('Squeak.Image',
                     classObj = oopMap[classInt];
                 var instConstructor, object;
                 if (!(classObj instanceof Squeak.Object)) {
+                    //double-fault
                     if (format < 5 && bits.length >= 6) {
-                        if (classObj.bits.length < 6 || classObj.format >= 5)
-                            debugger;
+                        //we are a ClassDescription
                         if (classObj.bits.length <= 7 && classObj.bits[classObj.bits.length - 1] === oldOop) {
+                            //our class is a Metaclass
                             //we are here because of faulting forwards - backwards (sqClass.soleInstance)
                             var nameOop = bits[Squeak.Class_name];
                             var name = oopMap[nameOop];
-                            if (name.format >= 8 && name.format < 12) {
-                                var bytes = Squeak.Object.prototype.decodeBytes(name.bits.length, name.bits, 0, name.format & 3);
-                                var nameString = Squeak.bytesAsString(bytes);
-                                instConstructor = new Function("return function " + nameString + "_class() {};")();
-                                instConstructor.prototype = Squeak.Object.prototype;
-                                classObj = new instConstructor;
-                                instConstructor = new Function("return function " + nameString + "() {};")();
-                                instConstructor.prototype = Squeak.Object.prototype;
-                                object = new instConstructor;
-                                classObj.instConstructor = instConstructor;
-                                oopMap[classInt] = classObj;
-                                oopMap[oldOop] = object;
-                            } else
-                                debugger;
-
+                            var bytes = Squeak.Object.prototype.decodeBytes(name.bits.length, name.bits, 0, name.format & 3);
+                            var nameString = Squeak.bytesAsString(bytes);
+                            instConstructor = new Function("return function " + nameString + "_class() {};")();
+                            instConstructor.prototype = Squeak.Object.prototype;
+                            classObj = new instConstructor;
+                            instConstructor = new Function("return function " + nameString + "() {};")();
+                            instConstructor.prototype = Squeak.Object.prototype;
+                            object = new instConstructor;
+                            classObj.instConstructor = instConstructor;
+                            oopMap[classInt] = classObj;
+                            oopMap[oldOop] = object;
                         } else {
+                            //our class is not a Metaclass
                             //we are here because of faulting forwards - forwards (sqClass.sqClass)
                             object = new Metaclass_class();
-                            object.constructor = Metaclass_class;
                             object.instConstructor = Metaclass;
                             classObj = new Metaclass();
                             classObj.constructor = Metaclass;
@@ -976,35 +973,23 @@ Object.subclass('Squeak.Image',
                         oopMap[classInt] = classObj;
                         oopMap[oldOop] = object;
                     } else
+                        //unforeseen
                         debugger;
                 } else {
                     object = oopMap[oldOop];
                     if (!(object instanceof Squeak.Object)) {
                         if (classObj.constructor === Metaclass) {
-                            if (classObj.sqClass.constructor !== Metaclass_class)
-                                debugger;
-                            if (bits.length !== 6 && bits.length !== 7 || format >= 5)
-                                debugger;
                             var thisClassOop = bits[bits.length - 1];
                             var thisClass = oopMap[thisClassOop];   //potentially faulting
                             object = oopMap[oldOop];
                             if (!(object instanceof Squeak.Object)) {
-                                if (thisClass.bits.length <= Squeak.Class_name || thisClass.format >= 5)
-                                    debugger;
                                 var nameOop = thisClass.bits[Squeak.Class_name];
                                 var name = oopMap[nameOop];
-                                if (name.format >= 8 && name.format < 12) {
-                                    var bytes;
-                                    if (name.bytes)
-                                        bytes = name.bytes;
-                                    else
-                                        bytes = classObj.decodeBytes(name.bits.length, name.bits, 0, name.format & 3);
-                                    instConstructor = new Function("return function " + Squeak.bytesAsString(bytes) + "_class() {};")();
-                                    instConstructor.prototype = Squeak.Object.prototype;
-                                    object = new instConstructor;
-                                    oopMap[oldOop] = object;
-                                } else
-                                    debugger;
+                                var bytes = name.bytes || classObj.decodeBytes(name.bits.length, name.bits, 0, name.format & 3);
+                                instConstructor = new Function("return function " + Squeak.bytesAsString(bytes) + "_class() {};")();
+                                instConstructor.prototype = Squeak.Object.prototype;
+                                object = new instConstructor;
+                                oopMap[oldOop] = object;
                             }
                         } else {
                             instConstructor = classObj.instConstructor || classObj.classInstConstructor(bits, format, classObj.classNameFromImage(bits, oopMap));
@@ -1564,49 +1549,29 @@ Object.subclass('Squeak.Object',
         this.bits = data;
     },
     classNameFromImage: function(instanceBits, oopMap) {
-        if ((!this.bits || this.bits.length < 6) && (!this.pointers || this.pointers.length < 6) || this.format >= 5)
-            debugger;
+        var nameOrCls;
         if (this.bits && this.bits.length > Squeak.Class_name) {
             var oop = this.bits[Squeak.Class_name];
             if ((oop & 1) !== 1) {
+                //avoid faulting just for getting a property that might not even be the name
                 var prop = Object.getOwnPropertyDescriptor(oopMap, oop);
-                if (!prop.get) {
-                    var nameOrCls = prop.value;
-                    if (nameOrCls.format >= 8 && nameOrCls.format < 12) {
-                        if (nameOrCls.bytes)
-                            return Squeak.bytesAsString(nameOrCls.bytes);
-                        var bytes = this.decodeBytes(nameOrCls.bits.length, nameOrCls.bits, 0, nameOrCls.format & 3);
-                        return Squeak.bytesAsString(bytes);
-                    }
-                }
+                if (!prop.get)
+                    nameOrCls = prop.value;
             }
+        } else if (this.pointers && this.pointers.length > Squeak.Class_name)
+            nameOrCls = this.pointers[Squeak.Class_name];
+        if (nameOrCls && nameOrCls.format >= 8 && nameOrCls.format < 12) {
+            var bytes = nameOrCls.bytes || this.decodeBytes(nameOrCls.bits.length, nameOrCls.bits, 0, nameOrCls.format & 3);
+            return Squeak.bytesAsString(bytes);
         }
-        if (this.pointers && this.pointers.length > Squeak.Class_name) {
-            var nameOrCls = this.pointers[Squeak.Class_name];
-            if (nameOrCls.format >= 8 && nameOrCls.format < 12) {
-                if (nameOrCls.bytes)
-                    return Squeak.bytesAsString(nameOrCls.bytes);
-                var bytes = this.decodeBytes(nameOrCls.bits.length, nameOrCls.bits, 0, nameOrCls.format & 3);
-                return Squeak.bytesAsString(bytes);
-            }
-        }
-        var name;
+        //we are likely not in a class, but in a metaclass
         if (this.bits && this.bits.length < 8 || this.pointers && this.pointers.length < 8) {
-            oop = instanceBits[Squeak.Class_name];
-            if ((oop & 1) !== 1) {
-                var prop = Object.getOwnPropertyDescriptor(oopMap, oop);
-                if (!prop.get) {
-                    name = prop.value;
-                    if (name.format >= 8 && name.format < 12) {
-                        if (name.bytes)
-                            return Squeak.bytesAsString(name.bytes) + " class";
-                        var bytes = this.decodeBytes(name.bits.length, name.bits, 0, name.format & 3);
-                        return Squeak.bytesAsString(bytes) + " class";
-                    }
-                    debugger;
-                }
-            } else
-                debugger;
+            //indeed we are in a metaclass, so we can use the instanceBits
+            //instead of chasing pointers through the metaclass' thisClass
+            var oop = instanceBits[Squeak.Class_name];
+            var name = oopMap[oop];
+            var bytes = name.bytes || this.decodeBytes(name.bits.length, name.bits, 0, name.format & 3);
+            return Squeak.bytesAsString(bytes) + " class";
         }
         debugger;
         return "ClassDescription";
@@ -2035,8 +2000,6 @@ Object.subclass('Squeak.Object',
                             return proto;   //non-singleton instance-specific, not appropriate for the class' instConstructor
                         }
                     default:
-                        if (className === "ByteSymbol")
-                            debugger;
                         instanceName = ((/^[AEIOU]/.test(className)) ? 'an' : 'a') + className;
                         break;
                 }

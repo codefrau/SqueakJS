@@ -1606,7 +1606,7 @@ Object.subclass('Squeak.Object',
                     name = prop.value;
                     if (name.format >= 8 && name.format < 12) {
                         if (name.bytes)
-                            return Squeak.bytesAsString(name.bytes);
+                            return Squeak.bytesAsString(name.bytes) + " class";
                         var bytes = this.decodeBytes(name.bits.length, name.bits, 0, name.format & 3);
                         return Squeak.bytesAsString(bytes) + " class";
                     }

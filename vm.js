@@ -999,7 +999,11 @@ Object.subclass('Squeak.Image',
                                 var nameOop = thisClass.bits[Squeak.Class_name];
                                 var name = oopMap[nameOop];
                                 if (name.format >= 8 && name.format < 12) {
-                                    var bytes = classObj.decodeBytes(name.bits.length, name.bits, 0, name.format & 3);
+                                    var bytes;
+                                    if (name.bytes)
+                                        bytes = name.bytes;
+                                    else
+                                        bytes = classObj.decodeBytes(name.bits.length, name.bits, 0, name.format & 3);
                                     instConstructor = new Function("return function " + Squeak.bytesAsString(bytes) + "_class() {};")();
                                     instConstructor.prototype = Squeak.Object.prototype;
                                     object = new instConstructor;

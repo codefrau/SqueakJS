@@ -869,7 +869,7 @@ Object.subclass('Squeak.Image',
         var objectMemorySize = readWord(); //first unused location in heap
         var oldBaseAddr = readWord(); //object memory base address of image
         var specialObjectsOopInt = readWord(); //oop of array of special oops
-        var splObs, compactClasses, floatClassOop, compactClassesOop;
+        var splObs, compactClasses, compactClassesOop;
 
         this.lastHash = readWord(); //Should be loaded from, and saved to the image header
         var savedWindowSize = readWord();
@@ -877,11 +877,12 @@ Object.subclass('Squeak.Image',
         var extraVMMemory = readWord();
         pos += imageHeaderSize - (9 * 4); //skip to end of header
         // read objects
-        var oopMap = {};
+        var previousOop,
+            oopMap = {};
         var headerSize = fileHeaderSize + imageHeaderSize;
-        while (pos < headerSize + objectMemorySize) {
-            var nWords = 0;
-            let classInt = 0;
+        var closure = function(){
+            var nWords = 0,
+                classInt = 0;
             var header = readWord();
             switch (header & Squeak.HeaderTypeMask) {
                 case Squeak.HeaderTypeSizeAndClass:
@@ -903,21 +904,15 @@ Object.subclass('Squeak.Image',
                     throw Error("Unexpected free block");
             }
             nWords--;  //length includes base header which we have already read
-            let oop = pos - 4 - headerSize, //0-rel byte oop of this object (base header)
+            var oop = pos - 4 - headerSize, //0-rel byte oop of this object (base header)
+                oldOop = oldBaseAddr + oop,
                 format = (header>>8) & 15,
                 hash = (header>>17) & 4095,
                 bits = readBits(nWords, format);
-
-            let oldOop = oldBaseAddr + oop;
-            if (!splObs && (oldOop === specialObjectsOopInt)) {
+            if (oldOop === specialObjectsOopInt)
                 splObs = bits;
-                floatClassOop = splObs[Squeak.splOb_ClassFloat];
-                compactClassesOop = splObs[Squeak.splOb_CompactClasses];
-            } else if (!compactClasses && (oldOop === compactClassesOop)) {
-                compactClasses = bits;
-            }
-            let previousOop = this.previousOop;
-            this.previousOop = oldOop;
+            var previous = previousOop;
+            previousOop = oldOop;
             Object.defineProperty(oopMap, oldOop, {configurable: true, get: function(){
                 delete oopMap[oldOop];
                 oopMap[oldOop] = {bits: bits, format: format};
@@ -973,7 +968,7 @@ Object.subclass('Squeak.Image',
                         oopMap[classInt] = classObj;
                         oopMap[oldOop] = object;
                     } else
-                        //unforeseen
+                    //unforeseen
                         debugger;
                 } else {
                     object = oopMap[oldOop];
@@ -1003,17 +998,19 @@ Object.subclass('Squeak.Image',
                 object.format = format;
                 object.hash = hash;
                 object.bits = bits;
-                object.previousOop = previousOop;
+                object.previousOop = previous;
                 return object}});
+        }
+        while (pos < headerSize + objectMemorySize) {
+            closure();
             this.oldSpaceCount++;
         }
-        if (!compactClasses && compactClassesOop) {
-            compactClasses = oopMap[compactClassesOop].bits;
-        }
+        compactClassesOop = splObs[Squeak.splOb_CompactClasses];
+        oopMap[compactClassesOop];
         this.firstOldObject = oopMap[oldBaseAddr+4];
-        this.lastOldObject = oopMap[this.previousOop];
+        this.lastOldObject = oopMap[previousOop];
         this.oldSpaceBytes = objectMemorySize;
-        var floatClass = oopMap[floatClassOop];
+        var floatClass = oopMap[splObs[Squeak.splOb_ClassFloat]];
         var obj = this.lastOldObject,
             done = 0,
             self = this;
@@ -3033,7 +3030,12 @@ Object.subclass('Squeak.Interpreter',
         return this.activeContext.pointers[this.sp - depthIntoStack];
     },
     stackInteger: function(depthIntoStack) {
-        return this.checkSmallInt(this.stackValue(depthIntoStack));
+        var num = this.stackValue(depthIntoStack);
+        // is it a SmallInt?
+        if (typeof num === "number") return num;
+        // no
+        this.success = false;
+        return 0;
     },
     stackIntOrFloat: function(depthIntoStack) {
         var num = this.stackValue(depthIntoStack);

@@ -926,7 +926,7 @@ Object.subclass('Squeak.Image',
                     if (!compactClasses && (oldOop === compactClassesOop)) {
                         compactClasses = bits;
                     }
-                    classObj = oopMap[compactClasses[classInt - 1]];
+                    classObj = oopMap[classInt = compactClasses[classInt - 1]];
                     hash |= 0x10000000;
                 } else
                     classObj = oopMap[classInt];

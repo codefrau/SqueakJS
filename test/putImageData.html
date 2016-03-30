@@ -1,0 +1,59 @@
+<html>
+<head>
+	<title>putImageData</title>
+    <style type="text/css">body{margin:40px auto;max-width:650px;line-height:1.6;font-family:sans-serif;font-size:18px;color:#444;padding:0 10px}canvas{border: 1px solid}pre{font-size:14px}</style>
+</head>
+<body>
+<h1>putImageData rendering bug</h1>
+<canvas id="canvas" width="600" height="400"></canvas>
+<p>This is rendered using <tt>putImageData</tt> only (see code below). On a retina display, the animating square leaves gribblies in some browsers. By clicking, the square jumps elsewhere, and the browser (not the JS code!) is clearing a larger rectangle, revealing the actual canvas backing store is indeed clean. Similarly, changing the page zoom temporarily clears the gribblies.</p>
+<p>Judging from the symptoms I'd say the fix would be to enlarge the damage rectangle for <tt>putImageData</tt> by 1&nbsp;pixel in all directions.</p>
+<p><a href="https://twitter.com/bertfreudenberg">@bertfreudenberg</a></p>
+<p>Bug status (March 2016):
+    <ul>
+        <li>Safari 9.1: buggy</li>
+        <li>Chrome 50: buggy</li>
+        <li>Chrome 51: fixed</li>
+        <li>Firefox 45: fine</li> 
+    </ul>
+</p>
+<script id="script">
+    var ctx = canvas.getContext("2d");
+    var bg = ctx.createImageData(100, 100);
+    var img = ctx.createImageData(100, 100);
+    var pix = new Uint32Array(img.data.buffer);
+    for (var y = 0; y < img.height; y++)
+        for (var x = 0; x < img.width; x++)
+            pix[img.width * y + x] = x % 9 && y % 9 ? 0xFFFFFFFF : 0xFF000000;
+    
+    var mousing = false;
+    canvas.onmousedown = function(evt) { mousing = true; canvas.onmousemove(evt); }
+    canvas.onmouseup = function(evt) { mousing = false; }
+    canvas.onmousemove = function(evt) {
+        if (mousing) {
+            ctx.putImageData(bg, x, y);
+            x = evt.offsetX - (img.width / 2 | 0);
+            y = evt.offsetY - (img.height / 2 | 0);
+            ctx.putImageData(img, x, y);
+        }
+    }
+
+    var xi = yi = 1;
+    function animate() {
+        if (!mousing) {
+            ctx.putImageData(bg, x, y);
+            x += xi;
+            y += yi; 
+            xi = x < 0 ? 1 : x + img.width > canvas.width ? -1 : xi;
+            yi = y < 0 ? 1 : y + img.height > canvas.height ? -1 : yi;
+            ctx.putImageData(img, x, y);
+        }
+        requestAnimationFrame(animate);
+    }
+    animate();
+</script>
+<p>Code:
+<pre><script>document.write(script.innerText)</script></pre>
+</p>
+</body>
+</html>

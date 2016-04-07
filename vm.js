@@ -3249,17 +3249,6 @@ Object.subclass('Squeak.Interpreter',
         // message send or return
         var byte = this.method.bytes[this.pc];
         if (byte >= 120 && byte <= 125) return true; // return
-        /*
-        if (byte < 96) return false;    // 96-103 storeAndPopReceiverVariableBytecode
-        if (byte <= 111) return true;   // 104-111 storeAndPopTemporaryVariableBytecode
-        if (byte == 129        // 129 extendedStoreBytecode
-            || byte == 130     // 130 extendedStoreAndPopBytecode
-            || byte == 141     // 141 storeRemoteTempLongBytecode
-            || byte == 142     // 142 storeAndPopRemoteTempLongBytecode
-            || (byte == 132 &&
-                this.method.bytes[this.pc + 1] >= 160)) // 132 doubleExtendedDoAnythingBytecode
-                    return true;
-        */
         if (byte < 131 || byte == 200) return false;
         if (byte >= 176) return true; // special send or short send
         if (byte <= 134) {         // long sends

@@ -1,6 +1,7 @@
 body {
     background-color: #eae6d1;
     font-family: sans-serif;
+    overflow: hidden;
 }
 canvas {
     position: absolute;

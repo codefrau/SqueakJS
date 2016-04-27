@@ -1,7 +1,7 @@
 module('users.bert.SqueakJS.vm').requires().toRun(function() {
 "use strict";    
 /*
- * Copyright (c) 2013-2015 Bert Freudenberg
+ * Copyright (c) 2013-2016 Bert Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,10 +25,21 @@ module('users.bert.SqueakJS.vm').requires().toRun(function() {
 // shorter name for convenience
 window.Squeak = users.bert.SqueakJS.vm;
 
+// if in private mode set localStorage to a regular dict
+var localStorage = window.localStorage;
+try {
+  localStorage["squeak-foo:"] = "bar";
+  if (localStorage["squeak-foo:"] !== "bar") throw Error();
+  delete localStorage["squeak-foo:"];
+} catch(e) {
+  console.warn("localStorage not available, faking");
+  localStorage = {};
+}
+
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 0.8.1",
+    vmVersion: "SqueakJS 0.8.2",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -373,7 +384,9 @@ Object.extend(Squeak,
         openReq.onblocked = function(e) {
             // If some other tab is loaded with the database, then it needs to be closed
             // before we can proceed upgrading the database.
-            alert("Database upgrade needed. Please close all other tabs with this site open!");
+            console.log("Database upgrade needed, but was blocked.");
+            console.warn("Falling back to local storage");
+            fakeTransaction();
         };
     },
     dbFake: function() {
@@ -407,10 +420,9 @@ Object.extend(Squeak,
                             buffer = bytes.buffer;
                         }
                     }
-                    var req = {result: buffer, error: "file not found"};
+                    var req = {result: buffer};
                     setTimeout(function(){
-                        if (buffer && req.onsuccess) req.onsuccess({target: req});
-                        if (!buffer && req.onerror) req.onerror({target: req});
+                        if (req.onsuccess) req.onsuccess({target: req});
                     }, 0);
                     return req;
                 },
@@ -647,9 +659,10 @@ Object.extend(Squeak,
         }
         function checkSubTemplates(path, url) {
             var template = JSON.parse(localStorage["squeak-template:" + path]);
-            template.entries.forEach(function(entry) {
+            for (var key in template.entries) {
+                var entry = template.entries[key];
                 if (entry[3]) Squeak.fetchTemplateDir(path + "/" + entry[0], url + "/" + entry[0]);
-            });
+            };
         }
         if (localStorage["squeak-template:" + path]) {
             checkSubTemplates(path, url);
@@ -661,7 +674,13 @@ Object.extend(Squeak,
                 if (rq.status == 200) {
                     console.log("adding template " + path);
                     ensureTemplateParent(path);
-                    localStorage["squeak-template:" + path] = '{"url": ' + JSON.stringify(url) + ', "entries": ' + rq.response + '}';
+                    var entries = JSON.parse(rq.response),
+                        template = {url: url, entries: {}};
+                    for (var key in entries) {
+                        var entry = entries[key];
+                        template.entries[entry[0]] = entry;
+                    }
+                    localStorage["squeak-template:" + path] = JSON.stringify(template);
                     checkSubTemplates(path, url);
                 }
                 else rq.onerror(rq.statusText);
@@ -894,8 +913,26 @@ Object.subclass('Squeak.Image',
             oopMap[oldBaseAddr + oop] = object;
         }
         this.firstOldObject = oopMap[oldBaseAddr+4];
-        this.lastOldObject = prevObj;
+        this.lastOldObject = object;
         this.oldSpaceBytes = objectMemorySize;
+        
+        if (true) {
+            // For debugging: re-create all objects with properly named prototypes
+            var cc = oopMap[oopMap[specialObjectsOopInt].bits[Squeak.splOb_CompactClasses]].bits;
+            var renamedObj = null;
+            object = this.firstOldObject;
+            prevObj = null;
+            while (object) {
+                prevObj = renamedObj;
+                renamedObj = object.renameFromImage(oopMap, cc);
+                if (prevObj) prevObj.nextObject = renamedObj;
+                oopMap[oldBaseAddr + object.oop] = renamedObj;
+                object = object.nextObject;
+            }
+            this.firstOldObject = oopMap[oldBaseAddr+4];
+            this.lastOldObject = renamedObj;
+        }
+        
         //create proper objects by mapping via oopMap
         var splObs         = oopMap[specialObjectsOopInt];
         var compactClasses = oopMap[splObs.bits[Squeak.splOb_CompactClasses]].bits;
@@ -1136,14 +1173,14 @@ Object.subclass('Squeak.Image',
         return this.lastHash & 0xFFF;
     },
     instantiateClass: function(aClass, indexableSize, filler) {
-        var newObject = new Squeak.Object();
+        var newObject = new (aClass.classInstProto()); // Squeak.Object
         var hash = this.registerObject(newObject);
         newObject.initInstanceOf(aClass, indexableSize, hash, filler);
         this.hasNewInstances[aClass.oop] = true;   // need GC to find all instances
         return newObject;
     },
     clone: function(object) {
-        var newObject = new Squeak.Object();
+        var newObject = new (object.sqClass.classInstProto()); // Squeak.Object
         var hash = this.registerObject(newObject);
         newObject.initAsClone(object, hash);
         this.hasNewInstances[newObject.sqClass.oop] = true;   // need GC to find all instances
@@ -1180,6 +1217,7 @@ Object.subclass('Squeak.Image',
         }
         // unless copyHash is false, make hash stay with the reference, not with the object
         if (copyHash) for (var i = 0; i < n; i++) {
+            if (!toArray[i].sqClass) return false; //cannot change hash of non-objects
             var fromHash = fromArray[i].hash;
             fromArray[i].hash = toArray[i].hash;
             toArray[i].hash = fromHash;
@@ -1309,10 +1347,6 @@ Object.subclass('Squeak.Image',
                 return null;
             }
         }
-        if (version >> 16 !== this.vm.image.segmentVersion() >> 16) {
-            console.error("image segment format not supported");
-            return null;
-        }
         // read objects
         var segment = [],
             oopMap = {};
@@ -1360,12 +1394,12 @@ Object.subclass('Squeak.Image',
                 oopMap[--fakeClsOop] = cls; return fakeClsOop; });
         // map objects using oopMap, and assign new oops
         var roots = oopMap[8] || oopMap[12] || oopMap[16],      // might be 1/2/3 header words
-            floatClass = this.specialObjectsArray.pointers[Squeak.splOb_ClassFloat],
-            obj = roots;
+            floatClass = this.specialObjectsArray.pointers[Squeak.splOb_ClassFloat];
         for (var i = 0; i < segment.length; i++) {
             var obj = segment[i];
             obj.installFromImage(oopMap, compactClassOops, floatClass, littleEndian, nativeFloats);
             obj.oop = -(++this.newSpaceCount);  // make this a proper new-space object (see registerObject)
+            this.hasNewInstances[obj.sqClass.oop] = true;   // need GC to find all instances
         }
         // don't truncate segmentWordArray now like the C VM does. It does not seem to be
         // worth the trouble of adjusting the following oops
@@ -1437,6 +1471,26 @@ Object.subclass('Squeak.Object',
         this.format = fmt;
         this.hash = hsh;
         this.bits = data;
+    },
+    classNameFromImage: function(oopMap) {
+        var name = oopMap[this.bits[Squeak.Class_name]];
+        if (name && name.format >= 8 && name.format < 12) {
+            var bytes = name.decodeBytes(name.bits.length, name.bits, 0, name.format & 3);
+            return Squeak.bytesAsString(bytes);
+        }
+        return "Class";
+    },
+    renameFromImage: function(oopMap, ccArray) {
+        var classObj = this.sqClass < 32 ? oopMap[ccArray[this.sqClass-1]] : oopMap[this.sqClass];
+        var instProto = classObj.instProto || classObj.classInstProto(classObj.classNameFromImage(oopMap));
+        if (!instProto) return this;
+        var renamedObj = new instProto; // Squeak.Object
+        renamedObj.oop = this.oop;
+        renamedObj.sqClass = this.sqClass;
+        renamedObj.format = this.format;
+        renamedObj.hash = this.hash;
+        renamedObj.bits = this.bits;
+        return renamedObj;
     },
     installFromImage: function(oopMap, ccArray, floatClass, littleEndian, nativeFloats) {
         //Install this object by decoding format, and rectifying pointers
@@ -1783,21 +1837,35 @@ Object.subclass('Squeak.Object',
     },
     className: function() {
         if (!this.pointers) return "_NOTACLASS_";
-        var name = this.pointers[6];
-        if (name && name.bytes) return Squeak.bytesAsString(name.bytes);
-        var name = this.pointers[7];
-        if (name && name.bytes) return Squeak.bytesAsString(name.bytes);
+        var name = this.pointers[Squeak.Class_name];
+        if (name && name.bytes) return name.bytesAsString();
         // must be meta class
-        for (var clsIndex = 5; clsIndex <= 6; clsIndex++)
-            for (var nameIndex = 6; nameIndex <= 7; nameIndex++) {
-                var cls = this.pointers[clsIndex];
-                if (cls.pointers) {
-                    var name = cls.pointers[nameIndex];
-                    if (name && name.bytes) return Squeak.bytesAsString(name.bytes) + " class";
-                }
+        for (var clsIndex = 5; clsIndex <= 6; clsIndex++) {
+            var cls = this.pointers[clsIndex];
+            if (cls && cls.pointers) {
+                name = cls.pointers[Squeak.Class_name];
+                if (name && name.bytes) return name.bytesAsString() + " class";
             }
+        }
         return "_SOMECLASS_";
-    }
+    },
+    classInstProto: function(className) {
+        if (this.instProto) return this.instProto;
+        var proto = Squeak.Object;  // in case below fails
+        try {
+            if (!className) className = this.className();
+            var safeName = className.replace(/[^A-Za-z0-9]/g,'_');
+            if (safeName === "UndefinedObject") safeName = "nil";
+            else if (safeName === "True") safeName = "true_";
+            else if (safeName === "False") safeName = "false_";
+            else safeName = ((/^[AEIOU]/.test(safeName)) ? 'an' : 'a') + safeName;
+            // fail okay if no eval()
+            proto = new Function("return function " + safeName + "() {};")();
+            proto.prototype = Squeak.Object.prototype;
+        } catch(e) {}
+        Object.defineProperty(this, 'instProto', { value: proto });
+        return proto;
+    },
 },
 'as method', {
     methodHeader: function() {
@@ -3181,17 +3249,6 @@ Object.subclass('Squeak.Interpreter',
         // message send or return
         var byte = this.method.bytes[this.pc];
         if (byte >= 120 && byte <= 125) return true; // return
-        /*
-        if (byte < 96) return false;    // 96-103 storeAndPopReceiverVariableBytecode
-        if (byte <= 111) return true;   // 104-111 storeAndPopTemporaryVariableBytecode
-        if (byte == 129        // 129 extendedStoreBytecode
-            || byte == 130     // 130 extendedStoreAndPopBytecode
-            || byte == 141     // 141 storeRemoteTempLongBytecode
-            || byte == 142     // 142 storeAndPopRemoteTempLongBytecode
-            || (byte == 132 &&
-                this.method.bytes[this.pc + 1] >= 160)) // 132 doubleExtendedDoAnythingBytecode
-                    return true;
-        */
         if (byte < 131 || byte == 200) return false;
         if (byte >= 176) return true; // special send or short send
         if (byte <= 134) {         // long sends
@@ -4926,11 +4983,12 @@ Object.subclass('Squeak.Primitives',
             } else {
                 this.showForm(context, cursorForm, bounds, true);
             }
-            var scale = this.display.scale || 1;
-            cursorCanvas.style.width = (cursorCanvas.width * scale) + "px";
-            cursorCanvas.style.height = (cursorCanvas.height * scale) + "px";
-            this.display.cursorOffsetX = cursorForm.offsetX * scale;
-            this.display.cursorOffsetY = cursorForm.offsetY * scale;
+            var canvas = this.display.context.canvas,
+                scale = canvas.offsetWidth / canvas.width;
+            cursorCanvas.style.width = (cursorCanvas.width * scale|0) + "px";
+            cursorCanvas.style.height = (cursorCanvas.height * scale|0) + "px";
+            this.display.cursorOffsetX = cursorForm.offsetX * scale|0;
+            this.display.cursorOffsetY = cursorForm.offsetY * scale|0;
         }
         this.vm.popN(argCount);
         return true;

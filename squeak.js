@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013,2014 Bert Freudenberg
+ * Copyright (c) 2013-2016 Bert Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -28,7 +28,7 @@
 //////////////////////////////////////////////////////////////////////////////
 
 window.module = function(dottedPath) {
-    if (dottedPath == "") return window;
+    if (dottedPath === "") return window;
     var path = dottedPath.split("."),
         name = path.pop(),
         parent = module(path.join(".")),
@@ -42,7 +42,7 @@ window.module = function(dottedPath) {
                     function load() {
                         code();
                         self.loaded = true;
-                        self.pending.forEach(function(f){f()});
+                        self.pending.forEach(function(f){f();});
                     }
                     if (req && !module(req).loaded) {
                         module(req).pending.push(load);
@@ -50,7 +50,7 @@ window.module = function(dottedPath) {
                         load();
                     }
                 }
-            }
+            };
         },
     };
     return self;
@@ -60,7 +60,7 @@ Object.extend = function(obj /* + more args */ ) {
     // skip arg 0, copy properties of other args to obj
     for (var i = 1; i < arguments.length; i++)
         if (typeof arguments[i] == 'object')
-            for (name in arguments[i])
+            for (var name in arguments[i])
                 obj[name] = arguments[i][name];
 };
 
@@ -123,6 +123,15 @@ Function.prototype.subclass = function(classPath /* + more args */ ) {
 
 module("SqueakJS").requires("users.bert.SqueakJS.vm").toRun(function() {
 
+// if in private mode set localStorage to a regular dict
+var localStorage = window.localStorage;
+try {
+  localStorage["squeak-foo:"] = "bar";
+  if (localStorage["squeak-foo:"] !== "bar") throw Error();
+  delete localStorage["squeak-foo:"];
+} catch(e) {
+  localStorage = {};
+}
 
 //////////////////////////////////////////////////////////////////////////////
 // display & event setup
@@ -152,7 +161,7 @@ function setupFullscreen(display, canvas, options) {
                 fullscreenElement = browser.elem;
                 fullscreenEnabled = browser.enable;
             }
-        })
+        });
     }
 
     // If the user canceled fullscreen, turn off the fullscreen flag so
@@ -164,18 +173,18 @@ function setupFullscreen(display, canvas, options) {
         if (options.footer) options.footer.style.display = fullscreen ? 'none' : '';
         if (options.fullscreenCheckbox) options.fullscreenCheckbox.checked = fullscreen;
         setTimeout(window.onresize, 0);
-    };
+    }
     
     var checkFullscreen;
     
     if (box.requestFullscreen) {
-        document.addEventListener(fullscreenEvent, function(){fullscreenChange(box == document[fullscreenElement])});
+        document.addEventListener(fullscreenEvent, function(){fullscreenChange(box == document[fullscreenElement]);});
         checkFullscreen = function() {
             if (document[fullscreenEnabled] && (box == document[fullscreenElement]) != display.fullscreen) {
                 if (display.fullscreen) box.requestFullscreen();
                 else document.exitFullscreen();
             }
-        }
+        };
     } else {
         var isFullscreen = false;
         checkFullscreen = function() {
@@ -183,13 +192,13 @@ function setupFullscreen(display, canvas, options) {
                 isFullscreen = display.fullscreen;
                 fullscreenChange(isFullscreen);
             }
-        }
+        };
     }
 
     if (options.fullscreenCheckbox) options.fullscreenCheckbox.onclick = function() {
         display.fullscreen = options.fullscreenCheckbox.checked;
         checkFullscreen();
-    }
+    };
 
     return checkFullscreen;
 }
@@ -204,7 +213,7 @@ function setupSwapButtons(options) {
             options.swapButtons = options.swapCheckbox.checked;
             settings["swapButtons"] = options.swapButtons;
             localStorage["squeakSettings:" + imageName] = JSON.stringify(settings);
-        }
+        };
     }
 }
 
@@ -220,39 +229,38 @@ function recordModifiers(evt, display) {
     return modifiers;
 }
 
+var canUseMouseOffset = navigator.userAgent.match("AppleWebKit/");
+
 function updateMousePos(evt, canvas, display) {
-    display.cursorCanvas.style.left = (evt.pageX + display.cursorOffsetX) + "px";
-    display.cursorCanvas.style.top = (evt.pageY + display.cursorOffsetY) + "px";
-    var x = ((evt.pageX - canvas.offsetLeft) * (canvas.width / canvas.offsetWidth)) | 0,
-        y = ((evt.pageY - canvas.offsetTop) * (canvas.height / canvas.offsetHeight)) | 0;
+    var evtX = canUseMouseOffset ? evt.offsetX : evt.layerX,
+        evtY = canUseMouseOffset ? evt.offsetY : evt.layerY;
+    display.cursorCanvas.style.left = (evtX + canvas.offsetLeft + display.cursorOffsetX) + "px";
+    display.cursorCanvas.style.top = (evtY + canvas.offsetTop + display.cursorOffsetY) + "px";
+    var x = (evtX * canvas.width / canvas.offsetWidth) | 0,
+        y = (evtY * canvas.height / canvas.offsetHeight) | 0;
     // clamp to display size
     display.mouseX = Math.max(0, Math.min(display.width, x));
     display.mouseY = Math.max(0, Math.min(display.height, y));
 }
 
 function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
-    if (what != "touchend") {
-        updateMousePos(evt, canvas, display);
-    }
+    updateMousePos(evt, canvas, display);
     if (!display.vm) return;
     var buttons = display.buttons & Squeak.Mouse_All;
     switch (what) {
         case 'mousedown':
-        case 'touchstart':
             switch (evt.button || 0) {
                 case 0: buttons = Squeak.Mouse_Red; break;      // left
                 case 1: buttons = Squeak.Mouse_Yellow; break;   // middle
                 case 2: buttons = Squeak.Mouse_Blue; break;     // right
-            };
+            }
             if (options.swapButtons)
                 if (buttons == Squeak.Mouse_Yellow) buttons = Squeak.Mouse_Blue;
                 else if (buttons == Squeak.Mouse_Blue) buttons = Squeak.Mouse_Yellow;
             break;
         case 'mousemove':
-        case 'touchmove':
             break; // nothing more to do
         case 'mouseup':
-        case 'touchend':
             buttons = 0;
             break;
     }
@@ -337,6 +345,7 @@ function createSqueakDisplay(canvas, options) {
     if (options.fullscreen) {
         document.body.style.margin = 0;
         document.body.style.backgroundColor = 'black';
+        document.ontouchmove = function(evt) { evt.preventDefault(); };
         if (options.header) options.header.style.display = 'none';
         if (options.footer) options.footer.style.display = 'none';
     }
@@ -345,7 +354,6 @@ function createSqueakDisplay(canvas, options) {
         fullscreen: false,
         width: 0,   // if 0, VM uses canvas.width
         height: 0,  // if 0, VM uses canvas.height
-        scale: 1,   // changed dynamically by VM if fixedWidth is set
         mouseX: 0,
         mouseY: 0,
         buttons: 0,
@@ -377,7 +385,7 @@ function createSqueakDisplay(canvas, options) {
                 eventQueue.offset = Date.now() - evt[1]; // get epoch from first event
                 delete eventQueue.push;                  // use original push from now on
                 eventQueue.push(evt);
-            }
+            };
             display.getNextEvent = function(evtBuf, timeOffset) {
                 var evt = eventQueue.shift();
                 if (evt) makeSqueakEvent(evt, evtBuf, timeOffset - eventQueue.offset);
@@ -385,7 +393,7 @@ function createSqueakDisplay(canvas, options) {
             };
             display.getNextEvent(firstEvtBuf, firstOffset);
         };
-    }
+    };
     display.reset();
 
     var checkFullscreen = setupFullscreen(display, canvas, options);
@@ -405,7 +413,7 @@ function createSqueakDisplay(canvas, options) {
             display.resizeTodo = null;
             todo();
         }
-    }
+    };
     display.clear = function() {
         canvas.width = canvas.width;
     };
@@ -434,6 +442,33 @@ function createSqueakDisplay(canvas, options) {
         ctx.fillStyle = style.color || "#F90";
         ctx.fillRect(x, y, w * value, h);
     };
+    display.executeClipboardPaste = function(text, timestamp) {
+        if (!display.vm) return true;
+        try {
+            display.clipboardString = text;
+            // simulate paste event for Squeak
+            fakeCmdOrCtrlKey('v'.charCodeAt(0), timestamp, display, eventQueue);
+        } catch(err) {
+            console.error("paste error " + err);
+        }
+    };
+    display.executeClipboardCopy = function(key, timestamp) {
+        if (!display.vm) return true;
+        // simulate copy event for Squeak so it places its text in clipboard
+        display.clipboardStringChanged = false;
+        fakeCmdOrCtrlKey((key || 'c').charCodeAt(0), timestamp, display, eventQueue);
+        var start = Date.now();
+        // now interpret until Squeak has copied to the clipboard
+        while (!display.clipboardStringChanged && Date.now() - start < 500)
+            display.vm.interpret(20);
+        if (!display.clipboardStringChanged) return;
+        // got it, now copy to the system clipboard
+        try {
+            return display.clipboardString;
+        } catch(err) {
+            console.error("copy error " + err);
+        }
+    };
     canvas.onmousedown = function(evt) {
         checkFullscreen();
         recordMouseEvent('mousedown', evt, canvas, display, eventQueue, options);
@@ -452,22 +487,199 @@ function createSqueakDisplay(canvas, options) {
     canvas.oncontextmenu = function() {
         return false;
     };
+    // touch event handling
+    var touch = {
+        state: 'idle',
+        button: 0,
+        x: 0,
+        y: 0,
+        dist: 0,
+        down: {},
+    };
+    function touchToMouse(evt) {
+        if (evt.touches.length) {
+            // average all touch positions
+            touch.x = touch.y = 0;
+            for (var i = 0; i < evt.touches.length; i++) {
+                touch.x += evt.touches[i].pageX / evt.touches.length;
+                touch.y += evt.touches[i].pageY / evt.touches.length;
+            }
+        }
+        return {
+            timeStamp: evt.timeStamp,
+            button: touch.button,
+            offsetX: touch.x - canvas.offsetLeft,
+            offsetY: touch.y - canvas.offsetTop,
+        };
+    }
+    function dd(ax, ay, bx, by) {var x = ax - bx, y = ay - by; return Math.sqrt(x*x + y*y);}
+    function dist(a, b) {return dd(a.pageX, a.pageY, b.pageX, b.pageY);}
+    function dent(n, l, t, u) { return n < l ? n + t - l : n > u ? n + t - u : t; }
+    function adjustDisplay(l, t, w, h) {
+        var cursorCanvas = display.cursorCanvas,
+            scale = w / canvas.width;
+        canvas.style.left = (l|0) + "px";
+        canvas.style.top = (t|0) + "px";
+        canvas.style.width = (w|0) + "px";
+        canvas.style.height = (h|0) + "px";
+        cursorCanvas.style.left = (l + display.cursorOffsetX + display.mouseX * scale|0) + "px";
+        cursorCanvas.style.top = (t + display.cursorOffsetY + display.mouseY * scale|0) + "px";
+        cursorCanvas.style.width = (cursorCanvas.width * scale|0) + "px";
+        cursorCanvas.style.height = (cursorCanvas.height * scale|0) + "px";
+        if (!options.pixelated) {
+            if (scale >= 3) {
+                canvas.classList.add("pixelated");
+                display.cursorCanvas.classList.add("pixelated");
+            } else {
+                canvas.classList.remove("pixelated");
+                display.cursorCanvas.classList.remove("pixelated");
+            }
+        }
+    }
+    // zooming/panning with two fingers
+    var maxZoom = 5;
+    function zoomStart(evt) {
+        touch.dist = dist(evt.touches[0], evt.touches[1]);
+        touch.down.x = touch.x;
+        touch.down.y = touch.y;
+        touch.down.dist = touch.dist;
+        touch.down.left = canvas.offsetLeft;
+        touch.down.top = canvas.offsetTop;
+        touch.down.width = canvas.offsetWidth;
+        touch.down.height = canvas.offsetHeight;
+        // store original canvas bounds
+        if (!touch.orig) touch.orig = {
+            left: touch.down.left,
+            top: touch.down.top,
+            right: touch.down.left + touch.down.width,
+            bottom: touch.down.top + touch.down.height,
+            width: touch.down.width,
+            height: touch.down.height,
+        };
+    }
+    function zoomMove(evt) {
+        if (evt.touches.length < 2) return;
+        touch.dist = dist(evt.touches[0], evt.touches[1]);
+        var minScale = touch.orig.width / touch.down.width,
+            //nowScale = dent(touch.dist / touch.down.dist, 0.8, 1, 1.5),
+            nowScale = touch.dist / touch.down.dist,
+            scale = Math.min(Math.max(nowScale, minScale * 0.95), minScale * maxZoom),
+            w = touch.down.width * scale,
+            h = touch.orig.height * w / touch.orig.width,
+            l = touch.down.left - (touch.down.x - touch.down.left) * (scale - 1) + (touch.x - touch.down.x),
+            t = touch.down.top - (touch.down.y - touch.down.top) * (scale - 1) + (touch.y - touch.down.y);
+        // allow to rubber-band by 20px for feedback
+        l = Math.max(Math.min(l, touch.orig.left + 20), touch.orig.right - w - 20);
+        t = Math.max(Math.min(t, touch.orig.top + 20), touch.orig.bottom - h - 20);
+        adjustDisplay(l, t, w, h);
+    }
+    function zoomEnd(evt) {
+        var l = canvas.offsetLeft,
+            t = canvas.offsetTop,
+            w = canvas.offsetWidth,
+            h = canvas.offsetHeight;
+        w = Math.min(Math.max(w, touch.orig.width), touch.orig.width * maxZoom);
+        h = touch.orig.height * w / touch.orig.width;
+        l = Math.max(Math.min(l, touch.orig.left), touch.orig.right - w);
+        t = Math.max(Math.min(t, touch.orig.top), touch.orig.bottom - h);
+        adjustDisplay(l, t, w, h);
+    }
+    // State machine to distinguish between 1st/2nd mouse button and zoom/pan:
+    // * if moved, or no 2nd finger within 100ms of 1st down, start mousing
+    // * if fingers moved significantly within 200ms of 2nd down, start zooming
+    // * if touch ended within this time, generate click (down+up)
+    // * otherwise, start mousing with 2nd button
+    // When mousing, always generate a move event before down event so that
+    // mouseover eventhandlers in image work better 
     canvas.ontouchstart = function(evt) {
-        evt.touches[0].timeStamp = evt.timeStamp;
-        recordMouseEvent('touchstart', evt.touches[0], canvas, display, eventQueue, options);
-        if (display.runNow) display.runNow(); // don't wait for timeout to run
         evt.preventDefault();
+        var e = touchToMouse(evt);
+        for (var i = 0; i < evt.changedTouches.length; i++) {
+            switch (touch.state) {
+                case 'idle':
+                    touch.state = 'got1stFinger';
+                    touch.first = e;
+                    setTimeout(function(){
+                        if (touch.state !== 'got1stFinger') return;
+                        touch.state = 'mousing';
+                        touch.button = e.button = 0;
+                        recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                        recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                    }, 100);
+                    break;
+                case 'got1stFinger':
+                    touch.state = 'got2ndFinger';
+                    zoomStart(evt);
+                    setTimeout(function(){
+                        if (touch.state !== 'got2ndFinger') return;
+                        var didMove = Math.abs(touch.down.dist - touch.dist) > 10 ||
+                            dd(touch.down.x, touch.down.y, touch.x, touch.y) > 10;
+                        if (didMove) {
+                            touch.state = 'zooming';
+                        } else {
+                            touch.state = 'mousing';
+                            touch.button = e.button = 2;
+                            recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                            recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                        }
+                    }, 200);
+                    break;
+            }
+        }
     };
     canvas.ontouchmove = function(evt) {
-        evt.touches[0].timeStamp = evt.timeStamp;
-        recordMouseEvent('touchmove', evt.touches[0], canvas, display, eventQueue, options);
-        if (display.runNow) display.runNow(); // don't wait for timeout to run
         evt.preventDefault();
+        var e = touchToMouse(evt);
+        switch (touch.state) {
+            case 'got1stFinger': 
+                touch.state = 'mousing';
+                touch.button = e.button = 0;
+                recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                break;
+            case 'mousing':
+                recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                return;
+            case 'got2ndFinger':
+                if (evt.touches.length > 1)
+                    touch.dist = dist(evt.touches[0], evt.touches[1]);
+                return;
+            case 'zooming':
+                zoomMove(evt);
+                return;
+        }
     };
     canvas.ontouchend = function(evt) {
-        recordMouseEvent('touchend', evt, canvas, display, eventQueue, options);
-        if (display.runNow) display.runNow(); // don't wait for timeout to run
         evt.preventDefault();
+        checkFullscreen();
+        var e = touchToMouse(evt);
+        for (var i = 0; i < evt.changedTouches.length; i++) {
+            switch (touch.state) {
+                case 'mousing':
+                    if (evt.touches.length > 0) break;
+                    touch.state = 'idle';
+                    recordMouseEvent('mouseup', e, canvas, display, eventQueue, options);
+                    return;
+                case 'got1stFinger': 
+                    touch.state = 'idle';
+                    touch.button = e.button = 0;
+                    recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                    recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                    recordMouseEvent('mouseup', e, canvas, display, eventQueue, options);
+                    return;
+                case 'got2ndFinger':
+                    touch.state = 'mousing';
+                    touch.button = e.button = 2;
+                    recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                    recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                    break;
+                case 'zooming':
+                    if (evt.touches.length > 0) break;
+                    touch.state = 'idle';
+                    zoomEnd(evt);
+                    return;
+            }
+        }
     };
     canvas.ontouchcancel = function(evt) {
         canvas.ontouchend(evt);
@@ -477,9 +689,7 @@ function createSqueakDisplay(canvas, options) {
     display.cursorCanvas.style.position = "absolute";
     display.cursorCanvas.style.cursor = "none";
     display.cursorCanvas.style.background = "transparent";
-    ['onmousedown', 'onmouseup', 'onmousemove', 'oncontextmenu',
-    'ontouchstart', 'ontouchmove', 'ontouchend', 'ontouchcancel'].
-        forEach(function(handler) { display.cursorCanvas[handler] = canvas[handler]; });
+    display.cursorCanvas.style.pointerEvents = "none";
     canvas.parentElement.appendChild(display.cursorCanvas);
     canvas.style.cursor = "none";
     // keyboard stuff
@@ -519,7 +729,7 @@ function createSqueakDisplay(canvas, options) {
         if ((evt.metaKey || (evt.altKey && !evt.ctrlKey))) {
             var key = evt.key; // only supported in FireFox, others have keyIdentifier
             if (!key && evt.keyIdentifier && evt.keyIdentifier.slice(0,2) == 'U+')
-                key = String.fromCharCode(parseInt(evt.keyIdentifier.slice(2), 16))
+                key = String.fromCharCode(parseInt(evt.keyIdentifier.slice(2), 16));
             if (key && key.length == 1) {
                 if (/[CXVR]/i.test(key))
                     return true;  // let browser handle cut/copy/paste/reload
@@ -535,20 +745,9 @@ function createSqueakDisplay(canvas, options) {
         recordModifiers(evt, display);
     };
     document.oncopy = function(evt, key) {
-        if (!display.vm) return true;
-        // simulate copy event for Squeak so it places its text in clipboard
-        display.clipboardStringChanged = false;
-        fakeCmdOrCtrlKey((key || 'c').charCodeAt(0), evt.timeStamp, display, eventQueue);
-        var start = Date.now();
-        // now interpret until Squeak has copied to the clipboard
-        while (!display.clipboardStringChanged && Date.now() - start < 500)
-            display.vm.interpret(20);
-        if (!display.clipboardStringChanged) return;
-        // got it, now copy to the system clipboard
-        try {
-            evt.clipboardData.setData("Text", display.clipboardString);
-        } catch(err) {
-            alert("copy error " + err);
+        var text = display.executeClipboardCopy(key, evt.timeStamp);
+        if (typeof text === 'string') {
+            evt.clipboardData.setData("Text", text);
         }
         evt.preventDefault();
     };
@@ -557,14 +756,8 @@ function createSqueakDisplay(canvas, options) {
         document.oncopy(evt, 'x');
     };
     document.onpaste = function(evt) {
-        if (!display.vm) return true;
-        try {
-            display.clipboardString = evt.clipboardData.getData('Text');
-            // simulate paste event for Squeak
-            fakeCmdOrCtrlKey('v'.charCodeAt(0), evt.timeStamp, display, eventQueue);
-        } catch(err) {
-            alert("paste error " + err);
-        }
+        var text = evt.clipboardData.getData('Text');
+        display.executeClipboardPaste(text, evt.timeStamp);
         evt.preventDefault();
     };
     // do not use addEventListener, we want to replace any previous drop handler
@@ -573,23 +766,24 @@ function createSqueakDisplay(canvas, options) {
             if (evt.dataTransfer.types[i] == 'Files') return true;
         return false;
     }
-    document.body.ondragover = function(evt) {
+    document.ondragover = function(evt) {
         evt.preventDefault();
-        if (!dragEventHasFiles(evt))
-            return evt.dataTransfer.dropEffect = 'none';
-        evt.dataTransfer.dropEffect = 'copy';
-        recordDragDropEvent(Squeak.EventDragMove, evt, canvas, display, eventQueue);
-        return false;
+        if (!dragEventHasFiles(evt)) {
+            evt.dataTransfer.dropEffect = 'none';
+        } else {
+            evt.dataTransfer.dropEffect = 'copy';
+            recordDragDropEvent(Squeak.EventDragMove, evt, canvas, display, eventQueue);
+        }
     };
-    document.body.ondragenter = function(evt) {
+    document.ondragenter = function(evt) {
         if (!dragEventHasFiles(evt)) return;
         recordDragDropEvent(Squeak.EventDragEnter, evt, canvas, display, eventQueue);
     };
-    document.body.ondragleave = function(evt) {
+    document.ondragleave = function(evt) {
         if (!dragEventHasFiles(evt)) return;
         recordDragDropEvent(Squeak.EventDragLeave, evt, canvas, display, eventQueue);
     };
-    document.body.ondrop = function(evt) {
+    document.ondrop = function(evt) {
         evt.preventDefault();
         if (!dragEventHasFiles(evt)) return false;
         var files = [].slice.call(evt.dataTransfer.files),
@@ -621,6 +815,7 @@ function createSqueakDisplay(canvas, options) {
         return false;
     };
     window.onresize = function() {
+        if (touch.orig) return; // manually resized
         // call resizeDone only if window size didn't change for 300ms
         var debounceWidth = window.innerWidth,
             debounceHeight = window.innerHeight;
@@ -628,7 +823,6 @@ function createSqueakDisplay(canvas, options) {
             if (debounceWidth == window.innerWidth && debounceHeight == window.innerHeight)
                 display.resizeDone();
         }, 300);
-
         // if no fancy layout, don't bother
         if ((!options.header || !options.footer) && !options.fullscreen) {
             display.width = canvas.width;
@@ -673,17 +867,15 @@ function createSqueakDisplay(canvas, options) {
         }
         // set cursor scale
         if (options.fixedWidth) {
-            display.scale = parseInt(canvas.style.width) / canvas.width;
-            var cursorCanvas = display.cursorCanvas;
-            cursorCanvas.style.width = (cursorCanvas.width * display.scale) + "px";
-            cursorCanvas.style.height = (cursorCanvas.height * display.scale) + "px";
-        } else {
-            display.scale = 1;
+            var cursorCanvas = display.cursorCanvas,
+                scale = canvas.offsetWidth / canvas.width;
+            cursorCanvas.style.width = (cursorCanvas.width * scale) + "px";
+            cursorCanvas.style.height = (cursorCanvas.height * scale) + "px";
         }
     };
     window.onresize();
     return display;
-};
+}
 
 function setupSpinner(vm, options) {
     var spinner = options.spinner;
@@ -691,7 +883,7 @@ function setupSpinner(vm, options) {
     spinner.onmousedown = function(evt) {
         if (confirm(SqueakJS.appName + " is busy. Interrupt?"))
             vm.interruptPending = true;
-    }
+    };
     return spinner.style;
 }
 
@@ -721,8 +913,10 @@ function updateSpinner(spinner, idleMS, vm, display) {
 var loop; // holds timeout for main loop
 
 SqueakJS.runImage = function(buffer, name, display, options) {
-    window.onbeforeunload = function() {
-        return SqueakJS.appName + " is still running";
+    window.onbeforeunload = function(evt) {
+        var msg = SqueakJS.appName + " is still running";  
+        evt.returnValue = msg;
+        return msg;
     };
     window.clearTimeout(loop);
     display.reset();
@@ -753,11 +947,11 @@ SqueakJS.runImage = function(buffer, name, display, options) {
                     console.error(error);
                     alert(error);
                 }
-            };
+            }
             display.runNow = function() {
                 window.clearTimeout(loop);
                 run();
-            }
+            };
             display.runFor = function(milliseconds) {
                 var stoptime = Date.now() + milliseconds;
                 do {
@@ -766,7 +960,7 @@ SqueakJS.runImage = function(buffer, name, display, options) {
             };
             run();
         },
-        function readProgress(value) {display.showProgress(value)});
+        function readProgress(value) {display.showProgress(value);});
     }, 0);
 };
 
@@ -783,7 +977,7 @@ function processOptions(options) {
                 try { val = JSON.parse(val); } catch(e) {
                     if (val[0] === "[") val = val.slice(1,-1).split(","); // handle string arrays
                     // if not JSON use string itself
-                };
+                }
         }
         options[key] = val;
     }
@@ -803,7 +997,7 @@ function fetchTemplates(options) {
             options.templates = templates;
         }
         for (var path in options.templates)
-            Squeak.fetchTemplateDir(options.root + path, options.templates[path]);
+            Squeak.fetchTemplateDir(path[0] == "/" ? path : options.root + path, options.templates[path]);
     }
 }
 
@@ -829,7 +1023,7 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     }
     if (options.document) {
         var docName = Squeak.splitFilePath(options.document).basename;
-        files.push({url: options.document, name: docName, forceDownload: true});
+        files.push({url: options.document, name: docName, forceDownload: options.forceDownload !== false});
         display.documentName = options.root + docName;
     }
     function getNextFile(whenAllDone) {
@@ -855,24 +1049,33 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
         rq.responseType = 'arraybuffer';
         rq.onprogress = function(e) {
             if (e.lengthComputable) display.showProgress(e.loaded / e.total);
-        }
+        };
         rq.onload = function(e) {
-            if (rq.status == 200) {
-                if (file.name == imageName) {imageData = rq.response;}
-                Squeak.filePut(options.root + file.name, rq.response, function() {
+            if (this.status == 200) {
+                if (file.name == imageName) {imageData = this.response;}
+                Squeak.filePut(options.root + file.name, this.response, function() {
                     getNextFile(whenAllDone);
                 });
             }
-            else rq.onerror(rq.statusText);
+            else this.onerror(this.statusText);
         };
         rq.onerror = function(e) {
-            alert("Failed to download:\n" + file.url);
-        }
+            console.warn('Retrying with CORS proxy: ' + file.url);
+            var proxy = options.proxy || 'https://crossorigin.me/',
+                retry = new XMLHttpRequest();
+            retry.open('GET', proxy + file.url);
+            retry.responseType = rq.responseType;
+            retry.onprogress = rq.onprogress;
+            retry.onload = rq.onload;
+            retry.onerror = function() {alert("Failed to download:\n" + file.url)};
+            retry.send();
+        };
         rq.send();
-    };
+    }
     getNextFile(function whenAllDone(imageData) {
         SqueakJS.runImage(imageData, options.root + imageName, display, options);
     });
+    return display;
 };
 
 SqueakJS.quitSqueak = function() {

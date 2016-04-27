@@ -39,7 +39,7 @@ try {
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 0.8.1",
+    vmVersion: "SqueakJS 0.8.2",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",

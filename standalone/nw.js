@@ -15,7 +15,8 @@ function patchSqueakForNode(root) {
             var path = Squeak.splitFilePath(filepath); if (!path.basename) return null;
             var now = Squeak.totalSeconds();
             var entry = [path.basename, now, 0, false, contents.byteLength || contents.length || 0];
-            fs.writeFile(root + filepath, contents, err => {});
+            fs.writeFileSync(root + filepath, contents);
+            if (optSuccess) optSuccess();
             return entry;
         },
         fileDelete: (filepath, entryOnly) => {

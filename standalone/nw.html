@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<head>
+<meta charset="utf-8">
+<title>SqueakJS</title>
+<link rel="icon" type="image/png" href="squeakjs.png">
+<link rel="stylesheet" href="squeakjs.css">
+<script src="squeak.js"></script>
+<script src="nw.js"></script>
+<script>
+    function runSqueak(imageName, documentArg) {
+        var fs = require("fs");
+        var sqCanvas = document.getElementById("sqCanvas");
+            sqSpinner = document.getElementById("sqSpinner");
+	var oldRunImg = SqueakJS.runImage.bind(SqueakJS);
+        SqueakJS.runImage = function(buffer, name, display, options) {
+	    display.documentName = documentArg;
+	    oldRunImg(buffer, name, display, options);
+	}.bind(SqueakJS);
+        SqueakJS.runSqueak(imageName, sqCanvas, {
+            fullscreen: true,
+            spinner: sqSpinner,
+            appName: imageName && imageName.replace(/\.image$/, ""),
+        });
+    }
+    
+    window.onload = function() {
+        var p = require("path");
+        var imageArg = nw.App.argv.find((a) => { return a.endsWith(".image") });
+    	var rootimagepath = p.resolve(p.dirname(imageArg));
+	var documentArg = nw.App.argv.slice(nw.App.argv.indexOf(imageArg) + 1, nw.App.argv.length)[0];
+	if (documentArg) documentArg = p.basename(documentArg);
+	patchSqueakForNode(rootimagepath);
+        return runSqueak(imageArg, documentArg);
+    }
+</script>
+</head>
+<body>
+    <canvas id="sqCanvas" style="display: block"></canvas>
+    <div id="sqSpinner"><div>
+</body>
+</html>

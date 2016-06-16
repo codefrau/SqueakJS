@@ -3572,18 +3572,23 @@ Object.subclass('Squeak.Primitives',
             case 182: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'oldprimSampledSoundmixSampleCountintostartingAtleftVolrightVol', argCount);
             case 183: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveApplyReverb', argCount);
             case 184: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixLoopedSampledSound', argCount);
+                break;  // fail 170-184 if fell through
             case 185: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixSampledSound', argCount);
-                break;  // fail 170-185 if fell through
-            // 186-188: was unused
-            case 188: if (!this.oldPrims) return this.primitiveExecuteMethodArgsArray(argCount);
-                break;  // fail 188 if fell through
+                else return this.primitiveExitCriticalSection(argCount);
+            case 186: if (this.oldPrims) break; // unused
+                else return this.primitiveEnterCriticalSection(argCount);
+            case 187: if (this.oldPrims) break; // unused
+                else return this.primitiveTestAndSetOwnershipOfCriticalSection(argCount);
+            case 188: if (this.oldPrims) break; // unused
+                else return this.primitiveExecuteMethodArgsArray(argCount);
             case 189: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundInsertSamples', argCount);
+                else return this.primitiveExecuteMethod(argCount);
             case 190: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStartRecording', argCount);
             case 191: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStopRecording', argCount);
             case 192: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundGetRecordingSampleRate', argCount);
             case 193: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundRecordSamples', argCount);
             case 194: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundSetRecordLevel', argCount);
-                break;  // fail 189-194 if fell through
+                break;  // fail 190-194 if fell through
             case 195: return false; // Context.findNextUnwindContextUpTo:
             case 196: return false; // Context.terminateTo:
             case 197: return false; // Context.findNextHandlerContextStarting
@@ -4849,6 +4854,15 @@ Object.subclass('Squeak.Primitives',
             if (sema.sqClass == semaClass)
                 this.synchronousSignal(sema);
         }
+    },
+    primitiveEnterCriticalSection: function(argCount) {
+      throw new Error("not implemented yet: primitiveEnterCriticalSection");
+    },
+    primitiveExitCriticalSection: function(argCount) {
+      throw new Error("not implemented yet: primitiveExitCriticalSection");
+    },
+    primitiveTestAndSetOwnershipOfCriticalSection: function(argCount) {
+      throw new Error("not implemented yet: primitiveTestAndSetOwnershipOfCriticalSection");
     },
 },
 'vm functions', {

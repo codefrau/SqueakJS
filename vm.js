@@ -3555,7 +3555,7 @@ Object.subclass('Squeak.Primitives',
             case 167: return false; // Processor.yield
             case 168: return this.primitiveCopyObject(argCount);
             case 169: if (this.oldPrims) return this.primitiveDirectorySetMacTypeAndCreator(argCount);
-                else return this.primitiveNotIdentical(argCount);
+                else return this.pop2andPushBoolIfOK(this.vm.stackValue(1) !== this.vm.stackValue(0)); //new: primitiveNotIdentical
             // Sound Primitives (170-199)
             case 170: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStart', argCount);
             case 171: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStartWithSemaphore', argCount);

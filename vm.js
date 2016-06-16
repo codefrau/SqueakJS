@@ -3647,7 +3647,8 @@ Object.subclass('Squeak.Primitives',
                 else return this.popNandPushIfOK(1, this.microsecondClockUTC());
             case 241: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortRead', argCount);
                 else return this.popNandPushIfOK(1, this.microsecondClockLocal());
-            // 242: unused
+            case 242: if (this.oldPrims) break; // unused
+                else return this.primitiveSignalAtUTCMicroseconds(argCount);
             case 243: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveTranslateStringWithTable', argCount);
             case 244: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindFirstInString' , argCount);
             case 245: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveIndexOfAsciiInString', argCount);
@@ -4809,11 +4810,7 @@ Object.subclass('Squeak.Primitives',
             this.resume(this.removeFirstLinkOfList(sema));
         return;
     },
-    primitiveSignalAtMilliseconds: function(argCount) { //Delay signal:atMs:
-        var msTime = this.stackInteger(0);
-        var sema = this.stackNonInteger(1);
-        var rcvr = this.stackNonInteger(2);
-        if (!this.success) return false;
+    signalAtMilliseconds: function(sema, msTime) {
         if (this.isA(sema, Squeak.splOb_ClassSemaphore)) {
             this.vm.specialObjects[Squeak.splOb_TheTimerSemaphore] = sema;
             this.vm.nextWakeupTick = msTime;
@@ -4821,6 +4818,21 @@ Object.subclass('Squeak.Primitives',
             this.vm.specialObjects[Squeak.splOb_TheTimerSemaphore] = this.vm.nilObj;
             this.vm.nextWakeupTick = 0;
         }
+    },
+    primitiveSignalAtMilliseconds: function(argCount) {
+        var msTime = this.stackInteger(0);
+        var sema = this.stackNonInteger(1);
+        if (!this.success) return false;
+        this.signalAtMilliseconds(sema, msTime);
+        this.vm.popN(argCount); // return self
+        return true;
+    },
+    primitiveSignalAtUTCMicroseconds: function(argCount) {
+        var usecsUTC = this.stackSigned53BitInt(0);
+        var sema = this.stackNonInteger(1);
+        if (!this.success) return false;
+        var msTime = (usecsUTC / 1000 + Squeak.EpochUTC - this.vm.startupTime) & Squeak.MillisecondClockMask;
+        this.signalAtMilliseconds(sema, msTime);
         this.vm.popN(argCount); // return self
         return true;
     },

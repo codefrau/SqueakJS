@@ -30,47 +30,47 @@ function SocketPlugin() {
     },
 
     // A socket handle emulates socket behavior
-    _newSocketHandle() {
+    _newSocketHandle(sendBufSize, connSemaIndex, readSemaIndex, writeSemaIndex) {
       var that = this;
       return {
         host: null,
         port: null,
 
-        response: null,
+        connSemaIndex: connSemaIndex,
+        readSemaIndex: readSemaIndex,
+        writeSemaIndex: writeSemaIndex,
+
+        sendBuffer: new Uint8Array(sendBufSize),
+        sendBufferIndex: 0,
+        sendTimeout: null,
+
+        response: [],
         responseIndex: 0,
-        responseLength: 0,
+        responseLength: null,
+        responseReceived: false,
 
         status: that.Socket_Unconnected,
 
-        connect(host, port) {
-          this.host = host;
-          this.port = port;
-          this.status = that.Socket_Connected;
+        _signalSemaphore(semaIndex) {
+          if (semaIndex <= 0) return;
+          that.primHandler.signalSemaphoreWithIndex(semaIndex);
         },
+        _signalConnSemaphore() { this._signalSemaphore(this.connSemaIndex); },
+        _signalReadSemaphore() { this._signalSemaphore(this.readSemaIndex); },
+        _signalWriteSemaphore() { this._signalSemaphore(this.writeSemaIndex); },
 
-        close() {
-          if (this.status == that.Socket_Connected ||
-              this.status == that.Socket_OtherEndClosed ||
-              this.status == that.Socket_WaitingForConnection) {
-            this.status = that.Socket_Unconnected;
-          }
-        },
-
-        destroy() {
-          this.status = that.Socket_InvalidSocket;
-        },
-
-        recv(count) {
-          var oldIndex = this.responseIndex;
-          this.responseIndex += count;
-          return this.response.slice(oldIndex, oldIndex + count);
-        },
-
-        send(request) {
+        _performRequest() {
+          var request = new TextDecoder("utf-8").decode(this.sendBuffer);
+          var requestLines = request.split('\n');
           // Split header lines and parse first line
           var firstLineItems = request.split('\n')[0].split(' ');
           var httpMethod = firstLineItems[0];
-          if (httpMethod !== 'GET') return -1;
+          if (httpMethod !== 'GET' && httpMethod !== 'PUT' &&
+              httpMethod !== 'POST') {
+            this.status = that.Socket_OtherEndClosed;
+            this._signalConnSemaphore();
+            return -1;
+          }
           var targetURL = firstLineItems[1];
 
           var url;
@@ -80,11 +80,30 @@ function SocketPlugin() {
             url = 'https://' + this.host + targetURL;
           }
 
+          var contentType, contentLength;
+          for (var i = 1; i < requestLines.length; i++) {
+            var line = requestLines[i];
+            if (line.indexOf('Content-Type: ') === 0) {
+              contentType = encodeURIComponent(line.substr(14));
+            } else if (line.indexOf('Content-Length: ') === 0) {
+              contentLength = parseInt(line.substr(16));
+            }
+          }
+
+          // Extract possible data to send
+          var data = null;
+          if (contentLength !== undefined) {
+            data = this.sendBuffer.slice(this.sendBufferIndex - contentLength, this.sendBufferIndex);
+          }
+
           var httpRequest = new XMLHttpRequest();
           httpRequest.open(httpMethod, url);
+          if (contentType !== undefined) {
+            httpRequest.setRequestHeader('Content-type', contentType);
+          }
           httpRequest.responseType = "arraybuffer";
 
-          var that = this;
+          var thisHandle = this;
           httpRequest.onload = function (oEvent) {
             var content = this.response;
             if (content) {
@@ -95,40 +114,95 @@ function SocketPlugin() {
                 'Content-Length: ' + content.byteLength + '\r\n\r\n');
 
               // Merge fake header with content
-              that.response = new Uint8Array(header.byteLength + content.byteLength);
-              that.response.set(header, 0);
-              that.response.set(new Uint8Array(content), header.byteLength);
-              that.responseLength = that.response.byteLength;
+              thisHandle.response = new Uint8Array(header.byteLength + content.byteLength);
+              thisHandle.response.set(header, 0);
+              thisHandle.response.set(new Uint8Array(content), header.byteLength);
+              thisHandle.responseLength = thisHandle.response.byteLength;
+
+              that.primHandler.signalSemaphoreWithIndex(thisHandle.readSemaIndex);
+            } else {
+              thisHandle.status = that.Socket_OtherEndClosed;
             }
           };
 
           httpRequest.onerror = function(e) {
             console.warn('Retrying with CORS proxy: ' + url);
-            var proxy = 'https://crossorigin.me/',
+            var proxy = 'https://cors-anywhere.herokuapp.com/'; //'https://crossorigin.me/',
                 retry = new XMLHttpRequest();
-            retry.open(httpMethod, proxy + url);
+            var proxyURL = proxy + (this.port === 443 ? url : 'http://' + thisHandle.host + targetURL);
+            retry.open(httpMethod, proxyURL);
             retry.responseType = httpRequest.responseType;
             retry.onload = httpRequest.onload;
-            retry.onerror = function() {alert("Failed to download:\n" + url);};
-            retry.send();
+            retry.onerror = function() {
+              thisHandle.status = that.Socket_OtherEndClosed;
+              alert("Failed to download:\n" + url);
+            };
+            retry.send(data);
           };
 
-          httpRequest.send(null);
-          return request.length;
+          httpRequest.send(data);
         },
 
-        can_read() {
-          if (this.response === null) return false; // response not ready (yet)
-          if (this.status == that.Socket_Connected &&
-              this.responseIndex < this.responseLength) {
+        connect(host, port) {
+          this.host = host;
+          this.port = port;
+          this.status = that.Socket_Connected;
+          this._signalConnSemaphore();
+          this._signalWriteSemaphore(); // Immediately ready to write
+        },
+
+        close() {
+          if (this.status == that.Socket_Connected ||
+              this.status == that.Socket_OtherEndClosed ||
+              this.status == that.Socket_WaitingForConnection) {
+            this.status = that.Socket_Unconnected;
+            this._signalConnSemaphore();
+          }
+        },
+
+        destroy() {
+          this.status = that.Socket_InvalidSocket;
+        },
+
+        dataAvailable() {
+          if (this.status == that.Socket_InvalidSocket) return false;
+          if (this.status == that.Socket_Connected) {
+            if (!this.responseReceived) {
+              this._signalReadSemaphore();
               return true;
+            } else {
+              this.status = that.Socket_OtherEndClosed;
+              this._signalConnSemaphore();
+            }
           }
           return false;
+        },
+
+        recv(start, count) {
+          if (this.responseLength !== null && start >= this.responseLength) {
+            this.responseReceived = true; // Everything has been read
+          }
+          this.responseIndex = start + count;
+          return this.response.slice(start, start + count);
+        },
+
+        send(data, start, end) {
+          if (this.sendTimeout !== null) {
+            window.clearTimeout(this.sendTimeout);
+          }
+          this.lastSend = Date.now();
+          newBytes = data.bytes.slice(start, end);
+          this.sendBuffer.set(newBytes, this.sendBufferIndex);
+          this.sendBufferIndex += newBytes.byteLength;
+          // Give image some time to send more data before performing requests
+          this.sendTimeout = setTimeout(this._performRequest.bind(this), 50);
+          return newBytes.byteLength;
         }
       };
     },
 
     primitiveHasSocketAccess(argCount) {
+      this.interpreterProxy.popthenPush(1, this.interpreterProxy.trueObject());
       return true;
     },
 
@@ -194,11 +268,16 @@ function SocketPlugin() {
 
     primitiveSocketCreate3Semaphores(argCount) {
       if (argCount !== 7) return false;
+      var writeSemaIndex = this.interpreterProxy.stackIntegerValue(0);
+      var readSemaIndex = this.interpreterProxy.stackIntegerValue(1);
+      var semaIndex = this.interpreterProxy.stackIntegerValue(2);
+      var sendBufSize = this.interpreterProxy.stackIntegerValue(3);
       var socketType = this.interpreterProxy.stackIntegerValue(5);
       if (socketType !== this.TCP_Socket_Type) return false;
       var name = '{socket handle #' + (++this.handleCounter) + '}';
       var sqHandle = this.primHandler.makeStString(name);
-      sqHandle.handle = this._newSocketHandle();
+      sqHandle.handle = this._newSocketHandle(sendBufSize, semaIndex,
+                                              readSemaIndex, writeSemaIndex);
       this.interpreterProxy.popthenPush(argCount, sqHandle);
       return true;
     },
@@ -216,7 +295,10 @@ function SocketPlugin() {
       if (argCount !== 1) return false;
       var handle = this.interpreterProxy.stackObjectValue(0).handle;
       if (handle === undefined) return false;
-      var ret = this.primHandler.makeStObject(handle.can_read());
+      var ret = this.interpreterProxy.falseObject();
+      if (handle.dataAvailable()) {
+        ret = this.interpreterProxy.trueObject();
+      }
       this.interpreterProxy.popthenPush(1, ret);
       return true;
     },
@@ -225,12 +307,10 @@ function SocketPlugin() {
       if (argCount !== 4) return false;
       var handle = this.interpreterProxy.stackObjectValue(3).handle;
       if (handle === undefined) return false;
-
       var target = this.interpreterProxy.stackObjectValue(2);
       var start = this.interpreterProxy.stackIntegerValue(1) - 1;
       var count = this.interpreterProxy.stackIntegerValue(0);
-
-      var bytes = handle.recv(count);
+      var bytes = handle.recv(start, count);
       target.bytes.set(bytes, start);
       this.interpreterProxy.popthenPush(argCount, bytes.length);
       return true;
@@ -240,14 +320,14 @@ function SocketPlugin() {
       if (argCount !== 4) return false;
       var handle = this.interpreterProxy.stackObjectValue(3).handle;
       if (handle === undefined) return false;
-      var data = this.interpreterProxy.stackObjectValue(2).bytesAsString();
+      var data = this.interpreterProxy.stackObjectValue(2);
       var start = this.interpreterProxy.stackIntegerValue(1) - 1;
       if (start < 0 ) return false;
       var count = this.interpreterProxy.stackIntegerValue(0);
       var end = start + count;
       if (end > data.length) return false;
 
-      res = handle.send(data.slice(start, end));
+      res = handle.send(data, start, end);
       this.interpreterProxy.popthenPush(1, res);
       return true;
     },

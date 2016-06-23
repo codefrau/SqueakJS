@@ -4928,7 +4928,7 @@ Object.subclass('Squeak.Primitives',
             case 11: return this.vm.image.gcTenured;        // tenures of surving objects since startup (read-only)
             // 12-20 specific to the translating VM
             // 21   root table size (read-only)
-            // 22   root table overflows since startup (read-only)
+            case 22: return 0;                              // root table overflows since startup (read-only)
             // 23   bytes of extra memory to reserve for VM buffers, plugins, etc.
             // 24   memory threshold above which to shrink object memory (read-write)
             // 25   memory headroom when growing object memory (read-write)

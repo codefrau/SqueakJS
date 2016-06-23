@@ -73,7 +73,12 @@ function SocketPlugin() {
           if (httpMethod !== 'GET') return -1;
           var targetURL = firstLineItems[1];
 
-          var url = 'http://' + this.host + ':' + this.port + targetURL;
+          var url;
+          if (this.port !== 443) {
+            url = 'http://' + this.host + ':' + this.port + targetURL;
+          } else {
+            url = 'https://' + this.host + targetURL;
+          }
 
           var httpRequest = new XMLHttpRequest();
           httpRequest.open(httpMethod, url);

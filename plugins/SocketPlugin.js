@@ -141,7 +141,7 @@ function SocketPlugin() {
             retry.onload = httpRequest.onload;
             retry.onerror = function() {
               thisHandle.status = that.Socket_OtherEndClosed;
-              alert("Failed to download:\n" + url);
+              console.error("Failed to download:\n" + url);
             };
             retry.send(data);
           };

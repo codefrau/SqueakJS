@@ -113,13 +113,11 @@ function SocketPlugin() {
           httpRequest.onload = function (oEvent) {
             var content = this.response;
             if (content) {
-              // Fake header
+              // Recreate header
               var header = new TextEncoder('utf-8').encode(
-                'HTTP/1.0 ' + this.status + ' OK\r\n' +
-                'Server: SqueakJS SocketPlugin Proxy\r\n' +
-                'Content-Length: ' + content.byteLength + '\r\n\r\n');
-
-              // Concat fake header and content
+                'HTTP/1.0 ' + this.status + ' ' + this.statusText + '\r\n' +
+                this.getAllResponseHeaders() + '\r\n');
+              // Concat header and content
               thisHandle.response = new Uint8Array(header.byteLength + content.byteLength);
               thisHandle.response.set(header, 0);
               thisHandle.response.set(new Uint8Array(content), header.byteLength);

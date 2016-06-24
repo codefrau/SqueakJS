@@ -3167,7 +3167,14 @@ Object.subclass('Squeak.Interpreter',
         this.breakOnContextChanged = true;
         this.breakOnContextReturned = null;
     },
-    printActiveContext: function() {
+    printActiveContext: function(maxWidth) {
+        if (!maxWidth) maxWidth = 72;
+        function printObj(obj) {
+            var value = obj.sqInstName ? obj.sqInstName() : obj.toString();
+            value = JSON.stringify(value).slice(1, -1);
+            if (value.length > maxWidth - 3) value = value.slice(0, maxWidth - 3) + '...';
+            return value;
+        }
         // temps and stack in current context
         var ctx = this.activeContext;
         var isBlock = typeof ctx.pointers[Squeak.BlockContext_argumentCount] === 'number';
@@ -3183,8 +3190,7 @@ Object.subclass('Squeak.Interpreter',
         var lastTemp = firstTemp + tempCount - 1;
         var stack = '';
         for (var i = stackBottom; i <= stackTop; i++) {
-            var obj = homeCtx.pointers[i];
-            var value = obj.sqInstName ? obj.sqInstName() : obj.toString();
+            var value = printObj(homeCtx.pointers[i]);
             var label = '';
             if (i == stackBottom) label = '=rcvr'; else
             if (i <= lastTemp) label = '=tmp' + (i - firstTemp);
@@ -3196,8 +3202,7 @@ Object.subclass('Squeak.Interpreter',
             var firstArg = this.decodeSqueakSP(1);
             var lastArg = firstArg + nArgs;
             for (var i = firstArg; i <= this.sp; i++) {
-                var obj = ctx.pointers[i];
-                var value = obj.sqInstName ? obj.sqInstName() : obj.toString();
+                var value = printObj(ctx.pointers[i]);
                 var label = '';
                 if (i <= lastArg) label = '=arg' + (i - firstArg);
                 stack += '\nblk[' + i + ']' + label +': ' + value;

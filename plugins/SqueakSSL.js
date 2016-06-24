@@ -1,7 +1,12 @@
+/*
+ * This is a fake SSL plugin, actual authentication and crypto
+ * is handled by browser and SocketPlugin
+ */
+
 function SqueakSSL() {
 
   return {
-    getModuleName() { return 'Dummy SqueakSSL'; },
+    getModuleName() { return 'SqueakSSL (fake)'; },
     interpreterProxy: null,
     primHandler: null,
 
@@ -32,7 +37,7 @@ function SqueakSSL() {
     },
 
     primitiveCreate(argCount) {
-      var name = '{ssl handle #' + (++this.handleCounter) + '}';
+      var name = '{SqueakJS SSL #' + (++this.handleCounter) + '}';
       var sqHandle = this.primHandler.makeStString(name);
       sqHandle.handle = true;
       this.interpreterProxy.popthenPush(argCount, sqHandle);

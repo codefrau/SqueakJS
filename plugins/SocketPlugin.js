@@ -1,7 +1,13 @@
+/*
+ * This Socket plugin only fulfills http:/https: requests by intercepting them
+ * and sending as XMLHttpRequest. To make connections to servers without CORS,
+ * it uses the crossorigin.me proxy.
+ */
+
 function SocketPlugin() {
 
   return {
-    getModuleName() { return 'SocketPlugin with support for web requests'; },
+    getModuleName() { return 'SocketPlugin (http-only)'; },
     interpreterProxy: null,
     primHandler: null,
 
@@ -113,7 +119,7 @@ function SocketPlugin() {
                 'Server: SqueakJS SocketPlugin Proxy\r\n' +
                 'Content-Length: ' + content.byteLength + '\r\n\r\n');
 
-              // Merge fake header with content
+              // Concat fake header and content
               thisHandle.response = new Uint8Array(header.byteLength + content.byteLength);
               thisHandle.response.set(header, 0);
               thisHandle.response.set(new Uint8Array(content), header.byteLength);
@@ -274,7 +280,7 @@ function SocketPlugin() {
       var sendBufSize = this.interpreterProxy.stackIntegerValue(3);
       var socketType = this.interpreterProxy.stackIntegerValue(5);
       if (socketType !== this.TCP_Socket_Type) return false;
-      var name = '{socket handle #' + (++this.handleCounter) + '}';
+      var name = '{SqueakJS Socket #' + (++this.handleCounter) + '}';
       var sqHandle = this.primHandler.makeStString(name);
       sqHandle.handle = this._newSocketHandle(sendBufSize, semaIndex,
                                               readSemaIndex, writeSemaIndex);

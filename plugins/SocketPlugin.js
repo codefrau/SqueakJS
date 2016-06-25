@@ -131,8 +131,13 @@ function SocketPlugin() {
 
           httpRequest.onerror = function(e) {
             console.warn('Retrying with CORS proxy: ' + url);
-            var proxy = 'https://cors-anywhere.herokuapp.com/'; //'https://crossorigin.me/',
-                retry = new XMLHttpRequest();
+            var proxy; retry = new XMLHttpRequest();
+            // crossorigin.me is preferred but does not support PUT/POST
+            if (httpMethod === 'GET') {
+              proxy = 'https://crossorigin.me/';
+            } else {
+              proxy = 'https://cors-anywhere.herokuapp.com/';
+            }
             var proxyURL = proxy + (this.port === 443 ? url : 'http://' + thisHandle.host + targetURL);
             retry.open(httpMethod, proxyURL);
             retry.responseType = httpRequest.responseType;

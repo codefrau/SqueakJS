@@ -47,13 +47,12 @@ function SocketPlugin() {
         readSemaIndex: readSemaIdx,
         writeSemaIndex: writeSemaIdx,
 
-        sendBuffer: new Uint8Array(sendBufSize),
-        sendBufferIndex: 0,
+        sendBuffer: null,
         sendTimeout: null,
 
         response: null,
-        responseBodyLength: null,
         responseReadUntil: 0,
+        responseReceived: false,
 
         status: plugin.Socket_Unconnected,
 
@@ -65,88 +64,169 @@ function SocketPlugin() {
         _signalReadSemaphore() { this._signalSemaphore(this.readSemaIndex); },
         _signalWriteSemaphore() { this._signalSemaphore(this.writeSemaIndex); },
 
+        _otherEndClosed() {
+          this.status = plugin.Socket_OtherEndClosed;
+          this._signalConnSemaphore();
+        },
+
         _hostAndPort() { return this.host + ':' + this.port; },
 
         _requestNeedsProxy() {
           return plugin.needProxy.has(this._hostAndPort());
         },
 
-        _getURL(targetURL, httpMethod, isRetry) {
-          var url = '';
-
-          if (isRetry || this._requestNeedsProxy()) {
+        _getProxy(httpMethod) {
+          if (httpMethod === 'GET') {
             // crossorigin.me is preferred but does not support PUT/POST
-            if (httpMethod === 'GET') {
-              url += 'https://crossorigin.me/';
-            } else {
-              url += 'https://cors-anywhere.herokuapp.com/';
-            }
+            return 'https://crossorigin.me/';
           }
+          return 'https://cors-anywhere.herokuapp.com/';
+        },
 
+        _getURL(targetURL) {
+          var url = '';
           if (this.port !== 443) {
             url += 'http://' + this._hostAndPort() + targetURL;
           } else {
             url += 'https://' + this.host + targetURL;
           }
+          return url;
+        },
 
+        _getFullURL(targetURL, httpMethod, isRetry) {
+          var url = '';
+          if (isRetry || this._requestNeedsProxy()) {
+            url += this._getProxy(httpMethod);
+          }
+          url += this._getURL(targetURL);
           return url;
         },
 
         _performRequest() {
           var request = new TextDecoder("utf-8").decode(this.sendBuffer);
-          var requestLines = request.split('\n');
+          var headerLines = request.split('\r\n\r\n')[0].split('\n');
           // Split header lines and parse first line
-          var firstLineItems = request.split('\n')[0].split(' ');
-          var httpMethod = firstLineItems[0];
+          var firstHeaderLineItems = headerLines[0].split(' ');
+          var httpMethod = firstHeaderLineItems[0];
           if (httpMethod !== 'GET' && httpMethod !== 'PUT' &&
               httpMethod !== 'POST') {
-            this.status = plugin.Socket_OtherEndClosed;
-            this._signalConnSemaphore();
+            this._otherEndClosed();
             return -1;
           }
-          var targetURL = firstLineItems[1];
+          var targetURL = firstHeaderLineItems[1];
 
-          var contentType, contentLength;
+          // Extract possible data to send
+          var data = null;
+          for (var i = 1; i < headerLines.length; i++) {
+            var line = headerLines[i];
+            if (line.indexOf('Content-Length: ') === 0) {
+              var contentLength = parseInt(line.substr(16));
+              var end = this.sendBuffer.byteLength;
+              data = this.sendBuffer.slice(end - contentLength, end);
+              break;
+            }
+          }
+
+          if (self.fetch) {
+            this._performFetchAPIRequest(targetURL, httpMethod, data, headerLines);
+          } else {
+            this._performXMLHTTPRequest(targetURL, httpMethod, data, headerLines);
+          }
+        },
+
+        _performFetchAPIRequest(targetURL, httpMethod, data, requestLines) {
+          var thisHandle = this;
+          var headers = {};
+          for (var i = 1; i < requestLines.length; i++) {
+            var lineItems = requestLines[i].split(':');
+            if (lineItems.length === 2) {
+              headers[lineItems[0]] = lineItems[1].trim();
+            }
+          }
+          var init = {
+            method: httpMethod,
+            headers: headers,
+            body: data
+          };
+
+          fetch(this._getFullURL(targetURL, httpMethod, false), init)
+          .then(thisHandle._handleFetchAPIResponse.bind(thisHandle))
+          .catch(function (e) { 
+            var url = thisHandle._getFullURL(targetURL, httpMethod, true);
+            console.warn('Retrying with CORS proxy: ' + url);
+            init.mode = 'cors';
+            fetch(url, init)
+            .then(function(res) {
+              thisHandle._handleFetchAPIResponse(res);
+              plugin.needProxy.add(thisHandle._hostAndPort());
+            })
+            .catch(function (e) {
+              thisHandle._otherEndClosed();
+              console.warn(e);
+            });
+          });
+        },
+
+        _handleFetchAPIResponse(res) {
+          if (this.response === null) {
+            var header = ['HTTP/1.0 ', res.status, ' ', res.statusText, '\r\n'];
+            res.headers.forEach(function(value, key, array) {
+              header = header.concat([key, ': ', value, '\r\n']);
+            });
+            header.push('\r\n');
+            this.response = [new TextEncoder('utf-8').encode(header.join(''))];
+          }
+          this._readIncremental(res.body.getReader());
+        },
+
+        _readIncremental(reader) {
+          var thisHandle = this;
+          return reader.read().then(function (result) {
+            if (result.done) {
+              thisHandle.responseReceived = true;
+              return;
+            }
+            thisHandle.response.push(result.value);
+            thisHandle._signalReadSemaphore();
+            return thisHandle._readIncremental(reader);
+          });
+        },
+
+        _performXMLHTTPRequest(targetURL, httpMethod, data, requestLines){
+          var thisHandle = this;
+
+          var contentType;
           for (var i = 1; i < requestLines.length; i++) {
             var line = requestLines[i];
             if (line.indexOf('Content-Type: ') === 0) {
               contentType = encodeURIComponent(line.substr(14));
-            } else if (line.indexOf('Content-Length: ') === 0) {
-              contentLength = parseInt(line.substr(16));
+              break;
             }
           }
 
-          // Extract possible data to send
-          var data = null;
-          if (contentLength !== undefined) {
-            data = this.sendBuffer.slice(
-                this.sendBufferIndex - contentLength, this.sendBufferIndex);
-          }
-
           var httpRequest = new XMLHttpRequest();
-          httpRequest.open(httpMethod, this._getURL(targetURL, httpMethod));
+          httpRequest.open(httpMethod, this._getFullURL(targetURL, httpMethod));
           if (contentType !== undefined) {
             httpRequest.setRequestHeader('Content-type', contentType);
           }
           httpRequest.responseType = "arraybuffer";
 
-          var thisHandle = this;
           httpRequest.onload = function (oEvent) {
-            thisHandle._handleResponse(this);
+            thisHandle._handleXMLHTTPResponse(this);
           };
 
           httpRequest.onerror = function(e) {
-            var url = thisHandle._getURL(targetURL, httpMethod, true);
+            var url = thisHandle._getFullURL(targetURL, httpMethod, true);
             console.warn('Retrying with CORS proxy: ' + url);
             var retry = new XMLHttpRequest();
             retry.open(httpMethod, url);
             retry.responseType = httpRequest.responseType;
             retry.onload = function(oEvent) {
-              thisHandle._handleResponse(this);
+              thisHandle._handleXMLHTTPResponse(this);
               plugin.needProxy.add(thisHandle._hostAndPort());
             };
             retry.onerror = function() {
-              thisHandle.status = plugin.Socket_OtherEndClosed;
+              thisHandle._otherEndClosed();
               console.error("Failed to download:\n" + url);
             };
             retry.send(data);
@@ -155,10 +235,12 @@ function SocketPlugin() {
           httpRequest.send(data);
         },
 
-        _handleResponse(response) {
-          var body = response.response;
-          if (!body) {
-            this.status = plugin.Socket_OtherEndClosed;
+        _handleXMLHTTPResponse(response) {
+          this.responseReceived = true;
+
+          var content = response.response;
+          if (!content) {
+            this._otherEndClosed();
             return;
           }
           // Recreate header
@@ -166,12 +248,12 @@ function SocketPlugin() {
             'HTTP/1.0 ' + response.status + ' ' + response.statusText +
             '\r\n' + response.getAllResponseHeaders() + '\r\n');
           // Concat header and response
-          this.response = new Uint8Array(header.byteLength + body.byteLength);
-          this.response.set(header, 0);
-          this.response.set(new Uint8Array(body), header.byteLength);
-          this.responseBodyLength = body.byteLength;
+          var res = new Uint8Array(header.byteLength + content.byteLength);
+          res.set(header, 0);
+          res.set(new Uint8Array(content), header.byteLength);
 
-          plugin.primHandler.signalSemaphoreWithIndex(this.readSemaIndex);
+          this.response = [res];
+          this._signalReadSemaphore();
         },
 
         connect(host, port) {
@@ -198,12 +280,12 @@ function SocketPlugin() {
         dataAvailable() {
           if (this.status == plugin.Socket_InvalidSocket) return false;
           if (this.status == plugin.Socket_Connected) {
-            if (this.responseReadUntil < this.responseBodyLength) {
+            if (this.response && this.response.length > 0) {
               this._signalReadSemaphore();
-              return true;
+              return true; 
             }
-            if (this.responseReadUntil > this.responseBodyLength) {
-              // Signal older Socket implementations plugin they reached the end
+            if (this.canBeClosed) {
+              // Signal older Socket implementations that they reached the end
               this.status = plugin.Socket_OtherEndClosed;
               this._signalConnSemaphore();
             }
@@ -213,10 +295,23 @@ function SocketPlugin() {
 
         recv(count) {
           if (this.response === null) return [];
-          if (this.responseReadUntil >= this.responseBodyLength) return [];
-          var start = this.responseReadUntil;
-          this.responseReadUntil += count;
-          return this.response.slice(start, this.responseReadUntil);
+          var data = this.response[0];
+          if (data.length > count) {
+            var rest = data.slice(count);
+            if (rest) {
+              this.response[0] = rest;
+            } else {
+              this.response.shift();
+            }
+            data = data.slice(0, count);
+          } else {
+            this.response.shift();
+          }
+          if (this.responseReceived && this.response.length === 0) {
+            this.canBeClosed = true;
+          }
+
+          return data;
         },
 
         send(data, start, end) {
@@ -225,8 +320,15 @@ function SocketPlugin() {
           }
           this.lastSend = Date.now();
           newBytes = data.bytes.slice(start, end);
-          this.sendBuffer.set(newBytes, this.sendBufferIndex);
-          this.sendBufferIndex += newBytes.byteLength;
+          if (this.sendBuffer === null) {
+            this.sendBuffer = newBytes;
+          } else {
+            var newLength = this.sendBuffer.byteLength + newBytes.byteLength;
+            var newBuffer = new Uint8Array(newLength);
+            newBuffer.set(this.sendBuffer, 0);
+            newBuffer.set(newBytes, this.sendBuffer.byteLength);
+            this.sendBuffer = newBuffer;
+          }
           // Give image some time to send more data before performing requests
           this.sendTimeout = setTimeout(this._performRequest.bind(this), 50);
           return newBytes.byteLength;

@@ -12,9 +12,10 @@ function SocketPlugin() {
     primHandler: null,
 
     handleCounter: 0,
+    needProxy: new Set(),
 
     // DNS Lookup
-    LastLookup: null,
+    lastLookup: null,
 
     // Constants
     TCP_Socket_Type: 0,
@@ -36,33 +37,60 @@ function SocketPlugin() {
     },
 
     // A socket handle emulates socket behavior
-    _newSocketHandle(sendBufSize, connSemaIndex, readSemaIndex, writeSemaIndex) {
-      var that = this;
+    _newSocketHandle(sendBufSize, connSemaIdx, readSemaIdx, writeSemaIdx) {
+      var plugin = this;
       return {
         host: null,
         port: null,
 
-        connSemaIndex: connSemaIndex,
-        readSemaIndex: readSemaIndex,
-        writeSemaIndex: writeSemaIndex,
+        connSemaIndex: connSemaIdx,
+        readSemaIndex: readSemaIdx,
+        writeSemaIndex: writeSemaIdx,
 
         sendBuffer: new Uint8Array(sendBufSize),
         sendBufferIndex: 0,
         sendTimeout: null,
 
         response: null,
-        responseLength: null,
+        responseBodyLength: null,
         responseReadUntil: 0,
 
-        status: that.Socket_Unconnected,
+        status: plugin.Socket_Unconnected,
 
         _signalSemaphore(semaIndex) {
           if (semaIndex <= 0) return;
-          that.primHandler.signalSemaphoreWithIndex(semaIndex);
+          plugin.primHandler.signalSemaphoreWithIndex(semaIndex);
         },
         _signalConnSemaphore() { this._signalSemaphore(this.connSemaIndex); },
         _signalReadSemaphore() { this._signalSemaphore(this.readSemaIndex); },
         _signalWriteSemaphore() { this._signalSemaphore(this.writeSemaIndex); },
+
+        _hostAndPort() { return this.host + ':' + this.port; },
+
+        _requestNeedsProxy() {
+          return plugin.needProxy.has(this._hostAndPort());
+        },
+
+        _getURL(targetURL, httpMethod, isRetry) {
+          var url = '';
+
+          if (isRetry || this._requestNeedsProxy()) {
+            // crossorigin.me is preferred but does not support PUT/POST
+            if (httpMethod === 'GET') {
+              url += 'https://crossorigin.me/';
+            } else {
+              url += 'https://cors-anywhere.herokuapp.com/';
+            }
+          }
+
+          if (this.port !== 443) {
+            url += 'http://' + this._hostAndPort() + targetURL;
+          } else {
+            url += 'https://' + this.host + targetURL;
+          }
+
+          return url;
+        },
 
         _performRequest() {
           var request = new TextDecoder("utf-8").decode(this.sendBuffer);
@@ -72,18 +100,11 @@ function SocketPlugin() {
           var httpMethod = firstLineItems[0];
           if (httpMethod !== 'GET' && httpMethod !== 'PUT' &&
               httpMethod !== 'POST') {
-            this.status = that.Socket_OtherEndClosed;
+            this.status = plugin.Socket_OtherEndClosed;
             this._signalConnSemaphore();
             return -1;
           }
           var targetURL = firstLineItems[1];
-
-          var url;
-          if (this.port !== 443) {
-            url = 'http://' + this.host + ':' + this.port + targetURL;
-          } else {
-            url = 'https://' + this.host + targetURL;
-          }
 
           var contentType, contentLength;
           for (var i = 1; i < requestLines.length; i++) {
@@ -98,11 +119,12 @@ function SocketPlugin() {
           // Extract possible data to send
           var data = null;
           if (contentLength !== undefined) {
-            data = this.sendBuffer.slice(this.sendBufferIndex - contentLength, this.sendBufferIndex);
+            data = this.sendBuffer.slice(
+                this.sendBufferIndex - contentLength, this.sendBufferIndex);
           }
 
           var httpRequest = new XMLHttpRequest();
-          httpRequest.open(httpMethod, url);
+          httpRequest.open(httpMethod, this._getURL(targetURL, httpMethod));
           if (contentType !== undefined) {
             httpRequest.setRequestHeader('Content-type', contentType);
           }
@@ -110,39 +132,21 @@ function SocketPlugin() {
 
           var thisHandle = this;
           httpRequest.onload = function (oEvent) {
-            var content = this.response;
-            if (content) {
-              // Recreate header
-              var header = new TextEncoder('utf-8').encode(
-                'HTTP/1.0 ' + this.status + ' ' + this.statusText + '\r\n' +
-                this.getAllResponseHeaders() + '\r\n');
-              // Concat header and content
-              thisHandle.response = new Uint8Array(header.byteLength + content.byteLength);
-              thisHandle.response.set(header, 0);
-              thisHandle.response.set(new Uint8Array(content), header.byteLength);
-              thisHandle.responseLength = thisHandle.response.byteLength;
-
-              that.primHandler.signalSemaphoreWithIndex(thisHandle.readSemaIndex);
-            } else {
-              thisHandle.status = that.Socket_OtherEndClosed;
-            }
+            thisHandle._handleResponse(this);
           };
 
           httpRequest.onerror = function(e) {
+            var url = thisHandle._getURL(targetURL, httpMethod, true);
             console.warn('Retrying with CORS proxy: ' + url);
-            var proxy; retry = new XMLHttpRequest();
-            // crossorigin.me is preferred but does not support PUT/POST
-            if (httpMethod === 'GET') {
-              proxy = 'https://crossorigin.me/';
-            } else {
-              proxy = 'https://cors-anywhere.herokuapp.com/';
-            }
-            var proxyURL = proxy + (this.port === 443 ? url : 'http://' + thisHandle.host + targetURL);
-            retry.open(httpMethod, proxyURL);
+            var retry = new XMLHttpRequest();
+            retry.open(httpMethod, url);
             retry.responseType = httpRequest.responseType;
-            retry.onload = httpRequest.onload;
+            retry.onload = function(oEvent) {
+              thisHandle._handleResponse(this);
+              plugin.needProxy.add(thisHandle._hostAndPort());
+            };
             retry.onerror = function() {
-              thisHandle.status = that.Socket_OtherEndClosed;
+              thisHandle.status = plugin.Socket_OtherEndClosed;
               console.error("Failed to download:\n" + url);
             };
             retry.send(data);
@@ -151,37 +155,56 @@ function SocketPlugin() {
           httpRequest.send(data);
         },
 
+        _handleResponse(response) {
+          var body = response.response;
+          if (!body) {
+            this.status = plugin.Socket_OtherEndClosed;
+            return;
+          }
+          // Recreate header
+          var header = new TextEncoder('utf-8').encode(
+            'HTTP/1.0 ' + response.status + ' ' + response.statusText +
+            '\r\n' + response.getAllResponseHeaders() + '\r\n');
+          // Concat header and response
+          this.response = new Uint8Array(header.byteLength + body.byteLength);
+          this.response.set(header, 0);
+          this.response.set(new Uint8Array(body), header.byteLength);
+          this.responseBodyLength = body.byteLength;
+
+          plugin.primHandler.signalSemaphoreWithIndex(this.readSemaIndex);
+        },
+
         connect(host, port) {
           this.host = host;
           this.port = port;
-          this.status = that.Socket_Connected;
+          this.status = plugin.Socket_Connected;
           this._signalConnSemaphore();
           this._signalWriteSemaphore(); // Immediately ready to write
         },
 
         close() {
-          if (this.status == that.Socket_Connected ||
-              this.status == that.Socket_OtherEndClosed ||
-              this.status == that.Socket_WaitingForConnection) {
-            this.status = that.Socket_Unconnected;
+          if (this.status == plugin.Socket_Connected ||
+              this.status == plugin.Socket_OtherEndClosed ||
+              this.status == plugin.Socket_WaitingForConnection) {
+            this.status = plugin.Socket_Unconnected;
             this._signalConnSemaphore();
           }
         },
 
         destroy() {
-          this.status = that.Socket_InvalidSocket;
+          this.status = plugin.Socket_InvalidSocket;
         },
 
         dataAvailable() {
-          if (this.status == that.Socket_InvalidSocket) return false;
-          if (this.status == that.Socket_Connected) {
-            if (this.responseReadUntil < this.responseLength) {
+          if (this.status == plugin.Socket_InvalidSocket) return false;
+          if (this.status == plugin.Socket_Connected) {
+            if (this.responseReadUntil < this.responseBodyLength) {
               this._signalReadSemaphore();
               return true;
             }
-            if (this.responseReadUntil > this.responseLength) {
-              // Signal older Socket implementations that they reached the end
-              this.status = that.Socket_OtherEndClosed;
+            if (this.responseReadUntil > this.responseBodyLength) {
+              // Signal older Socket implementations plugin they reached the end
+              this.status = plugin.Socket_OtherEndClosed;
               this._signalConnSemaphore();
             }
           }
@@ -190,7 +213,7 @@ function SocketPlugin() {
 
         recv(count) {
           if (this.response === null) return [];
-          if (this.responseReadUntil >= this.responseLength) return [];
+          if (this.responseReadUntil >= this.responseBodyLength) return [];
           var start = this.responseReadUntil;
           this.responseReadUntil += count;
           return this.response.slice(start, this.responseReadUntil);
@@ -224,9 +247,9 @@ function SocketPlugin() {
     primitiveResolverNameLookupResult(argCount) {
       if (argCount !== 0) return false;
       var inet;
-      if (this.LastLookup !== null) {
-        inet = this.primHandler.makeStString(this.LastLookup);
-        this.LastLookup = null;
+      if (this.lastLookup !== null) {
+        inet = this.primHandler.makeStString(this.lastLookup);
+        this.lastLookup = null;
       } else {
         inet = this.interpreterProxy.nilObject();
       }
@@ -236,7 +259,7 @@ function SocketPlugin() {
 
     primitiveResolverStartNameLookup(argCount) {
       if (argCount !== 1) return false;
-      this.LastLookup = this.interpreterProxy.stackValue(0).bytesAsString();
+      this.lastLookup = this.interpreterProxy.stackValue(0).bytesAsString();
       this.interpreterProxy.popthenPush(1, this.interpreterProxy.nilObject());
       return true;
     },

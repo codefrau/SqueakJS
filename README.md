@@ -101,6 +101,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2016-06-28: 0.8.3 add SocketPlugin for http/https connections
     2016-04-07: 0.8.2 better touch handling, debugging, CORS, lint
     2016-01-08: 0.8.1 windows keyboard fixes, 'new' operator fixed
     2015-11-24: 0.8 minor fixes

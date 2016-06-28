@@ -71,8 +71,8 @@
         window.location.reload();
     }
     window.onload = function() {
-        // if we have a hash then we just run Squeak with the options provided in the url
-        if (location.hash) {
+        // if we have an image in hash then we just run Squeak with the options provided in the url
+        if (location.hash.match(/\.image(\W|$)/)) {
             return runSqueak();
         }
         // otherwise, we generate the text to display

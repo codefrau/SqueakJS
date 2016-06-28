@@ -39,7 +39,7 @@ try {
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 0.8.2",
+    vmVersion: "SqueakJS 0.8.3",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -3167,7 +3167,14 @@ Object.subclass('Squeak.Interpreter',
         this.breakOnContextChanged = true;
         this.breakOnContextReturned = null;
     },
-    printActiveContext: function() {
+    printActiveContext: function(maxWidth) {
+        if (!maxWidth) maxWidth = 72;
+        function printObj(obj) {
+            var value = obj.sqInstName ? obj.sqInstName() : obj.toString();
+            value = JSON.stringify(value).slice(1, -1);
+            if (value.length > maxWidth - 3) value = value.slice(0, maxWidth - 3) + '...';
+            return value;
+        }
         // temps and stack in current context
         var ctx = this.activeContext;
         var isBlock = typeof ctx.pointers[Squeak.BlockContext_argumentCount] === 'number';
@@ -3183,8 +3190,7 @@ Object.subclass('Squeak.Interpreter',
         var lastTemp = firstTemp + tempCount - 1;
         var stack = '';
         for (var i = stackBottom; i <= stackTop; i++) {
-            var obj = homeCtx.pointers[i];
-            var value = obj.sqInstName ? obj.sqInstName() : obj.toString();
+            var value = printObj(homeCtx.pointers[i]);
             var label = '';
             if (i == stackBottom) label = '=rcvr'; else
             if (i <= lastTemp) label = '=tmp' + (i - firstTemp);
@@ -3196,8 +3202,7 @@ Object.subclass('Squeak.Interpreter',
             var firstArg = this.decodeSqueakSP(1);
             var lastArg = firstArg + nArgs;
             for (var i = firstArg; i <= this.sp; i++) {
-                var obj = ctx.pointers[i];
-                var value = obj.sqInstName ? obj.sqInstName() : obj.toString();
+                var value = printObj(ctx.pointers[i]);
                 var label = '';
                 if (i <= lastArg) label = '=arg' + (i - firstArg);
                 stack += '\nblk[' + i + ']' + label +': ' + value;
@@ -3555,7 +3560,7 @@ Object.subclass('Squeak.Primitives',
             case 167: return false; // Processor.yield
             case 168: return this.primitiveCopyObject(argCount);
             case 169: if (this.oldPrims) return this.primitiveDirectorySetMacTypeAndCreator(argCount);
-                else return this.primitiveNotIdentical(argCount);
+                else return this.pop2andPushBoolIfOK(this.vm.stackValue(1) !== this.vm.stackValue(0)); //new: primitiveNotIdentical
             // Sound Primitives (170-199)
             case 170: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStart', argCount);
             case 171: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStartWithSemaphore', argCount);
@@ -3572,18 +3577,23 @@ Object.subclass('Squeak.Primitives',
             case 182: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'oldprimSampledSoundmixSampleCountintostartingAtleftVolrightVol', argCount);
             case 183: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveApplyReverb', argCount);
             case 184: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixLoopedSampledSound', argCount);
+                break;  // fail 170-184 if fell through
             case 185: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixSampledSound', argCount);
-                break;  // fail 170-185 if fell through
-            // 186-188: was unused
-            case 188: if (!this.oldPrims) return this.primitiveExecuteMethodArgsArray(argCount);
-                break;  // fail 188 if fell through
+                else return this.primitiveExitCriticalSection(argCount);
+            case 186: if (this.oldPrims) break; // unused
+                else return this.primitiveEnterCriticalSection(argCount);
+            case 187: if (this.oldPrims) break; // unused
+                else return this.primitiveTestAndSetOwnershipOfCriticalSection(argCount);
+            case 188: if (this.oldPrims) break; // unused
+                else return this.primitiveExecuteMethodArgsArray(argCount);
             case 189: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundInsertSamples', argCount);
+                else return this.primitiveExecuteMethod(argCount);
             case 190: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStartRecording', argCount);
             case 191: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStopRecording', argCount);
             case 192: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundGetRecordingSampleRate', argCount);
             case 193: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundRecordSamples', argCount);
             case 194: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundSetRecordLevel', argCount);
-                break;  // fail 189-194 if fell through
+                break;  // fail 190-194 if fell through
             case 195: return false; // Context.findNextUnwindContextUpTo:
             case 196: return false; // Context.terminateTo:
             case 197: return false; // Context.findNextHandlerContextStarting
@@ -3647,7 +3657,8 @@ Object.subclass('Squeak.Primitives',
                 else return this.popNandPushIfOK(1, this.microsecondClockUTC());
             case 241: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortRead', argCount);
                 else return this.popNandPushIfOK(1, this.microsecondClockLocal());
-            // 242: unused
+            case 242: if (this.oldPrims) break; // unused
+                else return this.primitiveSignalAtUTCMicroseconds(argCount);
             case 243: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveTranslateStringWithTable', argCount);
             case 244: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindFirstInString' , argCount);
             case 245: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveIndexOfAsciiInString', argCount);
@@ -4809,11 +4820,7 @@ Object.subclass('Squeak.Primitives',
             this.resume(this.removeFirstLinkOfList(sema));
         return;
     },
-    primitiveSignalAtMilliseconds: function(argCount) { //Delay signal:atMs:
-        var msTime = this.stackInteger(0);
-        var sema = this.stackNonInteger(1);
-        var rcvr = this.stackNonInteger(2);
-        if (!this.success) return false;
+    signalAtMilliseconds: function(sema, msTime) {
         if (this.isA(sema, Squeak.splOb_ClassSemaphore)) {
             this.vm.specialObjects[Squeak.splOb_TheTimerSemaphore] = sema;
             this.vm.nextWakeupTick = msTime;
@@ -4821,6 +4828,21 @@ Object.subclass('Squeak.Primitives',
             this.vm.specialObjects[Squeak.splOb_TheTimerSemaphore] = this.vm.nilObj;
             this.vm.nextWakeupTick = 0;
         }
+    },
+    primitiveSignalAtMilliseconds: function(argCount) {
+        var msTime = this.stackInteger(0);
+        var sema = this.stackNonInteger(1);
+        if (!this.success) return false;
+        this.signalAtMilliseconds(sema, msTime);
+        this.vm.popN(argCount); // return self
+        return true;
+    },
+    primitiveSignalAtUTCMicroseconds: function(argCount) {
+        var usecsUTC = this.stackSigned53BitInt(0);
+        var sema = this.stackNonInteger(1);
+        if (!this.success) return false;
+        var msTime = (usecsUTC / 1000 + Squeak.EpochUTC - this.vm.startupTime) & Squeak.MillisecondClockMask;
+        this.signalAtMilliseconds(sema, msTime);
         this.vm.popN(argCount); // return self
         return true;
     },
@@ -4837,6 +4859,15 @@ Object.subclass('Squeak.Primitives',
             if (sema.sqClass == semaClass)
                 this.synchronousSignal(sema);
         }
+    },
+    primitiveEnterCriticalSection: function(argCount) {
+      throw new Error("not implemented yet: primitiveEnterCriticalSection");
+    },
+    primitiveExitCriticalSection: function(argCount) {
+      throw new Error("not implemented yet: primitiveExitCriticalSection");
+    },
+    primitiveTestAndSetOwnershipOfCriticalSection: function(argCount) {
+      throw new Error("not implemented yet: primitiveTestAndSetOwnershipOfCriticalSection");
     },
 },
 'vm functions', {
@@ -4902,7 +4933,7 @@ Object.subclass('Squeak.Primitives',
             case 11: return this.vm.image.gcTenured;        // tenures of surving objects since startup (read-only)
             // 12-20 specific to the translating VM
             // 21   root table size (read-only)
-            // 22   root table overflows since startup (read-only)
+            case 22: return 0;                              // root table overflows since startup (read-only)
             // 23   bytes of extra memory to reserve for VM buffers, plugins, etc.
             // 24   memory threshold above which to shrink object memory (read-write)
             // 25   memory headroom when growing object memory (read-write)

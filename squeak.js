@@ -109,6 +109,8 @@ Function.prototype.subclass = function(classPath /* + more args */ ) {
         "plugins/Matrix2x3Plugin.js",
         "plugins/MiscPrimitivePlugin.js",
         "plugins/ScratchPlugin.js",
+        "plugins/SocketPlugin.js",
+        "plugins/SqueakSSL.js",
         "plugins/SoundGenerationPlugin.js",
         "plugins/StarSqueakPlugin.js",
         "plugins/ZipPlugin.js",

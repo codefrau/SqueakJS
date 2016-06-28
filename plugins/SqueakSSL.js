@@ -4,6 +4,7 @@
  */
 
 function SqueakSSL() {
+  "use strict";
 
   return {
     getModuleName() { return 'SqueakSSL (fake)'; },
@@ -78,6 +79,7 @@ function SqueakSSL() {
       if (handle === undefined) return false;
       var propID = this.interpreterProxy.stackIntegerValue(0);
 
+      var res;
       if (propID === this.SQSSL_PROP_PEERNAME) {
         res = this.primHandler.makeStString('*'); // Match all
       } else {

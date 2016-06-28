@@ -5,6 +5,7 @@
  */
 
 function SocketPlugin() {
+  "use strict";
 
   return {
     getModuleName() { return 'SocketPlugin (http-only)'; },
@@ -310,7 +311,7 @@ function SocketPlugin() {
             window.clearTimeout(this.sendTimeout);
           }
           this.lastSend = Date.now();
-          newBytes = data.bytes.subarray(start, end);
+          var newBytes = data.bytes.subarray(start, end);
           if (this.sendBuffer === null) {
             this.sendBuffer = newBytes;
           } else {
@@ -454,7 +455,7 @@ function SocketPlugin() {
       var end = start + count;
       if (end > data.length) return false;
 
-      res = handle.send(data, start, end);
+      var res = handle.send(data, start, end);
       this.interpreterProxy.popthenPush(1, res);
       return true;
     },

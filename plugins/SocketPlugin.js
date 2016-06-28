@@ -75,30 +75,16 @@ function SocketPlugin() {
           return plugin.needProxy.has(this._hostAndPort());
         },
 
-        _getProxy(httpMethod) {
-          if (httpMethod === 'GET') {
-            // crossorigin.me is preferred but does not support PUT/POST
-            return 'https://crossorigin.me/';
-          }
-          return 'https://cors-anywhere.herokuapp.com/';
-        },
-
-        _getURL(targetURL) {
+        _getURL(targetURL, isRetry) {
           var url = '';
+          if (isRetry || this._requestNeedsProxy()) {
+            url += SqueakJS.options.proxy || 'https://crossorigin.me/';
+          }
           if (this.port !== 443) {
             url += 'http://' + this._hostAndPort() + targetURL;
           } else {
             url += 'https://' + this.host + targetURL;
           }
-          return url;
-        },
-
-        _getFullURL(targetURL, httpMethod, isRetry) {
-          var url = '';
-          if (isRetry || this._requestNeedsProxy()) {
-            url += this._getProxy(httpMethod);
-          }
-          url += this._getURL(targetURL);
           return url;
         },
 
@@ -119,15 +105,15 @@ function SocketPlugin() {
           var data = null;
           for (var i = 1; i < headerLines.length; i++) {
             var line = headerLines[i];
-            if (line.indexOf('Content-Length: ') === 0) {
+            if (line.match(/Content-Length:/i)) {
               var contentLength = parseInt(line.substr(16));
               var end = this.sendBuffer.byteLength;
-              data = this.sendBuffer.slice(end - contentLength, end);
+              data = this.sendBuffer.subarray(end - contentLength, end);
               break;
             }
           }
 
-          if (self.fetch) {
+          if (window.fetch) {
             this._performFetchAPIRequest(targetURL, httpMethod, data, headerLines);
           } else {
             this._performXMLHTTPRequest(targetURL, httpMethod, data, headerLines);
@@ -146,15 +132,15 @@ function SocketPlugin() {
           var init = {
             method: httpMethod,
             headers: headers,
-            body: data
+            body: data,
+            mode: 'cors'
           };
 
-          fetch(this._getFullURL(targetURL, httpMethod, false), init)
+          fetch(this._getURL(targetURL), init)
           .then(thisHandle._handleFetchAPIResponse.bind(thisHandle))
           .catch(function (e) { 
-            var url = thisHandle._getFullURL(targetURL, httpMethod, true);
+            var url = thisHandle._getURL(targetURL, true);
             console.warn('Retrying with CORS proxy: ' + url);
-            init.mode = 'cors';
             fetch(url, init)
             .then(function(res) {
               thisHandle._handleFetchAPIResponse(res);
@@ -198,14 +184,14 @@ function SocketPlugin() {
           var contentType;
           for (var i = 1; i < requestLines.length; i++) {
             var line = requestLines[i];
-            if (line.indexOf('Content-Type: ') === 0) {
+            if (line.match(/Content-Type:/i)) {
               contentType = encodeURIComponent(line.substr(14));
               break;
             }
           }
 
           var httpRequest = new XMLHttpRequest();
-          httpRequest.open(httpMethod, this._getFullURL(targetURL, httpMethod));
+          httpRequest.open(httpMethod, this._getURL(targetURL));
           if (contentType !== undefined) {
             httpRequest.setRequestHeader('Content-type', contentType);
           }
@@ -216,7 +202,7 @@ function SocketPlugin() {
           };
 
           httpRequest.onerror = function(e) {
-            var url = thisHandle._getFullURL(targetURL, httpMethod, true);
+            var url = thisHandle._getURL(targetURL, true);
             console.warn('Retrying with CORS proxy: ' + url);
             var retry = new XMLHttpRequest();
             retry.open(httpMethod, url);
@@ -284,7 +270,7 @@ function SocketPlugin() {
               this._signalReadSemaphore();
               return true; 
             }
-            if (this.canBeClosed) {
+            if (this.responseSentCompletly) {
               // Signal older Socket implementations that they reached the end
               this.status = plugin.Socket_OtherEndClosed;
               this._signalConnSemaphore();
@@ -297,18 +283,18 @@ function SocketPlugin() {
           if (this.response === null) return [];
           var data = this.response[0];
           if (data.length > count) {
-            var rest = data.slice(count);
+            var rest = data.subarray(count);
             if (rest) {
               this.response[0] = rest;
             } else {
               this.response.shift();
             }
-            data = data.slice(0, count);
+            data = data.subarray(0, count);
           } else {
             this.response.shift();
           }
           if (this.responseReceived && this.response.length === 0) {
-            this.canBeClosed = true;
+            this.responseSentCompletly = true;
           }
 
           return data;
@@ -319,7 +305,7 @@ function SocketPlugin() {
             window.clearTimeout(this.sendTimeout);
           }
           this.lastSend = Date.now();
-          newBytes = data.bytes.slice(start, end);
+          newBytes = data.bytes.subarray(start, end);
           if (this.sendBuffer === null) {
             this.sendBuffer = newBytes;
           } else {

@@ -7,7 +7,7 @@ function SqueakSSL() {
   "use strict";
 
   return {
-    getModuleName() { return 'SqueakSSL (fake)'; },
+    getModuleName: function() { return 'SqueakSSL (fake)'; },
     interpreterProxy: null,
     primHandler: null,
 
@@ -31,13 +31,13 @@ function SqueakSSL() {
     SQSSL_PROP_CERTNAME: 1,
     SQSSL_PROP_SERVERNAME: 2,
 
-    setInterpreter(anInterpreter) {
+    setInterpreter: function(anInterpreter) {
       this.interpreterProxy = anInterpreter;
       this.primHandler = this.interpreterProxy.vm.primHandler;
       return true;
     },
 
-    primitiveCreate(argCount) {
+    primitiveCreate: function(argCount) {
       var name = '{SqueakJS SSL #' + (++this.handleCounter) + '}';
       var sqHandle = this.primHandler.makeStString(name);
       sqHandle.handle = true;
@@ -45,19 +45,19 @@ function SqueakSSL() {
       return true;
     },
 
-    primitiveConnect(argCount) {
+    primitiveConnect: function(argCount) {
       if (argCount !== 5) return false;
       this.interpreterProxy.popthenPush(argCount, 0);
       return true;
     },
 
-    primitiveDestroy(argCount) {
+    primitiveDestroy: function(argCount) {
       if (argCount !== 1) return false;
       this.interpreterProxy.popthenPush(1, 1); // Non-zero if successful
       return true;
     },
 
-    primitiveGetIntProperty(argCount) {
+    primitiveGetIntProperty: function(argCount) {
       if (argCount !== 2) return false;
       var handle = this.interpreterProxy.stackObjectValue(1).handle;
       if (handle === undefined) return false;
@@ -73,7 +73,7 @@ function SqueakSSL() {
       return true;
     },
 
-    primitiveGetStringProperty(argCount) {
+    primitiveGetStringProperty: function(argCount) {
       if (argCount !== 2) return false;
       var handle = this.interpreterProxy.stackObjectValue(1).handle;
       if (handle === undefined) return false;
@@ -89,7 +89,7 @@ function SqueakSSL() {
       return true;
     },
 
-    primitiveEncrypt(argCount) {
+    primitiveEncrypt: function(argCount) {
       if (argCount !== 5) return false;
       var handle = this.interpreterProxy.stackObjectValue(4).handle;
       if (handle === undefined) return false;
@@ -102,7 +102,7 @@ function SqueakSSL() {
       return true;
     },
 
-    primitiveDecrypt(argCount) {
+    primitiveDecrypt: function(argCount) {
       if (argCount !== 5) return false;
       var handle = this.interpreterProxy.stackObjectValue(4).handle;
       if (handle === undefined) return false;

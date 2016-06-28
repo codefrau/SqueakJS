@@ -143,12 +143,16 @@ function SocketPlugin() {
             console.warn('Retrying with CORS proxy: ' + url);
             fetch(url, init)
             .then(function(res) {
+              console.log('Success: ' + url);
               thisHandle._handleFetchAPIResponse(res);
               plugin.needProxy.add(thisHandle._hostAndPort());
             })
             .catch(function (e) {
-              thisHandle._otherEndClosed();
-              console.warn(e);
+              // KLUDGE! This is just a workaround for a broken
+              // proxy server - we should remove it when
+              // crossorigin.me is fixed
+              console.warn('Fetch API failed, retrying with XMLHttpRequest');
+              thisHandle._performXMLHTTPRequest(targetURL, httpMethod, data, requestLines);
             });
           });
         },
@@ -208,6 +212,7 @@ function SocketPlugin() {
             retry.open(httpMethod, url);
             retry.responseType = httpRequest.responseType;
             retry.onload = function(oEvent) {
+              console.log('Success: ' + url);
               thisHandle._handleXMLHTTPResponse(this);
               plugin.needProxy.add(thisHandle._hostAndPort());
             };

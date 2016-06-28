@@ -12,9 +12,10 @@ function SocketPlugin() {
     primHandler: null,
 
     handleCounter: 0,
+    needProxy: new Set(),
 
     // DNS Lookup
-    LastLookup: null,
+    lastLookup: null,
 
     // Constants
     TCP_Socket_Type: 0,
@@ -36,113 +37,182 @@ function SocketPlugin() {
     },
 
     // A socket handle emulates socket behavior
-    _newSocketHandle(sendBufSize, connSemaIndex, readSemaIndex, writeSemaIndex) {
-      var that = this;
+    _newSocketHandle(sendBufSize, connSemaIdx, readSemaIdx, writeSemaIdx) {
+      var plugin = this;
       return {
         host: null,
         port: null,
 
-        connSemaIndex: connSemaIndex,
-        readSemaIndex: readSemaIndex,
-        writeSemaIndex: writeSemaIndex,
+        connSemaIndex: connSemaIdx,
+        readSemaIndex: readSemaIdx,
+        writeSemaIndex: writeSemaIdx,
 
-        sendBuffer: new Uint8Array(sendBufSize),
-        sendBufferIndex: 0,
+        sendBuffer: null,
         sendTimeout: null,
 
         response: null,
-        responseLength: null,
         responseReadUntil: 0,
+        responseReceived: false,
 
-        status: that.Socket_Unconnected,
+        status: plugin.Socket_Unconnected,
 
         _signalSemaphore(semaIndex) {
           if (semaIndex <= 0) return;
-          that.primHandler.signalSemaphoreWithIndex(semaIndex);
+          plugin.primHandler.signalSemaphoreWithIndex(semaIndex);
         },
         _signalConnSemaphore() { this._signalSemaphore(this.connSemaIndex); },
         _signalReadSemaphore() { this._signalSemaphore(this.readSemaIndex); },
         _signalWriteSemaphore() { this._signalSemaphore(this.writeSemaIndex); },
 
+        _otherEndClosed() {
+          this.status = plugin.Socket_OtherEndClosed;
+          this._signalConnSemaphore();
+        },
+
+        _hostAndPort() { return this.host + ':' + this.port; },
+
+        _requestNeedsProxy() {
+          return plugin.needProxy.has(this._hostAndPort());
+        },
+
+        _getURL(targetURL, isRetry) {
+          var url = '';
+          if (isRetry || this._requestNeedsProxy()) {
+            url += SqueakJS.options.proxy || 'https://crossorigin.me/';
+          }
+          if (this.port !== 443) {
+            url += 'http://' + this._hostAndPort() + targetURL;
+          } else {
+            url += 'https://' + this.host + targetURL;
+          }
+          return url;
+        },
+
         _performRequest() {
           var request = new TextDecoder("utf-8").decode(this.sendBuffer);
-          var requestLines = request.split('\n');
+          var headerLines = request.split('\r\n\r\n')[0].split('\n');
           // Split header lines and parse first line
-          var firstLineItems = request.split('\n')[0].split(' ');
-          var httpMethod = firstLineItems[0];
+          var firstHeaderLineItems = headerLines[0].split(' ');
+          var httpMethod = firstHeaderLineItems[0];
           if (httpMethod !== 'GET' && httpMethod !== 'PUT' &&
               httpMethod !== 'POST') {
-            this.status = that.Socket_OtherEndClosed;
-            this._signalConnSemaphore();
+            this._otherEndClosed();
             return -1;
           }
-          var targetURL = firstLineItems[1];
-
-          var url;
-          if (this.port !== 443) {
-            url = 'http://' + this.host + ':' + this.port + targetURL;
-          } else {
-            url = 'https://' + this.host + targetURL;
-          }
-
-          var contentType, contentLength;
-          for (var i = 1; i < requestLines.length; i++) {
-            var line = requestLines[i];
-            if (line.indexOf('Content-Type: ') === 0) {
-              contentType = encodeURIComponent(line.substr(14));
-            } else if (line.indexOf('Content-Length: ') === 0) {
-              contentLength = parseInt(line.substr(16));
-            }
-          }
+          var targetURL = firstHeaderLineItems[1];
 
           // Extract possible data to send
           var data = null;
-          if (contentLength !== undefined) {
-            data = this.sendBuffer.slice(this.sendBufferIndex - contentLength, this.sendBufferIndex);
+          for (var i = 1; i < headerLines.length; i++) {
+            var line = headerLines[i];
+            if (line.match(/Content-Length:/i)) {
+              var contentLength = parseInt(line.substr(16));
+              var end = this.sendBuffer.byteLength;
+              data = this.sendBuffer.subarray(end - contentLength, end);
+              break;
+            }
+          }
+
+          if (window.fetch) {
+            this._performFetchAPIRequest(targetURL, httpMethod, data, headerLines);
+          } else {
+            this._performXMLHTTPRequest(targetURL, httpMethod, data, headerLines);
+          }
+        },
+
+        _performFetchAPIRequest(targetURL, httpMethod, data, requestLines) {
+          var thisHandle = this;
+          var headers = {};
+          for (var i = 1; i < requestLines.length; i++) {
+            var lineItems = requestLines[i].split(':');
+            if (lineItems.length === 2) {
+              headers[lineItems[0]] = lineItems[1].trim();
+            }
+          }
+          var init = {
+            method: httpMethod,
+            headers: headers,
+            body: data,
+            mode: 'cors'
+          };
+
+          fetch(this._getURL(targetURL), init)
+          .then(thisHandle._handleFetchAPIResponse.bind(thisHandle))
+          .catch(function (e) { 
+            var url = thisHandle._getURL(targetURL, true);
+            console.warn('Retrying with CORS proxy: ' + url);
+            fetch(url, init)
+            .then(function(res) {
+              thisHandle._handleFetchAPIResponse(res);
+              plugin.needProxy.add(thisHandle._hostAndPort());
+            })
+            .catch(function (e) {
+              thisHandle._otherEndClosed();
+              console.warn(e);
+            });
+          });
+        },
+
+        _handleFetchAPIResponse(res) {
+          if (this.response === null) {
+            var header = ['HTTP/1.0 ', res.status, ' ', res.statusText, '\r\n'];
+            res.headers.forEach(function(value, key, array) {
+              header = header.concat([key, ': ', value, '\r\n']);
+            });
+            header.push('\r\n');
+            this.response = [new TextEncoder('utf-8').encode(header.join(''))];
+          }
+          this._readIncremental(res.body.getReader());
+        },
+
+        _readIncremental(reader) {
+          var thisHandle = this;
+          return reader.read().then(function (result) {
+            if (result.done) {
+              thisHandle.responseReceived = true;
+              return;
+            }
+            thisHandle.response.push(result.value);
+            thisHandle._signalReadSemaphore();
+            return thisHandle._readIncremental(reader);
+          });
+        },
+
+        _performXMLHTTPRequest(targetURL, httpMethod, data, requestLines){
+          var thisHandle = this;
+
+          var contentType;
+          for (var i = 1; i < requestLines.length; i++) {
+            var line = requestLines[i];
+            if (line.match(/Content-Type:/i)) {
+              contentType = encodeURIComponent(line.substr(14));
+              break;
+            }
           }
 
           var httpRequest = new XMLHttpRequest();
-          httpRequest.open(httpMethod, url);
+          httpRequest.open(httpMethod, this._getURL(targetURL));
           if (contentType !== undefined) {
             httpRequest.setRequestHeader('Content-type', contentType);
           }
           httpRequest.responseType = "arraybuffer";
 
-          var thisHandle = this;
           httpRequest.onload = function (oEvent) {
-            var content = this.response;
-            if (content) {
-              // Recreate header
-              var header = new TextEncoder('utf-8').encode(
-                'HTTP/1.0 ' + this.status + ' ' + this.statusText + '\r\n' +
-                this.getAllResponseHeaders() + '\r\n');
-              // Concat header and content
-              thisHandle.response = new Uint8Array(header.byteLength + content.byteLength);
-              thisHandle.response.set(header, 0);
-              thisHandle.response.set(new Uint8Array(content), header.byteLength);
-              thisHandle.responseLength = thisHandle.response.byteLength;
-
-              that.primHandler.signalSemaphoreWithIndex(thisHandle.readSemaIndex);
-            } else {
-              thisHandle.status = that.Socket_OtherEndClosed;
-            }
+            thisHandle._handleXMLHTTPResponse(this);
           };
 
           httpRequest.onerror = function(e) {
+            var url = thisHandle._getURL(targetURL, true);
             console.warn('Retrying with CORS proxy: ' + url);
-            var proxy; retry = new XMLHttpRequest();
-            // crossorigin.me is preferred but does not support PUT/POST
-            if (httpMethod === 'GET') {
-              proxy = 'https://crossorigin.me/';
-            } else {
-              proxy = 'https://cors-anywhere.herokuapp.com/';
-            }
-            var proxyURL = proxy + (this.port === 443 ? url : 'http://' + thisHandle.host + targetURL);
-            retry.open(httpMethod, proxyURL);
+            var retry = new XMLHttpRequest();
+            retry.open(httpMethod, url);
             retry.responseType = httpRequest.responseType;
-            retry.onload = httpRequest.onload;
+            retry.onload = function(oEvent) {
+              thisHandle._handleXMLHTTPResponse(this);
+              plugin.needProxy.add(thisHandle._hostAndPort());
+            };
             retry.onerror = function() {
-              thisHandle.status = that.Socket_OtherEndClosed;
+              thisHandle._otherEndClosed();
               console.error("Failed to download:\n" + url);
             };
             retry.send(data);
@@ -151,37 +221,58 @@ function SocketPlugin() {
           httpRequest.send(data);
         },
 
+        _handleXMLHTTPResponse(response) {
+          this.responseReceived = true;
+
+          var content = response.response;
+          if (!content) {
+            this._otherEndClosed();
+            return;
+          }
+          // Recreate header
+          var header = new TextEncoder('utf-8').encode(
+            'HTTP/1.0 ' + response.status + ' ' + response.statusText +
+            '\r\n' + response.getAllResponseHeaders() + '\r\n');
+          // Concat header and response
+          var res = new Uint8Array(header.byteLength + content.byteLength);
+          res.set(header, 0);
+          res.set(new Uint8Array(content), header.byteLength);
+
+          this.response = [res];
+          this._signalReadSemaphore();
+        },
+
         connect(host, port) {
           this.host = host;
           this.port = port;
-          this.status = that.Socket_Connected;
+          this.status = plugin.Socket_Connected;
           this._signalConnSemaphore();
           this._signalWriteSemaphore(); // Immediately ready to write
         },
 
         close() {
-          if (this.status == that.Socket_Connected ||
-              this.status == that.Socket_OtherEndClosed ||
-              this.status == that.Socket_WaitingForConnection) {
-            this.status = that.Socket_Unconnected;
+          if (this.status == plugin.Socket_Connected ||
+              this.status == plugin.Socket_OtherEndClosed ||
+              this.status == plugin.Socket_WaitingForConnection) {
+            this.status = plugin.Socket_Unconnected;
             this._signalConnSemaphore();
           }
         },
 
         destroy() {
-          this.status = that.Socket_InvalidSocket;
+          this.status = plugin.Socket_InvalidSocket;
         },
 
         dataAvailable() {
-          if (this.status == that.Socket_InvalidSocket) return false;
-          if (this.status == that.Socket_Connected) {
-            if (this.responseReadUntil < this.responseLength) {
+          if (this.status == plugin.Socket_InvalidSocket) return false;
+          if (this.status == plugin.Socket_Connected) {
+            if (this.response && this.response.length > 0) {
               this._signalReadSemaphore();
-              return true;
+              return true; 
             }
-            if (this.responseReadUntil > this.responseLength) {
+            if (this.responseSentCompletly) {
               // Signal older Socket implementations that they reached the end
-              this.status = that.Socket_OtherEndClosed;
+              this.status = plugin.Socket_OtherEndClosed;
               this._signalConnSemaphore();
             }
           }
@@ -190,10 +281,23 @@ function SocketPlugin() {
 
         recv(count) {
           if (this.response === null) return [];
-          if (this.responseReadUntil >= this.responseLength) return [];
-          var start = this.responseReadUntil;
-          this.responseReadUntil += count;
-          return this.response.slice(start, this.responseReadUntil);
+          var data = this.response[0];
+          if (data.length > count) {
+            var rest = data.subarray(count);
+            if (rest) {
+              this.response[0] = rest;
+            } else {
+              this.response.shift();
+            }
+            data = data.subarray(0, count);
+          } else {
+            this.response.shift();
+          }
+          if (this.responseReceived && this.response.length === 0) {
+            this.responseSentCompletly = true;
+          }
+
+          return data;
         },
 
         send(data, start, end) {
@@ -201,9 +305,16 @@ function SocketPlugin() {
             window.clearTimeout(this.sendTimeout);
           }
           this.lastSend = Date.now();
-          newBytes = data.bytes.slice(start, end);
-          this.sendBuffer.set(newBytes, this.sendBufferIndex);
-          this.sendBufferIndex += newBytes.byteLength;
+          newBytes = data.bytes.subarray(start, end);
+          if (this.sendBuffer === null) {
+            this.sendBuffer = newBytes;
+          } else {
+            var newLength = this.sendBuffer.byteLength + newBytes.byteLength;
+            var newBuffer = new Uint8Array(newLength);
+            newBuffer.set(this.sendBuffer, 0);
+            newBuffer.set(newBytes, this.sendBuffer.byteLength);
+            this.sendBuffer = newBuffer;
+          }
           // Give image some time to send more data before performing requests
           this.sendTimeout = setTimeout(this._performRequest.bind(this), 50);
           return newBytes.byteLength;
@@ -224,9 +335,9 @@ function SocketPlugin() {
     primitiveResolverNameLookupResult(argCount) {
       if (argCount !== 0) return false;
       var inet;
-      if (this.LastLookup !== null) {
-        inet = this.primHandler.makeStString(this.LastLookup);
-        this.LastLookup = null;
+      if (this.lastLookup !== null) {
+        inet = this.primHandler.makeStString(this.lastLookup);
+        this.lastLookup = null;
       } else {
         inet = this.interpreterProxy.nilObject();
       }
@@ -236,7 +347,7 @@ function SocketPlugin() {
 
     primitiveResolverStartNameLookup(argCount) {
       if (argCount !== 1) return false;
-      this.LastLookup = this.interpreterProxy.stackValue(0).bytesAsString();
+      this.lastLookup = this.interpreterProxy.stackValue(0).bytesAsString();
       this.interpreterProxy.popthenPush(1, this.interpreterProxy.nilObject());
       return true;
     },

@@ -8,7 +8,7 @@ function SocketPlugin() {
   "use strict";
 
   return {
-    getModuleName() { return 'SocketPlugin (http-only)'; },
+    getModuleName: function() { return 'SocketPlugin (http-only)'; },
     interpreterProxy: null,
     primHandler: null,
 
@@ -31,14 +31,14 @@ function SocketPlugin() {
     Socket_OtherEndClosed: 3,
     Socket_ThisEndClosed: 4,
 
-    setInterpreter(anInterpreter) {
+    setInterpreter: function(anInterpreter) {
       this.interpreterProxy = anInterpreter;
       this.primHandler = this.interpreterProxy.vm.primHandler;
       return true;
     },
 
     // A socket handle emulates socket behavior
-    _newSocketHandle(sendBufSize, connSemaIdx, readSemaIdx, writeSemaIdx) {
+    _newSocketHandle: function(sendBufSize, connSemaIdx, readSemaIdx, writeSemaIdx) {
       var plugin = this;
       return {
         host: null,
@@ -57,26 +57,26 @@ function SocketPlugin() {
 
         status: plugin.Socket_Unconnected,
 
-        _signalSemaphore(semaIndex) {
+        _signalSemaphore: function(semaIndex) {
           if (semaIndex <= 0) return;
           plugin.primHandler.signalSemaphoreWithIndex(semaIndex);
         },
-        _signalConnSemaphore() { this._signalSemaphore(this.connSemaIndex); },
-        _signalReadSemaphore() { this._signalSemaphore(this.readSemaIndex); },
-        _signalWriteSemaphore() { this._signalSemaphore(this.writeSemaIndex); },
+        _signalConnSemaphore: function() { this._signalSemaphore(this.connSemaIndex); },
+        _signalReadSemaphore: function() { this._signalSemaphore(this.readSemaIndex); },
+        _signalWriteSemaphore: function() { this._signalSemaphore(this.writeSemaIndex); },
 
-        _otherEndClosed() {
+        _otherEndClosed: function() {
           this.status = plugin.Socket_OtherEndClosed;
           this._signalConnSemaphore();
         },
 
-        _hostAndPort() { return this.host + ':' + this.port; },
+        _hostAndPort: function() { return this.host + ':' + this.port; },
 
-        _requestNeedsProxy() {
+        _requestNeedsProxy: function() {
           return plugin.needProxy.has(this._hostAndPort());
         },
 
-        _getURL(targetURL, isRetry) {
+        _getURL: function(targetURL, isRetry) {
           var url = '';
           if (isRetry || this._requestNeedsProxy()) {
             url += SqueakJS.options.proxy || 'https://crossorigin.me/';
@@ -89,7 +89,7 @@ function SocketPlugin() {
           return url;
         },
 
-        _performRequest() {
+        _performRequest: function() {
           var request = new TextDecoder("utf-8").decode(this.sendBuffer);
           var headerLines = request.split('\r\n\r\n')[0].split('\n');
           // Split header lines and parse first line
@@ -121,7 +121,7 @@ function SocketPlugin() {
           }
         },
 
-        _performFetchAPIRequest(targetURL, httpMethod, data, requestLines) {
+        _performFetchAPIRequest: function(targetURL, httpMethod, data, requestLines) {
           var thisHandle = this;
           var headers = {};
           for (var i = 1; i < requestLines.length; i++) {
@@ -158,7 +158,7 @@ function SocketPlugin() {
           });
         },
 
-        _handleFetchAPIResponse(res) {
+        _handleFetchAPIResponse: function(res) {
           if (this.response === null) {
             var header = ['HTTP/1.0 ', res.status, ' ', res.statusText, '\r\n'];
             res.headers.forEach(function(value, key, array) {
@@ -170,7 +170,7 @@ function SocketPlugin() {
           this._readIncremental(res.body.getReader());
         },
 
-        _readIncremental(reader) {
+        _readIncremental: function(reader) {
           var thisHandle = this;
           return reader.read().then(function (result) {
             if (result.done) {
@@ -183,7 +183,7 @@ function SocketPlugin() {
           });
         },
 
-        _performXMLHTTPRequest(targetURL, httpMethod, data, requestLines){
+        _performXMLHTTPRequest: function(targetURL, httpMethod, data, requestLines){
           var thisHandle = this;
 
           var contentType;
@@ -227,7 +227,7 @@ function SocketPlugin() {
           httpRequest.send(data);
         },
 
-        _handleXMLHTTPResponse(response) {
+        _handleXMLHTTPResponse: function(response) {
           this.responseReceived = true;
 
           var content = response.response;
@@ -248,7 +248,7 @@ function SocketPlugin() {
           this._signalReadSemaphore();
         },
 
-        connect(host, port) {
+        connect: function(host, port) {
           this.host = host;
           this.port = port;
           this.status = plugin.Socket_Connected;
@@ -256,7 +256,7 @@ function SocketPlugin() {
           this._signalWriteSemaphore(); // Immediately ready to write
         },
 
-        close() {
+        close: function() {
           if (this.status == plugin.Socket_Connected ||
               this.status == plugin.Socket_OtherEndClosed ||
               this.status == plugin.Socket_WaitingForConnection) {
@@ -265,11 +265,11 @@ function SocketPlugin() {
           }
         },
 
-        destroy() {
+        destroy: function() {
           this.status = plugin.Socket_InvalidSocket;
         },
 
-        dataAvailable() {
+        dataAvailable: function() {
           if (this.status == plugin.Socket_InvalidSocket) return false;
           if (this.status == plugin.Socket_Connected) {
             if (this.response && this.response.length > 0) {
@@ -285,7 +285,7 @@ function SocketPlugin() {
           return false;
         },
 
-        recv(count) {
+        recv: function(count) {
           if (this.response === null) return [];
           var data = this.response[0];
           if (data.length > count) {
@@ -306,7 +306,7 @@ function SocketPlugin() {
           return data;
         },
 
-        send(data, start, end) {
+        send: function(data, start, end) {
           if (this.sendTimeout !== null) {
             window.clearTimeout(this.sendTimeout);
           }
@@ -328,17 +328,17 @@ function SocketPlugin() {
       };
     },
 
-    primitiveHasSocketAccess(argCount) {
+    primitiveHasSocketAccess: function(argCount) {
       this.interpreterProxy.popthenPush(1, this.interpreterProxy.trueObject());
       return true;
     },
 
-    primitiveInitializeNetwork(argCount) {
+    primitiveInitializeNetwork: function(argCount) {
       this.interpreterProxy.pop(1);
       return true;
     },
 
-    primitiveResolverNameLookupResult(argCount) {
+    primitiveResolverNameLookupResult: function(argCount) {
       if (argCount !== 0) return false;
       var inet;
       if (this.lastLookup !== null) {
@@ -351,19 +351,19 @@ function SocketPlugin() {
       return true;
     },
 
-    primitiveResolverStartNameLookup(argCount) {
+    primitiveResolverStartNameLookup: function(argCount) {
       if (argCount !== 1) return false;
       this.lastLookup = this.interpreterProxy.stackValue(0).bytesAsString();
       this.interpreterProxy.popthenPush(1, this.interpreterProxy.nilObject());
       return true;
     },
 
-    primitiveResolverStatus(argCount) {
+    primitiveResolverStatus: function(argCount) {
       this.interpreterProxy.popthenPush(1, this.Resolver_Ready);
       return true;
     },
 
-    primitiveSocketConnectionStatus(argCount) {
+    primitiveSocketConnectionStatus: function(argCount) {
       if (argCount !== 1) return false;
       var handle = this.interpreterProxy.stackObjectValue(0).handle;
       var status = handle.status;
@@ -372,7 +372,7 @@ function SocketPlugin() {
       return true;
     },
 
-    primitiveSocketConnectToPort(argCount) {
+    primitiveSocketConnectToPort: function(argCount) {
       if (argCount !== 3) return false;
       var handle = this.interpreterProxy.stackObjectValue(2).handle;
       if (handle === undefined) return false;
@@ -384,7 +384,7 @@ function SocketPlugin() {
       return true;
     },
 
-    primitiveSocketCloseConnection(argCount) {
+    primitiveSocketCloseConnection: function(argCount) {
       if (argCount !== 1) return false;
       var handle = this.interpreterProxy.stackObjectValue(0).handle;
       if (handle === undefined) return false;
@@ -393,7 +393,7 @@ function SocketPlugin() {
       return true;
     },
 
-    primitiveSocketCreate3Semaphores(argCount) {
+    primitiveSocketCreate3Semaphores: function(argCount) {
       if (argCount !== 7) return false;
       var writeSemaIndex = this.interpreterProxy.stackIntegerValue(0);
       var readSemaIndex = this.interpreterProxy.stackIntegerValue(1);
@@ -409,7 +409,7 @@ function SocketPlugin() {
       return true;
     },
 
-    primitiveSocketDestroy(argCount) {
+    primitiveSocketDestroy: function(argCount) {
       if (argCount !== 1) return false;
       var handle = this.interpreterProxy.stackObjectValue(0).handle;
       if (handle === undefined) return false;
@@ -418,7 +418,7 @@ function SocketPlugin() {
       return true;
     },
 
-    primitiveSocketReceiveDataAvailable(argCount) {
+    primitiveSocketReceiveDataAvailable: function(argCount) {
       if (argCount !== 1) return false;
       var handle = this.interpreterProxy.stackObjectValue(0).handle;
       if (handle === undefined) return false;
@@ -430,7 +430,7 @@ function SocketPlugin() {
       return true;
     },
 
-    primitiveSocketReceiveDataBufCount(argCount) {
+    primitiveSocketReceiveDataBufCount: function(argCount) {
       if (argCount !== 4) return false;
       var handle = this.interpreterProxy.stackObjectValue(3).handle;
       if (handle === undefined) return false;
@@ -444,7 +444,7 @@ function SocketPlugin() {
       return true;
     },
 
-    primitiveSocketSendDataBufCount(argCount) {
+    primitiveSocketSendDataBufCount: function(argCount) {
       if (argCount !== 4) return false;
       var handle = this.interpreterProxy.stackObjectValue(3).handle;
       if (handle === undefined) return false;
@@ -460,7 +460,7 @@ function SocketPlugin() {
       return true;
     },
 
-    primitiveSocketSendDone(argCount) {
+    primitiveSocketSendDone: function(argCount) {
       if (argCount !== 1) return false;
       this.interpreterProxy.popthenPush(1, this.interpreterProxy.trueObject());
       return true;

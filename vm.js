@@ -5436,9 +5436,13 @@ Object.subclass('Squeak.Primitives',
     primitiveFileClose: function(argCount) {
         var handle = this.stackNonInteger(0);
         if (!this.success || !handle.file) return false;
-        this.fileClose(handle.file);
-        this.vm.breakOut();     // return to JS asap so async file handler can run
-        handle.file = null;
+        if (typeof handle.file === "string") {
+             this.fileConsoleFlush(handle.file);
+        } else {
+            this.fileClose(handle.file);
+            this.vm.breakOut();     // return to JS asap so async file handler can run
+            handle.file = null;
+        }
         return this.popNIfOK(argCount);
     },
     primitiveFileDelete: function(argCount) {
@@ -5451,8 +5455,12 @@ Object.subclass('Squeak.Primitives',
     primitiveFileFlush: function(argCount) {
         var handle = this.stackNonInteger(0);
         if (!this.success || !handle.file) return false;
-        Squeak.flushFile(handle.file);
-        this.vm.breakOut();     // return to JS asap so async file handler can run
+        if (typeof handle.file === "string") {
+             this.fileConsoleFlush(handle.file);
+        } else {
+            Squeak.flushFile(handle.file);
+            this.vm.breakOut();     // return to JS asap so async file handler can run
+        }
         return this.popNIfOK(argCount);
     },
     primitiveFileGetPosition: function(argCount) {
@@ -5461,6 +5469,13 @@ Object.subclass('Squeak.Primitives',
         this.popNandPushIfOK(argCount + 1, this.makeLargeIfNeeded(handle.filePos));
         return true;
     },
+    makeFileHandle: function(filename, file, writeFlag) {
+        var handle = this.makeStString("squeakjs:" + filename);
+        handle.file = file;             // shared between handles
+        handle.fileWrite = writeFlag;   // specific to this handle
+        handle.filePos = 0;             // specific to this handle
+        return handle;
+    },
     primitiveFileOpen: function(argCount) {
         var writeFlag = this.stackBoolean(0),
             fileNameObj = this.stackNonInteger(1);
@@ -5468,10 +5483,7 @@ Object.subclass('Squeak.Primitives',
         var fileName = this.filenameFromSqueak(fileNameObj.bytesAsString()),
             file = this.fileOpen(fileName, writeFlag);
         if (!file) return false;
-        var handle = this.makeStArray([file.name]); // array contents irrelevant
-        handle.file = file;             // shared between handles
-        handle.fileWrite = writeFlag;   // specific to this handle
-        handle.filePos = 0;             // specific to this handle
+        var handle = this.makeFileHandle(file.name, file, writeFlag);
         this.popNandPushIfOK(argCount+1, handle);
         return true;
     },
@@ -5523,8 +5535,13 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     primitiveFileStdioHandles: function(argCount) {
-        this.vm.warnOnce("Not yet implemented: primitiveFileStdioHandles");
-        return false;
+        var handles = [
+            null, // stdin
+            this.makeFileHandle('console.log', 'log', true),
+            this.makeFileHandle('console.error', 'error', true),
+        ];
+        this.popNandPushIfOK(argCount + 1, this.makeStArray(handles));
+        return true;
     },
     primitiveFileTruncate: function(argCount) {
         console.warn("Not yet implemented: primitiveFileTruncate");
@@ -5544,6 +5561,11 @@ Object.subclass('Squeak.Primitives',
         if (!array) return false;
         if (startIndex < 0 || startIndex + count > array.length)
             return false;
+        if (typeof handle.file === "string") {
+            this.fileConsoleWrite(handle.file, array, startIndex, count);
+            this.popNandPushIfOK(argCount+1, count);
+            return true;
+        }
         return this.fileContentsDo(handle.file, function(file) {
             var srcArray = array,
                 dstArray = file.contents || [];
@@ -5632,6 +5654,27 @@ Object.subclass('Squeak.Primitives',
         }
         return true;
     },
+    fileConsoleBuffer: {
+        log: '',
+        error: ''
+    },
+    fileConsoleWrite: function(logOrError, array, startIndex, count) {
+        var bytes = array.subarray(startIndex, startIndex + count),
+            buffer = this.fileConsoleBuffer[logOrError] + Squeak.bytesAsString(bytes),
+            lines = buffer.match('([^]*)\n');
+        if (lines) {
+            console[logOrError](lines[1]);  // up to last newline
+            buffer = lines[2];              // after last newline
+        }
+        this.fileConsoleBuffer[logOrError] = buffer;
+    },
+    fileConsoleFlush: function(logOrError) {
+        var buffer = this.fileConsoleBuffer[logOrError];
+        if (buffer) {
+            console[logOrError](buffer);
+            this.fileConsoleBuffer[logOrError] = '';
+        }
+    },
 },
 'DropPlugin', {
     primitiveDropRequestFileHandle: function(argCount) {
@@ -5642,10 +5685,7 @@ Object.subclass('Squeak.Primitives',
         var fileName = fileNames[index - 1],
             file = this.fileOpen(fileName, false);
         if (!file) return false;
-        var handle = this.makeStArray([fileName]); // array contents irrelevant
-        handle.file = file;             // shared between handles
-        handle.fileWrite = false;       // specific to this handle
-        handle.filePos = 0;             // specific to this handle
+        var handle = this.makeFileHandle(fileName, file, false);
         this.popNandPushIfOK(argCount+1, handle);
         return true;
     },

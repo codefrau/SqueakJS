@@ -126,7 +126,10 @@
                         else runSqueak(imageName);
                     });
                 }
-                reader.onerror = function() { alert("Failed to read " + f.name); }
+                reader.onerror = function() {
+                    alert("Failed to read " + f.name); 
+                    drop.style.borderColor = "";
+                }
                 reader.readAsArrayBuffer(f);
             });
             return false;

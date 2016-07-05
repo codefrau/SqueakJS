@@ -2299,7 +2299,7 @@ Object.subclass('Squeak.Interpreter',
         this.breakOutOfInterpreter = this.breakOutOfInterpreter || true; // do not overwrite break string
     },
     nextByte: function() {
-        return this.methodBytes[this.pc++];
+        return this.method.bytes[this.pc++];
     },
     nono: function() {
         throw Error("Oh No!");
@@ -2568,7 +2568,6 @@ Object.subclass('Squeak.Interpreter',
         //Following are more efficient than fetchContextRegisters() in newActiveContext()
         this.homeContext = newContext;
         this.method = newMethod;
-        this.methodBytes = newMethod.bytes;
         this.pc = newPC;
         this.sp = newSP;
         this.storeContextRegisters(); // not really necessary, I claim
@@ -2804,7 +2803,6 @@ Object.subclass('Squeak.Interpreter',
         }
         this.receiver = this.homeContext.pointers[Squeak.Context_receiver];
         this.method = meth;
-        this.methodBytes = meth.bytes;
         this.pc = this.decodeSqueakPC(ctxt.pointers[Squeak.Context_instructionPointer], meth);
         this.sp = this.decodeSqueakSP(ctxt.pointers[Squeak.Context_stackPointer]);
     },

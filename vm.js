@@ -5272,9 +5272,10 @@ Object.subclass('Squeak.Primitives',
         if (ctx) {
             var beep = ctx.createOscillator();
             beep.connect(ctx.destination);
+            beep.type = 'square';
             beep.frequency.value = 880;
-            beep.noteOn(0);
-            beep.noteOff(ctx.currentTime + 0.2);
+            beep.start();
+            beep.stop(ctx.currentTime + 0.2);
         } else {
             this.vm.warnOnce("could not initialize audio");
         }

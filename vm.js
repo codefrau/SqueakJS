@@ -2575,7 +2575,6 @@ Object.subclass('Squeak.Interpreter',
         this.method = newMethod;
         this.pc = newPC;
         this.sp = newSP;
-        this.storeContextRegisters(); // not really necessary, I claim
         this.receiver = newContext.pointers[Squeak.Context_receiver];
         if (this.receiver !== newRcvr)
             throw Error("receivers don't match");

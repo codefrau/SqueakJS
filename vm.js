@@ -6306,26 +6306,24 @@ Object.subclass('Squeak.Primitives',
             var args = [];
             for (var i = 0; i < numArgs; i++)
                 args.push(arguments[i]);
-            var continuation = arguments[numArgs];
-            function evalAsync() {
-                squeak.js_executeCallbackAsync(block, args, continuation);
-            }
-            setTimeout(evalAsync, 0);
+            return new Promise(function(resolve, reject) {
+                function evalAsync() {
+                    squeak.js_executeCallbackAsync(block, args, resolve, reject);
+                }
+                setTimeout(evalAsync, 0);
+            });
         }
     },
-    js_executeCallbackAsync: function(block, args, continuation) {
+    js_executeCallbackAsync: function(block, args, resolve, reject) {
         if (!this.js_activeCallback && !this.vm.frozen) {
-            var result = this.js_executeCallback(block, args);
-            if (typeof continuation === "function") {
-                continuation(result);
-            }
+            this.js_executeCallback(block, args, resolve, reject);
         } else {
             var squeak = this;
-            function again() {squeak.js_executeCallbackAsync(block, args, continuation)}
+            function again() {squeak.js_executeCallbackAsync(block, args, resolve, reject)}
             setTimeout(again, 0);
         }
     },
-    js_executeCallback: function(block, args) {
+    js_executeCallback: function(block, args, resolve, reject) {
         if (this.js_activeCallback)
             return console.error("Callback: already active");
         // make block and args available to primitiveGetActiveCallback
@@ -6345,10 +6343,10 @@ Object.subclass('Squeak.Primitives',
         this.js_activeCallback = null;
         if (result) {
             // return result to JS caller as JS object or string
-            try { return this.js_fromStObject(result); }
-            catch(err) { return result.toString(); }
+            try { resolve(this.js_fromStObject(result)); }
+            catch(err) { resolve(result.toString()); }
         } else {
-            console.error("Callback error: " + (this.vm.frozen ? "frozen" : "timeout"));
+            reject(Error("SqueakJS timeout"));
         }
     },
     js_objectOrGlobal: function(sqObject) {

@@ -389,7 +389,7 @@ to single-step.
                 this.generateClosureTemps(count, popValues);
                 return;
             case 0x8B:
-                throw Error("unusedBytecode");
+                throw Error("callPrimitive bytecode not implemented yet");
             // remote push from temp vector
             case 0x8C:
                 byte2 = this.method.bytes[this.pc++];

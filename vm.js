@@ -2155,7 +2155,9 @@ Object.subclass('Squeak.Interpreter',
             // Closures
             case 0x8A: this.pushNewArray(this.nextByte());   // create new temp vector
                 return;
-            case 0x8B: this.nono(); return;
+            case 0x8B: b2 = this.nextByte(); // invoke primitive number
+                this.callPrimitive(this.nextByte() * 256 + b2);
+                return;
             case 0x8C: b2 = this.nextByte(); // remote push from temp vector
                 this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2]);
                 return;
@@ -2418,6 +2420,9 @@ Object.subclass('Squeak.Interpreter',
         this.send(this.specialSelectors[lobits*2],
             this.specialSelectors[(lobits*2)+1],
             false);  //specialSelectors is  {...sel,nArgs,sel,nArgs,...)
+    },
+    callPrimitive: function(index) {
+        throw Error("callPrimitive bytecode not implemented yet")
     },
 },
 'closures', {

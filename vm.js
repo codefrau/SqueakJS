@@ -6136,8 +6136,6 @@ Object.subclass('Squeak.Primitives',
             isGlobal = !('jsObject' in rcvr),
             jsResult = null;
         try {
-            // prevent callbacks while running this primitive
-            this.js_activeCallback = "Callbacks must be asynchronous";
             var propName = selector.match(/([^:]*)/)[0];
             if (!isGlobal && propName === "new") {
                 if (args.length === 0) {
@@ -6170,9 +6168,6 @@ Object.subclass('Squeak.Primitives',
             }
         } catch(err) {
             return this.js_setError(err.message);
-        } finally {
-            // allow callbacks
-            this.js_activeCallback = null;
         }
         var stResult = this.makeStObject(jsResult, rcvr.sqClass);
         return this.popNandPushIfOK(argCount + 1, stResult);
@@ -6315,10 +6310,7 @@ Object.subclass('Squeak.Primitives',
     },
     js_executeCallback: function(block, args) {
         if (this.js_activeCallback)
-            if (typeof this.js_activeCallback == "string")
-                throw Error(this.js_activeCallback);
-            else
-                return console.error("Callback: already active");
+            return console.error("Callback: already active");
         // make block and args available to primitiveGetActiveCallback
         this.js_activeCallback = {
             block: block,

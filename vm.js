@@ -4580,7 +4580,7 @@ Object.subclass('Squeak.Primitives',
             rcvr.sqClass !== arg.sqClass ||
             length !== arg.pointersSize()) return false;
         for (var i = 0; i < length; i++)
-            arg.pointers[i] = rcvr.pointers[i];
+            rcvr.pointers[i] = arg.pointers[i];
         this.vm.pop(argCount);
         return true;
     },

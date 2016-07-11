@@ -6233,13 +6233,8 @@ Object.subclass('Squeak.Primitives',
         if (!callback) return this.js_setError("No active callback");
         try {
             // make array with expected number of arguments for block
-            var numArgs = callback.block.pointers[Squeak.BlockContext_argumentCount],
-                args = [];
-            if (typeof numArgs !== 'number')
-                numArgs = callback.block.pointers[Squeak.Closure_numArgs];
-            for (var i = 0; i < numArgs; i++)
-                args.push(callback.args[i]);
-            return this.popNandPushIfOK(argCount, this.makeStArray(args, proxyClass));
+            var array = this.makeStArray(callback.args, proxyClass);
+            return this.popNandPushIfOK(argCount, array);
         } catch(err) {
             return this.js_setError(err.message);
         }
@@ -6248,7 +6243,7 @@ Object.subclass('Squeak.Primitives',
         if (argCount !== 1) return false;
         if (!this.js_activeCallback)
             return this.js_setError("No active callback");
-        // set result so the interpret loop in js_fromStBlock() terminates
+        // set result so the interpret loop in js_executeCallback() terminates
         this.js_activeCallback.result = this.vm.pop();
         this.vm.breakOut(); // stop interpreting ASAP
         return true;
@@ -6303,12 +6298,32 @@ Object.subclass('Squeak.Primitives',
             throw Error("CallbackSemaphore not set");
         // block holds onto thisContext
         this.vm.reclaimableContextCount = 0;
+        var numArgs = block.pointers[Squeak.BlockContext_argumentCount];
+        if (typeof numArgs !== 'number')
+            numArgs = block.pointers[Squeak.Closure_numArgs];
         var squeak = this;
         return function evalSqueakBlock(/* arguments */) {
-            return squeak.js_executeCallback(block, arguments);
+            var args = [];
+            for (var i = 0; i < numArgs; i++)
+                args.push(arguments[i]);
+            return new Promise(function(resolve, reject) {
+                function evalAsync() {
+                    squeak.js_executeCallbackAsync(block, args, resolve, reject);
+                }
+                setTimeout(evalAsync, 0);
+            });
         }
     },
-    js_executeCallback: function(block, args) {
+    js_executeCallbackAsync: function(block, args, resolve, reject) {
+        if (!this.js_activeCallback && !this.vm.frozen) {
+            this.js_executeCallback(block, args, resolve, reject);
+        } else {
+            var squeak = this;
+            function again() {squeak.js_executeCallbackAsync(block, args, resolve, reject)}
+            setTimeout(again, 0);
+        }
+    },
+    js_executeCallback: function(block, args, resolve, reject) {
         if (this.js_activeCallback)
             return console.error("Callback: already active");
         // make block and args available to primitiveGetActiveCallback
@@ -6328,10 +6343,10 @@ Object.subclass('Squeak.Primitives',
         this.js_activeCallback = null;
         if (result) {
             // return result to JS caller as JS object or string
-            try { return this.js_fromStObject(result); }
-            catch(err) { return result.toString(); }
+            try { resolve(this.js_fromStObject(result)); }
+            catch(err) { resolve(result.toString()); }
         } else {
-            console.error("Callback error: " + (this.vm.frozen ? "frozen" : "timeout"));
+            reject(Error("SqueakJS timeout"));
         }
     },
     js_objectOrGlobal: function(sqObject) {

@@ -4706,7 +4706,7 @@ Object.subclass('Squeak.Primitives',
     primitiveSuspend: function() {
         if (this.vm.top() !== this.activeProcess()) return false;
         this.vm.popNandPush(1, this.vm.nilObj);
-        this.transferTo(this.pickTopProcess());
+        this.transferTo(this.wakeHighestPriority());
         return true;
     },
     getScheduler: function() {
@@ -4748,7 +4748,7 @@ Object.subclass('Squeak.Primitives',
             this.vm.breakNow();
         }
     },
-    pickTopProcess: function() { // aka wakeHighestPriority
+    wakeHighestPriority: function() {
         //Return the highest priority process that is ready to run.
         //Note: It is a fatal VM error if there is no runnable process.
         var schedLists = this.getScheduler().pointers[Squeak.ProcSched_processLists];
@@ -4805,7 +4805,7 @@ Object.subclass('Squeak.Primitives',
             sema.pointers[Squeak.Semaphore_excessSignals] = excessSignals - 1;
         else {
             this.linkProcessToList(this.activeProcess(), sema);
-            this.transferTo(this.pickTopProcess());
+            this.transferTo(this.wakeHighestPriority());
         }
         return true;
     },

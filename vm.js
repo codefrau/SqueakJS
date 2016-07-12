@@ -4704,8 +4704,7 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     primitiveSuspend: function() {
-        var activeProc = this.getScheduler().pointers[Squeak.ProcSched_activeProcess];
-        if (this.vm.top() !== activeProc) return false;
+        if (this.vm.top() !== this.activeProcess()) return false;
         this.vm.popNandPush(1, this.vm.nilObj);
         this.transferTo(this.pickTopProcess());
         return true;
@@ -4714,8 +4713,11 @@ Object.subclass('Squeak.Primitives',
         var assn = this.vm.specialObjects[Squeak.splOb_SchedulerAssociation];
         return assn.pointers[Squeak.Assn_value];
     },
+    activeProcess: function() {
+        return this.getScheduler().pointers[Squeak.ProcSched_activeProcess];
+    },
     resume: function(newProc) {
-        var activeProc = this.getScheduler().pointers[Squeak.ProcSched_activeProcess];
+        var activeProc = this.activeProcess();
         var activePriority = activeProc.pointers[Squeak.Proc_priority];
         var newPriority = newProc.pointers[Squeak.Proc_priority];
         if (newPriority > activePriority) {
@@ -4802,8 +4804,7 @@ Object.subclass('Squeak.Primitives',
         if (excessSignals > 0)
             sema.pointers[Squeak.Semaphore_excessSignals] = excessSignals - 1;
         else {
-            var activeProc = this.getScheduler().pointers[Squeak.ProcSched_activeProcess];
-            this.linkProcessToList(activeProc, sema);
+            this.linkProcessToList(this.activeProcess(), sema);
             this.transferTo(this.pickTopProcess());
         }
         return true;
@@ -4968,8 +4969,7 @@ Object.subclass('Squeak.Primitives',
     primitiveSnapshot: function(argCount) {
         this.vm.popNandPush(1, this.vm.trueObj);        // put true on stack for saved snapshot
         this.vm.storeContextRegisters();                // store current state for snapshot
-        var proc = this.getScheduler().pointers[Squeak.ProcSched_activeProcess];
-        proc.pointers[Squeak.Proc_suspendedContext] = this.vm.activeContext; // store initial context
+        this.activeProcess().pointers[Squeak.Proc_suspendedContext] = this.vm.activeContext; // store initial context
         this.vm.image.fullGC("snapshot");               // before cleanup so traversal works
         var buffer = this.vm.image.writeToBuffer();
         Squeak.flushAllFiles();                         // so there are no more writes pending

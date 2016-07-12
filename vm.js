@@ -4915,6 +4915,7 @@ Object.subclass('Squeak.Primitives',
                 return this.popNandPushIfOK(1, arrayObj);
             case 1:
                 var parm = this.stackInteger(0);
+                if (parm < 1 || parm > paramsArraySize) return false;
                 return this.popNandPushIfOK(2, this.makeStObject(this.vmParameterAt(parm)));
             case 2:
                 return this.popNandPushIfOK(3, 0);

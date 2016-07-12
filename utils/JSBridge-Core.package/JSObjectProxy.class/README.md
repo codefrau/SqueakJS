@@ -18,23 +18,34 @@ obj at: #complexProp put: {#a -> 3. #b -> 4}.
 obj at: #someMethod put: (JS Function new: 'return this.complexProp.a + this.complexProp.b').
 {obj someProp. obj complexProp. obj someMethod}
 
-"Inspect all properties in global navigator object"
+"Inspect all properties in global window object"
 | object propNames propValues |
-object := JS navigator.
+object := JS window.
 propNames := JS Object keys: object.
 propValues := (0 to: propNames length - 1) collect: [:i |
 	(propNames at: i) -> (object at: (propNames at: i))].
 (propValues as: Dictionary) inspect
 
-"A Squeak block becomes a JavaScript callback function"
+"A Squeak block becomes a JavaScript function"
 JS at: #sqPlus put: [:arg0 :arg1 |
 	Transcript show: 'sqPlus called with ', arg0 asString, ' and ', arg1 asString; cr.
 	arg0 + arg1].
-"JavaScript can call it later"
-JS setTimeout: 'alert("Result: " + sqPlus(3,4))' ms: 1000
-"also try e.g. sqPlus(3.5, 4.5) in the browser's console"
 
-"Load jQuery, and compile a helper method"
+"It can be called from JavaScript (open transcript to see)"
+JS eval: 'sqPlus(3, 4)'.
+
+"It returns a Promise. When resolved, you can access the result"
+JS eval: 'sqPlus(3, 4).then(function(result) { 
+	console.log(result);
+})'.
+
+"Which even works from Squeak ..."
+(JS sqPlus: 3 and: 4) then: [:result | JS alert: result].
+
+"If you don't need a result, just ignore the Promise"
+JS setTimeout: [JS alert: 'Hi'] ms: 1000.
+
+"Now for some fun: Load jQuery, and compile a helper method"
 | script |
 (JS at: #jQuery) ifNil: [
 	script := JS document createElement: 'SCRIPT'.

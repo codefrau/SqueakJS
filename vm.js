@@ -153,6 +153,8 @@ Object.extend(Squeak,
     LinkedList_lastLink: 1,
     //Semaphore layout:
     Semaphore_excessSignals: 2,
+    //Mutex layout:
+    Mutex_owner: 2,
     //Process layout:
     Proc_suspendedContext: 1,
     Proc_priority: 2,
@@ -4864,14 +4866,48 @@ Object.subclass('Squeak.Primitives',
         }
     },
     primitiveEnterCriticalSection: function(argCount) {
-      throw new Error("not implemented yet: primitiveEnterCriticalSection");
-    },
+        if (argCount > 1) return false;
+        var mutex = this.vm.stackValue(argCount);
+        var activeProc = argCount ? this.vm.top() : this.activeProcess();
+        var owningProcess = mutex.pointers[Squeak.Mutex_owner];
+        if (owningProcess.isNil) {
+            mutex.pointers[Squeak.Mutex_owner] = activeProc;
+            this.popNandPushIfOK(argCount + 1, this.vm.falseObj);
+        } else if (owningProcess === activeProc) {
+            this.popNandPushIfOK(argCount + 1, this.vm.trueObj);
+        } else {
+            this.popNandPushIfOK(argCount + 1, this.vm.falseObj);
+            this.linkProcessToList(activeProc, mutex);
+            this.transferTo(this.wakeHighestPriority());
+        }
+        return true;
+	},
     primitiveExitCriticalSection: function(argCount) {
-      throw new Error("not implemented yet: primitiveExitCriticalSection");
+        var criticalSection = this.vm.top();
+        if (this.isEmptyList(criticalSection)) {
+            criticalSection.pointers[Squeak.Mutex_owner] = this.vm.nilObj;
+        } else {
+            var owningProcess = this.removeFirstLinkOfList(criticalSection);
+            criticalSection.pointers[Squeak.Mutex_owner] = owningProcess;
+            this.resume(owningProcess);
+        }
+        return true;
     },
     primitiveTestAndSetOwnershipOfCriticalSection: function(argCount) {
-      throw new Error("not implemented yet: primitiveTestAndSetOwnershipOfCriticalSection");
-    },
+        if (argCount > 1) return false;
+        var mutex = this.vm.stackValue(argCount);
+        var activeProc = argCount ? this.vm.top() : this.activeProcess();
+        var owningProcess = mutex.pointers[Squeak.Mutex_owner];
+        if (owningProcess.isNil) {
+            mutex.pointers[Squeak.Mutex_owner] = activeProc;
+            this.popNandPushIfOK(argCount + 1, this.vm.falseObj);
+        } else if (owningProcess === activeProc) {
+            this.popNandPushIfOK(argCount + 1, this.vm.trueObj);
+        } else {
+            this.popNandPushIfOK(argCount + 1, this.vm.nilObj);
+        }
+        return true;
+	},
 },
 'vm functions', {
     primitiveGetAttribute: function(argCount) {

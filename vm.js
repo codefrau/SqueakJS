@@ -919,7 +919,7 @@ Object.subclass('Squeak.Image',
         this.oldSpaceBytes = objectMemorySize;
         
         if (true) {
-            // For debugging: re-create all objects with properly named prototypes
+            // For debugging: re-create all objects from named prototypes
             var cc = oopMap[oopMap[specialObjectsOopInt].bits[Squeak.splOb_CompactClasses]].bits;
             var renamedObj = null;
             object = this.firstOldObject;
@@ -935,7 +935,7 @@ Object.subclass('Squeak.Image',
             this.lastOldObject = renamedObj;
         }
         
-        //create proper objects by mapping via oopMap
+        // properly link objects by mapping via oopMap
         var splObs         = oopMap[specialObjectsOopInt];
         var compactClasses = oopMap[splObs.bits[Squeak.splOb_CompactClasses]].bits;
         var floatClass     = oopMap[splObs.bits[Squeak.splOb_ClassFloat]];

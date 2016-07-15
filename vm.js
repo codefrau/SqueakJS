@@ -871,7 +871,7 @@ Object.subclass('Squeak.Image',
         this.lastHash = readWord(); //Should be loaded from, and saved to the image header
         var savedWindowSize = readWord();
         var fullScreenFlag = readWord();
-        var extraVMMemory = readWord();
+        this.extraVMMemory = readWord();
         pos += imageHeaderSize - (9 * 4); //skip to end of header
         // read objects
         var prevObj;
@@ -4975,7 +4975,7 @@ Object.subclass('Squeak.Primitives',
             // 12-20 specific to the translating VM
             // 21   root table size (read-only)
             case 22: return 0;                              // root table overflows since startup (read-only)
-            // 23   bytes of extra memory to reserve for VM buffers, plugins, etc.
+            case 23: return this.vm.image.extraVMMemory;    // bytes of extra memory to reserve for VM buffers, plugins, etc.
             // 24   memory threshold above which to shrink object memory (read-write)
             // 25   memory headroom when growing object memory (read-write)
             // 26   interruptChecksEveryNms - force an ioProcessEvents every N milliseconds (read-write)

@@ -1,5 +1,5 @@
 module('users.bert.SqueakJS.vm').requires().toRun(function() {
-"use strict";    
+"use strict";
 /*
  * Copyright (c) 2013-2016 Bert Freudenberg
  *
@@ -329,7 +329,7 @@ Object.extend(Squeak,
             transactionFunc(Squeak.dbFake());
             if (completionFunc) completionFunc();
         }
-    
+
         if (typeof indexedDB == "undefined") {
             return fakeTransaction();
         }
@@ -353,7 +353,7 @@ Object.extend(Squeak,
 
         // otherwise, open SqueakDB first
         var openReq = indexedDB.open("squeak");
-        
+
         // UIWebView implements the interface but only returns null
         // https://stackoverflow.com/questions/27415998/indexeddb-open-returns-null-on-safari-ios-8-1-1-and-halts-execution-on-cordova
         if (!openReq) {
@@ -850,6 +850,7 @@ Object.subclass('Squeak.Image',
         var versions = [6501, 6502, 6504, 6505, 68000, 68002, 68003],
             version = 0,
             fileHeaderSize = 0;
+        debugger
         while (true) {  // try all four endianness + header combos
             littleEndian = !littleEndian;
             pos = fileHeaderSize;
@@ -917,7 +918,7 @@ Object.subclass('Squeak.Image',
         this.firstOldObject = oopMap[oldBaseAddr+4];
         this.lastOldObject = object;
         this.oldSpaceBytes = objectMemorySize;
-        
+
         if (true) {
             // For debugging: re-create all objects from named prototypes
             var cc = oopMap[oopMap[specialObjectsOopInt].bits[Squeak.splOb_CompactClasses]].bits;
@@ -934,7 +935,7 @@ Object.subclass('Squeak.Image',
             this.firstOldObject = oopMap[oldBaseAddr+4];
             this.lastOldObject = renamedObj;
         }
-        
+
         // properly link objects by mapping via oopMap
         var splObs         = oopMap[specialObjectsOopInt];
         var compactClasses = oopMap[splObs.bits[Squeak.splOb_CompactClasses]].bits;
@@ -1107,7 +1108,7 @@ Object.subclass('Squeak.Image',
             } else { // otherwise, remove it
                 var corpse = next;
                 obj.nextObject = corpse.nextObject;     // drop from old-space list
-                corpse.oop = -(++this.newSpaceCount);   // move to new-space for finalizing 
+                corpse.oop = -(++this.newSpaceCount);   // move to new-space for finalizing
                 removedBytes += corpse.totalBytes();
                 removedCount++;
                 //console.log("removing " + removedCount + " " + removedBytes + " " + corpse.totalBytes() + " " + corpse.toString())
@@ -4157,11 +4158,11 @@ Object.subclass('Squeak.Primitives',
         if (typeof obj === "number")
             if (obj === (obj|0)) return this.makeLargeIfNeeded(obj);
             else return this.makeFloat(obj);
-        if (proxyClass) {   // wrap in JS proxy instance 
+        if (proxyClass) {   // wrap in JS proxy instance
             var stObj = this.vm.instantiateClass(proxyClass, 0);
             stObj.jsObject = obj;
             return stObj;
-        } 
+        }
         if (typeof obj === "string" || obj.constructor === Uint8Array) return this.makeStString(obj);
         if (obj.constructor === Array) return this.makeStArray(obj);
         throw Error("cannot make smalltalk object");
@@ -5075,7 +5076,7 @@ Object.subclass('Squeak.Primitives',
                 merged = merged | ((m & bit) >> x) | ((c & bit) >> (x + 1));
                 bit = bit >>> 1;
             }
-            bits[y] = merged; 
+            bits[y] = merged;
         }
         return {
             obj: cursor.obj, bits: bits,
@@ -6160,7 +6161,7 @@ Object.subclass('Squeak.Primitives',
     js_primitiveDoUnderstand: function(argCount) {
         // This is JS's doesNotUnderstand handler,
         // as well as JS class's doesNotUnderstand handler.
-        // Property name is the selector up to first colon. 
+        // Property name is the selector up to first colon.
         // If it is 'new', create an instance;
         // otherwise if the property is a function, call it;
         // otherwise if the property exists, get/set it;

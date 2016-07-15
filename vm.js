@@ -834,8 +834,8 @@ Object.subclass('Squeak.Image',
             pos += 4;
             return int;
         };
-        var readBits = function(nWords, format) {
-            if (format < 5) { // pointers (do endian conversion)
+        var readBits = function(nWords, isPointers) {
+            if (isPointers) { // do endian conversion
                 var oops = [];
                 while (oops.length < nWords)
                     oops.push(readWord());
@@ -847,10 +847,9 @@ Object.subclass('Squeak.Image',
             }
         };
         // read version and determine endianness
-        var versions = [6501, 6502, 6504, 6505, 68000, 68002, 68003],
+        var versions = [6501, 6502, 6504, 6505, 6521, 68000, 68002, 68003, 68021],
             version = 0,
             fileHeaderSize = 0;
-        debugger
         while (true) {  // try all four endianness + header combos
             littleEndian = !littleEndian;
             pos = fileHeaderSize;
@@ -860,8 +859,9 @@ Object.subclass('Squeak.Image',
             if (fileHeaderSize > 512) throw Error("bad image version");
         };
         this.version = version;
-        var nativeFloats = [6505, 68003].indexOf(version) >= 0;
+        var nativeFloats = [6505, 6521, 68003].indexOf(version) >= 0;
         this.hasClosures = [6504, 6505, 68002, 68003].indexOf(version) >= 0;
+        this.isSpur = [6521, 68021].indexOf(version) >= 0;
         if (version >= 68000) throw Error("64 bit images not supported yet");
         // parse image header
         var imageHeaderSize = readWord();
@@ -872,54 +872,107 @@ Object.subclass('Squeak.Image',
         var savedWindowSize = readWord();
         var fullScreenFlag = readWord();
         this.extraVMMemory = readWord();
-        pos += imageHeaderSize - (9 * 4); //skip to end of header
-        // read objects
+        pos += 3 * 4;         // skip 3 words
+        var firstSegSize = readWord();
         var prevObj;
         var oopMap = {};
         var headerSize = fileHeaderSize + imageHeaderSize;
-        while (pos < headerSize + objectMemorySize) {
-            var nWords = 0;
-            var classInt = 0;
-            var header = readWord();
-            switch (header & Squeak.HeaderTypeMask) {
-                case Squeak.HeaderTypeSizeAndClass:
-                    nWords = header >>> 2;
-                    classInt = readWord();
-                    header = readWord();
-                    break;
-                case Squeak.HeaderTypeClass:
-                    classInt = header - Squeak.HeaderTypeClass;
-                    header = readWord();
-                    nWords = (header >>> 2) & 63;
-                    break;
-                case Squeak.HeaderTypeShort:
-                    nWords = (header >>> 2) & 63;
-                    classInt = (header >>> 12) & 31; //compact class index
-                    //Note classInt<32 implies compact class index
-                    break;
-                case Squeak.HeaderTypeFree:
-                    throw Error("Unexpected free block");
+        pos = headerSize;
+        if (!this.isSpur) {
+            // read traditional object memory
+            while (pos < headerSize + objectMemorySize) {
+                var nWords = 0;
+                var classInt = 0;
+                var header = readWord();
+                switch (header & Squeak.HeaderTypeMask) {
+                    case Squeak.HeaderTypeSizeAndClass:
+                        nWords = header >>> 2;
+                        classInt = readWord();
+                        header = readWord();
+                        break;
+                    case Squeak.HeaderTypeClass:
+                        classInt = header - Squeak.HeaderTypeClass;
+                        header = readWord();
+                        nWords = (header >>> 2) & 63;
+                        break;
+                    case Squeak.HeaderTypeShort:
+                        nWords = (header >>> 2) & 63;
+                        classInt = (header >>> 12) & 31; //compact class index
+                        //Note classInt<32 implies compact class index
+                        break;
+                    case Squeak.HeaderTypeFree:
+                        throw Error("Unexpected free block");
+                }
+                nWords--;  //length includes base header which we have already read
+                var oop = pos - 4 - headerSize, //0-rel byte oop of this object (base header)
+                    format = (header>>>8) & 15,
+                    hash = (header>>>17) & 4095,
+                    bits = readBits(nWords, format < 5);
+                var object = new Squeak.Object();
+                object.initFromImage(oop, classInt, format, hash, bits);
+                if (classInt < 32) object.hash |= 0x10000000;    // see fixCompactOops()
+                if (prevObj) prevObj.nextObject = object;
+                this.oldSpaceCount++;
+                prevObj = object;
+                //oopMap is from old oops to actual objects
+                oopMap[oldBaseAddr + oop] = object;
             }
-            nWords--;  //length includes base header which we have already read
-            var oop = pos - 4 - headerSize, //0-rel byte oop of this object (base header)
-                format = (header>>>8) & 15,
-                hash = (header>>>17) & 4095,
-                bits = readBits(nWords, format);
-
-            var object = new Squeak.Object();
-            object.initFromImage(oop, classInt, format, hash, bits);
-            if (classInt < 32) object.hash |= 0x10000000;    // see fixCompactOops()
-            if (prevObj) prevObj.nextObject = object;
-            this.oldSpaceCount++;
-            prevObj = object;
-            //oopMap is from old oops to actual objects
-            oopMap[oldBaseAddr + oop] = object;
+            this.firstOldObject = oopMap[oldBaseAddr+4];
+            this.lastOldObject = object;
+            this.oldSpaceBytes = objectMemorySize;
+        } else {
+            // Read all Spur object memory segments
+            this.oldSpaceBytes = firstSegSize - 16;
+            var segmentEnd = firstSegSize,
+                addressOffset = oldBaseAddr,
+                skippedObjects = 0;
+            while (pos < segmentEnd) {
+                while (pos < segmentEnd - 16) {
+                    // read objects in segment
+                    var formatAndClass = readWord(),
+                        sizeAndHash = readWord(),
+                        size = sizeAndHash >>> 24;
+                    if (size === 255) { // reinterpret word as size, read header again
+                        size = formatAndClass;
+                        formatAndClass = readWord();
+                        sizeAndHash = readWord();
+                    }
+                    var oop = pos - 8 - headerSize,
+                        format = (formatAndClass >>> 24) & 0x1F,
+                        classID = formatAndClass & 0x003FFFFF,
+                        hash = sizeAndHash & 0x003FFFFF;
+                    var bits = readBits(size < 2 ? 2 : size + (size & 1), format < 10 && classID > 0);
+                    // zero classId is a free chunk 
+                    if (classID > 0) {
+                        var object = new Squeak.Object();
+                        object.initFromImage(oop, classID, format, hash, bits);
+                        if (prevObj) prevObj.nextObject = object;
+                        this.oldSpaceCount++;
+                        prevObj = object;
+                        //oopMap is from old oops to actual objects
+                        oopMap[addressOffset + oop] = object;
+                    }
+                }
+                // last 16 bytes in segment is a bridge object
+                var deltaWords = readWord(),
+                    deltaWordsHi = readWord(),
+                    segmentBytes = readWord(),
+                    segmentBytesHi = readWord();
+                //  if segmentBytes is zero, the end of the image has been reached
+                if (segmentBytes === 0) {
+                    if (deltaWords !== 0x4A000003) throw Error("Magic number at image end not found")
+                } else {
+                    segmentEnd += segmentBytes;
+                    addressOffset += deltaWords * 4;
+                    this.oldSpaceBytes += segmentBytes - 16;
+                }
+            }
+            this.firstOldObject = oopMap[oldBaseAddr];
+            this.lastOldObject = object;
+            throw Error("Spur WIP")
         }
-        this.firstOldObject = oopMap[oldBaseAddr+4];
-        this.lastOldObject = object;
-        this.oldSpaceBytes = objectMemorySize;
 
-        if (true) {
+        if (!this.isSpur) {
             // For debugging: re-create all objects from named prototypes
             var cc = oopMap[oopMap[specialObjectsOopInt].bits[Squeak.splOb_CompactClasses]].bits;
             var renamedObj = null;

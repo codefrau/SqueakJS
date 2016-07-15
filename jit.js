@@ -1,5 +1,5 @@
 module('users.bert.SqueakJS.jit').requires("users.bert.SqueakJS.vm").toRun(function() {
-"use strict";    
+"use strict";
 /*
  * Copyright (c) 2014-2016 Bert Freudenberg
  *
@@ -120,7 +120,7 @@ spot after the context switch. All other bytecodes are executed continuously.
 
 When compiling for single-stepping, each bytecode gets a label, and after each
 bytecode a flag is checked and the method returns if needed. Because this is
-a performance penalty, methods are first compiled without single-step support, 
+a performance penalty, methods are first compiled without single-step support,
 and recompiled for single-stepping on demand.
 
 This is optional, another compiler can answer false from enableSingleStepping().
@@ -186,7 +186,7 @@ to single-step.
         this.endPC = 0;             // pc of furthest jump target
         this.prevPC = 0;            // pc at start of current instruction
         this.source = [];           // snippets will be joined in the end
-        this.sourceLabels = {};     // source pos of generated labels 
+        this.sourceLabels = {};     // source pos of generated labels
         this.needsLabel = {0: true}; // jump targets
         this.needsBreak = false;    // insert break check for previous bytecode
         if (optClass && optSel)
@@ -224,7 +224,7 @@ to single-step.
                     break;
                 // storeAndPop rcvr
                 case 0x60:
-                    this.generatePopInto("inst[", byte & 0x07, "]"); 
+                    this.generatePopInto("inst[", byte & 0x07, "]");
                     break;
                 // storeAndPop temp
                 case 0x68:
@@ -255,7 +255,7 @@ to single-step.
                         default: throw Error("unusedBytecode");
                     }
                     break;
-                // Extended bytecodes 
+                // Extended bytecodes
                 case 0x80: case 0x88:
                     this.generateExtended(byte);
                     break;
@@ -513,7 +513,7 @@ to single-step.
                 this.source.push(
                     "if (stack[vm.sp].sqClass === vm.specialObjects[7]) stack[vm.sp] = stack[vm.sp].pointersSize();\n",
                     "else if (stack[vm.sp].sqClass === vm.specialObjects[6]) stack[vm.sp] = stack[vm.sp].bytesSize();\n",
-                    "else { vm.pc = ", this.pc, "; vm.sendSpecial(18); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "; }\n"); 
+                    "else { vm.pc = ", this.pc, "; vm.sendSpecial(18); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "; }\n");
                 this.needsLabel[this.pc] = true;
                 return;
             //case 0xC3: return false; // next
@@ -681,7 +681,7 @@ to single-step.
             this.source.push("stack[++vm.sp] = closure;\n");
         }
         this.source.push("vm.pc = ", to, ";\n");
-        this.source.push("bytecodes -= ", blockSize, ";\n"); 
+        this.source.push("bytecodes -= ", blockSize, ";\n");
         if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", to,";\n");
         this.source.push("continue;\n");
         this.needsBreak = false; // already checked
@@ -710,15 +710,15 @@ to single-step.
         this.needsBreak = this.singleStep;
     },
     generateInstruction: function(comment, instr) {
-        if (this.debug) this.generateDebugCode(comment); 
+        if (this.debug) this.generateDebugCode(comment);
         this.generateLabel();
         this.source.push(instr, ";\n");
     },
     deleteUnneededLabels: function() {
         // switch statement is more efficient with fewer labels
-        for (var i in this.sourceLabels) 
+        for (var i in this.sourceLabels)
             if (!this.needsLabel[i])
-                for (var j = 0; j < 3; j++) 
+                for (var j = 0; j < 3; j++)
                     this.source[this.sourceLabels[i] + j] = "";
     },
 });

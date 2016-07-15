@@ -883,18 +883,18 @@ Object.subclass('Squeak.Image',
             var header = readWord();
             switch (header & Squeak.HeaderTypeMask) {
                 case Squeak.HeaderTypeSizeAndClass:
-                    nWords = header >> 2;
+                    nWords = header >>> 2;
                     classInt = readWord();
                     header = readWord();
                     break;
                 case Squeak.HeaderTypeClass:
                     classInt = header - Squeak.HeaderTypeClass;
                     header = readWord();
-                    nWords = (header >> 2) & 63;
+                    nWords = (header >>> 2) & 63;
                     break;
                 case Squeak.HeaderTypeShort:
-                    nWords = (header >> 2) & 63;
-                    classInt = (header >> 12) & 31; //compact class index
+                    nWords = (header >>> 2) & 63;
+                    classInt = (header >>> 12) & 31; //compact class index
                     //Note classInt<32 implies compact class index
                     break;
                 case Squeak.HeaderTypeFree:
@@ -902,8 +902,8 @@ Object.subclass('Squeak.Image',
             }
             nWords--;  //length includes base header which we have already read
             var oop = pos - 4 - headerSize, //0-rel byte oop of this object (base header)
-                format = (header>>8) & 15,
-                hash = (header>>17) & 4095,
+                format = (header>>>8) & 15,
+                hash = (header>>>17) & 4095,
                 bits = readBits(nWords, format);
 
             var object = new Squeak.Object();
@@ -1359,18 +1359,18 @@ Object.subclass('Squeak.Image',
                 header = readWord();
             switch (header & Squeak.HeaderTypeMask) {
                 case Squeak.HeaderTypeSizeAndClass:
-                    nWords = header >> 2;
+                    nWords = header >>> 2;
                     classInt = readWord();
                     header = readWord();
                     break;
                 case Squeak.HeaderTypeClass:
                     classInt = header - Squeak.HeaderTypeClass;
                     header = readWord();
-                    nWords = (header >> 2) & 63;
+                    nWords = (header >>> 2) & 63;
                     break;
                 case Squeak.HeaderTypeShort:
-                    nWords = (header >> 2) & 63;
-                    classInt = (header >> 12) & 31; //compact class index
+                    nWords = (header >>> 2) & 63;
+                    classInt = (header >>> 12) & 31; //compact class index
                     //Note classInt<32 implies compact class index
                     break;
                 case Squeak.HeaderTypeFree:
@@ -1378,8 +1378,8 @@ Object.subclass('Squeak.Image',
             }
             nWords--;  //length includes base header which we have already read
             var oop = pos, //0-rel byte oop of this object (base header)
-                format = (header>>8) & 15,
-                hash = (header>>17) & 4095,
+                format = (header>>>8) & 15,
+                hash = (header>>>17) & 4095,
                 bits = readBits(nWords, format);
 
             var object = new Squeak.Object();
@@ -1735,7 +1735,7 @@ Object.subclass('Squeak.Object',
         if (this.words) return this.words;
         if (this.uint32Array) return this.uint32Array;
         if (!this.bytes) return null;
-        return this.uint32Array = new Uint32Array(this.bytes.buffer, 0, this.bytes.length >> 2);
+        return this.uint32Array = new Uint32Array(this.bytes.buffer, 0, this.bytes.length >>> 2);
     },
     setAddr: function(addr) {
         // Move this object to addr by setting its oop. Answer address after this object.
@@ -1753,7 +1753,7 @@ Object.subclass('Squeak.Object',
             this.words ? this.words.length :
             this.pointers ? this.pointers.length : 0;
         // methods have both pointers and bytes
-        if (this.bytes) nWords += (this.bytes.length + 3) >> 2;
+        if (this.bytes) nWords += (this.bytes.length + 3) >>> 2;
         nWords++; // one header word always present
         var extraHeader = nWords > 63 ? 2 : this.sqClass.isCompact ? 0 : 1;
         return {header: extraHeader, body: nWords};

@@ -925,6 +925,8 @@ Object.subclass('Squeak.Image',
             this.oldSpaceBytes = firstSegSize - 16;
             var segmentEnd = firstSegSize,
                 addressOffset = oldBaseAddr,
+                freePageList = null,
+                classPages = null,
                 skippedObjects = 0;
             while (pos < segmentEnd) {
                 while (pos < segmentEnd - 16) {
@@ -944,8 +946,8 @@ Object.subclass('Squeak.Image',
                         hash = sizeAndHash & 0x003FFFFF;
                     var bits = readBits(size, format < 10 && classID > 0);
                     pos += (size < 2 ? 2 - size : size & 1) * 4; // align on 8 bytes, 16 min
-                    // zero classId is a free chunk 
-                    if (classID > 0) {
+                    // low class ids are internal to Spur
+                    if (classID >= 32) {
                         var object = new Squeak.SpurObject();
                         object.initFromImage(oop, classID, format, hash, bits);
                         if (prevObj) prevObj.nextObject = object;
@@ -955,6 +957,9 @@ Object.subclass('Squeak.Image',
                         oopMap[addressOffset + oop] = object;
                     } else {
                         this.oldSpaceBytes -= objPos - pos;
+                        if (!freePageList) freePageList = [];         // first hidden obj
+                        else if (!classPages) classPages = bits;      // second hidden obj
+                        oopMap[addressOffset + oop] = bits;
                     }
                 }
                 // last 16 bytes in segment is a bridge object
@@ -1000,7 +1005,7 @@ Object.subclass('Squeak.Image',
         if (this.isSpur) {
             var charClass = oopMap[splObs.bits[Squeak.splOb_ClassCharacter]];
             this.initCharacterTable(charClass);
-            compactClasses = this.spurClassTable(oopMap);
+            compactClasses = this.spurClassTable(oopMap, classPages);
             nativeFloats = this.getCharacter.bind(this);
         }
         var obj = this.firstOldObject,
@@ -1086,18 +1091,6 @@ Object.subclass('Squeak.Image',
             obj = obj.nextObject;
         }
     },
-    spurClassTable: function(oopMap) {
-        var hiddenRoots = this.firstOldObject.nextObject.nextObject.nextObject.nextObject.bits,
-            classes = {};
-        for (var p = 0; p < 4096; p++) {
-            var page = oopMap[hiddenRoots[p]];
-            if (page.format === 2) for (var i = 0; i < 1024; i++) {
-                var maybeClass = oopMap[page.bits[i]]
-                if (maybeClass.format === 1) classes[p * 1024 + i] = maybeClass;
-            }
-        }
-        return classes;
-    }
 },
 'garbage collection', {
     partialGC: function() {
@@ -1487,6 +1480,17 @@ Object.subclass('Squeak.Image',
 },
 'spur support',
 {
+    spurClassTable: function(oopMap, classPages) {
+        var classes = {};
+        for (var p = 0; p < 4096; p++) {
+            var page = oopMap[classPages[p]];
+            if (page.length === 1024) for (var i = 0; i < 1024; i++) {
+                var maybeClass = oopMap[page[i]]
+                if (maybeClass.format === 1) classes[p * 1024 + i] = maybeClass;
+            }
+        }
+        return classes;
+    },
     initCharacterTable: function(characterClass) {
         this.characterClass = characterClass.classInstProto("Character");
         this.characterTable = [];

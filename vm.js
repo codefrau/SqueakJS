@@ -1944,10 +1944,12 @@ Object.subclass('Squeak.Object',
         }
         return "_SOMECLASS_";
     },
-    defaultInst: Squeak.Object,
+    defaultInst: function() {
+        return Squeak.Object;
+    },
     classInstProto: function(className) {
         if (this.instProto) return this.instProto;
-        var proto = this.defaultInst;  // in case below fails
+        var proto = this.defaultInst();  // in case below fails
         try {
             if (!className) className = this.className();
             var safeName = className.replace(/[^A-Za-z0-9]/g,'_');
@@ -1957,7 +1959,7 @@ Object.subclass('Squeak.Object',
             else safeName = ((/^[AEIOU]/.test(safeName)) ? 'an' : 'a') + safeName;
             // fail okay if no eval()
             proto = new Function("return function " + safeName + "() {};")();
-            proto.prototype = this.defaultInst.prototype;
+            proto.prototype = this.defaultInst().prototype;
         } catch(e) {}
         Object.defineProperty(this, 'instProto', { value: proto });
         return proto;
@@ -2031,8 +2033,10 @@ Object.subclass('Squeak.Object',
 Squeak.Object.subclass('Squeak.SpurObject',
 'initialization',
 {
-    defaultInstProto: Squeak.SpurObject,
     installFromImage: function(oopMap, classTable, floatClass, littleEndian, nativeFloats) {
+    defaultInst: function() {
+        return Squeak.SpurObject;
+    },
         //Install this object by decoding format, and rectifying pointers
         var classID = this.sqClass;
         this.sqClass = classTable[classID];

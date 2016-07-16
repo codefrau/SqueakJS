@@ -2092,9 +2092,9 @@ Squeak.Object.subclass('Squeak.SpurObject',
             case 25: // CompiledMethod
             case 26: // CompiledMethod
             case 27: // CompiledMethod
-                throw Error('Canot read CompiledMethods yet')
-                var methodHeader = this.decodeWords(1, this.bits, littleEndian)[0],
-                    numLits = (methodHeader>>10) & 255,
+                var methodHeader = this.decodeWords(1, this.bits, littleEndian)[0];
+                if (methodHeader & 0x80000000) throw Error("Alternate bytecode set not supported")
+                var numLits = (methodHeader >> 1) & 0x7FFF,
                     oops = this.decodeWords(numLits+1, this.bits, littleEndian);
                 this.pointers = this.decodePointers(numLits+1, oops, oopMap, makeChar); //header+lits
                 this.bytes = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this.format & 3);

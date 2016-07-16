@@ -4172,8 +4172,9 @@ Object.subclass('Squeak.Primitives',
         return rcvr.pointers.indexOf(arg) >= 0;
     },
     asUint8Array: function(buffer) {
-        if (buffer.constructor === Uint8Array) return buffer;
-        if (buffer.constructor === ArrayBuffer) return new Uint8Array(buffer);
+	// A direct test of the buffer's constructor doesn't work on Safari 10.0.
+        if (buffer.constructor.name === "Uint8Array") return buffer;
+        if (buffer.constructor.name === "ArrayBuffer") return new Uint8Array(buffer);
         if (typeof buffer === "string") {
             var array = new Uint8Array(buffer.length);
             for (var i = 0; i < buffer.length; i++)

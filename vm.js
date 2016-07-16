@@ -993,6 +993,7 @@ Object.subclass('Squeak.Image',
         var splObs         = oopMap[specialObjectsOopInt];
         var compactClasses = oopMap[splObs.bits[Squeak.splOb_CompactClasses]].bits;
         var floatClass     = oopMap[splObs.bits[Squeak.splOb_ClassFloat]];
+        if (this.isSpur) compactClasses = this.spurClassTable(oopMap);
         var obj = this.firstOldObject,
             done = 0,
             self = this;
@@ -1075,6 +1076,18 @@ Object.subclass('Squeak.Image',
             obj = obj.nextObject;
         }
     },
+    spurClassTable: function(oopMap) {
+        var hiddenRoots = this.firstOldObject.nextObject.nextObject.nextObject.nextObject.bits,
+            classes = {};
+        for (var p = 0; p < 4096; p++) {
+            var page = oopMap[hiddenRoots[p]];
+            if (page.format === 2) for (var i = 0; i < 1024; i++) {
+                var maybeClass = oopMap[page.bits[i]]
+                if (maybeClass.format === 1) classes[p * 1024 + i] = maybeClass;
+            }
+        }
+        return classes;
+    }
 },
 'garbage collection', {
     partialGC: function() {

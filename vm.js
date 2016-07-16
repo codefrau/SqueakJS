@@ -2037,53 +2037,93 @@ Object.subclass('Squeak.Object',
 Squeak.Object.subclass('Squeak.SpurObject',
 'initialization',
 {
-    installFromImage: function(oopMap, classTable, floatClass, littleEndian, nativeFloats) {
     defaultInst: function() {
         return Squeak.SpurObject;
     },
+    installFromImage: function(oopMap, classTable, floatClass, littleEndian, makeChar) {
         //Install this object by decoding format, and rectifying pointers
         var classID = this.sqClass;
         this.sqClass = classTable[classID];
         if (!this.sqClass) throw Error("Class not found")
-        throw Error("spur wip");
         var nWords = this.bits.length;
-        if (this.format > 0 && this.format < 5) {
-            //Formats 0...4 -- Pointer fields
-            if (nWords > 0) {
-                var oops = this.bits; // endian conversion was already done
-                this.pointers = this.decodePointers(nWords, oops, oopMap);
-            }
-        } else if (this.format >= 12) {
-            //Formats 12-15 -- CompiledMethods both pointers and bits
-            var methodHeader = this.decodeWords(1, this.bits, littleEndian)[0],
-                numLits = (methodHeader>>10) & 255,
-                oops = this.decodeWords(numLits+1, this.bits, littleEndian);
-            this.pointers = this.decodePointers(numLits+1, oops, oopMap); //header+lits
-            this.bytes = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this.format & 3);
-        } else if (this.format >= 8) {
-            //Formats 8..11 -- ByteArrays (and ByteStrings)
-            if (nWords > 0)
-                this.bytes = this.decodeBytes(nWords, this.bits, 0, this.format & 3);
-        } else if (this.sqClass == floatClass) {
-            //These words are actually a Float
-            this.isFloat = true;
-            this.float = this.decodeFloat(this.bits, littleEndian, nativeFloats);
-            if (this.float == 1.3797216632888e-310) {
-                if (/noFloatDecodeWorkaround/.test(window.location.hash)) {
-                    // floatDecode workaround disabled
-                } else {
-                    this.constructor.prototype.decodeFloat = this.decodeFloatDeoptimized;
-                    this.float = this.decodeFloat(this.bits, littleEndian, nativeFloats);
-                    if (this.float == 1.3797216632888e-310)
-                        throw Error("Cannot deoptimize decodeFloat");
+        switch (this.format) {
+            case 0: // zero sized object
+                break;
+            case 1: // only inst vars
+            case 2: // only indexed vars
+            case 3: // inst vars and indexed vars
+            case 4: // only indexed vars (weak)
+            case 5: // only inst vars (weak)
+                if (nWords > 0) {
+                    var oops = this.bits; // endian conversion was already done
+                    this.pointers = this.decodePointers(nWords, oops, oopMap, makeChar);
                 }
-            }
-        } else {
-            if (nWords > 0)
-                this.words = this.decodeWords(nWords, this.bits, littleEndian);
+                break;
+            case 10: // 32 bit array
+                if (this.sqClass === floatClass) {
+                    //These words are actually a Float
+                    this.isFloat = true;
+                    this.float = this.decodeFloat(this.bits, littleEndian, true);
+                    if (this.float == 1.3797216632888e-310) {
+                        if (/noFloatDecodeWorkaround/.test(window.location.hash)) {
+                            // floatDecode workaround disabled
+                        } else {
+                            this.constructor.prototype.decodeFloat = this.decodeFloatDeoptimized;
+                            this.float = this.decodeFloat(this.bits, littleEndian, true);
+                            if (this.float == 1.3797216632888e-310)
+                                throw Error("Cannot deoptimize decodeFloat");
+                        }
+                    }
+                } else if (nWords > 0) {
+                    this.words = this.decodeWords(nWords, this.bits, littleEndian);
+                }
+                break
+            case 12: // 16 bit array
+            case 13: // 16 bit array (odd length)
+                throw Error("16 bit arrays not supported yet");
+            case 16: // 8 bit array
+            case 17: // ... length-1
+            case 18: // ... length-2
+            case 19: // ... length-3
+                if (nWords > 0)
+                    this.bytes = this.decodeBytes(nWords, this.bits, 0, this.format & 3);
+                break;
+            case 24: // CompiledMethod
+            case 25: // CompiledMethod
+            case 26: // CompiledMethod
+            case 27: // CompiledMethod
+                throw Error('Canot read CompiledMethods yet')
+                var methodHeader = this.decodeWords(1, this.bits, littleEndian)[0],
+                    numLits = (methodHeader>>10) & 255,
+                    oops = this.decodeWords(numLits+1, this.bits, littleEndian);
+                this.pointers = this.decodePointers(numLits+1, oops, oopMap, makeChar); //header+lits
+                this.bytes = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this.format & 3);
+                break
+            default:
+                throw Error("Unknown object format: " + this.format);
+
         }
         delete this.bits;
         this.mark = false; // for GC
+    },
+    decodePointers: function(nWords, theBits, oopMap, makeChar) {
+        //Convert immediate objects and look up object pointers in oopMap
+        var ptrs = new Array(nWords);
+        for (var i = 0; i < nWords; i++) {
+            var oop = theBits[i];
+            if ((oop & 1) === 1) {          // SmallInteger
+                ptrs[i] = oop >> 1;
+            } else if ((oop & 3) === 2) {   // Character
+                ptrs[i] = makeChar(oop >>> 2);
+            } else {                        // Object
+                ptrs[i] = oopMap[oop] || 42424242;
+                // when loading a context from image segment, there is
+                // garbage beyond its stack pointer, resulting in the oop
+                // not being found in oopMap. We just fill in an arbitrary
+                // SmallInteger - it's never accessed anyway
+            }
+        }
+        return ptrs;
     },
     initInstanceOfChar: function(charClass, unicode) {
         this.sqClass = charClass;

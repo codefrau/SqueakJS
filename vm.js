@@ -929,7 +929,8 @@ Object.subclass('Squeak.Image',
             while (pos < segmentEnd) {
                 while (pos < segmentEnd - 16) {
                     // read objects in segment
-                    var formatAndClass = readWord(),
+                    var objPos = pos,
+                        formatAndClass = readWord(),
                         sizeAndHash = readWord(),
                         size = sizeAndHash >>> 24;
                     if (size === 255) { // reinterpret word as size, read header again
@@ -941,16 +942,19 @@ Object.subclass('Squeak.Image',
                         format = (formatAndClass >>> 24) & 0x1F,
                         classID = formatAndClass & 0x003FFFFF,
                         hash = sizeAndHash & 0x003FFFFF;
-                    var bits = readBits(size < 2 ? 2 : size + (size & 1), format < 10 && classID > 0);
+                    var bits = readBits(size, format < 10 && classID > 0);
+                    pos += (size < 2 ? 2 - size : size & 1) * 4; // align on 8 bytes, 16 min
                     // zero classId is a free chunk 
                     if (classID > 0) {
-                        var object = new Squeak.Object();
+                        var object = new Squeak.SpurObject();
                         object.initFromImage(oop, classID, format, hash, bits);
                         if (prevObj) prevObj.nextObject = object;
                         this.oldSpaceCount++;
                         prevObj = object;
                         //oopMap is from old oops to actual objects
                         oopMap[addressOffset + oop] = object;
+                    } else {
+                        this.oldSpaceBytes -= objPos - pos;
                     }
                 }
                 // last 16 bytes in segment is a bridge object
@@ -969,7 +973,6 @@ Object.subclass('Squeak.Image',
             }
             this.firstOldObject = oopMap[oldBaseAddr];
             this.lastOldObject = object;
-            throw Error("Spur WIP")
         }
 
         if (!this.isSpur) {
@@ -999,7 +1002,7 @@ Object.subclass('Squeak.Image',
             self = this;
         function mapSomeObjects() {
             if (obj) {
-                var stop = done + (self.oldSpaceCount / 10 | 0);    // do it in 10 chunks
+                var stop = done + (self.oldSpaceCount / 20 | 0);    // do it in 20 chunks
                 while (obj && done < stop) {
                     obj.installFromImage(oopMap, compactClasses, floatClass, littleEndian, nativeFloats);
                     obj = obj.nextObject;
@@ -1028,7 +1031,7 @@ Object.subclass('Squeak.Image',
         } else {
             window.setTimeout(mapSomeObjectsAsync, 0);
         }
-     },
+    },
     decorateKnownObjects: function() {
         var splObjs = this.specialObjectsArray.pointers;
         splObjs[Squeak.splOb_NilObject].isNil = true;
@@ -1048,6 +1051,7 @@ Object.subclass('Squeak.Image',
     fixCompactOops: function() {
         // instances of compact classes might have been saved with a non-compact header
         // fix their oops here so validation succeeds later
+        if (this.isSpur) return;
         var obj = this.firstOldObject,
             adjust = 0;
         while (obj) {
@@ -1918,9 +1922,10 @@ Object.subclass('Squeak.Object',
         }
         return "_SOMECLASS_";
     },
+    defaultInst: Squeak.Object,
     classInstProto: function(className) {
         if (this.instProto) return this.instProto;
-        var proto = Squeak.Object;  // in case below fails
+        var proto = this.defaultInst;  // in case below fails
         try {
             if (!className) className = this.className();
             var safeName = className.replace(/[^A-Za-z0-9]/g,'_');
@@ -1930,7 +1935,7 @@ Object.subclass('Squeak.Object',
             else safeName = ((/^[AEIOU]/.test(safeName)) ? 'an' : 'a') + safeName;
             // fail okay if no eval()
             proto = new Function("return function " + safeName + "() {};")();
-            proto.prototype = Squeak.Object.prototype;
+            proto.prototype = this.defaultInst.prototype;
         } catch(e) {}
         Object.defineProperty(this, 'instProto', { value: proto });
         return proto;
@@ -1998,6 +2003,57 @@ Object.subclass('Squeak.Object',
         // following is same as decodeSqueakSP() but works without vm ref
         var sp = this.pointers[Squeak.Context_stackPointer];
         return Squeak.Context_tempFrameStart + (typeof sp === "number" ? sp : 0);
+    },
+});
+
+Squeak.Object.subclass('Squeak.SpurObject',
+'initialization',
+{
+    defaultInstProto: Squeak.SpurObject,
+    installFromImage: function(oopMap, classTable, floatClass, littleEndian, nativeFloats) {
+        //Install this object by decoding format, and rectifying pointers
+        var classID = this.sqClass;
+        this.sqClass = classTable[classID];
+        if (!this.sqClass) throw Error("Class not found")
+        throw Error("spur wip");
+        var nWords = this.bits.length;
+        if (this.format > 0 && this.format < 5) {
+            //Formats 0...4 -- Pointer fields
+            if (nWords > 0) {
+                var oops = this.bits; // endian conversion was already done
+                this.pointers = this.decodePointers(nWords, oops, oopMap);
+            }
+        } else if (this.format >= 12) {
+            //Formats 12-15 -- CompiledMethods both pointers and bits
+            var methodHeader = this.decodeWords(1, this.bits, littleEndian)[0],
+                numLits = (methodHeader>>10) & 255,
+                oops = this.decodeWords(numLits+1, this.bits, littleEndian);
+            this.pointers = this.decodePointers(numLits+1, oops, oopMap); //header+lits
+            this.bytes = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this.format & 3);
+        } else if (this.format >= 8) {
+            //Formats 8..11 -- ByteArrays (and ByteStrings)
+            if (nWords > 0)
+                this.bytes = this.decodeBytes(nWords, this.bits, 0, this.format & 3);
+        } else if (this.sqClass == floatClass) {
+            //These words are actually a Float
+            this.isFloat = true;
+            this.float = this.decodeFloat(this.bits, littleEndian, nativeFloats);
+            if (this.float == 1.3797216632888e-310) {
+                if (/noFloatDecodeWorkaround/.test(window.location.hash)) {
+                    // floatDecode workaround disabled
+                } else {
+                    this.constructor.prototype.decodeFloat = this.decodeFloatDeoptimized;
+                    this.float = this.decodeFloat(this.bits, littleEndian, nativeFloats);
+                    if (this.float == 1.3797216632888e-310)
+                        throw Error("Cannot deoptimize decodeFloat");
+                }
+            }
+        } else {
+            if (nWords > 0)
+                this.words = this.decodeWords(nWords, this.bits, littleEndian);
+        }
+        delete this.bits;
+        this.mark = false; // for GC
     },
 });
 

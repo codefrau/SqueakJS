@@ -996,7 +996,13 @@ Object.subclass('Squeak.Image',
         var splObs         = oopMap[specialObjectsOopInt];
         var compactClasses = oopMap[splObs.bits[Squeak.splOb_CompactClasses]].bits;
         var floatClass     = oopMap[splObs.bits[Squeak.splOb_ClassFloat]];
-        if (this.isSpur) compactClasses = this.spurClassTable(oopMap);
+        // Spur needs different arguments for installFromImage()
+        if (this.isSpur) {
+            var charClass = oopMap[splObs.bits[Squeak.splOb_ClassCharacter]];
+            this.initCharacterTable(charClass);
+            compactClasses = this.spurClassTable(oopMap);
+            nativeFloats = this.getCharacter.bind(this);
+        }
         var obj = this.firstOldObject,
             done = 0,
             self = this;
@@ -1477,6 +1483,22 @@ Object.subclass('Squeak.Image',
         // don't truncate segmentWordArray now like the C VM does. It does not seem to be
         // worth the trouble of adjusting the following oops
         return roots;
+    },
+},
+'spur support',
+{
+    initCharacterTable: function(characterClass) {
+        this.characterClass = characterClass.classInstProto("Character");
+        this.characterTable = [];
+    },
+    getCharacter: function(unicode) {
+        var char = this.characterTable[unicode];
+        if (!char) {
+            char = new this.characterClass;
+            char.initInstanceOfChar(this.characterClass, unicode);
+            this.characterTable[unicode] = char;
+        }
+        return char;
     },
 });
 
@@ -2054,6 +2076,12 @@ Squeak.Object.subclass('Squeak.SpurObject',
         }
         delete this.bits;
         this.mark = false; // for GC
+    },
+    initInstanceOfChar: function(charClass, unicode) {
+        this.sqClass = charClass;
+        this.hash = unicode;
+        this.format = 0;
+        this.isChar = true;
     },
 });
 

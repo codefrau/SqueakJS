@@ -6353,11 +6353,11 @@ Object.subclass('Squeak.Primitives',
         }
     },
     js_executeCallbackAsync: function(block, args, resolve, reject) {
+        var squeak = this;
+        function again() {squeak.js_executeCallbackAsync(block, args, resolve, reject)}
         if (!this.js_activeCallback && !this.vm.frozen) {
             this.js_executeCallback(block, args, resolve, reject);
         } else {
-            var squeak = this;
-            function again() {squeak.js_executeCallbackAsync(block, args, resolve, reject)}
             setTimeout(again, 0);
         }
     },

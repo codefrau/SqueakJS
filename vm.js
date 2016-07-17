@@ -4163,8 +4163,9 @@ Object.subclass('Squeak.Primitives',
             stObj.jsObject = obj;
             return stObj;
         }
-        if (typeof obj === "string" || obj.constructor === Uint8Array) return this.makeStString(obj);
-        if (obj.constructor === Array) return this.makeStArray(obj);
+	// A direct test of the buffer's constructor doesn't work on Safari 10.0.
+        if (typeof obj === "string" || obj.constructor.name === "Uint8Array") return this.makeStString(obj);
+        if (obj.constructor.name === "Array") return this.makeStArray(obj);
         throw Error("cannot make smalltalk object");
     },
     pointsTo: function(rcvr, arg) {

@@ -927,7 +927,8 @@ Object.subclass('Squeak.Image',
                 addressOffset = oldBaseAddr,
                 freePageList = null,
                 classPages = null,
-                skippedObjects = 0;
+                skippedBytes = 0,
+                oopAdjust = {};
             while (pos < segmentEnd) {
                 while (pos < segmentEnd - 16) {
                     // read objects in segment
@@ -955,11 +956,12 @@ Object.subclass('Squeak.Image',
                         prevObj = object;
                         //oopMap is from old oops to actual objects
                         oopMap[addressOffset + oop] = object;
+                        oopAdjust[oop] = skippedBytes;
                     } else {
-                        this.oldSpaceBytes -= objPos - pos;
+                        skippedBytes += pos - objPos;
                         if (!freePageList) freePageList = [];         // first hidden obj
                         else if (!classPages) classPages = bits;      // second hidden obj
-                        oopMap[addressOffset + oop] = bits;
+                        oopMap[addressOffset + oop] = bits;           // used in spurClassTable()
                     }
                 }
                 // last 16 bytes in segment is a bridge object
@@ -973,9 +975,11 @@ Object.subclass('Squeak.Image',
                 } else {
                     segmentEnd += segmentBytes;
                     addressOffset += deltaWords * 4;
+                    skippedBytes += deltaWords * 4;
                     this.oldSpaceBytes += segmentBytes - 16;
                 }
             }
+            this.oldSpaceBytes -= skippedBytes;
             this.firstOldObject = oopMap[oldBaseAddr];
             this.lastOldObject = object;
         }
@@ -1024,8 +1028,12 @@ Object.subclass('Squeak.Image',
             } else { // done
                 self.specialObjectsArray = splObs;
                 self.decorateKnownObjects();
-                self.fixCompiledMethods();
-                self.fixCompactOops();
+                if (self.isSpur) {
+                    self.fixSkippedOops(oopAdjust);
+                } else {
+                    self.fixCompiledMethods();
+                    self.fixCompactOops();
+                }
                 return false;   // don't do more
             }
         };
@@ -1092,6 +1100,20 @@ Object.subclass('Squeak.Image',
             if (obj.format >= 12) obj.sqClass = compiledMethodClass;
             obj = obj.nextObject;
         }
+    },
+    fixSkippedOops: function(oopAdjust) {
+        // reading Spur skips some internal objects
+        // we adjust the oops of following objects here
+        // this is like the compaction phase of our GC
+        var obj = this.firstOldObject;
+        while (obj) {
+            obj.oop -= oopAdjust[obj.oop];
+            obj = obj.nextObject;
+        }
+        // do a sanity check
+        obj = this.lastOldObject;
+        if (obj.addr() + obj.totalBytes() !== this.oldSpaceBytes)
+            throw Error("image size doesn't match object sizes")
     },
 },
 'garbage collection', {

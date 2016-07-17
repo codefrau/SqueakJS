@@ -388,8 +388,12 @@ to single-step.
                     count = byte2 & 127;
                 this.generateClosureTemps(count, popValues);
                 return;
+            // call primitive
             case 0x8B:
-                throw Error("callPrimitive bytecode not implemented yet");
+                byte2 = this.method.bytes[this.pc++];
+                byte3 = this.method.bytes[this.pc++];
+                this.generateCallPrimitive(byte2 + 256 * byte3);
+                return
             // remote push from temp vector
             case 0x8C:
                 byte2 = this.method.bytes[this.pc++];
@@ -688,6 +692,12 @@ to single-step.
         this.needsLabel[from] = true;   // initial pc when activated
         this.needsLabel[to] = true;     // for jump over closure
         if (to > this.endPC) this.endPC = to;
+    },
+    generateCallPrimitive: function(index) {
+        if (this.debug) this.generateDebugCode("call primitive " + index);
+        this.generateLabel();
+        // call prim is actually a no-op
+        if (this.pc !== 3) throw Error("call primitive bytecode not expected here");
     },
     generateLabel: function() {
         // remember label position for deleteUnneededLabels()

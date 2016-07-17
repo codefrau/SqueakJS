@@ -1049,10 +1049,12 @@ Object.subclass('Squeak.Image',
         splObjs[Squeak.splOb_TrueObject].isTrue = true;
         splObjs[Squeak.splOb_FalseObject].isFalse = true;
         splObjs[Squeak.splOb_ClassFloat].isFloatClass = true;
-        this.compactClasses = this.specialObjectsArray.pointers[Squeak.splOb_CompactClasses].pointers;
-        for (var i = 0; i < this.compactClasses.length; i++)
-            if (!this.compactClasses[i].isNil)
-                this.compactClasses[i].isCompact = true;
+        if (!this.isSpur) {
+            this.compactClasses = this.specialObjectsArray.pointers[Squeak.splOb_CompactClasses].pointers;
+            for (var i = 0; i < this.compactClasses.length; i++)
+                if (!this.compactClasses[i].isNil)
+                    this.compactClasses[i].isCompact = true;
+        }
         if (!Number.prototype.sqInstName)
             Object.defineProperty(Number.prototype, 'sqInstName', {
                 enumerable: false,

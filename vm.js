@@ -859,8 +859,8 @@ Object.subclass('Squeak.Image',
             if (fileHeaderSize > 512) throw Error("bad image version");
         };
         this.version = version;
-        var nativeFloats = [6505, 6521, 68003].indexOf(version) >= 0;
-        this.hasClosures = [6504, 6505, 68002, 68003].indexOf(version) >= 0;
+        var nativeFloats = [6505, 6521, 68003, 68021].indexOf(version) >= 0;
+        this.hasClosures = [6504, 6505, 6521, 68002, 68003, 68021].indexOf(version) >= 0;
         this.isSpur = [6521, 68021].indexOf(version) >= 0;
         if (version >= 68000) throw Error("64 bit images not supported yet");
         // parse image header

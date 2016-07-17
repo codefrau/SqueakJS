@@ -2007,9 +2007,6 @@ Object.subclass('Squeak.Object',
     methodGetSelector: function(zeroBasedIndex) {
         return this.pointers[1+zeroBasedIndex]; // step over header
     },
-    methodSetLiteral: function(zeroBasedIndex, value) {
-        this.pointers[1+zeroBasedIndex] = value; // step over header
-    },
 },
 'as context',
 {
@@ -3469,8 +3466,8 @@ Object.subclass('Squeak.Interpreter',
                 litIndex = this.method.bytes[this.pc + 2];
             } else
                 litIndex = this.method.bytes[this.pc + 1] & (byte === 134 ? 63 : 31);
-            var selectorObj = this.method.pointers[litIndex + 1];
-            if (selectorObj.bytesAsString() != 'blockCopy:') return true;
+            var selectorObj = this.method.methodGetLiteral(litIndex);
+            if (selectorObj.bytesAsString() !== 'blockCopy:') return true;
         }
         return false;
     },

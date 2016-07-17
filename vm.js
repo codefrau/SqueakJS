@@ -1815,9 +1815,10 @@ Object.subclass('Squeak.Object',
         return this.isFloat ? 2 : this.words ? this.words.length : 0;
     },
     instSize: function() {//same as class.classInstSize, but faster from format
-        if (this.format>4 || this.format==2) return 0; //indexable fields only
-        if (this.format<2) return this.pointersSize(); //indexable fields only
-        return this.sqClass.classInstSize(); //0-255
+        var fmt = this.format;
+        if (fmt > 4 || fmt === 2) return 0;      //indexable fields only
+        if (fmt < 2) return this.pointersSize(); //fixed fields only
+        return this.sqClass.classInstSize(); 
     },
     floatData: function() {
         var buffer = new ArrayBuffer(8);
@@ -2058,9 +2059,6 @@ Object.subclass('Squeak.Object',
 Squeak.Object.subclass('Squeak.SpurObject',
 'initialization',
 {
-    defaultInst: function() {
-        return Squeak.SpurObject;
-    },
     installFromImage: function(oopMap, classTable, floatClass, littleEndian, makeChar) {
         //Install this object by decoding format, and rectifying pointers
         var classID = this.sqClass;
@@ -2151,6 +2149,62 @@ Squeak.Object.subclass('Squeak.SpurObject',
         this.hash = unicode;
         this.format = 0;
         this.isChar = true;
+    },
+},
+'accessing', {
+    instSize: function() {//same as class.classInstSize, but faster from format
+        if (this.format < 2) return this.pointersSize(); //fixed fields only
+        return this.sqClass.classInstSize();
+    },
+    isBytes: function() {
+        var fmt = this.format;
+        return fmt >= 16 && fmt <= 23;
+    },
+    isMethod: function() {
+        return this.format >= 24;
+    },
+    isPointers: function() {
+        return this.format <= 6;
+    },
+    isWords: function() {
+        return this.format === 10;
+    },
+    isWordsOrBytes: function() {
+        var fmt = this.format;
+        return fmt === 10 || (fmt >= 16 && fmt <= 23);
+    },
+    snapshotSize: function() {
+        // words of extra object header and body this object would take up in image snapshot
+        // body size includes header size that is always present
+        var nWords =
+            this.isFloat ? 2 :
+            this.words ? this.words.length :
+            this.pointers ? this.pointers.length : 0;
+        // methods have both pointers and bytes
+        if (this.bytes) nWords += (this.bytes.length + 3) >>> 2;
+        var extraHeader = nWords > 254 ? 1 : 0;
+        nWords += nWords & 1; // align to 8 bytes
+        nWords += 2; // one 64 bit header always present
+        if (nWords < 4) nWords = 4; // minimum object size
+        return {header: extraHeader, body: nWords};
+    },
+    writeTo: function(data, pos, image) {
+        throw Error("not implemented yet");
+    },
+},
+'as class', {
+    defaultInst: function() {
+        return Squeak.SpurObject;
+    },
+    classInstSize: function() {
+        // this is a class, answer number of named inst vars
+        var format = this.pointers[Squeak.Class_format];
+        return format & 0xFFFF;
+    },
+    isWeak: function() {
+        var format = this.pointers[Squeak.Class_format],
+            spec = (format >> 16) & 0x1F;
+        return (format & 4) === 4;
     },
 },
 'as method', {

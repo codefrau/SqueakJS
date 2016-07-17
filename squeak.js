@@ -236,8 +236,10 @@ var canUseMouseOffset = navigator.userAgent.match("AppleWebKit/");
 function updateMousePos(evt, canvas, display) {
     var evtX = canUseMouseOffset ? evt.offsetX : evt.layerX,
         evtY = canUseMouseOffset ? evt.offsetY : evt.layerY;
-    display.cursorCanvas.style.left = (evtX + canvas.offsetLeft + display.cursorOffsetX) + "px";
-    display.cursorCanvas.style.top = (evtY + canvas.offsetTop + display.cursorOffsetY) + "px";
+    if (display.cursorCanvas) {
+        display.cursorCanvas.style.left = (evtX + canvas.offsetLeft + display.cursorOffsetX) + "px";
+        display.cursorCanvas.style.top = (evtY + canvas.offsetTop + display.cursorOffsetY) + "px";
+    }
     var x = (evtX * canvas.width / canvas.offsetWidth) | 0,
         y = (evtY * canvas.height / canvas.offsetHeight) | 0;
     // clamp to display size
@@ -362,7 +364,7 @@ function createSqueakDisplay(canvas, options) {
         keys: [],
         clipboardString: '',
         clipboardStringChanged: false,
-        cursorCanvas: document.createElement("canvas"),
+        cursorCanvas: options.cursor !== false && document.createElement("canvas"),
         cursorOffsetX: 0,
         cursorOffsetY: 0,
         droppedFiles: [],
@@ -372,7 +374,7 @@ function createSqueakDisplay(canvas, options) {
     setupSwapButtons(options);
     if (options.pixelated) {
         canvas.classList.add("pixelated");
-        display.cursorCanvas.classList.add("pixelated");
+        display.cursorCanvas && display.cursorCanvas.classList.add("pixelated");
     }
 
     var eventQueue = null;
@@ -524,17 +526,19 @@ function createSqueakDisplay(canvas, options) {
         canvas.style.top = (t|0) + "px";
         canvas.style.width = (w|0) + "px";
         canvas.style.height = (h|0) + "px";
-        cursorCanvas.style.left = (l + display.cursorOffsetX + display.mouseX * scale|0) + "px";
-        cursorCanvas.style.top = (t + display.cursorOffsetY + display.mouseY * scale|0) + "px";
-        cursorCanvas.style.width = (cursorCanvas.width * scale|0) + "px";
-        cursorCanvas.style.height = (cursorCanvas.height * scale|0) + "px";
+        if (cursorCanvas) {
+            cursorCanvas.style.left = (l + display.cursorOffsetX + display.mouseX * scale|0) + "px";
+            cursorCanvas.style.top = (t + display.cursorOffsetY + display.mouseY * scale|0) + "px";
+            cursorCanvas.style.width = (cursorCanvas.width * scale|0) + "px";
+            cursorCanvas.style.height = (cursorCanvas.height * scale|0) + "px";
+        }
         if (!options.pixelated) {
             if (scale >= 3) {
                 canvas.classList.add("pixelated");
-                display.cursorCanvas.classList.add("pixelated");
+                cursorCanvas && cursorCanvas.classList.add("pixelated");
             } else {
                 canvas.classList.remove("pixelated");
-                display.cursorCanvas.classList.remove("pixelated");
+                cursorCanvas && display.cursorCanvas.classList.remove("pixelated");
             }
         }
     }
@@ -687,13 +691,15 @@ function createSqueakDisplay(canvas, options) {
         canvas.ontouchend(evt);
     };
     // cursorCanvas shows Squeak cursor
-    display.cursorCanvas.style.display = "block";
-    display.cursorCanvas.style.position = "absolute";
-    display.cursorCanvas.style.cursor = "none";
-    display.cursorCanvas.style.background = "transparent";
-    display.cursorCanvas.style.pointerEvents = "none";
-    canvas.parentElement.appendChild(display.cursorCanvas);
-    canvas.style.cursor = "none";
+    if (display.cursorCanvas) {
+        display.cursorCanvas.style.display = "block";
+        display.cursorCanvas.style.position = "absolute";
+        display.cursorCanvas.style.cursor = "none";
+        display.cursorCanvas.style.background = "transparent";
+        display.cursorCanvas.style.pointerEvents = "none";
+        canvas.parentElement.appendChild(display.cursorCanvas);
+        canvas.style.cursor = "none";
+    }
     // keyboard stuff
     document.onkeypress = function(evt) {
         if (!display.vm) return true;
@@ -868,7 +874,7 @@ function createSqueakDisplay(canvas, options) {
             if (imgData) display.context.putImageData(imgData, 0, 0);
         }
         // set cursor scale
-        if (options.fixedWidth) {
+        if (display.cursorCanvas && options.fixedWidth) {
             var cursorCanvas = display.cursorCanvas,
                 scale = canvas.offsetWidth / canvas.width;
             cursorCanvas.style.width = (cursorCanvas.width * scale) + "px";

@@ -2130,6 +2130,12 @@ Squeak.Object.subclass('Squeak.SpurObject',
         this.format = 0;
         this.isChar = true;
     },
+},
+'as method', {
+    methodPrimitiveIndex: function() {
+        if ((this.methodHeader() & 0x10000) === 0) return 0;
+        return this.bytes[1] + 256 * this.bytes[2];
+    },
 });
 
 Object.subclass('Squeak.Interpreter',
@@ -2355,8 +2361,9 @@ Object.subclass('Squeak.Interpreter',
             // Closures
             case 0x8A: this.pushNewArray(this.nextByte());   // create new temp vector
                 return;
-            case 0x8B: b2 = this.nextByte(); // invoke primitive number
-                this.callPrimitive(this.nextByte() * 256 + b2);
+            case 0x8B:
+                if (this.pc !== 1) throw Error("call prim bytecode not expected here")
+                this.pc = 3; // skip over primitive number
                 return;
             case 0x8C: b2 = this.nextByte(); // remote push from temp vector
                 this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2]);
@@ -2620,9 +2627,6 @@ Object.subclass('Squeak.Interpreter',
         this.send(this.specialSelectors[lobits*2],
             this.specialSelectors[(lobits*2)+1],
             false);  //specialSelectors is  {...sel,nArgs,sel,nArgs,...)
-    },
-    callPrimitive: function(index) {
-        throw Error("callPrimitive bytecode not implemented yet")
     },
 },
 'closures', {
@@ -7223,6 +7227,9 @@ Object.subclass('Squeak.InstructionPrinter',
             this.innerIndents[i] = (this.innerIndents[i] || 0) + 1;
         if (to > this.endPC) this.endPC = to;
     },
+    callPrimitive: function(primitiveIndex) {
+        this.print('primitive: ' + primitiveIndex);
+    },
 });
 
 Object.subclass('Squeak.InstructionStream',
@@ -7332,8 +7339,8 @@ Object.subclass('Squeak.InstructionStream',
         var byte2 = this.method.bytes[this.pc++];
         if (offset === 10)
             return byte2 < 128 ? client.pushNewArray(byte2) : client.popIntoNewArray(byte2 - 128);
-        if (offset === 11) throw Error("unusedBytecode");
         var byte3 = this.method.bytes[this.pc++];
+        if (offset === 11) return client.callPrimitive(byte2 + 256 * byte3);
         if (offset === 12) return client.pushRemoteTemp(byte2, byte3);
         if (offset === 13) return client.storeIntoRemoteTemp(byte2, byte3);
         if (offset === 14) return client.popIntoRemoteTemp(byte2, byte3);

@@ -949,7 +949,7 @@ Object.subclass('Squeak.Image',
                     pos += (size < 2 ? 2 - size : size & 1) * 4; // align on 8 bytes, 16 min
                     // low class ids are internal to Spur
                     if (classID >= 32) {
-                        var object = new Squeak.SpurObject();
+                        var object = new Squeak.ObjectSpur();
                         object.initFromImage(oop, classID, format, hash, bits);
                         if (prevObj) prevObj.nextObject = object;
                         this.oldSpaceCount++;
@@ -2056,7 +2056,7 @@ Object.subclass('Squeak.Object',
     },
 });
 
-Squeak.Object.subclass('Squeak.SpurObject',
+Squeak.Object.subclass('Squeak.ObjectSpur',
 'initialization',
 {
     installFromImage: function(oopMap, classTable, floatClass, littleEndian, makeChar) {
@@ -2194,7 +2194,7 @@ Squeak.Object.subclass('Squeak.SpurObject',
 },
 'as class', {
     defaultInst: function() {
-        return Squeak.SpurObject;
+        return Squeak.ObjectSpur;
     },
     classInstSize: function() {
         // this is a class, answer number of named inst vars

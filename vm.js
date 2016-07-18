@@ -4163,8 +4163,9 @@ Object.subclass('Squeak.Primitives',
             stObj.jsObject = obj;
             return stObj;
         }
-        if (typeof obj === "string" || obj.constructor === Uint8Array) return this.makeStString(obj);
-        if (obj.constructor === Array) return this.makeStArray(obj);
+	// A direct test of the buffer's constructor doesn't work on Safari 10.0.
+        if (typeof obj === "string" || obj.constructor.name === "Uint8Array") return this.makeStString(obj);
+        if (obj.constructor.name === "Array") return this.makeStArray(obj);
         throw Error("cannot make smalltalk object");
     },
     pointsTo: function(rcvr, arg) {
@@ -4172,8 +4173,9 @@ Object.subclass('Squeak.Primitives',
         return rcvr.pointers.indexOf(arg) >= 0;
     },
     asUint8Array: function(buffer) {
-        if (buffer.constructor === Uint8Array) return buffer;
-        if (buffer.constructor === ArrayBuffer) return new Uint8Array(buffer);
+	// A direct test of the buffer's constructor doesn't work on Safari 10.0.
+        if (buffer.constructor.name === "Uint8Array") return buffer;
+        if (buffer.constructor.name === "ArrayBuffer") return new Uint8Array(buffer);
         if (typeof buffer === "string") {
             var array = new Uint8Array(buffer.length);
             for (var i = 0; i < buffer.length; i++)

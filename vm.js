@@ -5297,6 +5297,7 @@ Object.subclass('Squeak.Primitives',
                 if (parm < 1 || parm > paramsArraySize) return false;
                 return this.popNandPushIfOK(2, this.makeStObject(this.vmParameterAt(parm)));
             case 2:
+                // ignore writes
                 return this.popNandPushIfOK(3, 0);
         };
         return false;
@@ -5336,6 +5337,9 @@ Object.subclass('Squeak.Primitives',
             // 39   Number of finalization signals for Weak Objects pending when current IGC/FGC completed (read-only)
             case 40: return 4; // BytesPerWord for this image
             case 41: return this.vm.image.formatVersion();
+    		//42	number of stack pages in use (Cog Stack VM only, otherwise nil)
+		    //43	desired number of stack pages (stored in image file header, max 65535; Cog VMs only, otherwise nil)
+		    case 44: return this.vm.image.bytesLeft(); // size of eden, in bytes
         }
         return null;
     },

@@ -1516,13 +1516,14 @@ Object.subclass('Squeak.Image',
         return classes;
     },
     initCharacterTable: function(characterClass) {
-        this.characterClass = characterClass.classInstProto("Character");
-        this.characterTable = [];
+        characterClass.classInstProto("Character"); // provide name
+        this.characterClass = characterClass;
+        this.characterTable = {};
     },
     getCharacter: function(unicode) {
         var char = this.characterTable[unicode];
         if (!char) {
-            char = new this.characterClass;
+            char = new this.characterClass.instProto;
             char.initInstanceOfChar(this.characterClass, unicode);
             this.characterTable[unicode] = char;
         }
@@ -1811,7 +1812,8 @@ Object.subclass('Squeak.Object',
             case 'ReadOnlyVariableBinding': return this.pointers.join("->");
             case 'LargePositiveInteger': return this.bytesAsNumberString(false);
             case 'LargeNegativeInteger': return this.bytesAsNumberString(true);
-            case 'Character': return "$" + String.fromCharCode(this.pointers[0]) + " (" + this.pointers[0].toString() + ")";
+            case 'Character': var unicode = this.pointers ? this.pointers[0] : this.hash; // Spur
+                return "$" + String.fromCharCode(unicode) + " (" + unicode.toString() + ")";
         }
         return  /^[aeiou]/i.test(className) ? 'an ' + className : 'a ' + className;
     },
@@ -3646,6 +3648,10 @@ Object.subclass('Squeak.Primitives',
         this.initDisplay();
         this.initAtCache();
         this.initModules();
+        if (vm.image.isSpur) {
+            this.charFromInt = this.charFromIntSpur;
+            this.charToInt = this.charToIntSpur;
+        }
     },
     initModules: function() {
         this.loadedModules = {};
@@ -3925,21 +3931,32 @@ Object.subclass('Squeak.Primitives',
                 else return this.pop2andPushBoolIfOK(this.vm.stackValue(1) !== this.vm.stackValue(0)); //new: primitiveNotIdentical
             // Sound Primitives (170-199)
             case 170: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStart', argCount);
+                else return this.primitiveAsCharacter(argCount);
             case 171: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStartWithSemaphore', argCount);
+                else return this.popNandPushIfOK(argCount + 1, this.stackNonInteger(0).hash); //primitiveImmediateAsInteger
             case 172: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStop', argCount);
+                break;  // fail
             case 173: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundAvailableSpace', argCount);
             case 174: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySamples', argCount);
             case 175: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySilence', argCount);
             case 176: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primWaveTableSoundmixSampleCountintostartingAtpan', argCount);
+                break;  // fail
             case 177: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primFMSoundmixSampleCountintostartingAtpan', argCount);
+                break;  // fail
             case 178: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primPluckedSoundmixSampleCountintostartingAtpan', argCount);
+                break;  // fail
             case 179: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primSampledSoundmixSampleCountintostartingAtpan', argCount);
+                break;  // fail
             case 180: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixFMSound', argCount);
+                break;  // fail
             case 181: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixPluckedSound', argCount);
+                break;  // fail
             case 182: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'oldprimSampledSoundmixSampleCountintostartingAtleftVolrightVol', argCount);
+                break;  // fail
             case 183: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveApplyReverb', argCount);
+                break;  // fail
             case 184: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixLoopedSampledSound', argCount);
-                break;  // fail 170-184 if fell through
+                break; // fail
             case 185: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixSampledSound', argCount);
                 else return this.primitiveExitCriticalSection(argCount);
             case 186: if (this.oldPrims) break; // unused
@@ -4465,6 +4482,15 @@ Object.subclass('Squeak.Primitives',
         var charTable = this.vm.specialObjects[Squeak.splOb_CharacterTable];
         return charTable.pointers[ascii];
     },
+    charFromIntSpur: function(unicode) {
+        return this.vm.image.getCharacter(unicode);
+    },
+    charToInt: function(obj) {
+        return obj.pointers[0];
+    },
+    charToIntSpur: function(obj) {
+        return obj.hash;
+    },
     makeFloat: function(value) {
         var floatClass = this.vm.specialObjects[Squeak.splOb_ClassFloat];
         var newFloat = this.vm.instantiateClass(floatClass, 2);
@@ -4620,7 +4646,7 @@ Object.subclass('Squeak.Primitives',
             // put a character...
             if (objToPut.sqClass !== this.vm.specialObjects[Squeak.splOb_ClassCharacter])
                 {this.success = false; return objToPut;}
-            intToPut = objToPut.pointers[0];
+            intToPut = this.charToInt(objToPut);
             if (typeof intToPut !== "number") {this.success = false; return objToPut;}
         } else { // put a byte...
             if (typeof objToPut !== "number") {this.success = false; return objToPut;}
@@ -4724,6 +4750,13 @@ Object.subclass('Squeak.Primitives',
         if (nextInstance) return nextInstance;
         this.success = false;
         return 0;
+    },
+    primitiveAsCharacter: function(argCount) {
+        var unicode = this.stackInteger(0);
+        if (unicode < 0 || unicode > 0x3FFFFFFF) return false;
+        var char = this.charFromInt(unicode);
+        if (!char) return false;
+        return this.popNandPushIfOK(argCount + 1, char);
     },
     primitiveFullGC: function(argCount) {
         this.vm.image.fullGC("primitive");

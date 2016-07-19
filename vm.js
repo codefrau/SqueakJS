@@ -1341,12 +1341,12 @@ Object.subclass('Squeak.Image',
     },
     someInstanceOf: function(clsObj) {
         var obj = this.firstOldObject;
-        while (true) {
+        while (obj) {
             if (obj.sqClass === clsObj)
                 return obj;
             obj = obj.nextObject || this.nextObjectWithGCFor(clsObj);
-            if (!obj) return null;
         }
+        return null;
     },
     nextInstanceAfter: function(obj) {
         var clsObj = obj.sqClass;
@@ -1360,6 +1360,15 @@ Object.subclass('Squeak.Image',
     nextObjectWithGCFor: function(clsObj) {
         if (this.newSpaceCount === 0 || !this.hasNewInstances[clsObj.oop]) return null;
         return this.fullGC("instance of " + clsObj.className());
+    },
+    allInstancesOf: function(clsObj) {
+        var obj = this.firstOldObject,
+            result = [];
+        while (obj) {
+            if (obj.sqClass === clsObj) result.push(obj);
+            obj = obj.nextObject || this.nextObjectWithGCFor(clsObj);
+        }
+        return result;
     },
     writeToBuffer: function() {
         var headerSize = 64,
@@ -3945,7 +3954,7 @@ Object.subclass('Squeak.Primitives',
             case 176: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primWaveTableSoundmixSampleCountintostartingAtpan', argCount);
                 break;  // fail
             case 177: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primFMSoundmixSampleCountintostartingAtpan', argCount);
-                break;  // fail
+                return this.popNandPushIfOK(1, this.allInstancesOf(this.stackNonInteger(0)));
             case 178: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primPluckedSoundmixSampleCountintostartingAtpan', argCount);
                 break;  // fail
             case 179: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primSampledSoundmixSampleCountintostartingAtpan', argCount);
@@ -4753,6 +4762,12 @@ Object.subclass('Squeak.Primitives',
         if (nextInstance) return nextInstance;
         this.success = false;
         return 0;
+    },
+    allInstancesOf: function(clsObj) {
+        var instances = this.vm.image.allInstancesOf(clsObj);
+        var array = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassArray], instances.length);
+        array.pointers = instances;
+        return array;
     },
     primitiveAsCharacter: function(argCount) {
         var unicode = this.stackInteger(0);

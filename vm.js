@@ -2028,17 +2028,14 @@ Object.subclass('Squeak.Object',
     },
 },
 'as method', {
-    methodHeader: function() {
-        return this.pointers[0];
-    },
     methodNumLits: function() {
         return (this.pointers[0]>>9) & 0xFF;
     },
     methodNumArgs: function() {
-        return (this.methodHeader()>>24) & 0xF;
+        return (this.pointers[0]>>24) & 0xF;
     },
     methodPrimitiveIndex: function() {
-        var primBits = (this.methodHeader()) & 0x300001FF;
+        var primBits = this.pointers[0] & 0x300001FF;
         if (primBits > 0x1FF)
             return (primBits & 0x1FF) + (primBits >> 19);
         else
@@ -2049,13 +2046,13 @@ Object.subclass('Squeak.Object',
         return assn.pointers[Squeak.Assn_value];
     },
     methodNeedsLargeFrame: function() {
-        return (this.methodHeader() & 0x20000) > 0;
+        return (this.pointers[0] & 0x20000) > 0;
     },
     methodAddPointers: function(headerAndLits) {
         this.pointers = headerAndLits;
     },
     methodTempCount: function() {
-        return (this.methodHeader()>>18) & 63;
+        return (this.pointers[0]>>18) & 63;
     },
     methodGetLiteral: function(zeroBasedIndex) {
         return this.pointers[1+zeroBasedIndex]; // step over header
@@ -2184,9 +2181,9 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             case 25: // CompiledMethod
             case 26: // CompiledMethod
             case 27: // CompiledMethod
-                var methodHeader = this.decodeWords(1, this.bits, littleEndian)[0];
-                if (methodHeader & 0x80000000) throw Error("Alternate bytecode set not supported")
-                var numLits = (methodHeader >> 1) & 0x7FFF,
+                var rawHeader = this.decodeWords(1, this.bits, littleEndian)[0];
+                if (rawHeader & 0x80000000) throw Error("Alternate bytecode set not supported")
+                var numLits = (rawHeader >> 1) & 0x7FFF,
                     oops = this.decodeWords(numLits+1, this.bits, littleEndian);
                 this.pointers = this.decodePointers(numLits+1, oops, oopMap, makeChar); //header+lits
                 this.bytes = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this._format & 3);
@@ -2306,7 +2303,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         return this.pointers[0] & 0x7FFF;
     },
     methodPrimitiveIndex: function() {
-        if ((this.methodHeader() & 0x10000) === 0) return 0;
+        if ((this.pointers[0] & 0x10000) === 0) return 0;
         return this.bytes[1] + 256 * this.bytes[2];
     },
 });

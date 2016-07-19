@@ -1097,7 +1097,7 @@ Object.subclass('Squeak.Image',
         var obj = this.firstOldObject,
             compiledMethodClass = this.specialObjectsArray.pointers[Squeak.splOb_ClassCompiledMethod];
         while (obj) {
-            if (obj.format >= 12) obj.sqClass = compiledMethodClass;
+            if (obj.isMethod()) obj.sqClass = compiledMethodClass;
             obj = obj.nextObject;
         }
     },
@@ -1510,7 +1510,7 @@ Object.subclass('Squeak.Image',
             var page = oopMap[classPages[p]];
             if (page.length === 1024) for (var i = 0; i < 1024; i++) {
                 var maybeClass = oopMap[page[i]]
-                if (maybeClass.format === 1) classes[p * 1024 + i] = maybeClass;
+                if (maybeClass._format === 1) classes[p * 1024 + i] = maybeClass;
             }
         }
         return classes;
@@ -1537,10 +1537,10 @@ Object.subclass('Squeak.Object',
         this.hash = hash;
         var instSpec = aClass.pointers[Squeak.Class_format],
             instSize = ((instSpec>>1) & 0x3F) + ((instSpec>>10) & 0xC0) - 1; //0-255
-        this.format = (instSpec>>7) & 0xF; //This is the 0-15 code
+        this._format = (instSpec>>7) & 0xF; //This is the 0-15 code
 
-        if (this.format < 8) {
-            if (this.format != 6) {
+        if (this._format < 8) {
+            if (this._format != 6) {
                 if (instSize + indexableSize > 0)
                     this.pointers = this.fillArray(instSize + indexableSize, nilObj);
             } else // Words
@@ -1552,7 +1552,7 @@ Object.subclass('Squeak.Object',
                         this.words = new Uint32Array(indexableSize);
         } else // Bytes
             if (indexableSize > 0) {
-                // this.format |= -indexableSize & 3;       //deferred to writeTo()
+                // this._format |= -indexableSize & 3;       //deferred to writeTo()
                 this.bytes = new Uint8Array(indexableSize); //Methods require further init of pointers
             }
 
@@ -1577,7 +1577,7 @@ Object.subclass('Squeak.Object',
     initAsClone: function(original, hash) {
         this.sqClass = original.sqClass;
         this.hash = hash;
-        this.format = original.format;
+        this._format = original._format;
         if (original.isFloat) {
             this.isFloat = original.isFloat;
             this.float = original.float;
@@ -1591,14 +1591,14 @@ Object.subclass('Squeak.Object',
         // initial creation from Image, with unmapped data
         this.oop = oop;
         this.sqClass = cls;
-        this.format = fmt;
+        this._format = fmt;
         this.hash = hsh;
         this.bits = data;
     },
     classNameFromImage: function(oopMap) {
         var name = oopMap[this.bits[Squeak.Class_name]];
-        if (name && name.format >= 8 && name.format < 12) {
-            var bytes = name.decodeBytes(name.bits.length, name.bits, 0, name.format & 3);
+        if (name && name._format >= 8 && name._format < 12) {
+            var bytes = name.decodeBytes(name.bits.length, name.bits, 0, name._format & 3);
             return Squeak.bytesAsString(bytes);
         }
         return "Class";
@@ -1610,7 +1610,7 @@ Object.subclass('Squeak.Object',
         var renamedObj = new instProto; // Squeak.Object
         renamedObj.oop = this.oop;
         renamedObj.sqClass = this.sqClass;
-        renamedObj.format = this.format;
+        renamedObj._format = this._format;
         renamedObj.hash = this.hash;
         renamedObj.bits = this.bits;
         return renamedObj;
@@ -1624,23 +1624,23 @@ Object.subclass('Squeak.Object',
         else
             this.sqClass = oopMap[ccInt];
         var nWords = this.bits.length;
-        if (this.format < 5) {
+        if (this._format < 5) {
             //Formats 0...4 -- Pointer fields
             if (nWords > 0) {
                 var oops = this.bits; // endian conversion was already done
                 this.pointers = this.decodePointers(nWords, oops, oopMap);
             }
-        } else if (this.format >= 12) {
+        } else if (this._format >= 12) {
             //Formats 12-15 -- CompiledMethods both pointers and bits
             var methodHeader = this.decodeWords(1, this.bits, littleEndian)[0],
                 numLits = (methodHeader>>10) & 255,
                 oops = this.decodeWords(numLits+1, this.bits, littleEndian);
             this.pointers = this.decodePointers(numLits+1, oops, oopMap); //header+lits
-            this.bytes = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this.format & 3);
-        } else if (this.format >= 8) {
+            this.bytes = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this._format & 3);
+        } else if (this._format >= 8) {
             //Formats 8..11 -- ByteArrays (and ByteStrings)
             if (nWords > 0)
-                this.bytes = this.decodeBytes(nWords, this.bits, 0, this.format & 3);
+                this.bytes = this.decodeBytes(nWords, this.bits, 0, this._format & 3);
         } else if (this.sqClass == floatClass) {
             //These words are actually a Float
             this.isFloat = true;
@@ -1730,6 +1730,35 @@ Object.subclass('Squeak.Object',
         return array;
     },
 },
+'testing', {
+    isWords: function() {
+        return this._format === 6;
+    },
+    isBytes: function() {
+        var fmt = this._format;
+        return fmt >= 8 && fmt <= 11;
+    },
+    isWordsOrBytes: function() {
+        var fmt = this._format;
+        return fmt == 6  || (fmt >= 8 && fmt <= 11);
+    },
+    isPointers: function() {
+        return this._format <= 4;
+    },
+    isMethod: function() {
+        return this._format >= 12;
+    },
+    sameShapeAs: function(obj) {
+        // can we change this class to that of obj?
+        return this._format === obj._format &&
+            this.sqClass.isCompact === obj.sqClass.isCompact &&
+            this.sqClass.classInstSize() === obj.sqClass.classInstSize();
+    },
+    sameFormatAs: function(obj) {
+        var f = this._format, o = obj._format;
+        return f < 8 ? f === o : (f & 0xC) === (o & 0xC);
+    },
+},
 'printing', {
     toString: function() {
         return this.sqInstName();
@@ -1788,23 +1817,6 @@ Object.subclass('Squeak.Object',
     },
 },
 'accessing', {
-    isWords: function() {
-        return this.format === 6;
-    },
-    isBytes: function() {
-        var fmt = this.format;
-        return fmt >= 8 && fmt <= 11;
-    },
-    isWordsOrBytes: function() {
-        var fmt = this.format;
-        return fmt == 6  || (fmt >= 8 && fmt <= 11);
-    },
-    isPointers: function() {
-        return this.format <= 4;
-    },
-    isMethod: function() {
-        return this.format >= 12;
-    },
     pointersSize: function() {
         return this.pointers ? this.pointers.length : 0;
     },
@@ -1815,10 +1827,20 @@ Object.subclass('Squeak.Object',
         return this.isFloat ? 2 : this.words ? this.words.length : 0;
     },
     instSize: function() {//same as class.classInstSize, but faster from format
-        var fmt = this.format;
+        var fmt = this._format;
         if (fmt > 4 || fmt === 2) return 0;      //indexable fields only
         if (fmt < 2) return this.pointersSize(); //fixed fields only
         return this.sqClass.classInstSize(); 
+    },
+    indexableSize: function(primHandler) {
+        var fmt = this._format;
+        if (fmt < 2) return -1; //not indexable
+        if (fmt === 3 && primHandler.vm.isContext(this) && !primHandler.allowAccessBeyondSP)
+            return this.pointers[Squeak.Context_stackPointer]; // no access beyond top of stacks
+        if (fmt < 6) return this.pointersSize() - this.instSize(); // pointers
+        if (fmt < 8) return this.wordsSize(); // words
+        if (fmt < 12) return this.bytesSize(); // bytes
+        return this.bytesSize() + (4 * this.pointersSize()); // methods
     },
     floatData: function() {
         var buffer = new ArrayBuffer(8);
@@ -1889,10 +1911,10 @@ Object.subclass('Squeak.Object',
     },
     writeTo: function(data, pos, image) {
         // Write 1 to 3 header words encoding type, class, and size, then instance data
-        if (this.bytes) this.format |= -this.bytes.length & 3;
+        if (this.bytes) this._format |= -this.bytes.length & 3;
         var beforePos = pos,
             size = this.snapshotSize(),
-            formatAndHash = ((this.format & 15) << 8) | ((this.hash & 4095) << 17);
+            formatAndHash = ((this._format & 15) << 8) | ((this.hash & 4095) << 17);
         // write header words first
         switch (size.header) {
             case 2:
@@ -2059,13 +2081,53 @@ Object.subclass('Squeak.Object',
 Squeak.Object.subclass('Squeak.ObjectSpur',
 'initialization',
 {
+    initInstanceOf: function(aClass, indexableSize, hash, nilObj) {
+        this.sqClass = aClass;
+        this.hash = hash;
+        var instSpec = aClass.pointers[Squeak.Class_format],
+            instSize = instSpec & 0xFFFF,
+            format = (instSpec>>16) & 0x1F
+        this._format = format;
+        if (format < 12) {
+            if (format < 10) {
+                if (instSize + indexableSize > 0)
+                    this.pointers = this.fillArray(instSize + indexableSize, nilObj);
+            } else // Words
+                if (indexableSize > 0)
+                    if (aClass.isFloatClass) {
+                        this.isFloat = true;
+                        this.float = 0.0;
+                    } else
+                        this.words = new Uint32Array(indexableSize);
+        } else // Bytes
+            if (indexableSize > 0) {
+                // this._format |= -indexableSize & 3;       //deferred to writeTo()
+                this.bytes = new Uint8Array(indexableSize);  //Methods require further init of pointers
+            }
+//      Definition of Spur's format code...
+//
+// 		0	= 0 sized objects (UndefinedObject True False et al)
+// 		1	= non-indexable objects with inst vars (Point et al)
+// 		2	= indexable objects with no inst vars (Array et al)
+// 		3	= indexable objects with inst vars (MethodContext AdditionalMethodState et al)
+// 		4	= weak indexable objects with inst vars (WeakArray et al)
+// 		5	= weak non-indexable objects with inst vars (ephemerons) (Ephemeron)
+// 		6	= unused
+// 		7	= immediates (SmallInteger, Character)
+// 		8	= unused
+// 		9	= 64-bit indexable
+// 	10-11	= 32-bit indexable (Bitmap)					(plus one odd bit, unused in 32-bits)
+// 	12-15	= 16-bit indexable							(plus two odd bits, one unused in 32-bits)
+// 	16-23	= 8-bit indexable							(plus three odd bits, one unused in 32-bits)
+// 	24-31	= compiled methods (CompiledMethod)	(plus three odd bits, one unused in 32-bits)
+    },
     installFromImage: function(oopMap, classTable, floatClass, littleEndian, makeChar) {
         //Install this object by decoding format, and rectifying pointers
         var classID = this.sqClass;
         this.sqClass = classTable[classID];
         if (!this.sqClass) throw Error("Class not found")
         var nWords = this.bits.length;
-        switch (this.format) {
+        switch (this._format) {
             case 0: // zero sized object
                 break;
             case 1: // only inst vars
@@ -2105,7 +2167,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             case 18: // ... length-2
             case 19: // ... length-3
                 if (nWords > 0)
-                    this.bytes = this.decodeBytes(nWords, this.bits, 0, this.format & 3);
+                    this.bytes = this.decodeBytes(nWords, this.bits, 0, this._format & 3);
                 break;
             case 24: // CompiledMethod
             case 25: // CompiledMethod
@@ -2116,10 +2178,10 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                 var numLits = (methodHeader >> 1) & 0x7FFF,
                     oops = this.decodeWords(numLits+1, this.bits, littleEndian);
                 this.pointers = this.decodePointers(numLits+1, oops, oopMap, makeChar); //header+lits
-                this.bytes = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this.format & 3);
+                this.bytes = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this._format & 3);
                 break
             default:
-                throw Error("Unknown object format: " + this.format);
+                throw Error("Unknown object format: " + this._format);
 
         }
         delete this.bits;
@@ -2147,31 +2209,25 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
     initInstanceOfChar: function(charClass, unicode) {
         this.sqClass = charClass;
         this.hash = unicode;
-        this.format = 0;
+        this._format = 0;
         this.isChar = true;
     },
 },
 'accessing', {
     instSize: function() {//same as class.classInstSize, but faster from format
-        if (this.format < 2) return this.pointersSize(); //fixed fields only
+        if (this._format < 2) return this.pointersSize(); //fixed fields only
         return this.sqClass.classInstSize();
     },
-    isBytes: function() {
-        var fmt = this.format;
-        return fmt >= 16 && fmt <= 23;
-    },
-    isMethod: function() {
-        return this.format >= 24;
-    },
-    isPointers: function() {
-        return this.format <= 6;
-    },
-    isWords: function() {
-        return this.format === 10;
-    },
-    isWordsOrBytes: function() {
-        var fmt = this.format;
-        return fmt === 10 || (fmt >= 16 && fmt <= 23);
+    indexableSize: function(primHandler) {
+        var fmt = this._format;
+        if (fmt < 2) return -1; //not indexable
+        if (fmt === 3 && primHandler.vm.isContext(this) && !primHandler.allowAccessBeyondSP)
+            return this.pointers[Squeak.Context_stackPointer]; // no access beyond top of stacks
+        if (fmt < 6) return this.pointersSize() - this.instSize(); // pointers
+        if (fmt < 12) return this.wordsSize(); // words
+        if (fmt < 16) return this.shortsSize(); // shorts
+        if (fmt < 24) return this.bytesSize(); // bytes
+        return 4 * this.pointersSize() + this.bytesSize(); // methods
     },
     snapshotSize: function() {
         // words of extra object header and body this object would take up in image snapshot
@@ -2190,6 +2246,33 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
     },
     writeTo: function(data, pos, image) {
         throw Error("not implemented yet");
+    },
+},
+'testing', {
+    isBytes: function() {
+        var fmt = this._format;
+        return fmt >= 16 && fmt <= 23;
+    },
+    isMethod: function() {
+        return this._format >= 24;
+    },
+    isPointers: function() {
+        return this._format <= 6;
+    },
+    isWords: function() {
+        return this._format === 10;
+    },
+    isWordsOrBytes: function() {
+        var fmt = this._format;
+        return fmt === 10 || (fmt >= 16 && fmt <= 23);
+    },
+    sameShapeAs: function(obj) {
+        return this._format === obj._format &&
+            this.sqClass.classInstSize() === obj.sqClass.classInstSize();
+    },
+    sameFormatAs: function(obj) {
+        var f = this._format, o = obj._format;
+        return f < 16 ? f === o : (f & 0xF8) === (o & 0xF8);
     },
 },
 'as class', {
@@ -3290,9 +3373,6 @@ Object.subclass('Squeak.Interpreter',
     isMethodContext: function(obj) {
         return obj.sqClass === this.specialObjects[Squeak.splOb_ClassMethodContext];
     },
-    isMethod: function(obj, index) {
-        return  obj.sqClass === this.specialObjects[Squeak.splOb_ClassCompiledMethod];
-    },
     instantiateClass: function(aClass, indexableSize) {
         return this.image.instantiateClass(aClass, indexableSize, this.nilObj);
     },
@@ -4358,14 +4438,7 @@ Object.subclass('Squeak.Primitives',
     },
     indexableSize: function(obj) {
         if (typeof obj === "number") return -1; // -1 means not indexable
-        var fmt = obj.format;
-        if (fmt<2) return -1; //not indexable
-        if (fmt===3 && this.vm.isContext(obj) && !this.allowAccessBeyondSP)
-            return obj.pointers[Squeak.Context_stackPointer]; // no access beyond top of stacks
-        if (fmt<6) return obj.pointersSize() - obj.instSize(); // pointers
-        if (fmt<8) return obj.wordsSize(); // words
-        if (fmt<12) return obj.bytesSize(); // bytes
-        return obj.bytesSize() + (4 * obj.pointersSize()); // methods
+        return obj.indexableSize(this);
     },
     isA: function(obj, knownClass) {
         return obj.sqClass === this.vm.specialObjects[knownClass];
@@ -4497,14 +4570,14 @@ Object.subclass('Squeak.Primitives',
         if (index < 1 || index > info.size) {this.success = false; return array;}
         if (includeInstVars)  //pointers...   instVarAt and objectAt
             return array.pointers[index-1];
-        if (array.format<6)   //pointers...   normal at:
+        if (array.isPointers())   //pointers...   normal at:
             return array.pointers[index-1+info.ivarOffset];
-        if (array.format<8) // words...
+        if (array.isWords()) // words...
             return this.pos32BitIntFor(array.words[index-1]);
-        if (array.format<12) // bytes...
+        if (array.isBytes()) // bytes...
             if (info.convertChars) return this.charFromInt(array.bytes[index-1] & 0xFF);
             else return array.bytes[index-1] & 0xFF;
-        // methods (format>=12) must simulate Squeak's method indexing
+        // methods must simulate Squeak's method indexing
         var offset = array.pointersSize() * 4;
         if (index-1-offset < 0) {this.success = false; return array;} //reading lits as bytes
         return array.bytes[index-1-offset] & 0xFF;
@@ -4534,10 +4607,10 @@ Object.subclass('Squeak.Primitives',
         var objToPut = this.vm.stackValue(0);
         if (includeInstVars)  // pointers...   instVarAtPut and objectAtPut
             return array.pointers[index-1] = objToPut; //eg, objectAt:
-        if (array.format<6)  // pointers...   normal atPut
+        if (array.isPointers())  // pointers...   normal atPut
             return array.pointers[index-1+info.ivarOffset] = objToPut;
         var intToPut;
-        if (array.format<8) {  // words...
+        if (array.isWords()) {  // words...
             intToPut = this.stackPos32BitInt(0);
             if (this.success) array.words[index-1] = intToPut;
             return objToPut;
@@ -4554,9 +4627,9 @@ Object.subclass('Squeak.Primitives',
             intToPut = objToPut;
         }
         if (intToPut<0 || intToPut>255) {this.success = false; return objToPut;}
-        if (array.format<8)  // bytes...
+        if (array.isBytes())  // bytes...
             return array.bytes[index-1] = intToPut;
-        // methods (format>=12) must simulate Squeak's method indexing
+        // methods must simulate Squeak's method indexing
         var offset = array.pointersSize() * 4;
         if (index-1-offset < 0) {this.success = false; return array;} //writing lits as bytes
         array.bytes[index-1-offset] = intToPut;
@@ -4608,16 +4681,16 @@ Object.subclass('Squeak.Primitives',
         var cacheable =
             (this.vm.verifyAtSelector === atOrPutSelector)         //is at or atPut
             && (this.vm.verifyAtClass === array.sqClass)           //not a super send
-            && !(array.format === 3 && this.vm.isContext(array));  //not a context (size can change)
+            && !this.vm.isContext(array);                          //not a context (size can change)
         info = cacheable ? atOrPutCache[array.hash & this.atCacheMask] : this.nonCachedInfo;
         info.array = array;
         info.convertChars = convertChars;
         if (includeInstVars) {
-            info.size = array.instSize() + Math.max(0, this.indexableSize(array));
+            info.size = array.instSize() + Math.max(0, array.indexableSize(this));
             info.ivarOffset = 0;
         } else {
-            info.size = this.indexableSize(array);
-            info.ivarOffset = (array.format < 6) ? array.instSize() : 0;
+            info.size = array.indexableSize(this);
+            info.ivarOffset = array.isPointers() ? array.instSize() : 0;
         }
         return info;
     },
@@ -4685,10 +4758,7 @@ Object.subclass('Squeak.Primitives',
         var rcvr = this.stackNonInteger(1),
             arg = this.stackNonInteger(0);
         if (!this.success) return false;
-        if (rcvr.format !== arg.format ||
-            rcvr.sqClass.isCompact !== arg.sqClass.isCompact ||
-            rcvr.sqClass.classInstSize() !== arg.sqClass.classInstSize())
-                return false;
+        if (!rcvr.sameShapeAs(arg)) return false;
         rcvr.sqClass = arg.sqClass;
         return this.popNIfOK(1);
     },
@@ -4809,13 +4879,8 @@ Object.subclass('Squeak.Primitives',
         var src = this.stackNonInteger(1);
         var srcPos = this.stackInteger(0) - 1;
         if (!this.success) return dst; //some integer not right
-        var srcFmt = src.format;
-        var dstFmt = dst.format;
-        if (dstFmt < 8)
-            if (dstFmt != srcFmt) {this.success = false; return dst;} //incompatible formats
-        else
-            if ((dstFmt&0xC) != (srcFmt&0xC)) {this.success = false; return dst;} //incompatible formats
-        if (srcFmt<4) {//pointer type objects
+        if (!src.sameFormatAs(dst)) {this.success = false; return dst;} //incompatible formats
+        if (src.isPointers()) {//pointer type objects
             var totalLength = src.pointersSize();
             var srcInstSize = src.instSize();
             srcPos += srcInstSize;
@@ -4829,7 +4894,7 @@ Object.subclass('Squeak.Primitives',
             for (var i = 0; i < count; i++)
                 dst.pointers[dstPos + i] = src.pointers[srcPos + i];
             return dst;
-        } else if (srcFmt < 8) { //words type objects
+        } else if (src.isWords()) { //words type objects
             var totalLength = src.wordsSize();
             if ((srcPos < 0) || (srcPos + count) > totalLength)
                 {this.success = false; return dst;} //would go out of bounds
@@ -5220,7 +5285,7 @@ Object.subclass('Squeak.Primitives',
         0 args: return an Array of VM parameter values;
         1 arg:  return the indicated VM parameter;
         2 args: set the VM indicated parameter. */
-        var paramsArraySize = 41;
+        var paramsArraySize = 44;
         switch (argCount) {
             case 0:
                 var arrayObj = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassArray], paramsArraySize);

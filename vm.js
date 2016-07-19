@@ -3937,8 +3937,11 @@ Object.subclass('Squeak.Primitives',
             case 172: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStop', argCount);
                 break;  // fail
             case 173: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundAvailableSpace', argCount);
+                else return this.popNandPushIfOK(2, this.objectAt(false,false,true)); // slotAt:
             case 174: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySamples', argCount);
+                else return this.popNandPushIfOK(3, this.objectAtPut(false,false,true)); // slotAt:put:
             case 175: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySilence', argCount);
+                else return this.popNandPushIfOK(1, this.stackNonInteger(0).hash); //primitiveBehaviorHash
             case 176: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primWaveTableSoundmixSampleCountintostartingAtpan', argCount);
                 break;  // fail
             case 177: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primFMSoundmixSampleCountintostartingAtpan', argCount);

@@ -4492,8 +4492,13 @@ Object.subclass('Squeak.Primitives',
     },
     charFromInt: function(ascii) {
         var charTable = this.vm.specialObjects[Squeak.splOb_CharacterTable];
-        return charTable.pointers[ascii];
-    },
+        var char = charTable.pointers[ascii];
+        if (char) return char;
+        var charClass = this.vm.specialObjects[Squeak.splOb_ClassCharacter];
+        char = this.vm.instantiateClass(charClass, 0);
+        char.pointers[0] = ascii;
+        return char;
+},
     charFromIntSpur: function(unicode) {
         return this.vm.image.getCharacter(unicode);
     },
@@ -4611,7 +4616,8 @@ Object.subclass('Squeak.Primitives',
         if (array.isPointers())   //pointers...   normal at:
             return array.pointers[index-1+info.ivarOffset];
         if (array.isWords()) // words...
-            return this.pos32BitIntFor(array.words[index-1]);
+            if (info.convertChars) return this.charFromInt(array.words[index-1] & 0x3FFFFFFF);
+            else return this.pos32BitIntFor(array.words[index-1]);
         if (array.isBytes()) // bytes...
             if (info.convertChars) return this.charFromInt(array.bytes[index-1] & 0xFF);
             else return array.bytes[index-1] & 0xFF;

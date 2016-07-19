@@ -2032,7 +2032,7 @@ Object.subclass('Squeak.Object',
         return this.pointers[0];
     },
     methodNumLits: function() {
-        return this.pointers.length - 1;
+        return (this.pointers[0]>>9) & 0xFF;
     },
     methodNumArgs: function() {
         return (this.methodHeader()>>24) & 0xF;
@@ -2302,6 +2302,9 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
     },
 },
 'as method', {
+    methodNumLits: function() {
+        return this.pointers[0] & 0x7FFF;
+    },
     methodPrimitiveIndex: function() {
         if ((this.methodHeader() & 0x10000) === 0) return 0;
         return this.bytes[1] + 256 * this.bytes[2];
@@ -4894,9 +4897,9 @@ Object.subclass('Squeak.Primitives',
         var header = this.stackInteger(0);
         var bytecodeCount = this.stackInteger(1);
         if (!this.success) return 0;
-        var litCount = (header>>9) & 0xFF;
         var method = this.vm.instantiateClass(this.vm.stackValue(2), bytecodeCount);
         method.pointers = [header];
+        var litCount = method.methodNumLits();
         for (var i = 0; i < litCount; i++)
             method.pointers.push(this.vm.nilObj);
         this.vm.popNandPush(1+argCount, method);

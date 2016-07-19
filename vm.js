@@ -4911,7 +4911,7 @@ Object.subclass('Squeak.Primitives',
             argsArray = this.stackNonInteger(1),
             receiver = this.vm.stackValue(2);
         // Allow for up to two extra arguments (e.g. for mirror primitives).
-        if (!this.success || !this.vm.isMethod(methodObj) || argCount > 4) return false;
+        if (!this.success || !methodObj.isMethod() || argCount > 4) return false;
         var numArgs = methodObj.methodNumArgs();
         if (numArgs !== argsArray.pointersSize()) return false;
         // drop all args, push receiver, and new arguments

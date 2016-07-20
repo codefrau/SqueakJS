@@ -2145,7 +2145,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
 // 	16-23	= 8-bit indexable							(plus three odd bits, one unused in 32-bits)
 // 	24-31	= compiled methods (CompiledMethod)	(plus three odd bits, one unused in 32-bits)
     },
-    installFromImage: function(oopMap, classTable, floatClass, littleEndian, makeChar) {
+    installFromImage: function(oopMap, classTable, floatClass, littleEndian, getCharacter) {
         //Install this object by decoding format, and rectifying pointers
         var classID = this.sqClass;
         this.sqClass = classTable[classID];
@@ -2161,7 +2161,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             case 5: // only inst vars (weak)
                 if (nWords > 0) {
                     var oops = this.bits; // endian conversion was already done
-                    this.pointers = this.decodePointers(nWords, oops, oopMap, makeChar);
+                    this.pointers = this.decodePointers(nWords, oops, oopMap, getCharacter);
                 }
                 break;
             case 10: // 32 bit array
@@ -2201,7 +2201,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                 if (rawHeader & 0x80000000) throw Error("Alternate bytecode set not supported")
                 var numLits = (rawHeader >> 1) & 0x7FFF,
                     oops = this.decodeWords(numLits+1, this.bits, littleEndian);
-                this.pointers = this.decodePointers(numLits+1, oops, oopMap, makeChar); //header+lits
+                this.pointers = this.decodePointers(numLits+1, oops, oopMap, getCharacter); //header+lits
                 this.bytes = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this._format & 3);
                 break
             default:
@@ -2211,7 +2211,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         delete this.bits;
         this.mark = false; // for GC
     },
-    decodePointers: function(nWords, theBits, oopMap, makeChar) {
+    decodePointers: function(nWords, theBits, oopMap, getCharacter) {
         //Convert immediate objects and look up object pointers in oopMap
         var ptrs = new Array(nWords);
         for (var i = 0; i < nWords; i++) {
@@ -2219,7 +2219,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             if ((oop & 1) === 1) {          // SmallInteger
                 ptrs[i] = oop >> 1;
             } else if ((oop & 3) === 2) {   // Character
-                ptrs[i] = makeChar(oop >>> 2);
+                ptrs[i] = getCharacter(oop >>> 2);
             } else {                        // Object
                 ptrs[i] = oopMap[oop] || 42424242;
                 // when loading a context from image segment, there is

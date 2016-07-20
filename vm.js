@@ -1011,6 +1011,7 @@ Object.subclass('Squeak.Image',
             this.initCharacterTable(charClass);
             compactClasses = this.spurClassTable(oopMap, classPages);
             nativeFloats = this.getCharacter.bind(this);
+            this.initSpurOverrides();
         }
         var obj = this.firstOldObject,
             done = 0,
@@ -1266,6 +1267,13 @@ Object.subclass('Squeak.Image',
         this.lastHash = (13849 + (27181 * this.lastHash)) & 0xFFFFFFFF;
         return this.lastHash & 0xFFF;
     },
+    registerObjectSpur: function(obj) {
+        // We don't actually register the object yet, because that would prevent
+        // it from being garbage-collected by the Javascript collector
+        obj.oop = -(++this.newSpaceCount); // temp oops are negative. Real oop assigned when surviving GC
+        // Note this is also done in loadImageSegment()
+        return 0; // actual hash created on demand
+    },
     instantiateClass: function(aClass, indexableSize, filler) {
         var newObject = new (aClass.classInstProto()); // Squeak.Object
         var hash = this.registerObject(newObject);
@@ -1511,6 +1519,9 @@ Object.subclass('Squeak.Image',
 },
 'spur support',
 {
+    initSpurOverrides: function() {
+        this.registerObject = this.registerObjectSpur;
+    },
     spurClassTable: function(oopMap, classPages) {
         var classes = {};
         for (var p = 0; p < 4096; p++) {
@@ -3664,6 +3675,7 @@ Object.subclass('Squeak.Primitives',
         if (vm.image.isSpur) {
             this.charFromInt = this.charFromIntSpur;
             this.charToInt = this.charToIntSpur;
+            this.identityHash = this.identityHashSpur;
         }
     },
     initModules: function() {
@@ -3839,7 +3851,7 @@ Object.subclass('Squeak.Primitives',
             case 72: return this.primitiveArrayBecome(argCount, false); // one way
             case 73: return this.popNandPushIfOK(2, this.objectAt(false,false,true)); // instVarAt:
             case 74: return this.popNandPushIfOK(3, this.objectAtPut(false,false,true)); // instVarAt:put:
-            case 75: return this.popNandPushIfOK(1, this.stackNonInteger(0).hash); // Object.identityHash
+            case 75: return this.popNandPushIfOK(1, this.identityHash(this.stackNonInteger(0))); // Object.identityHash
             case 76: return this.primitiveStoreStackp(argCount);  // (Blue Book: primitiveAsObject)
             case 77: return this.popNandPushIfOK(1, this.someInstanceOf(this.stackNonInteger(0))); // Class.someInstance
             case 78: return this.popNandPushIfOK(1, this.nextInstanceAfter(this.stackNonInteger(0))); // Object.nextInstance
@@ -3954,7 +3966,7 @@ Object.subclass('Squeak.Primitives',
             case 174: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySamples', argCount);
                 else return this.popNandPushIfOK(3, this.objectAtPut(false,false,true)); // slotAt:put:
             case 175: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySilence', argCount);
-                else return this.popNandPushIfOK(1, this.stackNonInteger(0).hash); //primitiveBehaviorHash
+                else return this.popNandPushIfOK(1, this.behaviorHash(this.stackNonInteger(0))); //primitiveBehaviorHash
             case 176: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primWaveTableSoundmixSampleCountintostartingAtpan', argCount);
                 break;  // fail
             case 177: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primFMSoundmixSampleCountintostartingAtpan', argCount);
@@ -4778,6 +4790,22 @@ Object.subclass('Squeak.Primitives',
         var array = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassArray], instances.length);
         array.pointers = instances;
         return array;
+    },
+    identityHash: function(obj) {
+        return obj.hash;
+    },
+    identityHashSpur: function(obj) {
+        var hash = obj.hash;
+        if (hash > 0) return hash;
+        return obj.hash = this.newObjectHash();
+    },
+    behaviorHash: function(obj) {
+        var hash = obj.hash;
+        if (hash > 0) return hash;
+        throw Error("behaviorHash not implemented yet")
+    },
+    newObjectHash: function(obj) {
+        return Math.floor(Math.random() * 0x3FFFFFFE) + 1;
     },
     primitiveAsCharacter: function(argCount) {
         var unicode = this.stackInteger(0);

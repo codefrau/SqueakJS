@@ -1843,7 +1843,7 @@ Object.subclass('Squeak.Object',
     },
     nonWeakSize: function() {
         if (!this.pointers) return 0;
-        return this.format === 4            // weak?
+        return this._format === 4           // weak?
             ? this.sqClass.classInstSize()  // only inst vars
             : this.pointers.length;         // all fields
     },

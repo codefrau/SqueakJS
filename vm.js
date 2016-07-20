@@ -1161,13 +1161,11 @@ Object.subclass('Squeak.Image',
                 todo.push(object.sqClass);
             var body = object.pointers;
             if (body) {                   // trace all unmarked pointers
-                var n = body.length;
+                var n = object.nonWeakSize();               // do not trace weak fields
                 if (this.vm.isContext(object)) {            // contexts have garbage beyond SP
                     n = object.contextSizeWithStack();
                     for (var i = n; i < body.length; i++)   // clean up that garbage
                         body[i] = this.vm.nilObj;
-                } else if (object.sqClass.isWeak()) {       // do not trace the indexed part in weak arrays
-                    n = object.sqClass.classInstSize();
                 }
                 for (var i = 0; i < n; i++)
                     if (typeof body[i] === "object" && !body[i].mark)      // except SmallInts
@@ -1830,6 +1828,12 @@ Object.subclass('Squeak.Object',
 'accessing', {
     pointersSize: function() {
         return this.pointers ? this.pointers.length : 0;
+    },
+    nonWeakSize: function() {
+        if (!this.pointers) return 0;
+        return this.format === 4            // weak?
+            ? this.sqClass.classInstSize()  // only inst vars
+            : this.pointers.length;         // all fields
     },
     bytesSize: function() {
         return this.bytes ? this.bytes.length : 0;

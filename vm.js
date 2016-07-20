@@ -1169,8 +1169,9 @@ Object.subclass('Squeak.Image',
                         body[i] = this.vm.nilObj;
                 }
                 for (var i = 0; i < n; i++)
-                    if (typeof body[i] === "object" && !body[i].mark)      // except SmallInts
+                    if (typeof body[i] === "object" && !body[i].mark)      // except immediates
                         todo.push(body[i]);
+                // Note: "immediate" character objects in Spur always stay marked
             }
         }
         // sort by oop to preserve creation order
@@ -2230,10 +2231,11 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         return ptrs;
     },
     initInstanceOfChar: function(charClass, unicode) {
+        this.oop = (unicode << 2) | 2;
         this.sqClass = charClass;
         this.hash = unicode;
-        this._format = 0;
-        this.isChar = true;
+        this._format = 7;
+        this.mark = true;   // stays always marked so not traced by GC
     },
 },
 'accessing', {

@@ -4345,9 +4345,9 @@ Object.subclass('Squeak.Primitives',
             value = 0;
         for (var i = 0, f = 1; i < 4; i++, f *= 256)
             value += bytes[i] * f;
-        if (this.isA(stackVal, Squeak.splOb_ClassLargePositiveInteger))
+        if (this.isA(stackVal, Squeak.splOb_ClassLargePositiveInteger) && value <= 0x7FFFFFFF)
             return value;
-        if (this.isA(stackVal, Squeak.splOb_ClassLargeNegativeInteger))
+        if (this.isA(stackVal, Squeak.splOb_ClassLargeNegativeInteger) && -value >= -0x80000000)
             return -value;
         this.success = false;
         return 0;

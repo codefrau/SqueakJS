@@ -4713,7 +4713,15 @@ Object.subclass('Squeak.Primitives',
             return array.pointers[index-1+info.ivarOffset] = objToPut;
         var intToPut;
         if (array.isWords()) {  // words...
-            intToPut = this.stackPos32BitInt(0);
+            if (convertChars) {
+                // put a character...
+                if (objToPut.sqClass !== this.vm.specialObjects[Squeak.splOb_ClassCharacter])
+                    {this.success = false; return objToPut;}
+                intToPut = this.charToInt(objToPut);
+                if (typeof intToPut !== "number") {this.success = false; return objToPut;}
+            } else {
+                intToPut = this.stackPos32BitInt(0);
+            }
             if (this.success) array.words[index-1] = intToPut;
             return objToPut;
         }

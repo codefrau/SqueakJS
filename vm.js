@@ -1834,7 +1834,7 @@ Object.subclass('Squeak.Object',
             case 'Character': var unicode = this.pointers ? this.pointers[0] : this.hash; // Spur
                 return "$" + String.fromCharCode(unicode) + " (" + unicode.toString() + ")";
         }
-        return  /^[aeiou]/i.test(className) ? 'an ' + className : 'a ' + className;
+        return  /^[aeiou]/i.test(className) ? 'an' + className : 'a' + className;
     },
 },
 'accessing', {
@@ -3658,6 +3658,31 @@ Object.subclass('Squeak.Interpreter',
             if (selectorObj.bytesAsString() !== 'blockCopy:') return true;
         }
         return false;
+    },
+    nextSendSelector: function() {
+        // if the next bytecode corresponds to a Smalltalk
+        // message send, answer the selector
+        var byte = this.method.bytes[this.pc];
+        if (byte < 131 || byte == 200) return null;
+        var selectorObj;
+        if (byte >= 0xD0 ) {
+            selectorObj = this.method.methodGetLiteral(byte & 0x0F);
+        } else if (byte >= 0xB0 ) {
+            selectorObj = this.specialSelectors[2 * (byte - 0xB0)];
+        } else if (byte <= 134) { 
+            // long form support demands we check the selector
+            var litIndex;
+            if (byte === 132) {
+                if ((this.method.bytes[this.pc + 1] >> 5) > 1) return null;
+                litIndex = this.method.bytes[this.pc + 2];
+            } else
+                litIndex = this.method.bytes[this.pc + 1] & (byte === 134 ? 63 : 31);
+            selectorObj = this.method.methodGetLiteral(litIndex);
+        }
+        if (selectorObj) {
+            var selector = selectorObj.bytesAsString();
+            if (selector !== 'blockCopy:') return selector;
+        }
     },
 });
 

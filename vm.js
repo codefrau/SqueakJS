@@ -1229,7 +1229,7 @@ Object.subclass('Squeak.Image',
         // nil out all weak fields that did not survive GC
         var weakObj = this.firstOldObject;
         while (weakObj) {
-            if (weakObj.sqClass.isWeak()) {
+            if (weakObj.isWeak()) {
                 var pointers = weakObj.pointers || [],
                     firstWeak = weakObj.sqClass.classInstSize(),
                     finalized = false;
@@ -1783,6 +1783,9 @@ Object.subclass('Squeak.Object',
     isPointers: function() {
         return this._format <= 4;
     },
+    isWeak: function() {
+        return this._format === 4;
+    },
     isMethod: function() {
         return this._format >= 12;
     },
@@ -2004,10 +2007,6 @@ Object.subclass('Squeak.Object',
         // this is a class, answer number of named inst vars
         var format = this.pointers[Squeak.Class_format];
         return ((format >> 10) & 0xC0) + ((format >> 1) & 0x3F) - 1;
-    },
-    isWeak: function() {
-        var format = this.pointers[Squeak.Class_format];
-        return ((format >> 7) & 0xF) == 4;
     },
     instVarNames: function() {
         var index = this.pointers.length > 12 ? 4 :
@@ -2296,9 +2295,6 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         var fmt = this._format;
         return fmt >= 16 && fmt <= 23;
     },
-    isMethod: function() {
-        return this._format >= 24;
-    },
     isPointers: function() {
         return this._format <= 6;
     },
@@ -2308,6 +2304,12 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
     isWordsOrBytes: function() {
         var fmt = this._format;
         return fmt === 10 || (fmt >= 16 && fmt <= 23);
+    },
+    isWeak: function() {
+        return this._format === 4;
+    },
+    isMethod: function() {
+        return this._format >= 24;
     },
     sameShapeAs: function(obj) {
         return this._format === obj._format &&
@@ -2326,11 +2328,6 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         // this is a class, answer number of named inst vars
         var format = this.pointers[Squeak.Class_format];
         return format & 0xFFFF;
-    },
-    isWeak: function() {
-        var format = this.pointers[Squeak.Class_format],
-            spec = (format >> 16) & 0x1F;
-        return (format & 4) === 4;
     },
 },
 'as method', {

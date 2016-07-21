@@ -3917,7 +3917,7 @@ Object.subclass('Squeak.Primitives',
             case 109: return this.primitiveKeyboardPeek(argCount); // Sensor kbdPeek
             // System Primitives (110-119)
             case 110: return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
-            case 111: return this.popNandPushIfOK(1, this.vm.getClass(this.vm.top())); // Object.class
+            case 111: return this.popNandPushIfOK(argCount + 1, this.vm.getClass(this.vm.top())); // Object.class
             case 112: return this.popNandPushIfOK(1, this.vm.image.bytesLeft()); //primitiveBytesLeft
             case 113: return this.primitiveQuit(argCount);
             case 114: return this.primitiveExitToDebugger(argCount);

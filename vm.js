@@ -1544,7 +1544,6 @@ Object.subclass('Squeak.Image',
                 table[index] = newClass;
                 newClass.hash = index;
                 this.classTableIndex = index;
-                console.log("New class index: " + index);
                 return index;
             }
             index++;

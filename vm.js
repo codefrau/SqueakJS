@@ -5188,9 +5188,18 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     primitiveSuspend: function() {
-        if (this.vm.top() !== this.activeProcess()) return false;
-        this.vm.popNandPush(1, this.vm.nilObj);
-        this.transferTo(this.wakeHighestPriority());
+        var process = this.vm.top();
+        if (process === this.activeProcess()) {
+            this.vm.popNandPush(1, this.vm.nilObj);
+            this.transferTo(this.wakeHighestPriority());
+        } else {
+            var oldList = process.pointers[Squeak.Proc_myList];
+            if (oldList.isNil) return false;
+            this.removeProcessFromList(process, oldList);
+            if (!this.success) return false;
+            process.pointers[Squeak.Proc_myList] = this.vm.nilObj;
+            this.vm.popNandPush(1, oldList);
+        }
         return true;
     },
     getScheduler: function() {
@@ -5272,6 +5281,31 @@ Object.subclass('Squeak.Primitives',
         }
         first.pointers[Squeak.Link_nextLink] = this.vm.nilObj;
         return first;
+    },
+    removeProcessFromList: function(process, list) {
+        var first = list.pointers[Squeak.LinkedList_firstLink];
+        var last = list.pointers[Squeak.LinkedList_lastLink];
+        if (process === first) {
+            var next = process.pointers[Squeak.Link_nextLink];
+            list.pointers[Squeak.LinkedList_firstLink] = next;
+            if (process === last) {
+                list.pointers[Squeak.LinkedList_lastLink] = this.vm.nilObj;
+            }
+        } else {
+            var temp = first;
+            while (true) {
+                if (temp.isNil) return this.success = false;
+                next = temp.pointers[Squeak.Link_nextLink];
+                if (next === process) break;
+                temp = next;
+            }
+            next = process.pointers[Squeak.Link_nextLink];
+            temp.pointers[Squeak.Link_nextLink] = next;
+            if (process === last) {
+                list.pointers[Squeak.LinkedList_lastLink] = temp;
+            }
+        }
+        process.pointers[Squeak.Link_nextLink] = this.vm.nilObj;
     },
     registerSemaphore: function(specialObjIndex) {
         var sema = this.vm.top();

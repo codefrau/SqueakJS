@@ -959,7 +959,7 @@ Object.subclass('Squeak.Image',
                         oopAdjust[oop] = skippedBytes;
                     } else {
                         skippedBytes += pos - objPos;
-                        if (!freePageList) freePageList = [];         // first hidden obj
+                        if (!freePageList) freePageList = bits;       // first hidden obj
                         else if (!classPages) classPages = bits;      // second hidden obj
                         oopMap[addressOffset + oop] = bits;           // used in spurClassTable()
                     }
@@ -1532,7 +1532,25 @@ Object.subclass('Squeak.Image',
                 if (maybeClass._format === 1) classes[p * 1024 + i] = maybeClass;
             }
         }
+        this.classTable = classes;
+        this.classTableIndex = 1024;  // first page is special
         return classes;
+    },
+    enterIntoClassTable: function(newClass) {
+        var index = this.classTableIndex,
+            table = this.classTable;
+        while (index <= 0x3FFFFF) {
+            if (!table[index]) {
+                table[index] = newClass;
+                newClass.hash = index;
+                this.classTableIndex = index;
+                console.log("New class index: " + index);
+                return index;
+            }
+            index++;
+        }
+        console.error("class table full?"); // todo: clean out old class table entries
+        return null;
     },
     initCharacterTable: function(characterClass) {
         characterClass.classInstProto("Character"); // provide name
@@ -4829,7 +4847,7 @@ Object.subclass('Squeak.Primitives',
     behaviorHash: function(obj) {
         var hash = obj.hash;
         if (hash > 0) return hash;
-        throw Error("behaviorHash not implemented yet")
+        return this.vm.image.enterIntoClassTable(obj);
     },
     newObjectHash: function(obj) {
         return Math.floor(Math.random() * 0x3FFFFFFE) + 1;

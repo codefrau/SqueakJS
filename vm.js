@@ -1788,15 +1788,23 @@ Object.subclass('Squeak.Object',
     isMethod: function() {
         return this._format >= 12;
     },
+    sameFormats: function(a, b) {
+        return a < 8 ? a === b : (a & 0xC) === (b & 0xC);
+    },
+    sameFormatAs: function(obj) {
+        return this.sameFormats(this._format, obj._format);
+    },
     sameShapeAs: function(obj) {
-        // can we change this class to that of obj?
-        return this._format === obj._format &&
+        // can we change my class to that of obj?
+        return this.sameFormatAs(obj) &&
             this.sqClass.isCompact === obj.sqClass.isCompact &&
             this.sqClass.classInstSize() === obj.sqClass.classInstSize();
     },
-    sameFormatAs: function(obj) {
-        var f = this._format, o = obj._format;
-        return f < 8 ? f === o : (f & 0xC) === (o & 0xC);
+    classSameShapeAs: function(obj) {
+        // can we change obj's class to this?
+        return this.sameFormats(this.classInstFormat(), obj._format) &&
+            this.isCompact === obj.sqClass.isCompact &&
+            this.classInstSize() === obj.sqClass.classInstSize();
     },
 },
 'printing', {
@@ -2002,10 +2010,13 @@ Object.subclass('Squeak.Object',
     },
 },
 'as class', {
+    classInstFormat: function() {
+        return (this.pointers[Squeak.Class_format] >> 7) & 0xF;
+    },
     classInstSize: function() {
         // this is a class, answer number of named inst vars
-        var format = this.pointers[Squeak.Class_format];
-        return ((format >> 10) & 0xC0) + ((format >> 1) & 0x3F) - 1;
+        var spec = this.pointers[Squeak.Class_format];
+        return ((spec >> 10) & 0xC0) + ((spec >> 1) & 0x3F) - 1;
     },
     instVarNames: function() {
         var index = this.pointers.length > 12 ? 4 :
@@ -2310,23 +2321,28 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
     isMethod: function() {
         return this._format >= 24;
     },
+    sameFormats: function(a, b) {
+        return a < 16 ? a === b : (a & 0xF8) === (b & 0xF8);
+    },
     sameShapeAs: function(obj) {
-        return this._format === obj._format &&
+        return this.sameFormatAs(obj) &&
             this.sqClass.classInstSize() === obj.sqClass.classInstSize();
     },
-    sameFormatAs: function(obj) {
-        var f = this._format, o = obj._format;
-        return f < 16 ? f === o : (f & 0xF8) === (o & 0xF8);
+    classSameShapeAs: function(obj) {
+        return this.sameFormats(this.classInstFormat(), obj._format) &&
+            this.classInstSize() === obj.sqClass.classInstSize();
     },
 },
 'as class', {
     defaultInst: function() {
         return Squeak.ObjectSpur;
     },
+    classInstFormat: function() {
+        return (this.pointers[Squeak.Class_format] >> 16) & 0x1F;
+    },
     classInstSize: function() {
         // this is a class, answer number of named inst vars
-        var format = this.pointers[Squeak.Class_format];
-        return format & 0xFFFF;
+        return this.pointers[Squeak.Class_format] & 0xFFFF;
     },
 },
 'as method', {

@@ -3999,11 +3999,15 @@ Object.subclass('Squeak.Primitives',
             case 157: if (this.oldPrims) return this.primitiveFileSize(argCount);
             case 158: if (this.oldPrims) return this.primitiveFileWrite(argCount);
             case 159: if (this.oldPrims) return this.primitiveFileRename(argCount);
-            case 160: if (this.oldPrims) return this.primitiveDirectoryCreate(argCount); // new: primitiveAdoptInstance
+                break;  // fail 150-159 if fell through
+            case 160: if (this.oldPrims) return this.primitiveDirectoryCreate(argCount);
+                else return this.primitiveAdoptInstance(argCount);
             case 161: if (this.oldPrims) return this.primitiveDirectoryDelimitor(argCount); // new: primitiveSetIdentityHash
+                break;  // fail
             case 162: if (this.oldPrims) return this.primitiveDirectoryLookup(argCount);
+                break;  // fail
             case 163: if (this.oldPrims) return this.primitiveDirectoryDelete(argCount);
-                break;  // fail 150-163 if fell through
+                break;  // fail
             // 164: unused
             case 165:
             case 166: return this.primitiveIntegerAtAndPut(argCount);
@@ -4908,13 +4912,22 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     primitiveChangeClass: function(argCount) {
-        if (argCount !== 1) return false;
+        if (argCount > 2) return false;
         var rcvr = this.stackNonInteger(1),
             arg = this.stackNonInteger(0);
         if (!this.success) return false;
         if (!rcvr.sameShapeAs(arg)) return false;
         rcvr.sqClass = arg.sqClass;
-        return this.popNIfOK(1);
+        return this.popNIfOK(argCount);
+    },
+    primitiveAdoptInstance: function(argCount) {
+        if (argCount > 2) return false;
+        var cls = this.stackNonInteger(1),
+            obj = this.stackNonInteger(0);
+        if (!this.success) return false;
+        if (!cls.classSameShapeAs(obj)) return false;
+        obj.sqClass = cls;
+        return this.popNIfOK(argCount);
     },
     primitiveDoPrimitiveWithArgs: function(argCount) {
         var argumentArray = this.stackNonInteger(0),

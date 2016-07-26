@@ -6298,8 +6298,15 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     primitiveFileTruncate: function(argCount) {
-        console.warn("Not yet implemented: primitiveFileTruncate");
-        return false;
+        var pos = this.stackPos32BitInt(0),
+            handle = this.stackNonInteger(1);
+        if (!this.success || !handle.file || !handle.fileWrite) return false;
+        if (handle.file.size > pos) {
+            handle.file.size = pos;
+            handle.file.modified = true;
+            if (handle.filePos > handle.file.size) handle.filePos = handle.file.size;
+        }
+        return this.popNIfOK(argCount);
     },
     primitiveDisableFileAccess: function(argCount) {
         return this.fakePrimitive("FilePlugin.primitiveDisableFileAccess", 0, argCount);

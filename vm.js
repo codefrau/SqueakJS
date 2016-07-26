@@ -869,10 +869,9 @@ Object.subclass('Squeak.Image',
         var oldBaseAddr = readWord(); //object memory base address of image
         var specialObjectsOopInt = readWord(); //oop of array of special oops
         this.lastHash = readWord(); //Should be loaded from, and saved to the image header
-        var savedWindowSize = readWord();
-        var fullScreenFlag = readWord();
-        this.extraVMMemory = readWord();
-        pos += 3 * 4;         // skip 3 words
+        this.savedHeaderWords = [];
+        for (var i = 0; i < 6; i++)
+            this.savedHeaderWords.push(readWord());
         var firstSegSize = readWord();
         var prevObj;
         var oopMap = {};
@@ -923,7 +922,7 @@ Object.subclass('Squeak.Image',
         } else {
             // Read all Spur object memory segments
             this.oldSpaceBytes = firstSegSize - 16;
-            var segmentEnd = firstSegSize,
+            var segmentEnd = pos + firstSegSize,
                 addressOffset = oldBaseAddr,
                 freePageList = null,
                 classPages = null,
@@ -964,6 +963,7 @@ Object.subclass('Squeak.Image',
                         oopMap[addressOffset + oop] = bits;           // used in spurClassTable()
                     }
                 }
+                if (pos !== segmentEnd - 16) throw Error("invalid segment");
                 // last 16 bytes in segment is a bridge object
                 var deltaWords = readWord(),
                     deltaWordsHi = readWord(),
@@ -1417,7 +1417,7 @@ Object.subclass('Squeak.Image',
         return this.totalMemory - this.oldSpaceBytes;
     },
     formatVersion: function() {
-        return this.hasClosures ? 6504 : 6502;
+        return this.isSpur ? 6521 : this.hasClosures ? 6504 : 6502;
     },
     segmentVersion: function() {
         var dnu = this.specialObjectsArray.pointers[Squeak.splOb_SelectorDoesNotUnderstand],
@@ -1522,6 +1522,7 @@ Object.subclass('Squeak.Image',
 {
     initSpurOverrides: function() {
         this.registerObject = this.registerObjectSpur;
+        this.writeToBuffer = function() {return this.writeToBufferSpur();}.bind(this);
     },
     spurClassTable: function(oopMap, classPages) {
         var classes = {};
@@ -1564,6 +1565,126 @@ Object.subclass('Squeak.Image',
             this.characterTable[unicode] = char;
         }
         return char;
+    },
+    maxClassIndex: function() {
+        var index = 1024,
+            table = this.classTable;
+        for (var key in table) {
+            var classID = table[key].hash;
+            if (classID > index) index = classID;
+        }
+        return index;
+    },
+    classTableBytes: function() {
+        // space needed for master table and minor pages
+        var pages = (this.maxClassIndex() >> 10) + 1;
+        return (4 + 4096 + pages * (4 + 1024)) * 4;
+    },
+    writeFreeLists: function(data, pos, oopOffset) {
+        // we fake an empty free lists object
+        data.setUint32(pos, 0x0A000012); pos += 4;
+        data.setUint32(pos, 0x20000000); pos += 4;
+        pos += 32 * 4;  // 32 zeros
+        return pos;
+    },
+    writeClassTable: function(data, pos, objToOop) {
+        // write class tables as Spur expects them, faking their oops
+        var pages = (this.maxClassIndex() >> 10) + 1,
+            nilFalseTrueBytes = 3 * 16,
+            freeListBytes = 8 + 32 * 4,
+            majorTableBytes = 16 + 4096 * 4,
+            minorTableBytes = 16 + 1024 * 4,
+            firstPageOop = nilFalseTrueBytes + freeListBytes + majorTableBytes + 8;
+        // major table
+        data.setUint32(pos, 4096);       pos += 4;
+        data.setUint32(pos, 0xFF000000); pos += 4;
+        data.setUint32(pos, 0x02000010); pos += 4;
+        data.setUint32(pos, 0xFF000000); pos += 4;
+        for (var p = 0; p < pages; p++) {
+            data.setUint32(pos, firstPageOop + p * minorTableBytes); pos += 4;
+        }
+        pos += (4096 - pages) * 4;  // rest is nil
+        // minor tables
+        var classID = 0;
+        for (var p = 0; p < pages; p++) {
+            data.setUint32(pos, 1024);       pos += 4;
+            data.setUint32(pos, 0xFF000000); pos += 4;
+            data.setUint32(pos, 0x02000010); pos += 4;
+            data.setUint32(pos, 0xFF000000); pos += 4;
+            for (var i = 0; i < 1024; i++) {
+                var classObj = this.classTable[classID];
+                if (classObj && classObj.pointers) {
+                    if (!classObj.hash) throw Error("class without id");
+                    if (classObj.hash !== classID && classID >= 32) {
+                        console.warn("freeing class index " + classID + " " + classObj.className());
+                        classObj = null;
+                    }
+                }
+                if (classObj) data.setUint32(pos, objToOop(classObj)); 
+                pos += 4;
+                classID++;
+            }
+        }
+        return pos;
+    },
+    writeToBufferSpur: function() {
+        var headerSize = 64,
+            trailerSize = 16,
+            freeListsSize = 136,
+            hiddenSize = freeListsSize + this.classTableBytes(),
+            data = new DataView(new ArrayBuffer(headerSize + hiddenSize + this.oldSpaceBytes + trailerSize)),
+            start = Date.now(),
+            pos = 0;
+        function writeWord(word) {
+            data.setUint32(pos, word);
+            pos += 4;
+        };
+        function objToOop(obj) {
+            if (typeof obj === "number")
+                return obj << 1 | 1; // add tag bit
+            if (obj._format === 7) {
+                if (obj.hash !== (obj.oop >> 2) || (obj.oop & 3) !== 2)
+                    throw Error("Bad immediate char");
+                return obj.oop;
+            }
+            if (obj.oop < 0) throw Error("temporary oop");
+            // oops after nil/false/true are shifted by size of hidden objects
+            return obj.oop < 48 ? obj.oop : obj.oop + hiddenSize;
+        };
+        writeWord(this.formatVersion()); // magic number
+        writeWord(headerSize);
+        writeWord(hiddenSize + this.oldSpaceBytes); // end of memory
+        writeWord(this.firstOldObject.addr()); // base addr (0)
+        writeWord(objToOop(this.specialObjectsArray));
+        writeWord(this.lastHash);
+        this.savedHeaderWords.forEach(writeWord);
+        writeWord(hiddenSize + this.oldSpaceBytes + trailerSize); //first segment size
+        while (pos < headerSize)
+            writeWord(0);
+        // write objects
+        var obj = this.firstOldObject,
+            n = 0;
+        pos = obj.writeTo(data, pos, objToOop); obj = obj.nextObject; n++; // write nil
+        pos = obj.writeTo(data, pos, objToOop); obj = obj.nextObject; n++; // write false
+        pos = obj.writeTo(data, pos, objToOop); obj = obj.nextObject; n++; // write true
+        pos = this.writeFreeLists(data, pos, objToOop); // write hidden free list
+        pos = this.writeClassTable(data, pos, objToOop); // write hidden class table
+        while (obj) {
+            pos = obj.writeTo(data, pos, objToOop);
+            obj = obj.nextObject;
+            n++;
+        }
+        // write segement trailer
+        writeWord(0x4A000003);
+        writeWord(0x00800000);
+        writeWord(0);
+        writeWord(0);
+        // done
+        if (pos !== data.byteLength) throw Error("wrong image size");
+        if (n !== this.oldSpaceCount) throw Error("wrong object count");
+        var time = Date.now() - start;
+        console.log("Wrote " + n + " objects in " + time + " ms, image size " + pos + " bytes")
+        return data.buffer;
     },
 });
 
@@ -2175,8 +2296,9 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
     installFromImage: function(oopMap, classTable, floatClass, littleEndian, getCharacter) {
         //Install this object by decoding format, and rectifying pointers
         var classID = this.sqClass;
+        if (classID < 32) throw Error("Invalid class ID");
         this.sqClass = classTable[classID];
-        if (!this.sqClass) throw Error("Class not found")
+        if (!this.sqClass) throw Error("Invalid class ID");
         var nWords = this.bits.length;
         switch (this._format) {
             case 0: // zero sized object
@@ -2290,14 +2412,58 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             this.pointers ? this.pointers.length : 0;
         // methods have both pointers and bytes
         if (this.bytes) nWords += (this.bytes.length + 3) >>> 2;
-        var extraHeader = nWords > 254 ? 1 : 0;
+        var extraHeader = nWords >= 255 ? 2 : 0;
         nWords += nWords & 1; // align to 8 bytes
         nWords += 2; // one 64 bit header always present
         if (nWords < 4) nWords = 4; // minimum object size
         return {header: extraHeader, body: nWords};
     },
-    writeTo: function(data, pos, image) {
-        throw Error("not implemented yet");
+    writeTo: function(data, pos, objToOop) {
+        var nWords =
+            this.isFloat ? 2 :
+            this.words ? this.words.length :
+            this.pointers ? this.pointers.length : 0;
+        if (this.bytes) {
+            nWords += (this.bytes.length + 3) >>> 2;
+            this._format |= -this.bytes.length & 3;
+        }
+        var beforePos = pos,
+            formatAndClass = (this._format << 24) | (this.sqClass.hash & 0x003FFFFF),
+            sizeAndHash = (nWords << 24) | (this.hash & 0x003FFFFF);
+        // write extra header if needed
+        if (nWords >= 255) {
+            data.setUint32(pos, nWords); pos += 4;
+            sizeAndHash = (255 << 24) | (this.hash & 0x003FFFFF);
+            data.setUint32(pos, sizeAndHash); pos += 4;
+        }
+        // write regular header
+        data.setUint32(pos, formatAndClass); pos += 4;
+        data.setUint32(pos, sizeAndHash); pos += 4;
+        // now write body, if any
+        if (this.isFloat) {
+            data.setFloat64(pos, this.float); pos += 8;
+        } else if (this.words) {
+            for (var i = 0; i < this.words.length; i++) {
+                data.setUint32(pos, this.words[i]); pos += 4;
+            }
+        } else if (this.pointers) {
+            for (var i = 0; i < this.pointers.length; i++) {
+                data.setUint32(pos, objToOop(this.pointers[i])); pos += 4;
+            }
+        }
+        // no "else" because CompiledMethods have both pointers and bytes
+        if (this.bytes) {
+            for (var i = 0; i < this.bytes.length; i++)
+                data.setUint8(pos++, this.bytes[i]);
+            // skip to next word
+            pos += -this.bytes.length & 3;
+        }
+        // minimum object size is 16, align to 8 bytes
+        if (nWords === 0) pos += 8;
+        else pos += (nWords & 1) * 4;
+        // done
+        if (pos !== beforePos + this.totalBytes()) throw Error("written size does not match");
+        return pos;
     },
 },
 'testing', {

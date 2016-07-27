@@ -128,8 +128,8 @@ Object.extend(Squeak,
     Context_closure: 4,
     Context_receiver: 5,
     Context_tempFrameStart: 6,
-    Context_smallFrameSize: 17,
-    Context_largeFrameSize: 57,
+    Context_smallFrameSize: 16,
+    Context_largeFrameSize: 56,
     BlockContext_caller: 0,
     BlockContext_argumentCount: 3,
     BlockContext_initialIP: 4,
@@ -1578,40 +1578,42 @@ Object.subclass('Squeak.Image',
     classTableBytes: function() {
         // space needed for master table and minor pages
         var pages = (this.maxClassIndex() >> 10) + 1;
-        return (4 + 4096 + pages * (4 + 1024)) * 4;
+        return (4 + 4104 + pages * (4 + 1024)) * 4;
     },
-    writeFreeLists: function(data, pos, oopOffset) {
+    writeFreeLists: function(data, pos, littleEndian, oopOffset) {
         // we fake an empty free lists object
-        data.setUint32(pos, 0x0A000012); pos += 4;
-        data.setUint32(pos, 0x20000000); pos += 4;
+        data.setUint32(pos, 0x0A000012, littleEndian); pos += 4;
+        data.setUint32(pos, 0x20000000, littleEndian); pos += 4;
         pos += 32 * 4;  // 32 zeros
         return pos;
     },
-    writeClassTable: function(data, pos, objToOop) {
+    writeClassTable: function(data, pos, littleEndian, objToOop) {
         // write class tables as Spur expects them, faking their oops
         var pages = (this.maxClassIndex() >> 10) + 1,
             nilFalseTrueBytes = 3 * 16,
             freeListBytes = 8 + 32 * 4,
-            majorTableBytes = 16 + 4096 * 4,
-            minorTableBytes = 16 + 1024 * 4,
+            majorTableSlots = 4096 + 8,         // class pages plus 8 hiddenRootSlots
+            minorTableSlots = 1024,
+            majorTableBytes = 16 + majorTableSlots * 4,
+            minorTableBytes = 16 + minorTableSlots * 4,
             firstPageOop = nilFalseTrueBytes + freeListBytes + majorTableBytes + 8;
         // major table
-        data.setUint32(pos, 4096);       pos += 4;
-        data.setUint32(pos, 0xFF000000); pos += 4;
-        data.setUint32(pos, 0x02000010); pos += 4;
-        data.setUint32(pos, 0xFF000000); pos += 4;
+        data.setUint32(pos, majorTableSlots, littleEndian); pos += 4;
+        data.setUint32(pos,      0xFF000000, littleEndian); pos += 4;
+        data.setUint32(pos,      0x02000010, littleEndian); pos += 4;
+        data.setUint32(pos,      0xFF000000, littleEndian); pos += 4;
         for (var p = 0; p < pages; p++) {
-            data.setUint32(pos, firstPageOop + p * minorTableBytes); pos += 4;
+            data.setUint32(pos, firstPageOop + p * minorTableBytes, littleEndian); pos += 4;
         }
-        pos += (4096 - pages) * 4;  // rest is nil
+        pos += (majorTableSlots - pages) * 4;  // rest is nil
         // minor tables
         var classID = 0;
         for (var p = 0; p < pages; p++) {
-            data.setUint32(pos, 1024);       pos += 4;
-            data.setUint32(pos, 0xFF000000); pos += 4;
-            data.setUint32(pos, 0x02000010); pos += 4;
-            data.setUint32(pos, 0xFF000000); pos += 4;
-            for (var i = 0; i < 1024; i++) {
+            data.setUint32(pos, minorTableSlots, littleEndian); pos += 4;
+            data.setUint32(pos,      0xFF000000, littleEndian); pos += 4;
+            data.setUint32(pos,      0x02000010, littleEndian); pos += 4;
+            data.setUint32(pos,      0xFF000000, littleEndian); pos += 4;
+            for (var i = 0; i < minorTableSlots; i++) {
                 var classObj = this.classTable[classID];
                 if (classObj && classObj.pointers) {
                     if (!classObj.hash) throw Error("class without id");
@@ -1620,7 +1622,7 @@ Object.subclass('Squeak.Image',
                         classObj = null;
                     }
                 }
-                if (classObj) data.setUint32(pos, objToOop(classObj)); 
+                if (classObj) data.setUint32(pos, objToOop(classObj), littleEndian); 
                 pos += 4;
                 classID++;
             }
@@ -1633,10 +1635,11 @@ Object.subclass('Squeak.Image',
             freeListsSize = 136,
             hiddenSize = freeListsSize + this.classTableBytes(),
             data = new DataView(new ArrayBuffer(headerSize + hiddenSize + this.oldSpaceBytes + trailerSize)),
+            littleEndian = true,
             start = Date.now(),
             pos = 0;
         function writeWord(word) {
-            data.setUint32(pos, word);
+            data.setUint32(pos, word, littleEndian);
             pos += 4;
         };
         function objToOop(obj) {
@@ -1653,7 +1656,7 @@ Object.subclass('Squeak.Image',
         };
         writeWord(this.formatVersion()); // magic number
         writeWord(headerSize);
-        writeWord(hiddenSize + this.oldSpaceBytes); // end of memory
+        writeWord(hiddenSize + this.oldSpaceBytes + trailerSize); // end of memory
         writeWord(this.firstOldObject.addr()); // base addr (0)
         writeWord(objToOop(this.specialObjectsArray));
         writeWord(this.lastHash);
@@ -1664,13 +1667,13 @@ Object.subclass('Squeak.Image',
         // write objects
         var obj = this.firstOldObject,
             n = 0;
-        pos = obj.writeTo(data, pos, objToOop); obj = obj.nextObject; n++; // write nil
-        pos = obj.writeTo(data, pos, objToOop); obj = obj.nextObject; n++; // write false
-        pos = obj.writeTo(data, pos, objToOop); obj = obj.nextObject; n++; // write true
-        pos = this.writeFreeLists(data, pos, objToOop); // write hidden free list
-        pos = this.writeClassTable(data, pos, objToOop); // write hidden class table
+        pos = obj.writeTo(data, pos, littleEndian, objToOop); obj = obj.nextObject; n++; // write nil
+        pos = obj.writeTo(data, pos, littleEndian, objToOop); obj = obj.nextObject; n++; // write false
+        pos = obj.writeTo(data, pos, littleEndian, objToOop); obj = obj.nextObject; n++; // write true
+        pos = this.writeFreeLists(data, pos, littleEndian, objToOop); // write hidden free list
+        pos = this.writeClassTable(data, pos, littleEndian, objToOop); // write hidden class table
         while (obj) {
-            pos = obj.writeTo(data, pos, objToOop);
+            pos = obj.writeTo(data, pos, littleEndian, objToOop);
             obj = obj.nextObject;
             n++;
         }
@@ -2418,7 +2421,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         if (nWords < 4) nWords = 4; // minimum object size
         return {header: extraHeader, body: nWords};
     },
-    writeTo: function(data, pos, objToOop) {
+    writeTo: function(data, pos, littleEndian, objToOop) {
         var nWords =
             this.isFloat ? 2 :
             this.words ? this.words.length :
@@ -2432,23 +2435,23 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             sizeAndHash = (nWords << 24) | (this.hash & 0x003FFFFF);
         // write extra header if needed
         if (nWords >= 255) {
-            data.setUint32(pos, nWords); pos += 4;
+            data.setUint32(pos, nWords, littleEndian); pos += 4;
             sizeAndHash = (255 << 24) | (this.hash & 0x003FFFFF);
-            data.setUint32(pos, sizeAndHash); pos += 4;
+            data.setUint32(pos, sizeAndHash, littleEndian); pos += 4;
         }
         // write regular header
-        data.setUint32(pos, formatAndClass); pos += 4;
-        data.setUint32(pos, sizeAndHash); pos += 4;
+        data.setUint32(pos, formatAndClass, littleEndian); pos += 4;
+        data.setUint32(pos, sizeAndHash, littleEndian); pos += 4;
         // now write body, if any
         if (this.isFloat) {
-            data.setFloat64(pos, this.float); pos += 8;
+            data.setFloat64(pos, this.float, littleEndian); pos += 8;
         } else if (this.words) {
             for (var i = 0; i < this.words.length; i++) {
-                data.setUint32(pos, this.words[i]); pos += 4;
+                data.setUint32(pos, this.words[i], littleEndian); pos += 4;
             }
         } else if (this.pointers) {
             for (var i = 0; i < this.pointers.length; i++) {
-                data.setUint32(pos, objToOop(this.pointers[i])); pos += 4;
+                data.setUint32(pos, objToOop(this.pointers[i]), littleEndian); pos += 4;
             }
         }
         // no "else" because CompiledMethods have both pointers and bytes

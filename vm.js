@@ -1525,7 +1525,7 @@ Object.subclass('Squeak.Image',
 {
     initSpurOverrides: function() {
         this.registerObject = this.registerObjectSpur;
-        this.writeToBuffer = function() {return this.writeToBufferSpur();}.bind(this);
+        this.writeToBuffer = this.writeToBufferSpur;
     },
     spurClassTable: function(oopMap, classPages, splObjs) {
         var classes = {};

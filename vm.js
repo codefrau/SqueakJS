@@ -781,6 +781,9 @@ Object.subclass('Squeak.Image',
     =============
     Each Squeak object is a Squeak.Object instance, only SmallIntegers are JS numbers.
     Instance variables/fields reference other objects directly via the "pointers" property.
+    A Spur image uses Squeak.ObjectSpur instances instead. Characters are not immediate,
+    but made identical using a character table. They are created with their mark bit set to
+    true, so are ignored by the GC.
     {
         sqClass: reference to class object
         format: format integer as in Squeak oop header

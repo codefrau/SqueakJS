@@ -1012,7 +1012,7 @@ Object.subclass('Squeak.Image',
         if (this.isSpur) {
             var charClass = oopMap[splObs.bits[Squeak.splOb_ClassCharacter]];
             this.initCharacterTable(charClass);
-            compactClasses = this.spurClassTable(oopMap, classPages);
+            compactClasses = this.spurClassTable(oopMap, classPages, splObs);
             nativeFloats = this.getCharacter.bind(this);
             this.initSpurOverrides();
         }
@@ -1527,13 +1527,28 @@ Object.subclass('Squeak.Image',
         this.registerObject = this.registerObjectSpur;
         this.writeToBuffer = function() {return this.writeToBufferSpur();}.bind(this);
     },
-    spurClassTable: function(oopMap, classPages) {
+    spurClassTable: function(oopMap, classPages, splObjs) {
         var classes = {};
+        // read class table pages
         for (var p = 0; p < 4096; p++) {
             var page = oopMap[classPages[p]];
             if (page.length === 1024) for (var i = 0; i < 1024; i++) {
                 var maybeClass = oopMap[page[i]]
-                if (maybeClass._format === 1) classes[p * 1024 + i] = maybeClass;
+                if (maybeClass._format === 1) {
+                    var classIndex = p * 1024 + i;
+                    classes[classIndex] = maybeClass;
+                }
+            }
+        }
+        // add known classes which may not be in the table
+        for (var key in Squeak) {
+            if (/^splOb_Class/.test(key)) {
+                var knownClass = oopMap[splObjs.bits[Squeak[key]]];
+                if (knownClass._format === 1) {
+                    var classIndex = knownClass.hash;
+                    if (classIndex > 0 && classIndex < 1024)
+                        classes[classIndex] = knownClass;
+                }
             }
         }
         this.classTable = classes;

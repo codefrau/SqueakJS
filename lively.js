@@ -1,4 +1,4 @@
-module('users.bert.SqueakJS.ui').requires("lively.data.FileUpload").toRun(function() {
+module('users.bert.SqueakJS.lively').requires("lively.data.FileUpload").toRun(function() {
 /*
  * Copyright (c) 2013 Bert Freudenberg
  *

@@ -79,7 +79,8 @@ function SocketPlugin() {
         _getURL: function(targetURL, isRetry) {
           var url = '';
           if (isRetry || this._requestNeedsProxy()) {
-            url += SqueakJS.options.proxy || 'https://crossorigin.me/';
+            var proxy = typeof SqueakJS === "object" && SqueakJS.options.proxy;
+            url += proxy || 'https://crossorigin.me/';
           }
           if (this.port !== 443) {
             url += 'http://' + this._hostAndPort() + targetURL;
@@ -468,6 +469,10 @@ function SocketPlugin() {
   };
 }
 
-window.addEventListener('load', function() {
-  Squeak.registerExternalModule('SocketPlugin', SocketPlugin());
-});
+function registerSocketPlugin() {
+    if (typeof Squeak === "object" && Squeak.registerExternalModule) {
+        Squeak.registerExternalModule('SocketPlugin', SocketPlugin());
+    } else window.setTimeout(registerSocketPlugin, 0);
+};
+
+registerSocketPlugin();

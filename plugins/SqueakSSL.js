@@ -117,6 +117,10 @@ function SqueakSSL() {
   };
 }
 
-window.addEventListener('load', function() {
-  Squeak.registerExternalModule('SqueakSSL', SqueakSSL());
-});
+function registerSqueakSSL() {
+    if (typeof Squeak === "object" && Squeak.registerExternalModule) {
+        Squeak.registerExternalModule('SqueakSSL', SqueakSSL());
+    } else window.setTimeout(registerSqueakSSL, 0);
+};
+
+registerSqueakSSL();

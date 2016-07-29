@@ -126,7 +126,7 @@ function registerSpeechPlugin() {
         } else {
           console.warn('SpeechPlugin: Web Speech API is not supported by this browser.');
         }
-    } else window.setTimeout(registerSpeechPlugin, 0);
+    } else window.setTimeout(registerSpeechPlugin, 100);
 };
 
 registerSpeechPlugin();

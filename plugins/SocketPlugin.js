@@ -472,7 +472,7 @@ function SocketPlugin() {
 function registerSocketPlugin() {
     if (typeof Squeak === "object" && Squeak.registerExternalModule) {
         Squeak.registerExternalModule('SocketPlugin', SocketPlugin());
-    } else window.setTimeout(registerSocketPlugin, 0);
+    } else window.setTimeout(registerSocketPlugin, 100);
 };
 
 registerSocketPlugin();

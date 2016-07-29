@@ -926,7 +926,7 @@ Object.subclass('Squeak.Image',
             // Read all Spur object memory segments
             this.oldSpaceBytes = firstSegSize - 16;
             var segmentEnd = pos + firstSegSize,
-                addressOffset = oldBaseAddr,
+                addressOffset = 0,
                 freePageList = null,
                 classPages = null,
                 skippedBytes = 0,
@@ -943,7 +943,7 @@ Object.subclass('Squeak.Image',
                         formatAndClass = readWord();
                         sizeAndHash = readWord();
                     }
-                    var oop = pos - 8 - headerSize,
+                    var oop = addressOffset + pos - 8 - headerSize,
                         format = (formatAndClass >>> 24) & 0x1F,
                         classID = formatAndClass & 0x003FFFFF,
                         hash = sizeAndHash & 0x003FFFFF;
@@ -957,13 +957,13 @@ Object.subclass('Squeak.Image',
                         this.oldSpaceCount++;
                         prevObj = object;
                         //oopMap is from old oops to actual objects
-                        oopMap[addressOffset + oop] = object;
+                        oopMap[oldBaseAddr + oop] = object;
                         oopAdjust[oop] = skippedBytes;
                     } else {
                         skippedBytes += pos - objPos;
                         if (!freePageList) freePageList = bits;       // first hidden obj
                         else if (!classPages) classPages = bits;      // second hidden obj
-                        oopMap[addressOffset + oop] = bits;           // used in spurClassTable()
+                        oopMap[oldBaseAddr + oop] = bits;             // used in spurClassTable()
                     }
                 }
                 if (pos !== segmentEnd - 16) throw Error("invalid segment");
@@ -974,12 +974,13 @@ Object.subclass('Squeak.Image',
                     segmentBytesHi = readWord();
                 //  if segmentBytes is zero, the end of the image has been reached
                 if (segmentBytes === 0) {
-                    if (deltaWords !== 0x4A000003) throw Error("Magic number at image end not found")
+                    if (deltaWords !== 0x4A000003) throw Error("Magic number at image end not found");
                 } else {
+                    var deltaBytes = deltaWords * 4;
                     segmentEnd += segmentBytes;
-                    addressOffset += deltaWords * 4;
-                    skippedBytes += deltaWords * 4;
-                    this.oldSpaceBytes += segmentBytes - 16;
+                    addressOffset += deltaBytes;
+                    skippedBytes += 16 + deltaBytes;
+                    this.oldSpaceBytes += deltaBytes + segmentBytes;
                 }
             }
             this.oldSpaceBytes -= skippedBytes;

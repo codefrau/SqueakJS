@@ -1,5 +1,5 @@
 CACHE MANIFEST
-# Jun 28 18:12:48 2016
+# Jul 29 21:11:03 2016
 ../squeak.js
 ../vm.js
 ../jit.js
@@ -19,6 +19,7 @@ CACHE MANIFEST
 ../plugins/ScratchPlugin.js
 ../plugins/SocketPlugin.js
 ../plugins/SoundGenerationPlugin.js
+../plugins/SpeechPlugin.js
 ../plugins/SqueakSSL.js
 ../plugins/StarSqueakPlugin.js
 ../plugins/ZipPlugin.js

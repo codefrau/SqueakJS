@@ -110,11 +110,13 @@ Function.prototype.subclass = function(classPath /* + more args */ ) {
         "plugins/MiscPrimitivePlugin.js",
         "plugins/ScratchPlugin.js",
         "plugins/SocketPlugin.js",
+        "plugins/SpeechPlugin.js",
         "plugins/SqueakSSL.js",
         "plugins/SoundGenerationPlugin.js",
         "plugins/StarSqueakPlugin.js",
         "plugins/ZipPlugin.js",
         "lib/lz-string.js",
+        "lib/jszip.js",
     ].forEach(function(filename) {
         var script = document.createElement('script');
         script.setAttribute("type","text/javascript");
@@ -236,8 +238,10 @@ var canUseMouseOffset = navigator.userAgent.match("AppleWebKit/");
 function updateMousePos(evt, canvas, display) {
     var evtX = canUseMouseOffset ? evt.offsetX : evt.layerX,
         evtY = canUseMouseOffset ? evt.offsetY : evt.layerY;
-    display.cursorCanvas.style.left = (evtX + canvas.offsetLeft + display.cursorOffsetX) + "px";
-    display.cursorCanvas.style.top = (evtY + canvas.offsetTop + display.cursorOffsetY) + "px";
+    if (display.cursorCanvas) {
+        display.cursorCanvas.style.left = (evtX + canvas.offsetLeft + display.cursorOffsetX) + "px";
+        display.cursorCanvas.style.top = (evtY + canvas.offsetTop + display.cursorOffsetY) + "px";
+    }
     var x = (evtX * canvas.width / canvas.offsetWidth) | 0,
         y = (evtY * canvas.height / canvas.offsetHeight) | 0;
     // clamp to display size
@@ -362,7 +366,7 @@ function createSqueakDisplay(canvas, options) {
         keys: [],
         clipboardString: '',
         clipboardStringChanged: false,
-        cursorCanvas: document.createElement("canvas"),
+        cursorCanvas: options.cursor !== false && document.createElement("canvas"),
         cursorOffsetX: 0,
         cursorOffsetY: 0,
         droppedFiles: [],
@@ -372,7 +376,7 @@ function createSqueakDisplay(canvas, options) {
     setupSwapButtons(options);
     if (options.pixelated) {
         canvas.classList.add("pixelated");
-        display.cursorCanvas.classList.add("pixelated");
+        display.cursorCanvas && display.cursorCanvas.classList.add("pixelated");
     }
 
     var eventQueue = null;
@@ -524,17 +528,19 @@ function createSqueakDisplay(canvas, options) {
         canvas.style.top = (t|0) + "px";
         canvas.style.width = (w|0) + "px";
         canvas.style.height = (h|0) + "px";
-        cursorCanvas.style.left = (l + display.cursorOffsetX + display.mouseX * scale|0) + "px";
-        cursorCanvas.style.top = (t + display.cursorOffsetY + display.mouseY * scale|0) + "px";
-        cursorCanvas.style.width = (cursorCanvas.width * scale|0) + "px";
-        cursorCanvas.style.height = (cursorCanvas.height * scale|0) + "px";
+        if (cursorCanvas) {
+            cursorCanvas.style.left = (l + display.cursorOffsetX + display.mouseX * scale|0) + "px";
+            cursorCanvas.style.top = (t + display.cursorOffsetY + display.mouseY * scale|0) + "px";
+            cursorCanvas.style.width = (cursorCanvas.width * scale|0) + "px";
+            cursorCanvas.style.height = (cursorCanvas.height * scale|0) + "px";
+        }
         if (!options.pixelated) {
             if (scale >= 3) {
                 canvas.classList.add("pixelated");
-                display.cursorCanvas.classList.add("pixelated");
+                cursorCanvas && cursorCanvas.classList.add("pixelated");
             } else {
                 canvas.classList.remove("pixelated");
-                display.cursorCanvas.classList.remove("pixelated");
+                cursorCanvas && display.cursorCanvas.classList.remove("pixelated");
             }
         }
     }
@@ -687,13 +693,15 @@ function createSqueakDisplay(canvas, options) {
         canvas.ontouchend(evt);
     };
     // cursorCanvas shows Squeak cursor
-    display.cursorCanvas.style.display = "block";
-    display.cursorCanvas.style.position = "absolute";
-    display.cursorCanvas.style.cursor = "none";
-    display.cursorCanvas.style.background = "transparent";
-    display.cursorCanvas.style.pointerEvents = "none";
-    canvas.parentElement.appendChild(display.cursorCanvas);
-    canvas.style.cursor = "none";
+    if (display.cursorCanvas) {
+        display.cursorCanvas.style.display = "block";
+        display.cursorCanvas.style.position = "absolute";
+        display.cursorCanvas.style.cursor = "none";
+        display.cursorCanvas.style.background = "transparent";
+        display.cursorCanvas.style.pointerEvents = "none";
+        canvas.parentElement.appendChild(display.cursorCanvas);
+        canvas.style.cursor = "none";
+    }
     // keyboard stuff
     document.onkeypress = function(evt) {
         if (!display.vm) return true;
@@ -868,7 +876,7 @@ function createSqueakDisplay(canvas, options) {
             if (imgData) display.context.putImageData(imgData, 0, 0);
         }
         // set cursor scale
-        if (options.fixedWidth) {
+        if (display.cursorCanvas && options.fixedWidth) {
             var cursorCanvas = display.cursorCanvas,
                 scale = canvas.offsetWidth / canvas.width;
             cursorCanvas.style.width = (cursorCanvas.width * scale) + "px";
@@ -1003,7 +1011,110 @@ function fetchTemplates(options) {
     }
 }
 
+function processFile(file, options, thenDo) {
+    Squeak.filePut(options.root + file.name, file.data, function() {
+        console.log("Stored " + options.root + file.name);
+        if (file.zip) {
+            processZip(file, options, thenDo);
+        } else {
+            thenDo();
+        }
+    });
+}
+
+function processZip(file, options, thenDo) {
+    JSZip().loadAsync(file.data).then(function(zip) {
+        var todo = [];
+        zip.forEach(function(filename){
+            if (options.forceDownload || !Squeak.fileExists(options.root + filename))
+                todo.push(filename);
+            });
+        if (todo.length === 0) return thenDo();
+        var done = 0;
+        todo.forEach(function(filename){
+            console.log("Inflating " + file.name + ": " + filename);
+            zip.file(filename).async("arraybuffer").then(function(buffer){
+                console.log("Expanded size of " + filename + ": " + buffer.byteLength);
+                var unzipped = {name: filename, data: buffer};
+                processFile(unzipped, options, function() {
+                    if (++done === todo.length) thenDo();
+                });
+            });
+        });
+    });
+}
+
+function checkExisting(file, options, ifExists, ifNotExists) {
+    if (!Squeak.fileExists(options.root + file.name))
+        return ifNotExists();
+    if (file.image || file.zip) {
+        // if it's the image or a zip, load from file storage
+        Squeak.fileGet(options.root + file.name, function(data) {
+            file.data = data;
+            if (file.zip) processZip(file, options, ifExists);
+            else ifExists();
+        }, function onError() {
+            // if error, download it
+            Squeak.fileDelete(options.root + file.name);
+            return ifNotExists();
+        });
+    } else {
+       // for all other files assume they're okay
+       ifExists();
+    }
+}
+
+function downloadFile(file, display, options, thenDo) {
+    display.showBanner("Downloading " + file.name);
+    var rq = new XMLHttpRequest(),
+        proxy = options.proxy || "";
+    rq.open('GET', proxy + file.url);
+    rq.responseType = 'arraybuffer';
+    rq.onprogress = function(e) {
+        if (e.lengthComputable) display.showProgress(e.loaded / e.total);
+    };
+    rq.onload = function(e) {
+        if (this.status == 200) {
+            file.data = this.response;
+            processFile(file, options, thenDo);
+        }
+        else this.onerror(this.statusText);
+    };
+    rq.onerror = function(e) {
+        if (options.proxy) return alert("Failed to download:\n" + file.url);
+        console.warn('Retrying with CORS proxy: ' + file.url);
+        var proxy = 'https://crossorigin.me/',
+            retry = new XMLHttpRequest();
+        retry.open('GET', proxy + file.url);
+        retry.responseType = rq.responseType;
+        retry.onprogress = rq.onprogress;
+        retry.onload = rq.onload;
+        retry.onerror = function() {alert("Failed to download:\n" + file.url)};
+        retry.send();
+    };
+    rq.send();
+}
+
+function fetchFiles(files, display, options, thenDo) {
+    // check if files exist locally and download if nessecary
+    function getNextFile() {
+        if (files.length === 0) return thenDo();
+        var file = files.shift(),
+            forceDownload = options.forceDownload || file.forceDownload;
+        if (forceDownload) downloadFile(file, display, options, getNextFile);
+        else checkExisting(file, options,
+            function ifExists() {
+                getNextFile();
+            },
+            function ifNotExists() {
+                downloadFile(file, display, options, getNextFile);
+            });
+    }
+    getNextFile();
+}
+
 SqueakJS.runSqueak = function(imageUrl, canvas, options) {
+    // we need to fetch all files first, then run the image
     processOptions(options);
     if (options.image) imageUrl = options.image;
     else options.image = imageUrl;
@@ -1013,69 +1124,28 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     }
     SqueakJS.options = options;
     SqueakJS.appName = options.appName || imageUrl.replace(/.*\//, "").replace(/\.image$/, "");
-    Squeak.fsck();
     fetchTemplates(options);
     var display = createSqueakDisplay(canvas, options),
         imageName = Squeak.splitFilePath(imageUrl).basename,
-        imageData = null,
-        baseUrl = imageUrl.replace(/[^\/]*$/, ""),
-        files = [{url: imageUrl, name: imageName}];
+        image = {url: imageUrl, name: imageName, image: true},
+        baseUrl = options.url || imageUrl.replace(/[^\/]*$/, ""),
+        files = [image];
     if (options.files) {
         options.files.forEach(function(f) { if (f !== imageName) files.push({url: baseUrl + f, name: f}); });
+    }
+    if (options.zip) {
+        var zips = typeof options.zip === "string" ? [options.zip] : options.zip;
+        zips.forEach(function(f) { files.unshift({url: baseUrl + f, name: f, zip: true}); });
     }
     if (options.document) {
         var docName = Squeak.splitFilePath(options.document).basename;
         files.push({url: options.document, name: docName, forceDownload: options.forceDownload !== false});
         display.documentName = options.root + docName;
     }
-    function getNextFile(whenAllDone) {
-        if (files.length === 0) return whenAllDone(imageData);
-        var file = files.shift(),
-            forceDownload = options.forceDownload || file.forceDownload;
-        if (!forceDownload && Squeak.fileExists(options.root + file.name)) {
-            if (file.name == imageName) {
-                Squeak.fileGet(options.root + file.name, function(data) {
-                    imageData = data;
-                    getNextFile(whenAllDone);
-                }, function onError() {
-                    Squeak.fileDelete(options.root + file.name);
-                    files.unshift(file);
-                    getNextFile(whenAllDone);
-                });
-            } else getNextFile(whenAllDone);
-            return;
-        }
-        display.showBanner("Downloading " + file.name);
-        var rq = new XMLHttpRequest();
-        rq.open('GET', file.url);
-        rq.responseType = 'arraybuffer';
-        rq.onprogress = function(e) {
-            if (e.lengthComputable) display.showProgress(e.loaded / e.total);
-        };
-        rq.onload = function(e) {
-            if (this.status == 200) {
-                if (file.name == imageName) {imageData = this.response;}
-                Squeak.filePut(options.root + file.name, this.response, function() {
-                    getNextFile(whenAllDone);
-                });
-            }
-            else this.onerror(this.statusText);
-        };
-        rq.onerror = function(e) {
-            console.warn('Retrying with CORS proxy: ' + file.url);
-            var proxy = options.proxy || 'https://crossorigin.me/',
-                retry = new XMLHttpRequest();
-            retry.open('GET', proxy + file.url);
-            retry.responseType = rq.responseType;
-            retry.onprogress = rq.onprogress;
-            retry.onload = rq.onload;
-            retry.onerror = function() {alert("Failed to download:\n" + file.url)};
-            retry.send();
-        };
-        rq.send();
-    }
-    getNextFile(function whenAllDone(imageData) {
-        SqueakJS.runImage(imageData, options.root + imageName, display, options);
+    fetchFiles(files, display, options, function thenDo() {
+        Squeak.fsck();
+        if (!image.data) return alert("could not find image " + imageName);
+        SqueakJS.runImage(image.data, options.root + imageName, display, options);
     });
     return display;
 };

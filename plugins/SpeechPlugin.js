@@ -119,10 +119,14 @@ function SpeechPlugin() {
   };
 }
 
-window.addEventListener('load', function() {
-  if (('webkitSpeechRecognition' in window)) {
-    Squeak.registerExternalModule('SpeechPlugin', SpeechPlugin());
-  } else {
-    console.warn('Web Speech API is not supported by this browser.');
-  }
-});
+function registerSpeechPlugin() {
+    if (typeof Squeak === "object" && Squeak.registerExternalModule) {
+        if (('webkitSpeechRecognition' in window)) {
+          Squeak.registerExternalModule('SpeechPlugin', SpeechPlugin());
+        } else {
+          console.warn('SpeechPlugin: Web Speech API is not supported by this browser.');
+        }
+    } else window.setTimeout(registerSpeechPlugin, 0);
+};
+
+registerSpeechPlugin();

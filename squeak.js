@@ -1124,7 +1124,6 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     }
     SqueakJS.options = options;
     SqueakJS.appName = options.appName || imageUrl.replace(/.*\//, "").replace(/\.image$/, "");
-    Squeak.fsck();
     fetchTemplates(options);
     var display = createSqueakDisplay(canvas, options),
         imageName = Squeak.splitFilePath(imageUrl).basename,
@@ -1144,6 +1143,7 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
         display.documentName = options.root + docName;
     }
     fetchFiles(files, display, options, function thenDo() {
+        Squeak.fsck();
         if (!image.data) return alert("could not find image " + imageName);
         SqueakJS.runImage(image.data, options.root + imageName, display, options);
     });

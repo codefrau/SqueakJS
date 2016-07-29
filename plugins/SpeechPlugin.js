@@ -2,7 +2,7 @@ function SpeechPlugin() {
   'use strict';
 
   return {
-    getModuleName() { return 'SpeechPlugin'; },
+    getModuleName: function() { return 'SpeechPlugin'; },
     interpreterProxy: null,
     primHandler: null,
 
@@ -12,7 +12,7 @@ function SpeechPlugin() {
     recognition: null,
     synth: window.speechSynthesis,
 
-    setInterpreter(anInterpreter) {
+    setInterpreter: function(anInterpreter) {
       this.interpreterProxy = anInterpreter;
       this.primHandler = this.interpreterProxy.vm.primHandler;
       return true;
@@ -22,7 +22,7 @@ function SpeechPlugin() {
      * Speech Synthesis Primitive
      */
 
-    primitiveSpeak(argCount) {
+    primitiveSpeak: function(argCount) {
       var text, voice;
       if (argCount === 1) {
         text = this.interpreterProxy.stackValue(0).bytesAsString();
@@ -46,19 +46,19 @@ function SpeechPlugin() {
      * Speech Recognition Primitives
      */
 
-    primitiveRegisterSemaphore(argCount) {
+    primitiveRegisterSemaphore: function(argCount) {
       if (argCount !== 1) return false;
       this.semaphoreIndex = this.interpreterProxy.stackIntegerValue(0);
       return true;
     },
 
-    primitiveUnregisterSemaphore(argCount) {
+    primitiveUnregisterSemaphore: function(argCount) {
       if (argCount !== 0) return false;
       this.semaphoreIndex = null;
       return true;
     },
 
-    primitiveGetLastRecognitionResult(argCount) {
+    primitiveGetLastRecognitionResult: function(argCount) {
       if (argCount !== 0) return false;
       if (this.semaphoreIndex === null) return false;
       if (this.voiceInput === null) return false;
@@ -68,7 +68,7 @@ function SpeechPlugin() {
       return true;
     },
 
-    primitiveStartListening(argCount) {
+    primitiveStartListening: function(argCount) {
       if (argCount !== 0) return false;
       this.recognition = new webkitSpeechRecognition();
       this.recognition.lang = 'en-US'; // en-GB
@@ -90,7 +90,7 @@ function SpeechPlugin() {
       return true;
     },
 
-    _onRecognitionResult(event) {
+    _onRecognitionResult: function(event) {
       this.voiceInput = [];
       for (var i = event.resultIndex; i < event.results.length; i++) {
         var result = event.results[i];
@@ -109,7 +109,7 @@ function SpeechPlugin() {
       }
     },
 
-    primitiveStopListening(argCount) {
+    primitiveStopListening: function(argCount) {
       if (argCount !== 0) return false;
       this.voiceInput = [];
       this.recognition.stop();

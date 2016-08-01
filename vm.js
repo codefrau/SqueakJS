@@ -613,11 +613,21 @@ Object.extend(Squeak,
     },
     splitFilePath: function(filepath) {
         if (filepath[0] !== '/') filepath = '/' + filepath;
-        filepath = filepath.replace(/\/\//ig, '/');      // replace double-slashes
+        filepath = filepath.replace(/\/\//g, '/');      // replace double-slashes
         var matches = filepath.match(/(.*)\/(.*)/),
-            dirname = matches[1].length ? matches[1] : '/',
-            basename = matches[2].length ? matches[2] : null;
+            dirname = matches[1] ? matches[1] : '/',
+            basename = matches[2] ? matches[2] : null;
         return {fullname: filepath, dirname: dirname, basename: basename};
+    },
+    splitUrl: function(url, base) {
+        var matches = url.match(/(.*\/)?(.*)/),
+            uptoslash = matches[1] ? matches[1] : '',
+            filename = matches[2] ? matches[2] : null;
+        if (!uptoslash) {
+            uptoslash = base || '';
+            url = uptoslash + filename;
+        }
+        return {full: url, uptoslash: uptoslash, filename: filename};
     },
     flushFile: function(file) {
         if (file.modified) {

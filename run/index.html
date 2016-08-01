@@ -71,8 +71,8 @@
         window.location.reload();
     }
     window.onload = function() {
-        // if we have an image in hash then we just run Squeak with the options provided in the url
-        if (location.hash.match(/\.image(\W|$)/)) {
+        // if we have an image or zip in hash then we run Squeak with the options provided in the url
+        if (location.hash.match(/(\.image(\W|$)|\Wzip=)/)) {
             return runSqueak();
         }
         // otherwise, we generate the text to display
@@ -170,7 +170,7 @@
         <li>Squeak 3.8 (2006) <a href="#url=http://freudenbergs.de/bert/squeakjs&files=[Squeak3.8.1-6747full.image,Squeak3.8.1-6747full.changes,SqueakV3.sources]&swapButtons=true">link</a></li>
         <li>Squeak 3.9 (2008) <a href="#url=http://freudenbergs.de/bert/squeakjs&files=[Squeak3.9.1-final-7075.image,Squeak3.9.1-final-7075.changes,SqueakV39.sources]&swapButtons=true">link</a></li>
         <li>Squeak 4.5 (2014) <a href="#url=http://freudenbergs.de/bert/squeakjs&files=[Squeak4.5-13680.image,Squeak4.5-13680.changes,SqueakV41.sources]">link</a></li>
-        <li>Squeak 5.0 (2015) <a href="#url=http://files.squeak.org/5.0/&image=Squeak5.0-15113.image&zip=[Squeak5.0-15113.zip,SqueakV50.sources.zip]">link</a></li>
+        <li>Squeak 5.0 (2015) <a href="#url=http://files.squeak.org/5.0/&zip=[Squeak5.0-15113.zip,SqueakV50.sources.zip]">link</a></li>
         </ul>
         On the first run these will be stored locally. Subsequent starts are much faster.
 

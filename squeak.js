@@ -1029,7 +1029,20 @@ function processZip(file, display, options, thenDo) {
                 options.image.name = filename;
             if (options.forceDownload || !Squeak.fileExists(options.root + filename)) {
                 todo.push(filename);
-            });
+            } else if (options.image.name === filename) {
+                // image exists, need to fetch it from storage
+                var _thenDo = thenDo;
+                thenDo = function() {
+                    Squeak.fileGet(options.root + filename, function(data) {
+                        options.image.data = data;
+                        return _thenDo();
+                    }, function onError() {
+                        Squeak.fileDelete(options.root + file.name);
+                        return processZip(file, display, options, _thenDo);
+                    });
+                }
+            }
+        });
         if (todo.length === 0) return thenDo();
         var done = 0;
         display.showBanner("Unzipping " + file.name);

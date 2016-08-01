@@ -1010,18 +1010,18 @@ function fetchTemplates(options) {
     }
 }
 
-function processFile(file, options, thenDo) {
+function processFile(file, display, options, thenDo) {
     Squeak.filePut(options.root + file.name, file.data, function() {
         console.log("Stored " + options.root + file.name);
         if (file.zip) {
-            processZip(file, options, thenDo);
+            processZip(file, display, options, thenDo);
         } else {
             thenDo();
         }
     });
 }
 
-function processZip(file, options, thenDo) {
+function processZip(file, display, options, thenDo) {
     JSZip().loadAsync(file.data).then(function(zip) {
         var todo = [];
         zip.forEach(function(filename){
@@ -1032,16 +1032,19 @@ function processZip(file, options, thenDo) {
             });
         if (todo.length === 0) return thenDo();
         var done = 0;
+        display.showBanner("Unzipping " + file.name);
+        display.showProgress(0);
         todo.forEach(function(filename){
             console.log("Inflating " + file.name + ": " + filename);
-            zip.file(filename).async("arraybuffer").then(function(buffer){
+            function progress(x) { display.showProgress((x.percent / 100 + done) / todo.length); }
+            zip.file(filename).async("arraybuffer", progress).then(function(buffer){
                 console.log("Expanded size of " + filename + ": " + buffer.byteLength);
-                processFile(unzipped, options, function() {
                 var unzipped = {};
                 if (options.image.name === filename)
                     unzipped = options.image;
                 unzipped.name = filename;
                 unzipped.data = buffer;
+                processFile(unzipped, display, options, function() {
                     if (++done === todo.length) thenDo();
                 });
             });
@@ -1049,14 +1052,14 @@ function processZip(file, options, thenDo) {
     });
 }
 
-function checkExisting(file, options, ifExists, ifNotExists) {
+function checkExisting(file, display, options, ifExists, ifNotExists) {
     if (!Squeak.fileExists(options.root + file.name))
         return ifNotExists();
     if (file.image || file.zip) {
         // if it's the image or a zip, load from file storage
         Squeak.fileGet(options.root + file.name, function(data) {
             file.data = data;
-            if (file.zip) processZip(file, options, ifExists);
+            if (file.zip) processZip(file, display, options, ifExists);
             else ifExists();
         }, function onError() {
             // if error, download it
@@ -1081,7 +1084,7 @@ function downloadFile(file, display, options, thenDo) {
     rq.onload = function(e) {
         if (this.status == 200) {
             file.data = this.response;
-            processFile(file, options, thenDo);
+            processFile(file, display, options, thenDo);
         }
         else this.onerror(this.statusText);
     };
@@ -1107,7 +1110,7 @@ function fetchFiles(files, display, options, thenDo) {
         var file = files.shift(),
             forceDownload = options.forceDownload || file.forceDownload;
         if (forceDownload) downloadFile(file, display, options, getNextFile);
-        else checkExisting(file, options,
+        else checkExisting(file, display, options,
             function ifExists() {
                 getNextFile();
             },

@@ -6425,6 +6425,7 @@ Object.subclass('Squeak.Primitives',
             this.vm.freeze(function(unfreeze) {
                 Squeak.fileGet(file.name,
                     function success(contents) {
+                        if (contents == null) return error(file.name);
                         file.contents = this.asUint8Array(contents);
                         unfreeze();
                         func(file);

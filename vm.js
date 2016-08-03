@@ -999,9 +999,11 @@ Object.subclass('Squeak.Image',
             this.lastOldObject = object;
         }
 
-        if (!this.isSpur) {
+        if (true) {
             // For debugging: re-create all objects from named prototypes
-            var cc = oopMap[oopMap[specialObjectsOopInt].bits[Squeak.splOb_CompactClasses]].bits;
+            var _splObs = oopMap[specialObjectsOopInt],
+                cc = this.isSpur ? this.spurClassTable(oopMap, classPages, _splObs)
+                    : oopMap[_splObs.bits[Squeak.splOb_CompactClasses]].bits;
             var renamedObj = null;
             object = this.firstOldObject;
             prevObj = null;
@@ -1009,10 +1011,10 @@ Object.subclass('Squeak.Image',
                 prevObj = renamedObj;
                 renamedObj = object.renameFromImage(oopMap, cc);
                 if (prevObj) prevObj.nextObject = renamedObj;
+                else this.firstOldObject = renamedObj;
                 oopMap[oldBaseAddr + object.oop] = renamedObj;
                 object = object.nextObject;
             }
-            this.firstOldObject = oopMap[oldBaseAddr+4];
             this.lastOldObject = renamedObj;
         }
 
@@ -2418,6 +2420,26 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         this.hash = unicode;
         this._format = 7;
         this.mark = true;   // stays always marked so not traced by GC
+    },
+    classNameFromImage: function(oopMap) {
+        var name = oopMap[this.bits[Squeak.Class_name]];
+        if (name && name._format >= 16 && name._format < 24) {
+            var bytes = name.decodeBytes(name.bits.length, name.bits, 0, name._format & 7);
+            return Squeak.bytesAsString(bytes);
+        }
+        return "Class";
+    },
+    renameFromImage: function(oopMap, classTable) {
+        var classObj = classTable[this.sqClass];
+        var instProto = classObj.instProto || classObj.classInstProto(classObj.classNameFromImage(oopMap));
+        if (!instProto) return this;
+        var renamedObj = new instProto; // Squeak.SpurObject
+        renamedObj.oop = this.oop;
+        renamedObj.sqClass = this.sqClass;
+        renamedObj._format = this._format;
+        renamedObj.hash = this.hash;
+        renamedObj.bits = this.bits;
+        return renamedObj;
     },
 },
 'accessing', {

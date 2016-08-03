@@ -1061,7 +1061,7 @@ Object.subclass('Squeak.Image',
             }
         };
         if (!progressDo) {
-            while (mapSomeObjects());   // do it synchronously
+            while (mapSomeObjects()) {};   // do it synchronously
             if (thenDo) thenDo();
         } else {
             window.setTimeout(mapSomeObjectsAsync, 0);

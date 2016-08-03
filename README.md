@@ -101,6 +101,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2016-08-03: 0.9.1 fixes
     2016-07-29: 0.9 Spur support, stdout, SpeechPlugin, zipped images
     2016-06-28: 0.8.3 add SocketPlugin for http/https connections
     2016-04-07: 0.8.2 better touch handling, debugging, CORS, lint

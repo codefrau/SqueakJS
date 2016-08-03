@@ -13,6 +13,8 @@ SQUEAKJSLIBS=../vm.js ../jit.js ../plugins/*.js ../lib/lz-string.js ../lib/jszip
 ORGFILES=$(SQUEAKJS) $(SQUEAKJSLIBS) index.html
 GENFILES=squeak.min.js squeak.min.js.map $(BUILD)/index.html
 CPFILES=squeakjs.css squeakjs.png
+CLOSURE_COMPILER_DIR=closure-compiler
+CLOSURE_COMPILER=java -jar $(CLOSURE_COMPILER_DIR)/closure-compiler*.jar
 
 OS=$(shell uname)
 ifeq ($(OS),Darwin)
@@ -27,6 +29,7 @@ VERSION=$(shell grep 'vmVersion:.*".*"' ../vm.js | sed 's/^[^"]*"//;s/".*//')
 
 $(MANIFEST): Makefile $(TARGET) $(GENFILES) $(CPFILES)
 	@echo generate: $@
+	@rm -f $@
 	@# generate unique header from date
 	@echo 'CACHE MANIFEST\n#' $(DATE) > $@
 	@# append file name to manifest, and copy file to target
@@ -34,6 +37,8 @@ $(MANIFEST): Makefile $(TARGET) $(GENFILES) $(CPFILES)
 	@# allow accessing all URLs
 	@echo 'NETWORK:' >> $@
 	@echo '*' >> $@
+	@# make read-only
+	@chmod 444 $@
 	@# remove temp files
 	@rm -rf $(GENFILES) $(BUILD)
 
@@ -43,11 +48,20 @@ $(TARGET):
 $(BUILD):
 	@mkdir -pv $@
 
-squeak.min.js: Makefile $(SQUEAKJS) $(SQUEAKJSLIBS)
-	uglifyjs $(SQUEAKJS) $(SQUEAKJSLIBS) -c warnings=false -m sort \
-		-o squeak.min.js --source-map squeak.min.js.map --source-map-include-sources
+squeak.min.js: Makefile $(SQUEAKJS) $(SQUEAKJSLIBS) $(CLOSURE_COMPILER_DIR)
+	$(CLOSURE_COMPILER) --js_output_file $@ \
+		--create_source_map $@.map \
+		--compilation_level SIMPLE \
+		--language_in ECMASCRIPT5_STRICT \
+		$(SQUEAKJS) $(SQUEAKJSLIBS)
 
 squeak.min.js.map: squeak.min.js
+
+$(CLOSURE_COMPILER_DIR):
+	mkdir $@
+	curl https://dl.google.com/closure-compiler/compiler-latest.zip -o $@/c.zip
+	unzip -d $@ $@/c.zip
+	rm $@/c.zip
 
 $(BUILD)/index.html: index.html $(BUILD)
 	@# replace ../squeak.js with squeak.min.js

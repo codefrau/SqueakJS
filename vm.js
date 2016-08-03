@@ -39,7 +39,7 @@ try {
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 0.9",
+    vmVersion: "SqueakJS 0.9.1",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -613,11 +613,22 @@ Object.extend(Squeak,
     },
     splitFilePath: function(filepath) {
         if (filepath[0] !== '/') filepath = '/' + filepath;
-        filepath = filepath.replace(/\/\//ig, '/');      // replace double-slashes
+        filepath = filepath.replace(/\/\//g, '/');      // replace double-slashes
         var matches = filepath.match(/(.*)\/(.*)/),
-            dirname = matches[1].length ? matches[1] : '/',
-            basename = matches[2].length ? matches[2] : null;
+            dirname = matches[1] ? matches[1] : '/',
+            basename = matches[2] ? matches[2] : null;
         return {fullname: filepath, dirname: dirname, basename: basename};
+    },
+    splitUrl: function(url, base) {
+        var matches = url.match(/(.*\/)?(.*)/),
+            uptoslash = matches[1] ? matches[1] : '',
+            filename = matches[2] ? matches[2] : null;
+        if (!uptoslash) {
+            if (base && !base.match(/\/$/)) base += '/';
+            uptoslash = base || '';
+            url = uptoslash + filename;
+        }
+        return {full: url, uptoslash: uptoslash, filename: filename};
     },
     flushFile: function(file) {
         if (file.modified) {
@@ -961,9 +972,9 @@ Object.subclass('Squeak.Image',
                         oopAdjust[oop] = skippedBytes;
                     } else {
                         skippedBytes += pos - objPos;
-                        if (!freePageList) freePageList = bits;       // first hidden obj
-                        else if (!classPages) classPages = bits;      // second hidden obj
-                        oopMap[oldBaseAddr + oop] = bits;             // used in spurClassTable()
+                        if (!freePageList) freePageList = bits;         // first hidden obj
+                        else if (!classPages) classPages = bits;        // second hidden obj
+                        if (classID) oopMap[oldBaseAddr + oop] = bits;  // used in spurClassTable()
                     }
                 }
                 if (pos !== segmentEnd - 16) throw Error("invalid segment");
@@ -988,9 +999,11 @@ Object.subclass('Squeak.Image',
             this.lastOldObject = object;
         }
 
-        if (!this.isSpur) {
+        if (true) {
             // For debugging: re-create all objects from named prototypes
-            var cc = oopMap[oopMap[specialObjectsOopInt].bits[Squeak.splOb_CompactClasses]].bits;
+            var _splObs = oopMap[specialObjectsOopInt],
+                cc = this.isSpur ? this.spurClassTable(oopMap, classPages, _splObs)
+                    : oopMap[_splObs.bits[Squeak.splOb_CompactClasses]].bits;
             var renamedObj = null;
             object = this.firstOldObject;
             prevObj = null;
@@ -998,10 +1011,10 @@ Object.subclass('Squeak.Image',
                 prevObj = renamedObj;
                 renamedObj = object.renameFromImage(oopMap, cc);
                 if (prevObj) prevObj.nextObject = renamedObj;
+                else this.firstOldObject = renamedObj;
                 oopMap[oldBaseAddr + object.oop] = renamedObj;
                 object = object.nextObject;
             }
-            this.firstOldObject = oopMap[oldBaseAddr+4];
             this.lastOldObject = renamedObj;
         }
 
@@ -1050,7 +1063,7 @@ Object.subclass('Squeak.Image',
             }
         };
         if (!progressDo) {
-            while (mapSomeObjects());   // do it synchronously
+            while (mapSomeObjects()) {};   // do it synchronously
             if (thenDo) thenDo();
         } else {
             window.setTimeout(mapSomeObjectsAsync, 0);
@@ -2407,6 +2420,26 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         this.hash = unicode;
         this._format = 7;
         this.mark = true;   // stays always marked so not traced by GC
+    },
+    classNameFromImage: function(oopMap) {
+        var name = oopMap[this.bits[Squeak.Class_name]];
+        if (name && name._format >= 16 && name._format < 24) {
+            var bytes = name.decodeBytes(name.bits.length, name.bits, 0, name._format & 7);
+            return Squeak.bytesAsString(bytes);
+        }
+        return "Class";
+    },
+    renameFromImage: function(oopMap, classTable) {
+        var classObj = classTable[this.sqClass];
+        var instProto = classObj.instProto || classObj.classInstProto(classObj.classNameFromImage(oopMap));
+        if (!instProto) return this;
+        var renamedObj = new instProto; // Squeak.SpurObject
+        renamedObj.oop = this.oop;
+        renamedObj.sqClass = this.sqClass;
+        renamedObj._format = this._format;
+        renamedObj.hash = this.hash;
+        renamedObj.bits = this.bits;
+        return renamedObj;
     },
 },
 'accessing', {
@@ -6425,6 +6458,7 @@ Object.subclass('Squeak.Primitives',
             this.vm.freeze(function(unfreeze) {
                 Squeak.fileGet(file.name,
                     function success(contents) {
+                        if (contents == null) return error(file.name);
                         file.contents = this.asUint8Array(contents);
                         unfreeze();
                         func(file);

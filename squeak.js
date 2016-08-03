@@ -934,9 +934,9 @@ SqueakJS.runImage = function(buffer, name, display, options) {
     display.showBanner("Loading " + SqueakJS.appName);
     display.showProgress(0);
     var self = this;
-    window.setTimeout(function() {
+    window.setTimeout(function readImageAsync() {
         var image = new Squeak.Image(name);
-        image.readFromBuffer(buffer, function() {
+        image.readFromBuffer(buffer, function startRunning() {
             display.quitFlag = false;
             var vm = new Squeak.Interpreter(image, display);
             SqueakJS.vm = vm;
@@ -948,7 +948,7 @@ SqueakJS.runImage = function(buffer, name, display, options) {
             function run() {
                 try {
                     if (display.quitFlag) self.onQuit(vm, display, options);
-                    else vm.interpret(50, function(ms) {
+                    else vm.interpret(50, function runAgain(ms) {
                         if (ms == "sleep") ms = 200;
                         if (spinner) updateSpinner(spinner, ms, vm, display);
                         loop = window.setTimeout(run, ms);

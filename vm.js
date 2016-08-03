@@ -624,6 +624,7 @@ Object.extend(Squeak,
             uptoslash = matches[1] ? matches[1] : '',
             filename = matches[2] ? matches[2] : null;
         if (!uptoslash) {
+            if (base && !base.match(/\/$/)) base += '/';
             uptoslash = base || '';
             url = uptoslash + filename;
         }

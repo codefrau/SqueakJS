@@ -6179,13 +6179,29 @@ Object.subclass('Squeak.Primitives',
     secondClock: function() {
         return this.pos32BitIntFor(Squeak.totalSeconds()); // will overflow 32 bits in 2037
     },
+    microsecondClock: function(state) {
+        var millis = Date.now() - state.epoch;
+        if (typeof performance !== "object")
+            return this.pos53BitIntFor(millis * 1000);
+        // use high-res clock, adjust for roll-over
+        var micros = performance.now() * 1000 % 1000 | 0,
+            oldMillis = state.millis,
+            oldMicros = state.micros;
+        if (oldMillis > millis) millis = oldMillis;                 // rolled over previously 
+        if (millis === oldMillis && micros < oldMicros) millis++;   // roll over now
+        state.millis = millis;
+        state.micros = micros;
+        return this.pos53BitIntFor(millis * 1000 + micros);
+    },
     microsecondClockUTC: function() {
-        var millis = Date.now() - Squeak.EpochUTC;
-        return this.pos53BitIntFor(millis * 1000);
+        if (!this.microsecondClockUTCState)
+            this.microsecondClockUTCState = {epoch: Squeak.EpochUTC, millis: 0, micros: 0};
+        return this.microsecondClock(this.microsecondClockUTCState);
     },
     microsecondClockLocal: function() {
-        var millis = Date.now() - Squeak.Epoch;
-        return this.pos53BitIntFor(millis * 1000);
+        if (!this.microsecondClockLocalState)
+            this.microsecondClockLocalState = {epoch: Squeak.Epoch, millis: 0, micros: 0};
+        return this.microsecondClock(this.microsecondClockLocalState);
     },
 },
 'FilePlugin', {

@@ -1982,7 +1982,7 @@ Object.subclass('Squeak.Object',
             value = value * 256 + this.bytes[i];
         }
         var sign = negative ? '-' : '',
-            approx = value >= 9007199254740992 ? '≈' : '';
+            approx = value > 0x1FFFFFFFFFFFFF ? '≈' : '';
         return sign + '16r' + digits.join('') + ' (' + approx + sign + value + 'L)';
     },
     assnKeyAsString: function() {
@@ -4626,7 +4626,7 @@ Object.subclass('Squeak.Primitives',
                 value = 0;
             for (var i = 0, f = 1; i < n; i++, f *= 256)
                 value += bytes[i] * f;
-            if (value < 9007199254740992) {
+            if (value <= 0x1FFFFFFFFFFFFF) {
                 if (this.isA(stackVal, Squeak.splOb_ClassLargePositiveInteger))
                     return value;
                 if (this.isA(stackVal, Squeak.splOb_ClassLargeNegativeInteger))

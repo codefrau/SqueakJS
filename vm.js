@@ -4557,12 +4557,17 @@ Object.subclass('Squeak.Primitives',
             bytes[i] = (signed32>>>(8*i)) & 255;
         return lgIntObj;
     },
-    pos64BitIntFor: function(longlong) {
+    pos53BitIntFor: function(longlong) {
         // Return the quantity as an unsigned 64-bit integer
         if (longlong <= 0xFFFFFFFF) return this.pos32BitIntFor(longlong);
+        if (longlong > 0x1FFFFFFFFFFFFF) {
+            console.warn("Out of range: pos53BitIntFor(" + longlong + ")");
+            this.success = false;
+            return 0;
+        };
         var sz = longlong <= 0xFFFFFFFFFF ? 5 :
                  longlong <= 0xFFFFFFFFFFFF ? 6 :
-                 longlong <= 0xFFFFFFFFFFFFFF ? 7 : 8;
+                 7;
         var lgIntClass = this.vm.specialObjects[Squeak.splOb_ClassLargePositiveInteger],
             lgIntObj = this.vm.instantiateClass(lgIntClass, sz),
             bytes = lgIntObj.bytes;
@@ -6176,11 +6181,11 @@ Object.subclass('Squeak.Primitives',
     },
     microsecondClockUTC: function() {
         var millis = Date.now() - Squeak.EpochUTC;
-        return this.pos64BitIntFor(millis * 1000);
+        return this.pos53BitIntFor(millis * 1000);
     },
     microsecondClockLocal: function() {
         var millis = Date.now() - Squeak.Epoch;
-        return this.pos64BitIntFor(millis * 1000);
+        return this.pos53BitIntFor(millis * 1000);
     },
 },
 'FilePlugin', {

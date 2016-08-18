@@ -1242,6 +1242,11 @@ Object.subclass('Squeak.Image',
         this.oldSpaceCount += newObjects.length;
         this.gcTenured += newObjects.length;
     },
+    tenureIfYoung: function(object) {
+        if (object.oop < 0) {
+            this.appendToOldObjects([object]);
+        }
+    },
     finalizeWeakReferences: function() {
         // nil out all weak fields that did not survive GC
         var weakObj = this.firstOldObject;
@@ -1281,7 +1286,6 @@ Object.subclass('Squeak.Image',
         // We don't actually register the object yet, because that would prevent
         // it from being garbage-collected by the Javascript collector
         obj.oop = -(++this.newSpaceCount); // temp oops are negative. Real oop assigned when surviving GC
-        // Note this is also done in loadImageSegment()
         this.lastHash = (13849 + (27181 * this.lastHash)) & 0xFFFFFFFF;
         return this.lastHash & 0xFFF;
     },
@@ -1289,7 +1293,6 @@ Object.subclass('Squeak.Image',
         // We don't actually register the object yet, because that would prevent
         // it from being garbage-collected by the Javascript collector
         obj.oop = -(++this.newSpaceCount); // temp oops are negative. Real oop assigned when surviving GC
-        // Note this is also done in loadImageSegment()
         return 0; // actual hash created on demand
     },
     instantiateClass: function(aClass, indexableSize, filler) {
@@ -1442,8 +1445,8 @@ Object.subclass('Squeak.Image',
         return this.formatVersion() | (wholeWord[0] & 0xFF000000);
     },
     loadImageSegment: function(segmentWordArray, outPointerArray) {
-        // The C VM creates real objects from the segment in-place. We need to create
-        // real objects, which we just put in new space.
+        // The C VM creates real objects from the segment in-place. 
+        // We do the same, linking the new objects directly into old-space.
         // The code below is almost the same as readFromBuffer() ... should unify
         var data = new DataView(segmentWordArray.words.buffer),
             littleEndian = false,
@@ -1477,7 +1480,10 @@ Object.subclass('Squeak.Image',
             }
         }
         // read objects
-        var segment = [],
+        this.tenureIfYoung(segmentWordArray);
+        var prevObj = segmentWordArray,
+            endMarker = prevObj.nextObject,
+            oopOffset = segmentWordArray.oop,
             oopMap = {};
         while (pos < data.byteLength) {
             var nWords = 0,
@@ -1509,10 +1515,13 @@ Object.subclass('Squeak.Image',
                 bits = readBits(nWords, format);
 
             var object = new Squeak.Object();
-            object.initFromImage(oop, classInt, format, hash, bits);
-            segment.push(object);
+            object.initFromImage(oop + oopOffset, classInt, format, hash, bits);
+            prevObj.nextObject = object;
+            this.oldSpaceCount++;
+            prevObj = object;
             oopMap[oop] = object;
         }
+        object.nextObject = endMarker;
         // add outPointers to oopMap
         for (var i = 0; i < outPointerArray.pointers.length; i++)
             oopMap[0x80000004 + i * 4] = outPointerArray.pointers[i];
@@ -1521,17 +1530,16 @@ Object.subclass('Squeak.Image',
             fakeClsOop = 0, // make up a compact-classes array with oops, as if loading an image
             compactClassOops = compactClasses.map(function(cls) {
                 oopMap[--fakeClsOop] = cls; return fakeClsOop; });
-        // map objects using oopMap, and assign new oops
-        var roots = oopMap[8] || oopMap[12] || oopMap[16],      // might be 1/2/3 header words
-            floatClass = this.specialObjectsArray.pointers[Squeak.splOb_ClassFloat];
-        for (var i = 0; i < segment.length; i++) {
-            var obj = segment[i];
+        // truncate segmentWordArray array to one element
+        segmentWordArray.words = new Uint32Array([segmentWordArray.words[0]]);
+        // map objects using oopMap
+        var roots = segmentWordArray.nextObject,
+            floatClass = this.specialObjectsArray.pointers[Squeak.splOb_ClassFloat],
+            obj = roots;
+        do {
             obj.installFromImage(oopMap, compactClassOops, floatClass, littleEndian, nativeFloats);
-            obj.oop = -(++this.newSpaceCount);  // make this a proper new-space object (see registerObject)
-            this.hasNewInstances[obj.sqClass.oop] = true;   // need GC to find all instances
-        }
-        // don't truncate segmentWordArray now like the C VM does. It does not seem to be
-        // worth the trouble of adjusting the following oops
+            obj = obj.nextObject;
+        } while (obj !== endMarker);
         return roots;
     },
 },

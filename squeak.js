@@ -543,6 +543,7 @@ function createSqueakDisplay(canvas, options) {
                 cursorCanvas && display.cursorCanvas.classList.remove("pixelated");
             }
         }
+        return scale;
     }
     // zooming/panning with two fingers
     var maxZoom = 5;
@@ -590,7 +591,8 @@ function createSqueakDisplay(canvas, options) {
         h = touch.orig.height * w / touch.orig.width;
         l = Math.max(Math.min(l, touch.orig.left), touch.orig.right - w);
         t = Math.max(Math.min(t, touch.orig.top), touch.orig.bottom - h);
-        adjustDisplay(l, t, w, h);
+        var scale = adjustDisplay(l, t, w, h);
+        if (scale == 1) touch.orig = null;
     }
     // State machine to distinguish between 1st/2nd mouse button and zoom/pan:
     // * if moved, or no 2nd finger within 100ms of 1st down, start mousing

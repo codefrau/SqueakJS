@@ -728,6 +728,7 @@ function createSqueakDisplay(canvas, options) {
             9: 9,   // Tab
             13: 13, // Return
             27: 27, // Escape
+            32: 32, // Space
             33: 11, // PageUp
             34: 12, // PageDown
             35: 4,  // End

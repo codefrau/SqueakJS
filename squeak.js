@@ -594,7 +594,10 @@ function createSqueakDisplay(canvas, options) {
         l = Math.max(Math.min(l, touch.orig.left), touch.orig.right - w);
         t = Math.max(Math.min(t, touch.orig.top), touch.orig.bottom - h);
         var scale = adjustDisplay(l, t, w, h);
-        if (scale == 1) touch.orig = null;
+        if ((scale - display.initialScale) < 0.0001) {
+            touch.orig = null;
+            window.onresize();
+        }
     }
     // State machine to distinguish between 1st/2nd mouse button and zoom/pan:
     // * if moved, or no 2nd finger within 100ms of 1st down, start mousing
@@ -866,8 +869,14 @@ function createSqueakDisplay(canvas, options) {
             paddingY = 0;
         // above are the default values for laying out the canvas
         if (!options.fixedWidth) { // set canvas resolution
-            display.width = w;
-            display.height = h;
+            if (!options.minWidth) options.minWidth = 700;
+            if (!options.minHeight) options.minHeight = 700;
+            var scaleW = w < options.minWidth ? options.minWidth / w : 1,
+                scaleH = h < options.minHeight ? options.minHeight / h : 1,
+                scale = Math.max(scaleW, scaleH);
+            display.width = Math.floor(w * scale);
+            display.height = Math.floor(h * scale);
+            display.initialScale = w / display.width;
         } else { // fixed resolution and aspect ratio
             display.width = options.fixedWidth;
             display.height = options.fixedHeight;
@@ -878,6 +887,7 @@ function createSqueakDisplay(canvas, options) {
             } else {
                 paddingY = h - Math.floor(w / wantRatio);
             }
+            display.initialScale = (w - paddingX) / display.width;
         }
         // set size and position
         canvas.style.left = (x + Math.floor(paddingX / 2)) + "px";

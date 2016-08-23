@@ -785,6 +785,10 @@ function createSqueakDisplay(canvas, options) {
         canvas.parentElement.appendChild(keyboardButton);
         keyboardButton.onmousedown = function(evt) {
             canvas.contentEditable = true;
+            canvas.setAttribute('autocomplete', 'off');
+            canvas.setAttribute('autocorrect', 'off');
+            canvas.setAttribute('autocapitalize', 'off');
+            canvas.setAttribute('spellcheck', 'off');
             canvas.focus();
             evt.preventDefault();
         }

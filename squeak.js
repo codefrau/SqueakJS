@@ -428,7 +428,9 @@ function createSqueakDisplay(canvas, options) {
         var ctx = display.context;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = style.color || "#F90";
-        ctx.font = style.font || 'bold 48px sans-serif';
+        ctx.font = style.font || "bold 48px sans-serif";
+        if (!style.font && ctx.measureText(msg).width > canvas.width)
+            ctx.font = "bold 24px sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(msg, canvas.width / 2, canvas.height / 2);

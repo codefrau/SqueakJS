@@ -3,7 +3,7 @@ body {
     font-family: sans-serif;
 }
 canvas {
-    position: absolute;
+    position: fixed;
     background: #000;
     cursor: default;
 }
@@ -14,7 +14,7 @@ canvas.pixelated {
     -ms-interpolation-mode: nearest-neighbor;
 }
 div#sqHeader {
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
     right: 0;
@@ -22,7 +22,7 @@ div#sqHeader {
     border-bottom: 6px double gray;
 }
 div#sqFooter {
-    position: absolute;
+    position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
@@ -30,7 +30,7 @@ div#sqFooter {
     border-top: 6px double gray;
 }
 div#sqSpinner {
-    position: absolute;
+    position: fixed;
     margin: auto; top: 0; left: 0; bottom: 0; right: 0;
     width: 100px;
     height: 100px;

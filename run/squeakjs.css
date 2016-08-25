@@ -3,7 +3,7 @@ body {
     font-family: sans-serif;
 }
 canvas {
-    position: absolute;
+    position: fixed;
     background: #000;
     display: none;
 }
@@ -22,7 +22,7 @@ h1 {
     margin: 0 20px 0 5px;
 }
 div#sqSpinner {
-    position: absolute;
+    position: fixed;
     margin: auto; top: 0; left: 0; bottom: 0; right: 0;
     width: 100px;
     height: 100px;

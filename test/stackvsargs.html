@@ -1,0 +1,79 @@
+<html>
+<head>
+    <title>Stack vs Args</title>
+    <style type="text/css">body{margin:40px auto;max-width:650px;line-height:1.6;font-family:sans-serif;font-size:18px;color:#444;padding:0 10px}pre{font-size:14px}</style>
+    
+</head>
+<body>
+<h1>Passing args directly vs on stack</h1>
+<script id="script">
+var data = [20000];
+var stack = [];
+
+function byArgs(self, a) {
+    if (a <= 1) return a;
+    var tmp1 = byArgs(self, a - 1);
+    var tmp2 = tmp1 + a;
+    return tmp2;
+}
+
+function byStack(stack) {
+    var a = stack[stack.length - 1];
+    var self = stack[stack.length - 2];
+    if (a <= 1) {
+        stack.length -= 2;
+        stack.push(a);
+    } else {
+        stack.push(self);
+        stack.push(a - 1);
+        byStack(stack);
+        var tmp1 = stack.pop();
+        var tmp2 = tmp1 + a;
+        stack.length -= 2;
+        stack.push(tmp2);
+    }
+}
+
+function callByArgs() {
+    var result = byArgs(self, data[0]);
+    return result;
+}
+
+function callByStack() {
+    stack.push(self);
+    stack.push(data[0]);
+    byStack(stack);
+    var result = stack.pop();
+    return result;
+}
+
+function time(f, iterations) {
+    var start = Date.now();
+    for (var i = 0; i < iterations; i++) 
+        f();
+    return Date.now() - start;
+}
+
+function bench(f) {
+    var iterations = 1000;
+    do {
+        iterations *= 2;
+        var ms = time(f, iterations);
+    } while (ms < 1000);
+    return iterations * 1000 / ms | 0;
+}
+
+try {
+    var benchArgs = bench(callByArgs);
+    var benchStack = bench(callByStack);
+    document.write("Args: " + benchArgs + "/s<br>");
+    document.write("Stack: " + benchStack + "/s<br>");
+    document.write((benchArgs / benchStack|0) + "x faster<br>");
+} catch(e) {
+    document.write("Error: " + e);
+}
+</script>
+<hr>
+<pre><script>document.write(script.innerText.replace(/</g,'&lt;').replace(/>/g,'&gt;'))</script></pre>
+</body>
+</html>

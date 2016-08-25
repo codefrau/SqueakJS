@@ -968,7 +968,7 @@ footer {
   }
 }
 
-@media print, screen and (max-width: 480px) {
+@media print, screen and (max-width: 520px) {
   header {
     position: relative;
     padding: 5px 0px;
@@ -984,11 +984,12 @@ footer {
   }
 
   section {
-    margin-top: 25px;
+    margin-top: 0;
   }
 
   #banner {
-    top: 60px;
+    position: relative;
+    top: 0;
     height: 30px;
   }
   #banner .fork {

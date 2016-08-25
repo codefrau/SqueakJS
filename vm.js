@@ -1573,6 +1573,7 @@ Object.subclass('Squeak.Image',
                 }
             }
         }
+        classes[3] = classes[1];      // SmallInteger needs two entries
         this.classTable = classes;
         this.classTableIndex = 1024;  // first page is special
         return classes;

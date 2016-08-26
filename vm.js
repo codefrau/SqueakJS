@@ -2346,7 +2346,10 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         var classID = this.sqClass;
         if (classID < 32) throw Error("Invalid class ID");
         this.sqClass = classTable[classID];
-        if (!this.sqClass) throw Error("Invalid class ID");
+        if (!this.sqClass) {
+            this.sqClass = classTable[3]; // Char class
+            console.error("class id not in class table: " + classID);
+        }
         var nWords = this.bits.length;
         switch (this._format) {
             case 0: // zero sized object
@@ -2444,6 +2447,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
     },
     renameFromImage: function(oopMap, classTable) {
         var classObj = classTable[this.sqClass];
+        if (!classObj) return this;
         var instProto = classObj.instProto || classObj.classInstProto(classObj.classNameFromImage(oopMap));
         if (!instProto) return this;
         var renamedObj = new instProto; // Squeak.SpurObject
@@ -2676,7 +2680,8 @@ Object.subclass('Squeak.Interpreter',
             if (globalsClass === "Environment")
                 return globals.pointers[2].pointers[1].pointers
         }
-        throw Error("cannot find global dict");
+        console.warn("cannot find global dict");
+        return [];
     },
     initCompiler: function() {
         if (!Squeak.Compiler)

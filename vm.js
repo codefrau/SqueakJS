@@ -2726,6 +2726,10 @@ Object.subclass('Squeak.Interpreter',
                 console.warn("Hacking " + each.method);
             }
         }, this);
+        // Pharo
+        if (this.findMethod("PharoClassInstaller>>initialize")) {
+            Squeak.platformName = "unix";
+        }
     },
 },
 'interpreting', {

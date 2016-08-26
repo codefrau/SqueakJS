@@ -2202,14 +2202,18 @@ Object.subclass('Squeak.Object',
     },
     className: function() {
         if (!this.pointers) return "_NOTACLASS_";
-        var name = this.pointers[Squeak.Class_name];
-        if (name && name.bytes) return name.bytesAsString();
+        for (var nameIdx = 6; nameIdx <= 7; nameIdx++) {
+            var name = this.pointers[nameIdx];
+            if (name && name.bytes) return name.bytesAsString();
+        }
         // must be meta class
         for (var clsIndex = 5; clsIndex <= 6; clsIndex++) {
             var cls = this.pointers[clsIndex];
             if (cls && cls.pointers) {
-                name = cls.pointers[Squeak.Class_name];
-                if (name && name.bytes) return name.bytesAsString() + " class";
+                for (var nameIdx = 6; nameIdx <= 7; nameIdx++) {
+                    var name = cls.pointers[nameIdx];
+                    if (name && name.bytes) return name.bytesAsString();
+                }
             }
         }
         return "_SOMECLASS_";

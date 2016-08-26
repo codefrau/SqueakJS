@@ -6526,9 +6526,10 @@ Object.subclass('Squeak.Primitives',
         error: ''
     },
     fileConsoleWrite: function(logOrError, array, startIndex, count) {
+        // buffer until there is a newline
         var bytes = array.subarray(startIndex, startIndex + count),
             buffer = this.fileConsoleBuffer[logOrError] + Squeak.bytesAsString(bytes),
-            lines = buffer.match('([^]*)\n');
+            lines = buffer.match('([^]*)\n(.*)');
         if (lines) {
             console[logOrError](lines[1]);  // up to last newline
             buffer = lines[2];              // after last newline

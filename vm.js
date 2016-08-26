@@ -6341,6 +6341,11 @@ Object.subclass('Squeak.Primitives',
         }
         if (startIndex < 0 || startIndex + count > arrayObj.bytes.length)
             return false;
+        if (typeof handle.file === "string") {
+            //this.fileConsoleRead(handle.file, array, startIndex, count);
+            this.popNandPushIfOK(argCount+1, 0);
+            return true;
+        }
         return this.fileContentsDo(handle.file, function(file) {
             if (!file.contents)
                 return this.popNandPushIfOK(argCount+1, 0);

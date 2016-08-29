@@ -2344,12 +2344,9 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
     installFromImage: function(oopMap, classTable, floatClass, littleEndian, getCharacter) {
         //Install this object by decoding format, and rectifying pointers
         var classID = this.sqClass;
-        if (classID < 32) throw Error("Invalid class ID");
+        if (classID < 32) throw Error("Invalid class ID: " + classID);
         this.sqClass = classTable[classID];
-        if (!this.sqClass) {
-            this.sqClass = classTable[3]; // Char class
-            console.error("class id not in class table: " + classID);
-        }
+        if (!this.sqClass) throw Error("Class ID not in class table: " + classID);
         var nWords = this.bits.length;
         switch (this._format) {
             case 0: // zero sized object

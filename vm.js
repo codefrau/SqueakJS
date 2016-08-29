@@ -1555,8 +1555,8 @@ Object.subclass('Squeak.Image',
         for (var p = 0; p < 4096; p++) {
             var page = oopMap[classPages[p]];
             if (page.length === 1024) for (var i = 0; i < 1024; i++) {
-                var maybeClass = oopMap[page[i]]
-                if (maybeClass._format === 1) {
+                var maybeClass = oopMap[page[i]];   // class or nil
+                if (maybeClass.bits.length >= 3) {
                     var classIndex = p * 1024 + i;
                     classes[classIndex] = maybeClass;
                 }

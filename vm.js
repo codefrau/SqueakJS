@@ -1550,15 +1550,16 @@ Object.subclass('Squeak.Image',
         this.writeToBuffer = this.writeToBufferSpur;
     },
     spurClassTable: function(oopMap, classPages, splObjs) {
-        var classes = {};
+        var classes = {},
+            nil = this.firstOldObject;
         // read class table pages
         for (var p = 0; p < 4096; p++) {
             var page = oopMap[classPages[p]];
             if (page.length === 1024) for (var i = 0; i < 1024; i++) {
-                var maybeClass = oopMap[page[i]];   // class or nil
-                if (maybeClass.bits.length >= 3) {
+                var entry = oopMap[page[i]];
+                if (entry !== nil) {
                     var classIndex = p * 1024 + i;
-                    classes[classIndex] = maybeClass;
+                    classes[classIndex] = entry;
                 }
             }
         }
@@ -1566,7 +1567,7 @@ Object.subclass('Squeak.Image',
         for (var key in Squeak) {
             if (/^splOb_Class/.test(key)) {
                 var knownClass = oopMap[splObjs.bits[Squeak[key]]];
-                if (knownClass._format === 1) {
+                if (knownClass !== nil) {
                     var classIndex = knownClass.hash;
                     if (classIndex > 0 && classIndex < 1024)
                         classes[classIndex] = knownClass;

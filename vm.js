@@ -1808,6 +1808,7 @@ Object.subclass('Squeak.Object',
     },
     renameFromImage: function(oopMap, ccArray) {
         var classObj = this.sqClass < 32 ? oopMap[ccArray[this.sqClass-1]] : oopMap[this.sqClass];
+        if (!classObj) return this;
         var instProto = classObj.instProto || classObj.classInstProto(classObj.classNameFromImage(oopMap));
         if (!instProto) return this;
         var renamedObj = new instProto; // Squeak.Object

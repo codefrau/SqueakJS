@@ -2213,7 +2213,7 @@ Object.subclass('Squeak.Object',
             if (cls && cls.pointers) {
                 for (var nameIdx = 6; nameIdx <= 7; nameIdx++) {
                     var name = cls.pointers[nameIdx];
-                    if (name && name.bytes) return name.bytesAsString();
+                    if (name && name.bytes) return name.bytesAsString() + " class";
                 }
             }
         }

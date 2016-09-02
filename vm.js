@@ -1179,8 +1179,9 @@ Object.subclass('Squeak.Image',
         var roots = this.gcRoots().filter(function(obj){return obj.oop < 0;}),
             object = this.firstOldObject;
         while (object) {
-            var body = object.pointers;
-            if (body) {
+            if (object.dirty) {
+                object.dirty = false;
+                var body = object.pointers;
                 for (var i = 0; i < body.length; i++) {
                     var child = body[i];
                     if (typeof child === "object" && child.oop < 0) // if child is new
@@ -1201,6 +1202,7 @@ Object.subclass('Squeak.Image',
             if (object.mark) continue;    // objects are added to todo more than once
             newObjects.push(object);
             object.mark = true;           // mark it
+            object.dirty = false;
             if (object.sqClass.oop < 0)   // trace class if new
                 todo.push(object.sqClass);
             var body = object.pointers;

@@ -1136,8 +1136,16 @@ Object.subclass('Squeak.Image',
 },
 'garbage collection', {
     partialGC: function() {
-        // no partial GC needed since new space uses the Javascript GC
-        return this.totalMemory - this.oldSpaceBytes;
+        // Tenure all reachable new objects
+        // weak refs are treated strongly, no finalization
+        var start = Date.now();
+        var newObjects = this.findNewObjects();
+        this.appendToOldObjects(newObjects);
+        this.allocationCount += this.newSpaceCount;
+        this.newSpaceCount = 0;
+        this.hasNewInstances = {};
+        console.log("Incremental GC: " + (Date.now() - start) + " ms");
+        return Math.max(0, this.totalMemory - this.oldSpaceBytes);
     },
     fullGC: function(reason) {
         // Collect garbage and return first tenured object (to support object enumeration)
@@ -1158,7 +1166,60 @@ Object.subclass('Squeak.Image',
         this.hasNewInstances = {};
         this.gcCount++;
         this.gcMilliseconds += Date.now() - start;
+        console.log("Full GC (" + reason + "):" + (Date.now() - start) + " ms");
         return newObjects.length > 0 ? newObjects[0] : null;
+    },
+    gcRoots: function() {
+        // the roots of the system
+        this.vm.storeContextRegisters();        // update active context
+        return [this.specialObjectsArray, this.vm.activeContext];
+    },
+    newRoots: function() {
+        // find new objects directly pointed to by old objects
+        var roots = this.gcRoots().filter(function(obj){return obj.oop < 0;}),
+            object = this.firstOldObject;
+        while (object) {
+            var body = object.pointers;
+            if (body) {
+                for (var i = 0; i < body.length; i++) {
+                    var child = body[i];
+                    if (typeof child === "object" && child.oop < 0) // if child is new
+                        roots.push(child);
+                }
+            }
+            object = object.nextObject;
+        }
+        return roots;
+    },
+    findNewObjects: function() {
+        // Find new objects transitively reachable from old objects
+        this.vm.storeContextRegisters();        // update active context
+        var todo = this.newRoots(),             // direct pointers from old space
+            newObjects = []; 
+        while (todo.length > 0) {
+            var object = todo.pop();
+            if (object.mark) continue;    // objects are added to todo more than once
+            newObjects.push(object);
+            object.mark = true;           // mark it
+            if (object.sqClass.oop < 0)   // trace class if new
+                todo.push(object.sqClass);
+            var body = object.pointers;
+            if (body) {                   // trace all unmarked pointers
+                var n = body.length;
+                if (this.vm.isContext(object)) {            // contexts have garbage beyond SP
+                    n = object.contextSizeWithStack();
+                    for (var i = n; i < body.length; i++)   // clean up that garbage
+                        body[i] = this.vm.nilObj;
+                }
+                for (var i = 0; i < n; i++) {
+                    var child = body[i];
+                    if (typeof child === "object" && child.oop < 0)
+                        todo.push(body[i]);
+                }
+            }
+        }
+        // sort by oop to preserve creation order
+        return newObjects.sort(function(a,b){return b.oop - a.oop});
     },
     markReachableObjects: function() {
         // Visit all reachable objects and mark them.
@@ -1166,13 +1227,12 @@ Object.subclass('Squeak.Image',
         // Contexts are handled specially: they have garbage beyond the stack pointer
         // which must not be traced, and is cleared out here
         // In weak objects, only the inst vars are traced
-        this.vm.storeContextRegisters();        // update active context
-        var todo = [this.specialObjectsArray, this.vm.activeContext];
+        var todo = this.gcRoots();
         var newObjects = [];
         while (todo.length > 0) {
             var object = todo.pop();
-            if (object.mark) continue;             // objects are added to todo more than once
-            if (!object.nextObject && object !== this.lastOldObject)       // it's a new object
+            if (object.mark) continue;    // objects are added to todo more than once
+            if (object.oop < 0)           // it's a new object
                 newObjects.push(object);
             object.mark = true;           // mark it
             if (!object.sqClass.mark)     // trace class if not marked
@@ -2037,10 +2097,11 @@ Object.subclass('Squeak.Object',
         return this.pointers ? this.pointers.length : 0;
     },
     nonWeakSize: function() {
-        if (!this.pointers) return 0;
         return this._format === 4           // weak?
             ? this.sqClass.classInstSize()  // only inst vars
-            : this.pointers.length;         // all fields
+            : this.pointers
+                ? this.pointers.length      // all fields
+                : 0;
     },
     bytesSize: function() {
         return this.bytes ? this.bytes.length : 0;

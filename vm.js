@@ -5850,7 +5850,7 @@ Object.subclass('Squeak.Primitives',
         0 args: return an Array of VM parameter values;
         1 arg:  return the indicated VM parameter;
         2 args: set the VM indicated parameter. */
-        var paramsArraySize = 44;
+        var paramsArraySize = this.vm.image.isSpur ? 54 : 44;
         switch (argCount) {
             case 0:
                 var arrayObj = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassArray], paramsArraySize);
@@ -5904,8 +5904,43 @@ Object.subclass('Squeak.Primitives',
             case 41: return this.vm.image.formatVersion();
     		//42	number of stack pages in use (Cog Stack VM only, otherwise nil)
 		    //43	desired number of stack pages (stored in image file header, max 65535; Cog VMs only, otherwise nil)
-		    case 44: return this.vm.image.bytesLeft(); // size of eden, in bytes
-        }
+		    case 44: return 0; // size of eden, in bytes
+            // 45	desired size of eden, in bytes (stored in image file header; Cog VMs only, otherwise nil)
+            // 46	size of machine code zone, in bytes (stored in image file header; Cog JIT VM only, otherwise nil)
+            // 47	desired size of machine code zone, in bytes (applies at startup only, stored in image file header; Cog JIT VM only)
+            // 48	various properties of the Cog VM as an integer encoding an array of bit flags.
+            //      Bit 0: tells the VM that the image's Process class has threadId as its 5th inst var (after nextLink, suspendedContext, priority & myList)
+            //      Bit 1: on Cog JIT VMs asks the VM to set the flag bit in interpreted methods
+            //      Bit 2: if set, preempting a process puts it to the head of its run queue, not the back,
+            // 	i.e. preempting a process by a higher priority one will not cause the preempted process to yield
+            // 		to others at the same priority.
+            //      Bit 3: in a muilt-threaded VM, if set, the Window system will only be accessed from the first VM thread
+            //      Bit 4: in a Spur vm, if set, causes weaklings and ephemerons to be queued individually for finalization
+            // 49	the size of the external semaphore table (read-write; Cog VMs only)
+            // 50-51 reserved for VM parameters that persist in the image (such as eden above)
+            // 52	root (remembered) table maximum size (read-only)
+            // 53	the number of oldSpace segments (Spur only, otherwise nil)
+            case 54: return this.vm.image.bytesLeft();	// total size of free old space (Spur only, otherwise nil)
+            // 55	ratio of growth and image size at or above which a GC will be performed post scavenge (Spur only, otherwise nil)
+            // 56	number of process switches since startup (read-only)
+            // 57	number of ioProcessEvents calls since startup (read-only)
+            // 58	number of forceInterruptCheck (Cog VMs) or quickCheckInterruptCalls (non-Cog VMs) calls since startup (read-only)
+            // 59	number of check event calls since startup (read-only)
+            // 60	number of stack page overflows since startup (read-only; Cog VMs only)
+            // 61	number of stack page divorces since startup (read-only; Cog VMs only)
+            // 62	number of machine code zone compactions since startup (read-only; Cog VMs only)
+            // 63	milliseconds taken by machine code zone compactions since startup (read-only; Cog VMs only)
+            // 64	current number of machine code methods (read-only; Cog VMs only)
+            // 65	In newer Cog VMs a set of flags describing VM features,
+            //      if non-zero bit 0 implies multiple bytecode set support;
+            //      if non-zero bit 0 implies read-only object support
+            //      (read-only; Cog VMs only; nil in older Cog VMs, a boolean answering multiple bytecode support in not so old Cog VMs)
+            // 66	the byte size of a stack page in the stack zone  (read-only; Cog VMs only)
+            // 67	the maximum allowed size of old space in bytes, 0 implies no internal limit (Spur VMs only).
+            // 68 - 69 reserved for more Cog-related info
+            // 70	the value of VM_PROXY_MAJOR (the interpreterProxy major version number)
+            // 71	the value of VM_PROXY_MINOR (the interpreterProxy minor version number)"
+		}
         return null;
     },
     primitiveImageName: function(argCount) {

@@ -1231,6 +1231,7 @@ Object.subclass('Squeak.Image',
         // In weak objects, only the inst vars are traced
         var todo = this.gcRoots();
         var newObjects = [];
+        this.weakObjects = [];
         while (todo.length > 0) {
             var object = todo.pop();
             if (object.mark) continue;    // objects are added to todo more than once
@@ -1241,7 +1242,11 @@ Object.subclass('Squeak.Image',
                 todo.push(object.sqClass);
             var body = object.pointers;
             if (body) {                   // trace all unmarked pointers
-                var n = object.nonWeakSize();               // do not trace weak fields
+                var n = body.length;
+                if (object.isWeak()) {
+                    n = object.sqClass.classInstSize();     // do not trace weak fields
+                    this.weakObjects.push(object);
+                }
                 if (this.vm.isContext(object)) {            // contexts have garbage beyond SP
                     n = object.contextSizeWithStack();
                     for (var i = n; i < body.length; i++)   // clean up that garbage
@@ -1311,32 +1316,31 @@ Object.subclass('Squeak.Image',
     },
     finalizeWeakReferences: function() {
         // nil out all weak fields that did not survive GC
-        var weakObj = this.firstOldObject;
-        while (weakObj) {
-            if (weakObj.isWeak()) {
-                var pointers = weakObj.pointers || [],
-                    firstWeak = weakObj.sqClass.classInstSize(),
-                    finalized = false;
-                for (var i = firstWeak; i < pointers.length; i++) {
-                    if (pointers[i].oop < 0) {    // ref is not in old-space
-                        pointers[i] = this.vm.nilObj;
-                        finalized = true;
-                    }
+        var weakObjects = this.weakObjects;
+        this.weakObjects = null;
+        for (var o = 0; o < weakObjects.length; o++) {
+            var weakObj = weakObjects[o],
+                pointers = weakObj.pointers,
+                firstWeak = weakObj.sqClass.classInstSize(),
+                finalized = false;
+            for (var i = firstWeak; i < pointers.length; i++) {
+                if (pointers[i].oop < 0) {    // ref is not in old-space
+                    pointers[i] = this.vm.nilObj;
+                    finalized = true;
                 }
-                if (finalized) {
-                    this.vm.pendingFinalizationSignals++;
-                    if (firstWeak >= 2) { // check if weak obj is a finalizer item
-                        var list = weakObj.pointers[Squeak.WeakFinalizerItem_list];
-                        if (list.sqClass == this.vm.specialObjects[Squeak.splOb_ClassWeakFinalizer]) {
-                            // add weak obj as first in the finalization list
-                            var items = list.pointers[Squeak.WeakFinalizationList_first];
-                            weakObj.pointers[Squeak.WeakFinalizerItem_next] = items;
-                            list.pointers[Squeak.WeakFinalizationList_first] = weakObj;
-                        }
+            }
+            if (finalized) {
+                this.vm.pendingFinalizationSignals++;
+                if (firstWeak >= 2) { // check if weak obj is a finalizer item
+                    var list = weakObj.pointers[Squeak.WeakFinalizerItem_list];
+                    if (list.sqClass == this.vm.specialObjects[Squeak.splOb_ClassWeakFinalizer]) {
+                        // add weak obj as first in the finalization list
+                        var items = list.pointers[Squeak.WeakFinalizationList_first];
+                        weakObj.pointers[Squeak.WeakFinalizerItem_next] = items;
+                        list.pointers[Squeak.WeakFinalizationList_first] = weakObj;
                     }
                 }
             }
-            weakObj = weakObj.nextObject;
         };
         if (this.vm.pendingFinalizationSignals > 0) {
             this.vm.forceInterruptCheck();                      // run finalizer asap
@@ -2097,13 +2101,6 @@ Object.subclass('Squeak.Object',
 'accessing', {
     pointersSize: function() {
         return this.pointers ? this.pointers.length : 0;
-    },
-    nonWeakSize: function() {
-        return this._format === 4           // weak?
-            ? this.sqClass.classInstSize()  // only inst vars
-            : this.pointers
-                ? this.pointers.length      // all fields
-                : 0;
     },
     bytesSize: function() {
         return this.bytes ? this.bytes.length : 0;

@@ -1141,6 +1141,7 @@ Object.subclass('Squeak.Image',
         var start = Date.now();
         var newObjects = this.findNewObjects();
         this.appendToOldObjects(newObjects);
+        this.finalizeWeakReferences();
         this.allocationCount += this.newSpaceCount;
         this.newSpaceCount = 0;
         this.hasNewInstances = {};
@@ -1154,7 +1155,6 @@ Object.subclass('Squeak.Image',
         // But they have an allocation id so the survivors can be ordered on tenure.
         // The "nextObject" references are created by collecting all new objects,
         // sorting them by id, and then linking them into old space.
-
         this.vm.addMessage("fullGC: " + reason);
         var start = Date.now();
         var newObjects = this.markReachableObjects();
@@ -1175,7 +1175,8 @@ Object.subclass('Squeak.Image',
         return [this.specialObjectsArray, this.vm.activeContext];
     },
     newRoots: function() {
-        // find new objects directly pointed to by old objects
+        // Find new objects directly pointed to by old objects
+        // For speed we only scan "dirty" objects that have been written to
         var roots = this.gcRoots().filter(function(obj){return obj.oop < 0;}),
             object = this.firstOldObject;
         while (object) {
@@ -1196,7 +1197,8 @@ Object.subclass('Squeak.Image',
         // Find new objects transitively reachable from old objects
         this.vm.storeContextRegisters();        // update active context
         var todo = this.newRoots(),             // direct pointers from old space
-            newObjects = []; 
+            newObjects = [];
+        this.weakObjects = [];
         while (todo.length > 0) {
             var object = todo.pop();
             if (object.mark) continue;    // objects are added to todo more than once
@@ -1208,6 +1210,10 @@ Object.subclass('Squeak.Image',
             var body = object.pointers;
             if (body) {                   // trace all unmarked pointers
                 var n = body.length;
+                if (object.isWeak()) {
+                    n = object.sqClass.classInstSize();     // do not trace weak fields
+                    this.weakObjects.push(object);
+                }
                 if (this.vm.isContext(object)) {            // contexts have garbage beyond SP
                     n = object.contextSizeWithStack();
                     for (var i = n; i < body.length; i++)   // clean up that garbage

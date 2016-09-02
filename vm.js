@@ -1136,8 +1136,9 @@ Object.subclass('Squeak.Image',
 },
 'garbage collection', {
     partialGC: function() {
-        // Tenure all reachable new objects
-        // weak refs are treated strongly, no finalization
+        // Tenure all reachable new objects, finalize weak refs
+        // TODO: instead of simply tenuring (growing without bounds),
+        // make a linked list of young objects
         var start = Date.now();
         var newObjects = this.findNewObjects();
         this.appendToOldObjects(newObjects);

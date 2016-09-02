@@ -4307,7 +4307,7 @@ Object.subclass('Squeak.Primitives',
             case 128: return this.primitiveArrayBecome(argCount, true); // both ways
             case 129: return this.popNandPushIfOK(1, this.vm.image.specialObjectsArray); //specialObjectsOop
             case 130: return this.primitiveFullGC(argCount);
-            case 131: return this.popNandPushIfOK(1, this.vm.image.partialGC()); // GCmost
+            case 131: return this.primitivePartialGC(argCount);
             case 132: return this.pop2andPushBoolIfOK(this.pointsTo(this.stackNonInteger(1), this.vm.top())); //Object.pointsTo
             case 133: return true; //TODO primitiveSetInterruptKey
             case 134: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheInterruptSemaphore));
@@ -5234,6 +5234,11 @@ Object.subclass('Squeak.Primitives',
     },
     primitiveFullGC: function(argCount) {
         this.vm.image.fullGC("primitive");
+        var bytes = this.vm.image.bytesLeft();
+        return this.popNandPushIfOK(1, this.makeLargeIfNeeded(bytes));
+    },
+    primitivePartialGC: function(argCount) {
+        this.vm.image.partialGC("primitive");
         var bytes = this.vm.image.bytesLeft();
         return this.popNandPushIfOK(1, this.makeLargeIfNeeded(bytes));
     },

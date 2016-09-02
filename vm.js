@@ -4917,7 +4917,7 @@ Object.subclass('Squeak.Primitives',
         char = this.vm.instantiateClass(charClass, 0);
         char.pointers[0] = ascii;
         return char;
-},
+    },
     charFromIntSpur: function(unicode) {
         return this.vm.image.getCharacter(unicode);
     },
@@ -5070,10 +5070,14 @@ Object.subclass('Squeak.Primitives',
         }
         if (index<1 || index>info.size) {this.success = false; return array;}
         var objToPut = this.vm.stackValue(0);
-        if (includeInstVars)  // pointers...   instVarAtPut and objectAtPut
+        if (includeInstVars)  {// pointers...   instVarAtPut and objectAtPut
+            array.dirty = true;
             return array.pointers[index-1] = objToPut; //eg, objectAt:
-        if (array.isPointers())  // pointers...   normal atPut
+        }
+        if (array.isPointers())  {// pointers...   normal atPut
+            array.dirty = true;
             return array.pointers[index-1+info.ivarOffset] = objToPut;
+        }
         var intToPut;
         if (array.isWords()) {  // words...
             if (convertChars) {
@@ -5437,6 +5441,7 @@ Object.subclass('Squeak.Primitives',
             length !== arg.pointersSize()) return false;
         for (var i = 0; i < length; i++)
             rcvr.pointers[i] = arg.pointers[i];
+        rcvr.dirty = arg.dirty;
         this.vm.pop(argCount);
         return true;
     },
@@ -5604,7 +5609,9 @@ Object.subclass('Squeak.Primitives',
         var sched = this.getScheduler();
         var oldProc = sched.pointers[Squeak.ProcSched_activeProcess];
         sched.pointers[Squeak.ProcSched_activeProcess] = newProc;
+        sched.dirty = true;
         oldProc.pointers[Squeak.Proc_suspendedContext] = this.vm.activeContext;
+        oldProc.dirty = true;
         this.vm.newActiveContext(newProc.pointers[Squeak.Proc_suspendedContext]);
         newProc.pointers[Squeak.Proc_suspendedContext] = this.vm.nilObj;
         this.vm.reclaimableContextCount = 0;
@@ -5628,14 +5635,17 @@ Object.subclass('Squeak.Primitives',
     linkProcessToList: function(proc, aList) {
         // Add the given process to the given linked list and set the backpointer
         // of process to its new list.
-        if (this.isEmptyList(aList))
+        if (this.isEmptyList(aList)) {
             aList.pointers[Squeak.LinkedList_firstLink] = proc;
-        else {
+        } else {
             var lastLink = aList.pointers[Squeak.LinkedList_lastLink];
             lastLink.pointers[Squeak.Link_nextLink] = proc;
+            lastLink.dirty = true;
         }
         aList.pointers[Squeak.LinkedList_lastLink] = proc;
+        aList.dirty = true;
         proc.pointers[Squeak.Proc_myList] = aList;
+        proc.dirty = true;
     },
     isEmptyList: function(aLinkedList) {
         return aLinkedList.pointers[Squeak.LinkedList_firstLink].isNil;
@@ -5650,6 +5660,7 @@ Object.subclass('Squeak.Primitives',
         } else {
             var next = first.pointers[Squeak.Link_nextLink];
             aList.pointers[Squeak.LinkedList_firstLink] = next;
+            aList.dirty = true;
         }
         first.pointers[Squeak.Link_nextLink] = this.vm.nilObj;
         return first;
@@ -5760,6 +5771,7 @@ Object.subclass('Squeak.Primitives',
         var owningProcess = mutex.pointers[Squeak.Mutex_owner];
         if (owningProcess.isNil) {
             mutex.pointers[Squeak.Mutex_owner] = activeProc;
+            mutex.dirty = true;
             this.popNandPushIfOK(argCount + 1, this.vm.falseObj);
         } else if (owningProcess === activeProc) {
             this.popNandPushIfOK(argCount + 1, this.vm.trueObj);
@@ -5777,6 +5789,7 @@ Object.subclass('Squeak.Primitives',
         } else {
             var owningProcess = this.removeFirstLinkOfList(criticalSection);
             criticalSection.pointers[Squeak.Mutex_owner] = owningProcess;
+            criticalSection.dirty = true;
             this.resume(owningProcess);
         }
         return true;
@@ -5788,6 +5801,7 @@ Object.subclass('Squeak.Primitives',
         var owningProcess = mutex.pointers[Squeak.Mutex_owner];
         if (owningProcess.isNil) {
             mutex.pointers[Squeak.Mutex_owner] = activeProc;
+            mutex.dirty = true;
             this.popNandPushIfOK(argCount + 1, this.vm.falseObj);
         } else if (owningProcess === activeProc) {
             this.popNandPushIfOK(argCount + 1, this.vm.trueObj);

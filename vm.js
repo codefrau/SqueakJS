@@ -2720,6 +2720,7 @@ Object.subclass('Squeak.Interpreter',
         var sched = schedAssn.pointers[Squeak.Assn_value];
         var proc = sched.pointers[Squeak.ProcSched_activeProcess];
         this.activeContext = proc.pointers[Squeak.Proc_suspendedContext];
+        this.activeContext.dirty = true;
         this.fetchContextRegisters(this.activeContext);
         this.reclaimableContextCount = 0;
     },
@@ -2838,6 +2839,7 @@ Object.subclass('Squeak.Interpreter',
 
             // storeAndPop rcvr, temp
             case 0x60: case 0x61: case 0x62: case 0x63: case 0x64: case 0x65: case 0x66: case 0x67:
+                this.receiver.dirty = true;
                 this.receiver.pointers[b&7] = this.pop(); return;
             case 0x68: case 0x69: case 0x6A: case 0x6B: case 0x6C: case 0x6D: case 0x6E: case 0x6F:
                 this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&7)] = this.pop(); return;
@@ -3101,19 +3103,41 @@ Object.subclass('Squeak.Interpreter',
     extendedStore: function( nextByte) {
         var lobits = nextByte & 63;
         switch (nextByte>>6) {
-            case 0: this.receiver.pointers[lobits] = this.top(); break;
-            case 1: this.homeContext.pointers[Squeak.Context_tempFrameStart+lobits] = this.top(); break;
-            case 2: this.nono(); break;
-            case 3: this.method.methodGetLiteral(lobits).pointers[Squeak.Assn_value] = this.top(); break;
+            case 0:
+                this.receiver.dirty = true;
+                this.receiver.pointers[lobits] = this.top();
+                break;
+            case 1:
+                this.homeContext.pointers[Squeak.Context_tempFrameStart+lobits] = this.top();
+                break;
+            case 2:
+                this.nono();
+                break;
+            case 3:
+                var assoc = this.method.methodGetLiteral(lobits);
+                assoc.dirty = true;
+                assoc.pointers[Squeak.Assn_value] = this.top();
+                break;
         }
     },
     extendedStorePop: function(nextByte) {
         var lobits = nextByte & 63;
         switch (nextByte>>6) {
-            case 0: this.receiver.pointers[lobits] = this.pop(); break;
-            case 1: this.homeContext.pointers[Squeak.Context_tempFrameStart+lobits] = this.pop(); break;
-            case 2: this.nono(); break;
-            case 3: this.method.methodGetLiteral(lobits).pointers[Squeak.Assn_value] = this.pop(); break;
+            case 0:
+                this.receiver.dirty = true;
+                this.receiver.pointers[lobits] = this.pop();
+                break;
+            case 1:
+                this.homeContext.pointers[Squeak.Context_tempFrameStart+lobits] = this.pop();
+                break;
+            case 2:
+                this.nono();
+                break;
+            case 3:
+                var assoc = this.method.methodGetLiteral(lobits);
+                assoc.dirty = true;
+                assoc.pointers[Squeak.Assn_value] = this.pop();
+                break;
         }
     },
     doubleExtendedDoAnything: function(byte2) {
@@ -3124,9 +3148,11 @@ Object.subclass('Squeak.Interpreter',
             case 2: this.push(this.receiver.pointers[byte3]); break;
             case 3: this.push(this.method.methodGetLiteral(byte3)); break;
             case 4: this.push(this.method.methodGetLiteral(byte3).pointers[Squeak.Assn_value]); break;
-            case 5: this.receiver.pointers[byte3] = this.top(); break;
-            case 6: this.receiver.pointers[byte3] = this.pop(); break;
-            case 7: this.method.methodGetLiteral(byte3).pointers[Squeak.Assn_value] = this.top(); break;
+            case 5: this.receiver.dirty = true; this.receiver.pointers[byte3] = this.top(); break;
+            case 6: this.receiver.dirty = true; this.receiver.pointers[byte3] = this.pop(); break;
+            case 7: var assoc = this.method.methodGetLiteral(byte3);
+                assoc.dirty = true;
+                assoc.pointers[Squeak.Assn_value] = this.top(); break;
         }
     },
     jumpIfTrue: function(delta) {
@@ -3295,6 +3321,7 @@ Object.subclass('Squeak.Interpreter',
         /////// Woosh //////
         this.activeContext = newContext; //We're off and running...
         //Following are more efficient than fetchContextRegisters() in newActiveContext()
+        this.activeContext.dirty = true;
         this.homeContext = newContext;
         this.method = newMethod;
         this.pc = newPC;
@@ -3347,6 +3374,7 @@ Object.subclass('Squeak.Interpreter',
             thisContext = nextContext;
         }
         this.activeContext = thisContext;
+        this.activeContext.dirty = true;
         this.fetchContextRegisters(this.activeContext);
         this.push(returnValue);
         if (this.breakOnContextChanged) {
@@ -3514,6 +3542,7 @@ Object.subclass('Squeak.Interpreter',
         // Note: this is inlined in executeNewMethod() and doReturn()
         this.storeContextRegisters();
         this.activeContext = newContext; //We're off and running...
+        this.activeContext.dirty = true;
         this.fetchContextRegisters(newContext);
     },
     exportThisContext: function() {

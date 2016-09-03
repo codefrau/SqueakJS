@@ -1422,10 +1422,11 @@ Object.subclass('Squeak.Image',
         var n = fromArray.length;
         if (n !== toArray.length)
             return false;
-        // need to visit all objects, so ensure new objects have
-        // nextObject pointers and permanent oops
+        // need to visit all objects: find young objects now
+        // so oops do not change later
+        var firstYoungObject = null;
         if (this.newSpaceCount > 0)
-            this.fullGC("become");              // does update context
+            firstYoungObject = this.partialGC("become");  // does update context
         else
             this.vm.storeContextRegisters();    // still need to update active context
         // obj.oop used as dict key here is why we store them
@@ -1450,6 +1451,8 @@ Object.subclass('Squeak.Image',
             fromArray[i].hash = toArray[i].hash;
             toArray[i].hash = fromHash;
         }
+        // temporarily append young objects to old space
+        this.lastOldObject.nextObject = firstYoungObject;
         // Now, for every object...
         var obj = this.firstOldObject;
         while (obj) {
@@ -1464,6 +1467,8 @@ Object.subclass('Squeak.Image',
             }
             obj = obj.nextObject;
         }
+        // separate old / young space again
+        this.lastOldObject.nextObject = null;
         this.vm.flushMethodCacheAfterBecome(mutations);
         return true;
     },

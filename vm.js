@@ -1320,13 +1320,16 @@ Object.subclass('Squeak.Image',
             object = this.firstOldObject;
         while (object) {
             if (object.dirty) {
-                object.dirty = false;
-                var body = object.pointers;
+                var body = object.pointers,
+                    dirty = false;
                 for (var i = 0; i < body.length; i++) {
                     var child = body[i];
-                    if (typeof child === "object" && child.oop < 0) // if child is new
+                    if (typeof child === "object" && child.oop < 0) { // if child is new
                         roots.push(child);
+                        dirty = true;
+                    }
                 }
+                object.dirty = dirty;
             }
             object = object.nextObject;
         }
@@ -1342,7 +1345,6 @@ Object.subclass('Squeak.Image',
             if (object.mark) continue;    // objects are added to todo more than once
             newObjects.push(object);
             object.mark = true;           // mark it
-            object.dirty = false;
             if (object.sqClass.oop < 0)   // trace class if new
                 todo.push(object.sqClass);
             var body = object.pointers;

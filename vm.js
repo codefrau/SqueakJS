@@ -811,16 +811,19 @@ Object.subclass('Squeak.Image',
         isCompact: (optional) true if this is a compact class
         oop: identifies this object in a snapshot (assigned on GC, new space object oops are negative)
         mark: boolean (used only during GC, otherwise false)
-        nextObject: linked list of objects in old space (new space objects do not have this yet)
+        dirty: boolean (true when an object may have a ref to a new object, set on every write, reset on GC)
+        nextObject: linked list of objects in old space and young space (newly created objects do not have this yet)
     }
 
-    Object Table
-    ============
-    There is no actual object table. Instead, objects in old space are a linked list.
+    Object Memory
+    =============
+    Objects in old space are a linked list (firstOldObject). When loading an image, all objects are old.
+    Objects are tenured to old space during a full GC.
     New objects are only referenced by other objects' pointers, and thus can be garbage-collected
     at any time by the Javascript GC.
-
-    Weak references are only finalized during a full GC.
+    A partial GC links new objects to support enumeration of new space.
+    
+    Weak references are finalized by a full GC. A partial GC only finalizes young weak references.
 
     */
     }
@@ -830,8 +833,10 @@ Object.subclass('Squeak.Image',
         this.totalMemory = 100000000;
         this.name = name;
         this.gcCount = 0;
-        this.gcTenured = 0;
         this.gcMilliseconds = 0;
+        this.pgcCount = 0;
+        this.pgcMilliseconds = 0;
+        this.gcTenured = 0;
         this.allocationCount = 0;
         this.oldSpaceCount = 0;
         this.newSpaceCount = 0;
@@ -1134,21 +1139,7 @@ Object.subclass('Squeak.Image',
             throw Error("image size doesn't match object sizes")
     },
 },
-'garbage collection', {
-    partialGC: function() {
-        // Tenure all reachable new objects, finalize weak refs
-        // TODO: instead of simply tenuring (growing without bounds),
-        // make a linked list of young objects
-        var start = Date.now();
-        var newObjects = this.findNewObjects();
-        this.appendToOldObjects(newObjects);
-        this.finalizeWeakReferences();
-        this.allocationCount += this.newSpaceCount;
-        this.newSpaceCount = 0;
-        this.hasNewInstances = {};
-        console.log("Incremental GC: " + (Date.now() - start) + " ms");
-        return Math.max(0, this.totalMemory - this.oldSpaceBytes);
-    },
+'garbage collection - full', {
     fullGC: function(reason) {
         // Collect garbage and return first tenured object (to support object enumeration)
         // Old space is a linked list of objects - each object has an "nextObject" reference.
@@ -1175,63 +1166,8 @@ Object.subclass('Squeak.Image',
         this.vm.storeContextRegisters();        // update active context
         return [this.specialObjectsArray, this.vm.activeContext];
     },
-    newRoots: function() {
-        // Find new objects directly pointed to by old objects
-        // For speed we only scan "dirty" objects that have been written to
-        var roots = this.gcRoots().filter(function(obj){return obj.oop < 0;}),
-            object = this.firstOldObject;
-        while (object) {
-            if (object.dirty) {
-                object.dirty = false;
-                var body = object.pointers;
-                for (var i = 0; i < body.length; i++) {
-                    var child = body[i];
-                    if (typeof child === "object" && child.oop < 0) // if child is new
-                        roots.push(child);
-                }
-            }
-            object = object.nextObject;
-        }
-        return roots;
-    },
-    findNewObjects: function() {
-        // Find new objects transitively reachable from old objects
-        this.vm.storeContextRegisters();        // update active context
-        var todo = this.newRoots(),             // direct pointers from old space
-            newObjects = [];
-        this.weakObjects = [];
-        while (todo.length > 0) {
-            var object = todo.pop();
-            if (object.mark) continue;    // objects are added to todo more than once
-            newObjects.push(object);
-            object.mark = true;           // mark it
-            object.dirty = false;
-            if (object.sqClass.oop < 0)   // trace class if new
-                todo.push(object.sqClass);
-            var body = object.pointers;
-            if (body) {                   // trace all unmarked pointers
-                var n = body.length;
-                if (object.isWeak()) {
-                    n = object.sqClass.classInstSize();     // do not trace weak fields
-                    this.weakObjects.push(object);
-                }
-                if (this.vm.isContext(object)) {            // contexts have garbage beyond SP
-                    n = object.contextSizeWithStack();
-                    for (var i = n; i < body.length; i++)   // clean up that garbage
-                        body[i] = this.vm.nilObj;
-                }
-                for (var i = 0; i < n; i++) {
-                    var child = body[i];
-                    if (typeof child === "object" && child.oop < 0)
-                        todo.push(body[i]);
-                }
-            }
-        }
-        // sort by oop to preserve creation order
-        return newObjects.sort(function(a,b){return b.oop - a.oop});
-    },
     markReachableObjects: function() {
-        // Visit all reachable objects and mark them.
+        // FullGC: Visit all reachable objects and mark them.
         // Return surviving new objects
         // Contexts are handled specially: they have garbage beyond the stack pointer
         // which must not be traced, and is cleared out here
@@ -1269,7 +1205,7 @@ Object.subclass('Squeak.Image',
         return this.isSpur ? newObjects : newObjects.sort(function(a,b){return b.oop - a.oop});
     },
     removeUnmarkedOldObjects: function() {
-        // Unlink unmarked old objects from the nextObject linked list
+        // FullGC: Unlink unmarked old objects from the nextObject linked list
         // Reset marks of remaining objects, and adjust their oops
         // Set this.lastOldObject to last old object
         var removedCount = 0,
@@ -1284,6 +1220,8 @@ Object.subclass('Squeak.Image',
                 this.oldSpaceCount -= removedCount;
                 return;
             }
+            // reset partial GC flag
+            if (next.dirty) next.dirty = false;
             // if marked, continue with next object
             if (next.mark) {
                 obj = next;
@@ -1300,7 +1238,7 @@ Object.subclass('Squeak.Image',
         }
     },
     appendToOldObjects: function(newObjects) {
-        // append new objects to linked list of old objects
+        // FullGC: append new objects to linked list of old objects
         // and unmark them
         var oldObj = this.lastOldObject;
         //var oldBytes = this.oldSpaceBytes;
@@ -1351,6 +1289,100 @@ Object.subclass('Squeak.Image',
         };
         if (this.vm.pendingFinalizationSignals > 0) {
             this.vm.forceInterruptCheck();                      // run finalizer asap
+        }
+    },
+},
+'garbage collection - partial', {
+    partialGC: function(reason) {
+        // make a linked list of young objects
+        // and finalize weak refs
+        this.vm.addMessage("partialGC: " + reason);
+        var start = Date.now();
+        var young = this.findYoungObjects();
+        this.appendToYoungSpace(young);
+        this.finalizeWeakReferences();
+        this.cleanupYoungSpace(young);
+        this.allocationCount += this.newSpaceCount - young.length;
+        this.newSpaceCount = young.length;
+        this.hasNewInstances = {};
+        this.pgcCount++;
+        this.pgcMilliseconds += Date.now() - start;
+        console.log("Incremental GC (" + reason+ "): " + (Date.now() - start) + " ms");
+        return young[0];
+    },
+    youngRoots: function() {
+        // PartialGC: Find new objects directly pointed to by old objects.
+        // For speed we only scan "dirty" objects that have been written to
+        var roots = this.gcRoots().filter(function(obj){return obj.oop < 0;}),
+            object = this.firstOldObject;
+        while (object) {
+            if (object.dirty) {
+                object.dirty = false;
+                var body = object.pointers;
+                for (var i = 0; i < body.length; i++) {
+                    var child = body[i];
+                    if (typeof child === "object" && child.oop < 0) // if child is new
+                        roots.push(child);
+                }
+            }
+            object = object.nextObject;
+        }
+        return roots;
+    },
+    findYoungObjects: function() {
+        // PartialGC: find new objects transitively reachable from old objects
+        var todo = this.youngRoots(),     // direct pointers from old space
+            newObjects = [];
+        this.weakObjects = [];
+        while (todo.length > 0) {
+            var object = todo.pop();
+            if (object.mark) continue;    // objects are added to todo more than once
+            newObjects.push(object);
+            object.mark = true;           // mark it
+            object.dirty = false;
+            if (object.sqClass.oop < 0)   // trace class if new
+                todo.push(object.sqClass);
+            var body = object.pointers;
+            if (body) {                   // trace all unmarked pointers
+                var n = body.length;
+                if (object.isWeak()) {
+                    n = object.sqClass.classInstSize();     // do not trace weak fields
+                    this.weakObjects.push(object);
+                }
+                if (this.vm.isContext(object)) {            // contexts have garbage beyond SP
+                    n = object.contextSizeWithStack();
+                    for (var i = n; i < body.length; i++)   // clean up that garbage
+                        body[i] = this.vm.nilObj;
+                }
+                for (var i = 0; i < n; i++) {
+                    var child = body[i];
+                    if (typeof child === "object" && child.oop < 0)
+                        todo.push(body[i]);
+                }
+            }
+        }
+        // pre-spur sort by oop to preserve creation order
+        return this.isSpur ? newObjects : newObjects.sort(function(a,b){return b.oop - a.oop});
+    },
+    appendToYoungSpace: function(objects) {
+        // PartialGC: link new objects into young list
+        // and give them positive oops temporarily so finalization works
+        var oop = this.lastOldObject.oop;
+        for (var i = 0; i < objects.length; i++) {
+            var obj = objects[i];
+            obj.oop = ++oop;
+            obj.nextObject = objects[i + 1];
+        }
+    },
+    cleanupYoungSpace: function(objects) {
+        // PartialGC: After finalizing weak refs, make oops
+        // in young space negative again
+        var obj = objects[0],
+            oop = 0;
+        while (obj) {
+            obj.oop = --oop;
+            obj.mark = false;
+            obj = obj.nextObject;
         }
     },
 },
@@ -5877,8 +5909,8 @@ Object.subclass('Squeak.Primitives',
             // 6    survivor count tenuring threshold (read-write)
             case 7: return this.vm.image.gcCount;           // full GCs since startup (read-only)
             case 8: return this.vm.image.gcMilliseconds;    // total milliseconds in full GCs since startup (read-only)
-            case 9: return 1;   /* image expects > 0 */     // incremental GCs since startup (read-only)
-            case 10: return 0;                              // total milliseconds in incremental GCs since startup (read-only)
+            case 9: return this.vm.image.pgcCount;          // incremental GCs since startup (read-only)
+            case 10: return this.vm.image.pgcMilliseconds;  // total milliseconds in incremental GCs since startup (read-only)
             case 11: return this.vm.image.gcTenured;        // tenures of surving objects since startup (read-only)
             // 12-20 specific to the translating VM
             // 21   root table size (read-only)

@@ -839,6 +839,7 @@ Object.subclass('Squeak.Image',
         this.gcTenured = 0;
         this.allocationCount = 0;
         this.oldSpaceCount = 0;
+        this.youngSpaceCount = 0;
         this.newSpaceCount = 0;
         this.hasNewInstances = {};
     },
@@ -1155,10 +1156,11 @@ Object.subclass('Squeak.Image',
         this.finalizeWeakReferences();
         this.allocationCount += this.newSpaceCount;
         this.newSpaceCount = 0;
+        this.youngSpaceCount = 0;
         this.hasNewInstances = {};
         this.gcCount++;
         this.gcMilliseconds += Date.now() - start;
-        console.log("Full GC (" + reason + "):" + (Date.now() - start) + " ms");
+        console.log("Full GC (" + reason + "): " + (Date.now() - start) + " ms");
         return newObjects.length > 0 ? newObjects[0] : null;
     },
     gcRoots: function() {
@@ -1303,11 +1305,12 @@ Object.subclass('Squeak.Image',
         this.finalizeWeakReferences();
         this.cleanupYoungSpace(young);
         this.allocationCount += this.newSpaceCount - young.length;
-        this.newSpaceCount = young.length;
+        this.youngSpaceCount = young.length;
+        this.newSpaceCount = this.youngSpaceCount;
         this.hasNewInstances = {};
         this.pgcCount++;
         this.pgcMilliseconds += Date.now() - start;
-        console.log("Incremental GC (" + reason+ "): " + (Date.now() - start) + " ms");
+        console.log("Partial GC (" + reason+ "): " + (Date.now() - start) + " ms");
         return young[0];
     },
     youngRoots: function() {
@@ -1495,9 +1498,10 @@ Object.subclass('Squeak.Image',
         }
     },
     nextObjectWithGC: function(reason, obj) {
-        if (obj.oop < 0 && this.newSpaceCount > 0)
-            console.warn("nextObject called on new object (might visit multiple times)");
-        return this.newSpaceCount > 0 && this.partialGC(reason);
+        var limit = obj.oop > 0 ? 0 : this.youngSpaceCount;
+        if (this.newSpaceCount <= limit) return null; // no more objects
+        if (obj.oop < 0) console.warn("nextObject called on new object (might visit multiple times)");
+        return this.partialGC(reason);
     },
     nextObjectWithGCFor: function(obj, clsObj) {
         if (this.newSpaceCount === 0 || !this.hasNewInstances[clsObj.oop]) return null;

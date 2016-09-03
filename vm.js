@@ -232,6 +232,26 @@ Object.extend(Squeak,
     NonSmallInt: -0x50000000,           // non-small and neg (so non pos32 too)
     MillisecondClockMask: 0x1FFFFFFF,
 },
+"error codes", {
+	PrimNoErr: 0,
+	PrimErrGenericFailure: 1,
+	PrimErrBadReceiver: 2,
+	PrimErrBadArgument: 3,
+	PrimErrBadIndex: 4,
+	PrimErrBadNumArgs: 5,
+	PrimErrInappropriate: 6,
+	PrimErrUnsupported: 7,
+	PrimErrNoModification: 8,
+	PrimErrNoMemory: 9,
+	PrimErrNoCMemory: 10,
+	PrimErrNotFound: 11,
+	PrimErrBadMethod: 12,
+	PrimErrNamedInternal: 13,
+	PrimErrObjectMayMove: 14,
+	PrimErrLimitExceeded: 15,
+	PrimErrObjectIsPinned: 16,
+	PrimErrWritePastObject: 17,
+},
 "modules", {
     // don't clobber registered modules
     externalModules: Squeak.externalModules || {},
@@ -2820,9 +2840,7 @@ Object.subclass('Squeak.Interpreter',
             // Closures
             case 0x8A: this.pushNewArray(this.nextByte());   // create new temp vector
                 return;
-            case 0x8B:
-                if (this.pc !== 1) throw Error("call prim bytecode not expected here")
-                this.pc = 3; // skip over primitive number
+            case 0x8B: this.callPrimBytecode();
                 return;
             case 0x8C: b2 = this.nextByte(); // remote push from temp vector
                 this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2]);
@@ -3086,6 +3104,22 @@ Object.subclass('Squeak.Interpreter',
         this.send(this.specialSelectors[lobits*2],
             this.specialSelectors[(lobits*2)+1],
             false);  //specialSelectors is  {...sel,nArgs,sel,nArgs,...)
+    },
+    callPrimBytecode: function() {
+        this.pc += 2; // skip over primitive number
+        if (this.primFailCode) {
+            if (this.method.bytes[this.pc] === 0x81) // extended store
+                this.stackTopPut(this.getErrorObjectFromPrimFailCode());
+            this.primFailCode = 0;
+        }
+    },
+    getErrorObjectFromPrimFailCode: function() {
+        var primErrTable = this.specialObjects[Squeak.splOb_PrimErrTableIndex];
+        if (primErrTable && primErrTable.pointers) {
+            var errorObject = primErrTable.pointers[this.primFailCode - 1];
+            if (errorObject) return errorObject;
+        }
+        return this.primFailCode;
     },
 },
 'closures', {
@@ -3548,6 +3582,9 @@ Object.subclass('Squeak.Interpreter',
     },
     top: function() {
         return this.activeContext.pointers[this.sp];
+    },
+    stackTopPut: function(object) {
+        this.activeContext.pointers[this.sp] = object;
     },
     stackValue: function(depthIntoStack) {
         return this.activeContext.pointers[this.sp - depthIntoStack];
@@ -5080,6 +5117,7 @@ Object.subclass('Squeak.Primitives',
             // but we need to stop runaway allocations
             console.warn("squeak: out of memory");
             this.success = false;
+            this.vm.primFailCode = Squeak.PrimErrNoMemory;
             return null;
         } else {
             return this.vm.instantiateClass(clsObj, indexableSize);

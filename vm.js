@@ -1473,37 +1473,42 @@ Object.subclass('Squeak.Image',
         return true;
     },
     objectAfter: function(obj) {
-        // if this was the last old object, tenure new objects and try again
-        return obj.nextObject || (this.newSpaceCount > 0 && this.fullGC("nextObject"));
+        // if this was the last old object, continue with young objects
+        return obj.nextObject || this.nextObjectWithGC("nextObject", obj);
     },
     someInstanceOf: function(clsObj) {
         var obj = this.firstOldObject;
         while (obj) {
             if (obj.sqClass === clsObj)
                 return obj;
-            obj = obj.nextObject || this.nextObjectWithGCFor(clsObj);
+            obj = obj.nextObject || this.nextObjectWithGCFor(obj, clsObj);
         }
         return null;
     },
     nextInstanceAfter: function(obj) {
         var clsObj = obj.sqClass;
         while (true) {
-            obj = obj.nextObject || this.nextObjectWithGCFor(clsObj);
+            obj = obj.nextObject || this.nextObjectWithGCFor(obj, clsObj);
             if (!obj) return null;
             if (obj.sqClass === clsObj)
                 return obj;
         }
     },
-    nextObjectWithGCFor: function(clsObj) {
+    nextObjectWithGC: function(reason, obj) {
+        if (obj.oop < 0 && this.newSpaceCount > 0)
+            console.warn("nextObject called on new object (might visit multiple times)");
+        return this.newSpaceCount > 0 && this.partialGC(reason);
+    },
+    nextObjectWithGCFor: function(obj, clsObj) {
         if (this.newSpaceCount === 0 || !this.hasNewInstances[clsObj.oop]) return null;
-        return this.fullGC("instance of " + clsObj.className());
+        return this.nextObjectWithGC("instance of " + clsObj.className(), obj);
     },
     allInstancesOf: function(clsObj) {
         var obj = this.firstOldObject,
             result = [];
         while (obj) {
             if (obj.sqClass === clsObj) result.push(obj);
-            obj = obj.nextObject || this.nextObjectWithGCFor(clsObj);
+            obj = obj.nextObject || this.nextObjectWithGCFor(obj, clsObj);
         }
         return result;
     },

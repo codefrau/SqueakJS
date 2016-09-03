@@ -1252,6 +1252,7 @@ Object.subclass('Squeak.Image',
             oldObj = newObj;
             //console.log("tenuring " + (i+1) + " " + (this.oldSpaceBytes - oldBytes) + " " + newObj.totalBytes() + " " + newObj.toString());
         }
+        oldObj.nextObject = null;   // might have been in young space
         this.lastOldObject = oldObj;
         this.oldSpaceCount += newObjects.length;
         this.gcTenured += newObjects.length;

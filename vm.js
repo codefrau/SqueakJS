@@ -1265,8 +1265,8 @@ Object.subclass('Squeak.Image',
                 // Note: "immediate" character objects in Spur always stay marked
             }
         }
-        // sort by oop to preserve creation order
-        return newObjects.sort(function(a,b){return b.oop - a.oop});
+        // pre-spur sort by oop to preserve creation order
+        return this.isSpur ? newObjects : newObjects.sort(function(a,b){return b.oop - a.oop});
     },
     removeUnmarkedOldObjects: function() {
         // Unlink unmarked old objects from the nextObject linked list

@@ -698,8 +698,8 @@ to single-step.
     generateCallPrimitive: function(index) {
         if (this.debug) this.generateDebugCode("call primitive " + index);
         this.generateLabel();
-        // call prim is actually a no-op
-        if (this.pc !== 3) throw Error("call primitive bytecode not expected here");
+        if (this.method.bytes[this.pc] === 0x81)  // extended store
+            this.source.push("if (vm.primFailCode) {stack[vm.sp] = vm.getErrorObjectFromPrimFailCode(); vm.primFailCode = 0;}\n");
     },
     generateDirty: function(target, arg) {
         switch(target) {

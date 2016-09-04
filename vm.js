@@ -5856,6 +5856,7 @@ Object.subclass('Squeak.Primitives',
             // 45	desired size of eden, in bytes (stored in image file header; Cog VMs only, otherwise nil)
             // 46	size of machine code zone, in bytes (stored in image file header; Cog JIT VM only, otherwise nil)
             // 47	desired size of machine code zone, in bytes (applies at startup only, stored in image file header; Cog JIT VM only)
+            case 48: return 0;
             // 48	various properties of the Cog VM as an integer encoding an array of bit flags.
             //      Bit 0: tells the VM that the image's Process class has threadId as its 5th inst var (after nextLink, suspendedContext, priority & myList)
             //      Bit 1: on Cog JIT VMs asks the VM to set the flag bit in interpreted methods

@@ -2601,6 +2601,19 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         // this is a class, answer number of named inst vars
         return this.pointers[Squeak.Class_format] & 0xFFFF;
     },
+    classByteSizeOfInstance: function(nElements) {
+        var format = this.classInstFormat(),
+            nWords = this.classInstSize();
+        if (format < 9) nWords += nElements;                        // 32 bit
+        else if (format >= 16) nWords += (nElements + 3) / 4 | 0;   //  8 bit
+        else if (format >= 12) nWords += (nElements + 1) / 2 | 0;   // 16 bit
+        else if (format >= 10) nWords += nElements;                 // 32 bit
+        else nWords += nElements * 2;                               // 64 bit
+        nWords += nWords & 1;                                       // align to 64 bits
+        nWords += nWords >= 255 ? 4 : 2;                            // header words
+        if (nWords < 4) nWords = 4;                                 // minimum object size
+        return nWords * 4;
+	},
 },
 'as method', {
     methodNumLits: function() {
@@ -4306,21 +4319,21 @@ Object.subclass('Squeak.Primitives',
             case 174: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySamples', argCount);
                 else return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,true)); // slotAt:put:
             case 175: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySilence', argCount);
-                else return this.popNandPushIfOK(argCount+1, this.behaviorHash(this.stackNonInteger(0))); //primitiveBehaviorHash
+                else return this.popNandPushIfOK(argCount+1, this.behaviorHash(this.stackNonInteger(0)));
             case 176: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primWaveTableSoundmixSampleCountintostartingAtpan', argCount);
                 break;  // fail
             case 177: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primFMSoundmixSampleCountintostartingAtpan', argCount);
-                return this.popNandPushIfOK(1, this.allInstancesOf(this.stackNonInteger(0)));
+                return this.popNandPushIfOK(argCount+1, this.allInstancesOf(this.stackNonInteger(0)));
             case 178: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primPluckedSoundmixSampleCountintostartingAtpan', argCount);
                 return false; // allObjectsDo fallback code is just as fast and uses less memory
             case 179: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primSampledSoundmixSampleCountintostartingAtpan', argCount);
                 break;  // fail
             case 180: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixFMSound', argCount);
-                break;  // fail
+                return false; // growMemoryByAtLeast
             case 181: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixPluckedSound', argCount);
-                break;  // fail
+                return this.primitiveSizeInBytesOfInstance(argCount);
             case 182: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'oldprimSampledSoundmixSampleCountintostartingAtleftVolrightVol', argCount);
-                break;  // fail
+                return this.primitiveSizeInBytes(argCount);
             case 183: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveApplyReverb', argCount);
                 break;  // fail
             case 184: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixLoopedSampledSound', argCount);
@@ -5162,6 +5175,18 @@ Object.subclass('Squeak.Primitives',
     },
     newObjectHash: function(obj) {
         return Math.floor(Math.random() * 0x3FFFFFFE) + 1;
+    },
+    primitiveSizeInBytesOfInstance: function(argCount) {
+        if (argCount > 1) return false;
+        var classObj = this.stackNonInteger(argCount),
+            nElements = argCount ? this.stackInteger(0) : 0,
+            bytes = classObj.classByteSizeOfInstance(nElements);
+        return this.popNandPushIfOK(argCount + 1, this.makeLargeIfNeeded(bytes));
+    },
+    primitiveSizeInBytes: function(argCount) {
+        var object = this.stackNonInteger(0),
+            bytes = object.totalBytes();
+        return this.popNandPushIfOK(argCount + 1, this.makeLargeIfNeeded(bytes));
     },
     primitiveAsCharacter: function(argCount) {
         var unicode = this.stackInteger(0);

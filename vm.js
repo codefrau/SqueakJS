@@ -909,6 +909,7 @@ Object.subclass('Squeak.Image',
         var firstSegSize = readWord();
         var prevObj;
         var oopMap = {};
+        var rawBits = {};
         var headerSize = fileHeaderSize + imageHeaderSize;
         pos = headerSize;
         if (!this.isSpur) {
@@ -942,13 +943,15 @@ Object.subclass('Squeak.Image',
                     hash = (header>>>17) & 4095,
                     bits = readBits(nWords, format < 5);
                 var object = new Squeak.Object();
-                object.initFromImage(oop, classInt, format, hash, bits);
+                object.initFromImage(oop, classInt, format, hash);
                 if (classInt < 32) object.hash |= 0x10000000;    // see fixCompactOops()
                 if (prevObj) prevObj.nextObject = object;
                 this.oldSpaceCount++;
                 prevObj = object;
                 //oopMap is from old oops to actual objects
                 oopMap[oldBaseAddr + oop] = object;
+                //rawBits holds raw content bits for objects
+                rawBits[oop] = bits;
             }
             this.firstOldObject = oopMap[oldBaseAddr+4];
             this.lastOldObject = object;
@@ -983,12 +986,14 @@ Object.subclass('Squeak.Image',
                     // low class ids are internal to Spur
                     if (classID >= 32) {
                         var object = new Squeak.ObjectSpur();
-                        object.initFromImage(oop, classID, format, hash, bits);
+                        object.initFromImage(oop, classID, format, hash);
                         if (prevObj) prevObj.nextObject = object;
                         this.oldSpaceCount++;
                         prevObj = object;
                         //oopMap is from old oops to actual objects
                         oopMap[oldBaseAddr + oop] = object;
+                        //rawBits holds raw content bits for objects
+                        rawBits[oop] = bits;
                         oopAdjust[oop] = skippedBytes;
                     } else {
                         skippedBytes += pos - objPos;
@@ -1022,14 +1027,14 @@ Object.subclass('Squeak.Image',
         if (true) {
             // For debugging: re-create all objects from named prototypes
             var _splObs = oopMap[specialObjectsOopInt],
-                cc = this.isSpur ? this.spurClassTable(oopMap, classPages, _splObs)
-                    : oopMap[_splObs.bits[Squeak.splOb_CompactClasses]].bits;
+                cc = this.isSpur ? this.spurClassTable(oopMap, rawBits, classPages, _splObs)
+                    : rawBits[oopMap[rawBits[_splObs.oop][Squeak.splOb_CompactClasses]].oop];
             var renamedObj = null;
             object = this.firstOldObject;
             prevObj = null;
             while (object) {
                 prevObj = renamedObj;
-                renamedObj = object.renameFromImage(oopMap, cc);
+                renamedObj = object.renameFromImage(oopMap, rawBits, cc);
                 if (prevObj) prevObj.nextObject = renamedObj;
                 else this.firstOldObject = renamedObj;
                 oopMap[oldBaseAddr + object.oop] = renamedObj;
@@ -1040,13 +1045,13 @@ Object.subclass('Squeak.Image',
 
         // properly link objects by mapping via oopMap
         var splObs         = oopMap[specialObjectsOopInt];
-        var compactClasses = oopMap[splObs.bits[Squeak.splOb_CompactClasses]].bits;
-        var floatClass     = oopMap[splObs.bits[Squeak.splOb_ClassFloat]];
+        var compactClasses = rawBits[oopMap[rawBits[splObs.oop][Squeak.splOb_CompactClasses]].oop];
+        var floatClass     = oopMap[rawBits[splObs.oop][Squeak.splOb_ClassFloat]];
         // Spur needs different arguments for installFromImage()
         if (this.isSpur) {
-            var charClass = oopMap[splObs.bits[Squeak.splOb_ClassCharacter]];
+            var charClass = oopMap[rawBits[splObs.oop][Squeak.splOb_ClassCharacter]];
             this.initCharacterTable(charClass);
-            compactClasses = this.spurClassTable(oopMap, classPages, splObs);
+            compactClasses = this.spurClassTable(oopMap, rawBits, classPages, splObs);
             nativeFloats = this.getCharacter.bind(this);
             this.initSpurOverrides();
         }
@@ -1057,7 +1062,7 @@ Object.subclass('Squeak.Image',
             if (obj) {
                 var stop = done + (self.oldSpaceCount / 20 | 0);    // do it in 20 chunks
                 while (obj && done < stop) {
-                    obj.installFromImage(oopMap, compactClasses, floatClass, littleEndian, nativeFloats);
+                    obj.installFromImage(oopMap, rawBits, compactClasses, floatClass, littleEndian, nativeFloats);
                     obj = obj.nextObject;
                     done++;
                 }
@@ -1504,7 +1509,8 @@ Object.subclass('Squeak.Image',
         var prevObj = segmentWordArray,
             endMarker = prevObj.nextObject,
             oopOffset = segmentWordArray.oop,
-            oopMap = {};
+            oopMap = {},
+            rawBits = {};
         while (pos < data.byteLength) {
             var nWords = 0,
                 classInt = 0,
@@ -1535,11 +1541,12 @@ Object.subclass('Squeak.Image',
                 bits = readBits(nWords, format);
 
             var object = new Squeak.Object();
-            object.initFromImage(oop + oopOffset, classInt, format, hash, bits);
+            object.initFromImage(oop + oopOffset, classInt, format, hash);
             prevObj.nextObject = object;
             this.oldSpaceCount++;
             prevObj = object;
             oopMap[oop] = object;
+            rawBits[oop + oopOffset] = bits;
         }
         object.nextObject = endMarker;
         // add outPointers to oopMap
@@ -1557,7 +1564,7 @@ Object.subclass('Squeak.Image',
             floatClass = this.specialObjectsArray.pointers[Squeak.splOb_ClassFloat],
             obj = roots;
         do {
-            obj.installFromImage(oopMap, compactClassOops, floatClass, littleEndian, nativeFloats);
+            obj.installFromImage(oopMap, rawBits, compactClassOops, floatClass, littleEndian, nativeFloats);
             obj = obj.nextObject;
         } while (obj !== endMarker);
         return roots;
@@ -1569,7 +1576,7 @@ Object.subclass('Squeak.Image',
         this.registerObject = this.registerObjectSpur;
         this.writeToBuffer = this.writeToBufferSpur;
     },
-    spurClassTable: function(oopMap, classPages, splObjs) {
+    spurClassTable: function(oopMap, rawBits, classPages, splObjs) {
         var classes = {},
             nil = this.firstOldObject;
         // read class table pages
@@ -1586,7 +1593,7 @@ Object.subclass('Squeak.Image',
         // add known classes which may not be in the table
         for (var key in Squeak) {
             if (/^splOb_Class/.test(key)) {
-                var knownClass = oopMap[splObjs.bits[Squeak[key]]];
+                var knownClass = oopMap[rawBits[splObjs.oop][Squeak[key]]];
                 if (knownClass !== nil) {
                     var classIndex = knownClass.hash;
                     if (classIndex > 0 && classIndex < 1024)
@@ -1810,36 +1817,35 @@ Object.subclass('Squeak.Object',
             if (original.bytes) this.bytes = new Uint8Array(original.bytes);     // copy
         }
     },
-    initFromImage: function(oop, cls, fmt, hsh, data) {
+    initFromImage: function(oop, cls, fmt, hsh) {
         // initial creation from Image, with unmapped data
         this.oop = oop;
         this.sqClass = cls;
         this._format = fmt;
         this.hash = hsh;
-        this.bits = data;
     },
-    classNameFromImage: function(oopMap) {
-        var name = oopMap[this.bits[Squeak.Class_name]];
+    classNameFromImage: function(oopMap, rawBits) {
+        var name = oopMap[rawBits[this.oop][Squeak.Class_name]];
         if (name && name._format >= 8 && name._format < 12) {
-            var bytes = name.decodeBytes(name.bits.length, name.bits, 0, name._format & 3);
+            var bits = rawBits[name.oop],
+                bytes = name.decodeBytes(bits.length, bits, 0, name._format & 3);
             return Squeak.bytesAsString(bytes);
         }
         return "Class";
     },
-    renameFromImage: function(oopMap, ccArray) {
+    renameFromImage: function(oopMap, rawBits, ccArray) {
         var classObj = this.sqClass < 32 ? oopMap[ccArray[this.sqClass-1]] : oopMap[this.sqClass];
         if (!classObj) return this;
-        var instProto = classObj.instProto || classObj.classInstProto(classObj.classNameFromImage(oopMap));
+        var instProto = classObj.instProto || classObj.classInstProto(classObj.classNameFromImage(oopMap, rawBits));
         if (!instProto) return this;
         var renamedObj = new instProto; // Squeak.Object
         renamedObj.oop = this.oop;
         renamedObj.sqClass = this.sqClass;
         renamedObj._format = this._format;
         renamedObj.hash = this.hash;
-        renamedObj.bits = this.bits;
         return renamedObj;
     },
-    installFromImage: function(oopMap, ccArray, floatClass, littleEndian, nativeFloats) {
+    installFromImage: function(oopMap, rawBits, ccArray, floatClass, littleEndian, nativeFloats) {
         //Install this object by decoding format, and rectifying pointers
         var ccInt = this.sqClass;
         // map compact classes
@@ -1847,43 +1853,43 @@ Object.subclass('Squeak.Object',
             this.sqClass = oopMap[ccArray[ccInt-1]];
         else
             this.sqClass = oopMap[ccInt];
-        var nWords = this.bits.length;
+        var bits = rawBits[this.oop],
+            nWords = bits.length;
         if (this._format < 5) {
             //Formats 0...4 -- Pointer fields
             if (nWords > 0) {
-                var oops = this.bits; // endian conversion was already done
+                var oops = bits; // endian conversion was already done
                 this.pointers = this.decodePointers(nWords, oops, oopMap);
             }
         } else if (this._format >= 12) {
             //Formats 12-15 -- CompiledMethods both pointers and bits
-            var methodHeader = this.decodeWords(1, this.bits, littleEndian)[0],
+            var methodHeader = this.decodeWords(1, bits, littleEndian)[0],
                 numLits = (methodHeader>>10) & 255,
-                oops = this.decodeWords(numLits+1, this.bits, littleEndian);
+                oops = this.decodeWords(numLits+1, bits, littleEndian);
             this.pointers = this.decodePointers(numLits+1, oops, oopMap); //header+lits
-            this.bytes = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this._format & 3);
+            this.bytes = this.decodeBytes(nWords-(numLits+1), bits, numLits+1, this._format & 3);
         } else if (this._format >= 8) {
             //Formats 8..11 -- ByteArrays (and ByteStrings)
             if (nWords > 0)
-                this.bytes = this.decodeBytes(nWords, this.bits, 0, this._format & 3);
+                this.bytes = this.decodeBytes(nWords, bits, 0, this._format & 3);
         } else if (this.sqClass == floatClass) {
             //These words are actually a Float
             this.isFloat = true;
-            this.float = this.decodeFloat(this.bits, littleEndian, nativeFloats);
+            this.float = this.decodeFloat(bits, littleEndian, nativeFloats);
             if (this.float == 1.3797216632888e-310) {
                 if (/noFloatDecodeWorkaround/.test(window.location.hash)) {
                     // floatDecode workaround disabled
                 } else {
                     this.constructor.prototype.decodeFloat = this.decodeFloatDeoptimized;
-                    this.float = this.decodeFloat(this.bits, littleEndian, nativeFloats);
+                    this.float = this.decodeFloat(bits, littleEndian, nativeFloats);
                     if (this.float == 1.3797216632888e-310)
                         throw Error("Cannot deoptimize decodeFloat");
                 }
             }
         } else {
             if (nWords > 0)
-                this.words = this.decodeWords(nWords, this.bits, littleEndian);
+                this.words = this.decodeWords(nWords, bits, littleEndian);
         }
-        delete this.bits;
         this.mark = false; // for GC
     },
     decodePointers: function(nWords, theBits, oopMap) {
@@ -2363,13 +2369,14 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
 // 	16-23	= 8-bit indexable							(plus three odd bits, one unused in 32-bits)
 // 	24-31	= compiled methods (CompiledMethod)	(plus three odd bits, one unused in 32-bits)
     },
-    installFromImage: function(oopMap, classTable, floatClass, littleEndian, getCharacter) {
+    installFromImage: function(oopMap, rawBits, classTable, floatClass, littleEndian, getCharacter) {
         //Install this object by decoding format, and rectifying pointers
         var classID = this.sqClass;
         if (classID < 32) throw Error("Invalid class ID: " + classID);
         this.sqClass = classTable[classID];
         if (!this.sqClass) throw Error("Class ID not in class table: " + classID);
-        var nWords = this.bits.length;
+        var bits = rawBits[this.oop],
+            nWords = bits.length;
         switch (this._format) {
             case 0: // zero sized object
                 break;
@@ -2379,7 +2386,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             case 4: // only indexed vars (weak)
             case 5: // only inst vars (weak)
                 if (nWords > 0) {
-                    var oops = this.bits; // endian conversion was already done
+                    var oops = bits; // endian conversion was already done
                     this.pointers = this.decodePointers(nWords, oops, oopMap, getCharacter);
                 }
                 break;
@@ -2387,19 +2394,19 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                 if (this.sqClass === floatClass) {
                     //These words are actually a Float
                     this.isFloat = true;
-                    this.float = this.decodeFloat(this.bits, littleEndian, true);
+                    this.float = this.decodeFloat(bits, littleEndian, true);
                     if (this.float == 1.3797216632888e-310) {
                         if (/noFloatDecodeWorkaround/.test(window.location.hash)) {
                             // floatDecode workaround disabled
                         } else {
                             this.constructor.prototype.decodeFloat = this.decodeFloatDeoptimized;
-                            this.float = this.decodeFloat(this.bits, littleEndian, true);
+                            this.float = this.decodeFloat(bits, littleEndian, true);
                             if (this.float == 1.3797216632888e-310)
                                 throw Error("Cannot deoptimize decodeFloat");
                         }
                     }
                 } else if (nWords > 0) {
-                    this.words = this.decodeWords(nWords, this.bits, littleEndian);
+                    this.words = this.decodeWords(nWords, bits, littleEndian);
                 }
                 break
             case 12: // 16 bit array
@@ -2410,24 +2417,23 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             case 18: // ... length-2
             case 19: // ... length-3
                 if (nWords > 0)
-                    this.bytes = this.decodeBytes(nWords, this.bits, 0, this._format & 3);
+                    this.bytes = this.decodeBytes(nWords, bits, 0, this._format & 3);
                 break;
             case 24: // CompiledMethod
             case 25: // CompiledMethod
             case 26: // CompiledMethod
             case 27: // CompiledMethod
-                var rawHeader = this.decodeWords(1, this.bits, littleEndian)[0];
+                var rawHeader = this.decodeWords(1, bits, littleEndian)[0];
                 if (rawHeader & 0x80000000) throw Error("Alternate bytecode set not supported")
                 var numLits = (rawHeader >> 1) & 0x7FFF,
-                    oops = this.decodeWords(numLits+1, this.bits, littleEndian);
+                    oops = this.decodeWords(numLits+1, bits, littleEndian);
                 this.pointers = this.decodePointers(numLits+1, oops, oopMap, getCharacter); //header+lits
-                this.bytes = this.decodeBytes(nWords-(numLits+1), this.bits, numLits+1, this._format & 3);
+                this.bytes = this.decodeBytes(nWords-(numLits+1), bits, numLits+1, this._format & 3);
                 break
             default:
                 throw Error("Unknown object format: " + this._format);
 
         }
-        delete this.bits;
         this.mark = false; // for GC
     },
     decodePointers: function(nWords, theBits, oopMap, getCharacter) {
@@ -2456,25 +2462,25 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         this._format = 7;
         this.mark = true;   // stays always marked so not traced by GC
     },
-    classNameFromImage: function(oopMap) {
-        var name = oopMap[this.bits[Squeak.Class_name]];
+    classNameFromImage: function(oopMap, rawBits) {
+        var name = oopMap[rawBits[this.oop][Squeak.Class_name]];
         if (name && name._format >= 16 && name._format < 24) {
-            var bytes = name.decodeBytes(name.bits.length, name.bits, 0, name._format & 7);
+            var bits = rawBits[name.oop],
+                bytes = name.decodeBytes(bits.length, bits, 0, name._format & 7);
             return Squeak.bytesAsString(bytes);
         }
         return "Class";
     },
-    renameFromImage: function(oopMap, classTable) {
+    renameFromImage: function(oopMap, rawBits, classTable) {
         var classObj = classTable[this.sqClass];
         if (!classObj) return this;
-        var instProto = classObj.instProto || classObj.classInstProto(classObj.classNameFromImage(oopMap));
+        var instProto = classObj.instProto || classObj.classInstProto(classObj.classNameFromImage(oopMap, rawBits));
         if (!instProto) return this;
         var renamedObj = new instProto; // Squeak.SpurObject
         renamedObj.oop = this.oop;
         renamedObj.sqClass = this.sqClass;
         renamedObj._format = this._format;
         renamedObj.hash = this.hash;
-        renamedObj.bits = this.bits;
         return renamedObj;
     },
 },

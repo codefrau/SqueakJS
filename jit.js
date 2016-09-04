@@ -436,10 +436,10 @@ to single-step.
         }
         this.source.push(";\n");
     },
-    generateStoreInto: function(value, arg1, suffix1, arg2, suffix2) {
+    generateStoreInto: function(target, arg1, suffix1, arg2, suffix2) {
         if (this.debug) this.generateDebugCode("store into");
         this.generateLabel();
-        this.source.push(value);
+        this.source.push(target);
         if (arg1 !== undefined) {
             this.source.push(arg1, suffix1);
             if (arg2 !== undefined) {
@@ -447,11 +447,12 @@ to single-step.
             }
         }
         this.source.push(" = stack[vm.sp];\n");
+        this.generateDirty(target, arg1);
     },
-    generatePopInto: function(value, arg1, suffix1, arg2, suffix2) {
+    generatePopInto: function(target, arg1, suffix1, arg2, suffix2) {
         if (this.debug) this.generateDebugCode("pop into");
         this.generateLabel();
-        this.source.push(value);
+        this.source.push(target);
         if (arg1 !== undefined) {
             this.source.push(arg1, suffix1);
             if (arg2 !== undefined) {
@@ -459,6 +460,7 @@ to single-step.
             }
         }
         this.source.push(" = stack[vm.sp--];\n");
+        this.generateDirty(target, arg1);
     },
     generateReturn: function(what) {
         if (this.debug) this.generateDebugCode("return");
@@ -698,6 +700,15 @@ to single-step.
         this.generateLabel();
         // call prim is actually a no-op
         if (this.pc !== 3) throw Error("call primitive bytecode not expected here");
+    },
+    generateDirty: function(target, arg) {
+        switch(target) {
+            case "inst[": this.source.push("rcvr.dirty = true;\n"); break;
+            case "lit[": this.source.push(target, arg, "].dirty = true;\n"); break;
+            case "temp[": break;
+            default:
+                throw Error("unexpected target " + target);
+        }
     },
     generateLabel: function() {
         // remember label position for deleteUnneededLabels()

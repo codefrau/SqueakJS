@@ -831,16 +831,19 @@ Object.subclass('Squeak.Image',
         isCompact: (optional) true if this is a compact class
         oop: identifies this object in a snapshot (assigned on GC, new space object oops are negative)
         mark: boolean (used only during GC, otherwise false)
-        nextObject: linked list of objects in old space (new space objects do not have this yet)
+        dirty: boolean (true when an object may have a ref to a new object, set on every write, reset on GC)
+        nextObject: linked list of objects in old space and young space (newly created objects do not have this yet)
     }
 
-    Object Table
-    ============
-    There is no actual object table. Instead, objects in old space are a linked list.
+    Object Memory
+    =============
+    Objects in old space are a linked list (firstOldObject). When loading an image, all objects are old.
+    Objects are tenured to old space during a full GC.
     New objects are only referenced by other objects' pointers, and thus can be garbage-collected
     at any time by the Javascript GC.
-
-    Weak references are only finalized during a full GC.
+    A partial GC links new objects to support enumeration of new space.
+    
+    Weak references are finalized by a full GC. A partial GC only finalizes young weak references.
 
     */
     }
@@ -850,10 +853,13 @@ Object.subclass('Squeak.Image',
         this.totalMemory = 100000000;
         this.name = name;
         this.gcCount = 0;
-        this.gcTenured = 0;
         this.gcMilliseconds = 0;
+        this.pgcCount = 0;
+        this.pgcMilliseconds = 0;
+        this.gcTenured = 0;
         this.allocationCount = 0;
         this.oldSpaceCount = 0;
+        this.youngSpaceCount = 0;
         this.newSpaceCount = 0;
         this.hasNewInstances = {};
     },
@@ -1159,11 +1165,7 @@ Object.subclass('Squeak.Image',
             throw Error("image size doesn't match object sizes")
     },
 },
-'garbage collection', {
-    partialGC: function() {
-        // no partial GC needed since new space uses the Javascript GC
-        return this.totalMemory - this.oldSpaceBytes;
-    },
+'garbage collection - full', {
     fullGC: function(reason) {
         // Collect garbage and return first tenured object (to support object enumeration)
         // Old space is a linked list of objects - each object has an "nextObject" reference.
@@ -1171,7 +1173,6 @@ Object.subclass('Squeak.Image',
         // But they have an allocation id so the survivors can be ordered on tenure.
         // The "nextObject" references are created by collecting all new objects,
         // sorting them by id, and then linking them into old space.
-
         this.vm.addMessage("fullGC: " + reason);
         var start = Date.now();
         var newObjects = this.markReachableObjects();
@@ -1180,31 +1181,42 @@ Object.subclass('Squeak.Image',
         this.finalizeWeakReferences();
         this.allocationCount += this.newSpaceCount;
         this.newSpaceCount = 0;
+        this.youngSpaceCount = 0;
         this.hasNewInstances = {};
         this.gcCount++;
         this.gcMilliseconds += Date.now() - start;
+        console.log("Full GC (" + reason + "): " + (Date.now() - start) + " ms");
         return newObjects.length > 0 ? newObjects[0] : null;
     },
+    gcRoots: function() {
+        // the roots of the system
+        this.vm.storeContextRegisters();        // update active context
+        return [this.specialObjectsArray, this.vm.activeContext];
+    },
     markReachableObjects: function() {
-        // Visit all reachable objects and mark them.
+        // FullGC: Visit all reachable objects and mark them.
         // Return surviving new objects
         // Contexts are handled specially: they have garbage beyond the stack pointer
         // which must not be traced, and is cleared out here
         // In weak objects, only the inst vars are traced
-        this.vm.storeContextRegisters();        // update active context
-        var todo = [this.specialObjectsArray, this.vm.activeContext];
+        var todo = this.gcRoots();
         var newObjects = [];
+        this.weakObjects = [];
         while (todo.length > 0) {
             var object = todo.pop();
-            if (object.mark) continue;             // objects are added to todo more than once
-            if (!object.nextObject && object !== this.lastOldObject)       // it's a new object
+            if (object.mark) continue;    // objects are added to todo more than once
+            if (object.oop < 0)           // it's a new object
                 newObjects.push(object);
             object.mark = true;           // mark it
             if (!object.sqClass.mark)     // trace class if not marked
                 todo.push(object.sqClass);
             var body = object.pointers;
             if (body) {                   // trace all unmarked pointers
-                var n = object.nonWeakSize();               // do not trace weak fields
+                var n = body.length;
+                if (object.isWeak()) {
+                    n = object.sqClass.classInstSize();     // do not trace weak fields
+                    this.weakObjects.push(object);
+                }
                 if (this.vm.isContext(object)) {            // contexts have garbage beyond SP
                     n = object.contextSizeWithStack();
                     for (var i = n; i < body.length; i++)   // clean up that garbage
@@ -1220,7 +1232,7 @@ Object.subclass('Squeak.Image',
         return this.isSpur ? newObjects : newObjects.sort(function(a,b){return b.oop - a.oop});
     },
     removeUnmarkedOldObjects: function() {
-        // Unlink unmarked old objects from the nextObject linked list
+        // FullGC: Unlink unmarked old objects from the nextObject linked list
         // Reset marks of remaining objects, and adjust their oops
         // Set this.lastOldObject to last old object
         var removedCount = 0,
@@ -1235,6 +1247,8 @@ Object.subclass('Squeak.Image',
                 this.oldSpaceCount -= removedCount;
                 return;
             }
+            // reset partial GC flag
+            if (next.dirty) next.dirty = false;
             // if marked, continue with next object
             if (next.mark) {
                 obj = next;
@@ -1251,7 +1265,7 @@ Object.subclass('Squeak.Image',
         }
     },
     appendToOldObjects: function(newObjects) {
-        // append new objects to linked list of old objects
+        // FullGC: append new objects to linked list of old objects
         // and unmark them
         var oldObj = this.lastOldObject;
         //var oldBytes = this.oldSpaceBytes;
@@ -1263,6 +1277,7 @@ Object.subclass('Squeak.Image',
             oldObj = newObj;
             //console.log("tenuring " + (i+1) + " " + (this.oldSpaceBytes - oldBytes) + " " + newObj.totalBytes() + " " + newObj.toString());
         }
+        oldObj.nextObject = null;   // might have been in young space
         this.lastOldObject = oldObj;
         this.oldSpaceCount += newObjects.length;
         this.gcTenured += newObjects.length;
@@ -1274,35 +1289,131 @@ Object.subclass('Squeak.Image',
     },
     finalizeWeakReferences: function() {
         // nil out all weak fields that did not survive GC
-        var weakObj = this.firstOldObject;
-        while (weakObj) {
-            if (weakObj.isWeak()) {
-                var pointers = weakObj.pointers || [],
-                    firstWeak = weakObj.sqClass.classInstSize(),
-                    finalized = false;
-                for (var i = firstWeak; i < pointers.length; i++) {
-                    if (pointers[i].oop < 0) {    // ref is not in old-space
-                        pointers[i] = this.vm.nilObj;
-                        finalized = true;
-                    }
+        var weakObjects = this.weakObjects;
+        this.weakObjects = null;
+        for (var o = 0; o < weakObjects.length; o++) {
+            var weakObj = weakObjects[o],
+                pointers = weakObj.pointers,
+                firstWeak = weakObj.sqClass.classInstSize(),
+                finalized = false;
+            for (var i = firstWeak; i < pointers.length; i++) {
+                if (pointers[i].oop < 0) {    // ref is not in old-space
+                    pointers[i] = this.vm.nilObj;
+                    finalized = true;
                 }
-                if (finalized) {
-                    this.vm.pendingFinalizationSignals++;
-                    if (firstWeak >= 2) { // check if weak obj is a finalizer item
-                        var list = weakObj.pointers[Squeak.WeakFinalizerItem_list];
-                        if (list.sqClass == this.vm.specialObjects[Squeak.splOb_ClassWeakFinalizer]) {
-                            // add weak obj as first in the finalization list
-                            var items = list.pointers[Squeak.WeakFinalizationList_first];
-                            weakObj.pointers[Squeak.WeakFinalizerItem_next] = items;
-                            list.pointers[Squeak.WeakFinalizationList_first] = weakObj;
-                        }
+            }
+            if (finalized) {
+                this.vm.pendingFinalizationSignals++;
+                if (firstWeak >= 2) { // check if weak obj is a finalizer item
+                    var list = weakObj.pointers[Squeak.WeakFinalizerItem_list];
+                    if (list.sqClass == this.vm.specialObjects[Squeak.splOb_ClassWeakFinalizer]) {
+                        // add weak obj as first in the finalization list
+                        var items = list.pointers[Squeak.WeakFinalizationList_first];
+                        weakObj.pointers[Squeak.WeakFinalizerItem_next] = items;
+                        list.pointers[Squeak.WeakFinalizationList_first] = weakObj;
                     }
                 }
             }
-            weakObj = weakObj.nextObject;
         };
         if (this.vm.pendingFinalizationSignals > 0) {
             this.vm.forceInterruptCheck();                      // run finalizer asap
+        }
+    },
+},
+'garbage collection - partial', {
+    partialGC: function(reason) {
+        // make a linked list of young objects
+        // and finalize weak refs
+        this.vm.addMessage("partialGC: " + reason);
+        var start = Date.now();
+        var young = this.findYoungObjects();
+        this.appendToYoungSpace(young);
+        this.finalizeWeakReferences();
+        this.cleanupYoungSpace(young);
+        this.allocationCount += this.newSpaceCount - young.length;
+        this.youngSpaceCount = young.length;
+        this.newSpaceCount = this.youngSpaceCount;
+        this.hasNewInstances = {};
+        this.pgcCount++;
+        this.pgcMilliseconds += Date.now() - start;
+        console.log("Partial GC (" + reason+ "): " + (Date.now() - start) + " ms");
+        return young[0];
+    },
+    youngRoots: function() {
+        // PartialGC: Find new objects directly pointed to by old objects.
+        // For speed we only scan "dirty" objects that have been written to
+        var roots = this.gcRoots().filter(function(obj){return obj.oop < 0;}),
+            object = this.firstOldObject;
+        while (object) {
+            if (object.dirty) {
+                var body = object.pointers,
+                    dirty = false;
+                for (var i = 0; i < body.length; i++) {
+                    var child = body[i];
+                    if (typeof child === "object" && child.oop < 0) { // if child is new
+                        roots.push(child);
+                        dirty = true;
+                    }
+                }
+                object.dirty = dirty;
+            }
+            object = object.nextObject;
+        }
+        return roots;
+    },
+    findYoungObjects: function() {
+        // PartialGC: find new objects transitively reachable from old objects
+        var todo = this.youngRoots(),     // direct pointers from old space
+            newObjects = [];
+        this.weakObjects = [];
+        while (todo.length > 0) {
+            var object = todo.pop();
+            if (object.mark) continue;    // objects are added to todo more than once
+            newObjects.push(object);
+            object.mark = true;           // mark it
+            if (object.sqClass.oop < 0)   // trace class if new
+                todo.push(object.sqClass);
+            var body = object.pointers;
+            if (body) {                   // trace all unmarked pointers
+                var n = body.length;
+                if (object.isWeak()) {
+                    n = object.sqClass.classInstSize();     // do not trace weak fields
+                    this.weakObjects.push(object);
+                }
+                if (this.vm.isContext(object)) {            // contexts have garbage beyond SP
+                    n = object.contextSizeWithStack();
+                    for (var i = n; i < body.length; i++)   // clean up that garbage
+                        body[i] = this.vm.nilObj;
+                }
+                for (var i = 0; i < n; i++) {
+                    var child = body[i];
+                    if (typeof child === "object" && child.oop < 0)
+                        todo.push(body[i]);
+                }
+            }
+        }
+        // pre-spur sort by oop to preserve creation order
+        return this.isSpur ? newObjects : newObjects.sort(function(a,b){return b.oop - a.oop});
+    },
+    appendToYoungSpace: function(objects) {
+        // PartialGC: link new objects into young list
+        // and give them positive oops temporarily so finalization works
+        var oop = this.lastOldObject.oop;
+        for (var i = 0; i < objects.length; i++) {
+            var obj = objects[i];
+            obj.oop = ++oop;
+            obj.nextObject = objects[i + 1];
+        }
+    },
+    cleanupYoungSpace: function(objects) {
+        // PartialGC: After finalizing weak refs, make oops
+        // in young space negative again
+        var obj = objects[0],
+            oop = 0;
+        while (obj) {
+            obj.oop = --oop;
+            obj.mark = false;
+            obj = obj.nextObject;
         }
     },
 },
@@ -1342,10 +1453,11 @@ Object.subclass('Squeak.Image',
         var n = fromArray.length;
         if (n !== toArray.length)
             return false;
-        // need to visit all objects, so ensure new objects have
-        // nextObject pointers and permanent oops
+        // need to visit all objects: find young objects now
+        // so oops do not change later
+        var firstYoungObject = null;
         if (this.newSpaceCount > 0)
-            this.fullGC("become");              // does update context
+            firstYoungObject = this.partialGC("become");  // does update context
         else
             this.vm.storeContextRegisters();    // still need to update active context
         // obj.oop used as dict key here is why we store them
@@ -1370,6 +1482,8 @@ Object.subclass('Squeak.Image',
             fromArray[i].hash = toArray[i].hash;
             toArray[i].hash = fromHash;
         }
+        // temporarily append young objects to old space
+        this.lastOldObject.nextObject = firstYoungObject;
         // Now, for every object...
         var obj = this.firstOldObject;
         while (obj) {
@@ -1384,41 +1498,49 @@ Object.subclass('Squeak.Image',
             }
             obj = obj.nextObject;
         }
+        // separate old / young space again
+        this.lastOldObject.nextObject = null;
         this.vm.flushMethodCacheAfterBecome(mutations);
         return true;
     },
     objectAfter: function(obj) {
-        // if this was the last old object, tenure new objects and try again
-        return obj.nextObject || (this.newSpaceCount > 0 && this.fullGC("nextObject"));
+        // if this was the last old object, continue with young objects
+        return obj.nextObject || this.nextObjectWithGC("nextObject", obj);
     },
     someInstanceOf: function(clsObj) {
         var obj = this.firstOldObject;
         while (obj) {
             if (obj.sqClass === clsObj)
                 return obj;
-            obj = obj.nextObject || this.nextObjectWithGCFor(clsObj);
+            obj = obj.nextObject || this.nextObjectWithGCFor(obj, clsObj);
         }
         return null;
     },
     nextInstanceAfter: function(obj) {
         var clsObj = obj.sqClass;
         while (true) {
-            obj = obj.nextObject || this.nextObjectWithGCFor(clsObj);
+            obj = obj.nextObject || this.nextObjectWithGCFor(obj, clsObj);
             if (!obj) return null;
             if (obj.sqClass === clsObj)
                 return obj;
         }
     },
-    nextObjectWithGCFor: function(clsObj) {
+    nextObjectWithGC: function(reason, obj) {
+        var limit = obj.oop > 0 ? 0 : this.youngSpaceCount;
+        if (this.newSpaceCount <= limit) return null; // no more objects
+        if (obj.oop < 0) console.warn("nextObject called on new object (might visit multiple times)");
+        return this.partialGC(reason);
+    },
+    nextObjectWithGCFor: function(obj, clsObj) {
         if (this.newSpaceCount === 0 || !this.hasNewInstances[clsObj.oop]) return null;
-        return this.fullGC("instance of " + clsObj.className());
+        return this.nextObjectWithGC("instance of " + clsObj.className(), obj);
     },
     allInstancesOf: function(clsObj) {
         var obj = this.firstOldObject,
             result = [];
         while (obj) {
             if (obj.sqClass === clsObj) result.push(obj);
-            obj = obj.nextObject || this.nextObjectWithGCFor(clsObj);
+            obj = obj.nextObject || this.nextObjectWithGCFor(obj, clsObj);
         }
         return result;
     },
@@ -2062,12 +2184,6 @@ Object.subclass('Squeak.Object',
     pointersSize: function() {
         return this.pointers ? this.pointers.length : 0;
     },
-    nonWeakSize: function() {
-        if (!this.pointers) return 0;
-        return this._format === 4           // weak?
-            ? this.sqClass.classInstSize()  // only inst vars
-            : this.pointers.length;         // all fields
-    },
     bytesSize: function() {
         return this.bytes ? this.bytes.length : 0;
     },
@@ -2698,6 +2814,7 @@ Object.subclass('Squeak.Interpreter',
         var sched = schedAssn.pointers[Squeak.Assn_value];
         var proc = sched.pointers[Squeak.ProcSched_activeProcess];
         this.activeContext = proc.pointers[Squeak.Proc_suspendedContext];
+        this.activeContext.dirty = true;
         this.fetchContextRegisters(this.activeContext);
         this.reclaimableContextCount = 0;
     },
@@ -2816,6 +2933,7 @@ Object.subclass('Squeak.Interpreter',
 
             // storeAndPop rcvr, temp
             case 0x60: case 0x61: case 0x62: case 0x63: case 0x64: case 0x65: case 0x66: case 0x67:
+                this.receiver.dirty = true;
                 this.receiver.pointers[b&7] = this.pop(); return;
             case 0x68: case 0x69: case 0x6A: case 0x6B: case 0x6C: case 0x6D: case 0x6E: case 0x6F:
                 this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&7)] = this.pop(); return;
@@ -3077,19 +3195,41 @@ Object.subclass('Squeak.Interpreter',
     extendedStore: function( nextByte) {
         var lobits = nextByte & 63;
         switch (nextByte>>6) {
-            case 0: this.receiver.pointers[lobits] = this.top(); break;
-            case 1: this.homeContext.pointers[Squeak.Context_tempFrameStart+lobits] = this.top(); break;
-            case 2: this.nono(); break;
-            case 3: this.method.methodGetLiteral(lobits).pointers[Squeak.Assn_value] = this.top(); break;
+            case 0:
+                this.receiver.dirty = true;
+                this.receiver.pointers[lobits] = this.top();
+                break;
+            case 1:
+                this.homeContext.pointers[Squeak.Context_tempFrameStart+lobits] = this.top();
+                break;
+            case 2:
+                this.nono();
+                break;
+            case 3:
+                var assoc = this.method.methodGetLiteral(lobits);
+                assoc.dirty = true;
+                assoc.pointers[Squeak.Assn_value] = this.top();
+                break;
         }
     },
     extendedStorePop: function(nextByte) {
         var lobits = nextByte & 63;
         switch (nextByte>>6) {
-            case 0: this.receiver.pointers[lobits] = this.pop(); break;
-            case 1: this.homeContext.pointers[Squeak.Context_tempFrameStart+lobits] = this.pop(); break;
-            case 2: this.nono(); break;
-            case 3: this.method.methodGetLiteral(lobits).pointers[Squeak.Assn_value] = this.pop(); break;
+            case 0:
+                this.receiver.dirty = true;
+                this.receiver.pointers[lobits] = this.pop();
+                break;
+            case 1:
+                this.homeContext.pointers[Squeak.Context_tempFrameStart+lobits] = this.pop();
+                break;
+            case 2:
+                this.nono();
+                break;
+            case 3:
+                var assoc = this.method.methodGetLiteral(lobits);
+                assoc.dirty = true;
+                assoc.pointers[Squeak.Assn_value] = this.pop();
+                break;
         }
     },
     doubleExtendedDoAnything: function(byte2) {
@@ -3100,9 +3240,11 @@ Object.subclass('Squeak.Interpreter',
             case 2: this.push(this.receiver.pointers[byte3]); break;
             case 3: this.push(this.method.methodGetLiteral(byte3)); break;
             case 4: this.push(this.method.methodGetLiteral(byte3).pointers[Squeak.Assn_value]); break;
-            case 5: this.receiver.pointers[byte3] = this.top(); break;
-            case 6: this.receiver.pointers[byte3] = this.pop(); break;
-            case 7: this.method.methodGetLiteral(byte3).pointers[Squeak.Assn_value] = this.top(); break;
+            case 5: this.receiver.dirty = true; this.receiver.pointers[byte3] = this.top(); break;
+            case 6: this.receiver.dirty = true; this.receiver.pointers[byte3] = this.pop(); break;
+            case 7: var assoc = this.method.methodGetLiteral(byte3);
+                assoc.dirty = true;
+                assoc.pointers[Squeak.Assn_value] = this.top(); break;
         }
     },
     jumpIfTrue: function(delta) {
@@ -3287,6 +3429,7 @@ Object.subclass('Squeak.Interpreter',
         /////// Woosh //////
         this.activeContext = newContext; //We're off and running...
         //Following are more efficient than fetchContextRegisters() in newActiveContext()
+        this.activeContext.dirty = true;
         this.homeContext = newContext;
         this.method = newMethod;
         this.pc = newPC;
@@ -3339,6 +3482,7 @@ Object.subclass('Squeak.Interpreter',
             thisContext = nextContext;
         }
         this.activeContext = thisContext;
+        this.activeContext.dirty = true;
         this.fetchContextRegisters(this.activeContext);
         this.push(returnValue);
         if (this.breakOnContextChanged) {
@@ -3506,6 +3650,7 @@ Object.subclass('Squeak.Interpreter',
         // Note: this is inlined in executeNewMethod() and doReturn()
         this.storeContextRegisters();
         this.activeContext = newContext; //We're off and running...
+        this.activeContext.dirty = true;
         this.fetchContextRegisters(newContext);
     },
     exportThisContext: function() {
@@ -4267,7 +4412,7 @@ Object.subclass('Squeak.Primitives',
             case 128: return this.primitiveArrayBecome(argCount, true); // both ways
             case 129: return this.popNandPushIfOK(1, this.vm.image.specialObjectsArray); //specialObjectsOop
             case 130: return this.primitiveFullGC(argCount);
-            case 131: return this.popNandPushIfOK(1, this.vm.image.partialGC()); // GCmost
+            case 131: return this.primitivePartialGC(argCount);
             case 132: return this.pop2andPushBoolIfOK(this.pointsTo(this.stackNonInteger(1), this.vm.top())); //Object.pointsTo
             case 133: return true; //TODO primitiveSetInterruptKey
             case 134: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheInterruptSemaphore));
@@ -4878,7 +5023,7 @@ Object.subclass('Squeak.Primitives',
         char = this.vm.instantiateClass(charClass, 0);
         char.pointers[0] = ascii;
         return char;
-},
+    },
     charFromIntSpur: function(unicode) {
         return this.vm.image.getCharacter(unicode);
     },
@@ -5031,10 +5176,14 @@ Object.subclass('Squeak.Primitives',
         }
         if (index<1 || index>info.size) {this.success = false; return array;}
         var objToPut = this.vm.stackValue(0);
-        if (includeInstVars)  // pointers...   instVarAtPut and objectAtPut
+        if (includeInstVars)  {// pointers...   instVarAtPut and objectAtPut
+            array.dirty = true;
             return array.pointers[index-1] = objToPut; //eg, objectAt:
-        if (array.isPointers())  // pointers...   normal atPut
+        }
+        if (array.isPointers())  {// pointers...   normal atPut
+            array.dirty = true;
             return array.pointers[index-1+info.ivarOffset] = objToPut;
+        }
         var intToPut;
         if (array.isWords()) {  // words...
             if (convertChars) {
@@ -5203,6 +5352,11 @@ Object.subclass('Squeak.Primitives',
     },
     primitiveFullGC: function(argCount) {
         this.vm.image.fullGC("primitive");
+        var bytes = this.vm.image.bytesLeft();
+        return this.popNandPushIfOK(1, this.makeLargeIfNeeded(bytes));
+    },
+    primitivePartialGC: function(argCount) {
+        this.vm.image.partialGC("primitive");
         var bytes = this.vm.image.bytesLeft();
         return this.popNandPushIfOK(1, this.makeLargeIfNeeded(bytes));
     },
@@ -5411,6 +5565,7 @@ Object.subclass('Squeak.Primitives',
             length !== arg.pointersSize()) return false;
         for (var i = 0; i < length; i++)
             rcvr.pointers[i] = arg.pointers[i];
+        rcvr.dirty = arg.dirty;
         this.vm.pop(argCount);
         return true;
     },
@@ -5578,7 +5733,9 @@ Object.subclass('Squeak.Primitives',
         var sched = this.getScheduler();
         var oldProc = sched.pointers[Squeak.ProcSched_activeProcess];
         sched.pointers[Squeak.ProcSched_activeProcess] = newProc;
+        sched.dirty = true;
         oldProc.pointers[Squeak.Proc_suspendedContext] = this.vm.activeContext;
+        oldProc.dirty = true;
         this.vm.newActiveContext(newProc.pointers[Squeak.Proc_suspendedContext]);
         newProc.pointers[Squeak.Proc_suspendedContext] = this.vm.nilObj;
         this.vm.reclaimableContextCount = 0;
@@ -5602,14 +5759,17 @@ Object.subclass('Squeak.Primitives',
     linkProcessToList: function(proc, aList) {
         // Add the given process to the given linked list and set the backpointer
         // of process to its new list.
-        if (this.isEmptyList(aList))
+        if (this.isEmptyList(aList)) {
             aList.pointers[Squeak.LinkedList_firstLink] = proc;
-        else {
+        } else {
             var lastLink = aList.pointers[Squeak.LinkedList_lastLink];
             lastLink.pointers[Squeak.Link_nextLink] = proc;
+            lastLink.dirty = true;
         }
         aList.pointers[Squeak.LinkedList_lastLink] = proc;
+        aList.dirty = true;
         proc.pointers[Squeak.Proc_myList] = aList;
+        proc.dirty = true;
     },
     isEmptyList: function(aLinkedList) {
         return aLinkedList.pointers[Squeak.LinkedList_firstLink].isNil;
@@ -5624,6 +5784,7 @@ Object.subclass('Squeak.Primitives',
         } else {
             var next = first.pointers[Squeak.Link_nextLink];
             aList.pointers[Squeak.LinkedList_firstLink] = next;
+            aList.dirty = true;
         }
         first.pointers[Squeak.Link_nextLink] = this.vm.nilObj;
         return first;
@@ -5734,6 +5895,7 @@ Object.subclass('Squeak.Primitives',
         var owningProcess = mutex.pointers[Squeak.Mutex_owner];
         if (owningProcess.isNil) {
             mutex.pointers[Squeak.Mutex_owner] = activeProc;
+            mutex.dirty = true;
             this.popNandPushIfOK(argCount + 1, this.vm.falseObj);
         } else if (owningProcess === activeProc) {
             this.popNandPushIfOK(argCount + 1, this.vm.trueObj);
@@ -5751,6 +5913,7 @@ Object.subclass('Squeak.Primitives',
         } else {
             var owningProcess = this.removeFirstLinkOfList(criticalSection);
             criticalSection.pointers[Squeak.Mutex_owner] = owningProcess;
+            criticalSection.dirty = true;
             this.resume(owningProcess);
         }
         return true;
@@ -5762,6 +5925,7 @@ Object.subclass('Squeak.Primitives',
         var owningProcess = mutex.pointers[Squeak.Mutex_owner];
         if (owningProcess.isNil) {
             mutex.pointers[Squeak.Mutex_owner] = activeProc;
+            mutex.dirty = true;
             this.popNandPushIfOK(argCount + 1, this.vm.falseObj);
         } else if (owningProcess === activeProc) {
             this.popNandPushIfOK(argCount + 1, this.vm.trueObj);
@@ -5831,8 +5995,8 @@ Object.subclass('Squeak.Primitives',
             // 6    survivor count tenuring threshold (read-write)
             case 7: return this.vm.image.gcCount;           // full GCs since startup (read-only)
             case 8: return this.vm.image.gcMilliseconds;    // total milliseconds in full GCs since startup (read-only)
-            case 9: return 1;   /* image expects > 0 */     // incremental GCs since startup (read-only)
-            case 10: return 0;                              // total milliseconds in incremental GCs since startup (read-only)
+            case 9: return this.vm.image.pgcCount;          // incremental GCs since startup (read-only)
+            case 10: return this.vm.image.pgcMilliseconds;  // total milliseconds in incremental GCs since startup (read-only)
             case 11: return this.vm.image.gcTenured;        // tenures of surving objects since startup (read-only)
             // 12-20 specific to the translating VM
             // 21   root table size (read-only)

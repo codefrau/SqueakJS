@@ -298,11 +298,11 @@ to single-step.
         if (this.singleStep) {
             if (this.debug) this.source.push("// all valid PCs have a label;\n");
             this.source.push("default: throw Error('invalid PC'); }"); // all PCs handled
-            return new Function("return function " + funcName + "(vm, singleStep) {\n" + this.source.join("") + "\n}")();
+            return new Function("'use strict';\nreturn function " + funcName + "(vm, singleStep) {\n" + this.source.join("") + "}")();
         } else {
             this.sourcePos['loop-end'] = this.source.length; this.source.push("default: vm.interpretOne(true); return;\n}");
             this.deleteUnneededLabels();
-            return new Function("return function " + funcName + "(vm) {\n" + this.source.join("") + "\n}")();
+            return new Function("'use strict';\nreturn function " + funcName + "(vm) {\n" + this.source.join("") + "}")();
         }
     },
     generateExtended: function(bytecode) {

@@ -141,9 +141,9 @@ to single-step.
 },
 'accessing', {
     compile: function(method, optClass, optSel) {
-        if (!method.isHot) {
+        if (method.compiled === void 0) {
             // 1st time
-            method.isHot = true;
+            method.compiled = false;
         } else {
             // 2nd time
             this.singleStep = false;

@@ -184,7 +184,8 @@ to single-step.
         this.prevPC = 0;            // pc at start of current instruction
         this.source = [];           // snippets will be joined in the end
         this.sourceLabels = {};     // source pos of generated labels
-        this.needsLabel = {0: true}; // jump targets
+        this.needsLabel = {};       // jump targets
+        this.sourcePos = {};        // source pos of optional vars / statements
         this.needsBreak = false;    // insert break check for previous bytecode
         if (optClass && optSel)
             this.source.push("// ", optClass, ">>", optSel, "\n");
@@ -195,8 +196,8 @@ to single-step.
             "    inst = rcvr.pointers,\n",
             "    temp = vm.homeContext.pointers,\n",
             "    lit = vm.method.pointers;\n",
-            "while (true) switch (vm.pc) {\n"
         );
+        this.sourcePos['loop-start'] = this.source.length; this.source.push("while (true) switch (vm.pc) {\ncase 0:\n");
         this.done = false;
         while (!this.done) {
             var byte = method.bytes[this.pc++],
@@ -299,8 +300,7 @@ to single-step.
             this.source.push("default: throw Error('invalid PC'); }"); // all PCs handled
             return new Function("return function " + funcName + "(vm, singleStep) {\n" + this.source.join("") + "\n}")();
         } else {
-            if (this.debug) this.source.push("// fall back to single-stepping\n");
-            this.source.push("default: vm.interpretOne(true); return;}");
+            this.sourcePos['loop-end'] = this.source.length; this.source.push("default: vm.interpretOne(true); return;\n}");
             this.deleteUnneededLabels();
             return new Function("return function " + funcName + "(vm) {\n" + this.source.join("") + "\n}")();
         }
@@ -705,8 +705,10 @@ to single-step.
     },
     generateLabel: function() {
         // remember label position for deleteUnneededLabels()
-        this.sourceLabels[this.prevPC] = this.source.length;
-        this.source.push("case ", this.prevPC, ":\n");
+        if (this.prevPC) {
+            this.sourceLabels[this.prevPC] = this.source.length;
+            this.source.push("case ", this.prevPC, ":\n");
+        }
         this.prevPC = this.pc;
     },
     generateDebugCode: function(comment) {
@@ -730,10 +732,16 @@ to single-step.
     },
     deleteUnneededLabels: function() {
         // switch statement is more efficient with fewer labels
+        var needsAnyLabel = false;
         for (var i in this.sourceLabels)
-            if (!this.needsLabel[i])
-                for (var j = 0; j < 3; j++)
-                    this.source[this.sourceLabels[i] + j] = "";
+            if (this.needsLabel[i])
+                needsAnyLabel = true;
+            else for (var j = 0; j < 3; j++)
+               this.source[this.sourceLabels[i] + j] = "";
+        if (!needsAnyLabel) {
+            this.source[this.sourcePos['loop-start']] = "";
+            this.source[this.sourcePos['loop-end']] = "";
+        }
     },
 });
 

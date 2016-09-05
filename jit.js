@@ -297,15 +297,13 @@ to single-step.
         var funcName = this.functionNameFor(optClass, optSel);
         if (this.singleStep) {
             if (this.debug) this.source.push("// all valid PCs have a label;\n");
-            this.source.push("default: throw Error('invalid PC'); }"); // all PCs handled
-            this.deleteUnneededVariables();
-            return new Function("'use strict';\nreturn function " + funcName + "(vm, singleStep) {\n" + this.source.join("") + "}")();
+            this.source.push("default: throw Error('invalid PC');\n}"); // all PCs handled
         } else {
             this.sourcePos['loop-end'] = this.source.length; this.source.push("default: vm.interpretOne(true); return;\n}");
             this.deleteUnneededLabels();
-            this.deleteUnneededVariables();
-            return new Function("'use strict';\nreturn function " + funcName + "(vm) {\n" + this.source.join("") + "}")();
         }
+        this.deleteUnneededVariables();
+        return new Function("'use strict';\nreturn function " + funcName + "(vm) {\n" + this.source.join("") + "}")();
     },
     generateExtended: function(bytecode) {
         var byte2, byte3;
@@ -569,8 +567,7 @@ to single-step.
         this.source.push(
             "vm.pc = ", this.pc, "; if (!vm.primHandler.quickSendOther(rcvr, ", (byte & 0x0F), "))",
             " vm.sendSpecial(", ((byte & 0x0F) + 16), ");\n",
-            "if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return;\n",
-            "if (vm.pc !== ", this.pc, ") throw Error('Huh?');\n");
+            "if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return;\n");
         this.needsBreak = false; // already checked
         // if falling back to a full send we need a label for coming back
         this.needsLabel[this.pc] = true;
@@ -767,13 +764,13 @@ to single-step.
     },
     deleteUnneededLabels: function() {
         // switch statement is more efficient with fewer labels
-        var needsAnyLabel = false;
+        var hasAnyLabel = false;
         for (var i in this.sourceLabels)
             if (this.needsLabel[i])
-                needsAnyLabel = true;
+                hasAnyLabel = true;
             else for (var j = 0; j < 3; j++)
                this.source[this.sourceLabels[i] + j] = "";
-        if (!needsAnyLabel) {
+        if (!hasAnyLabel) {
             this.source[this.sourcePos['loop-start']] = "";
             this.source[this.sourcePos['loop-end']] = "";
         }

@@ -2897,7 +2897,7 @@ Object.subclass('Squeak.Interpreter',
                 }
                 this.breakNow();
             }
-            this.byteCodeCount += this.method.compiled(this);
+            this.method.compiled(this);
             return;
         }
         var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively
@@ -3074,7 +3074,7 @@ Object.subclass('Squeak.Interpreter',
         this.breakOutTick = this.primHandler.millisecondClockValue() + (forMilliseconds || 500);
         while (this.breakOutOfInterpreter === false)
             if (this.method.compiled) {
-                this.byteCodeCount += this.method.compiled(this);
+                this.method.compiled(this);
             } else {
                 this.interpretOne();
             }

@@ -73,7 +73,7 @@
     }
     window.onload = function() {
         // if we have an image or zip in hash then we run Squeak with the options provided in the url
-        if (location.hash.match(/(\.image(\W|$)|\Wzip=)/)) {
+        if ((location.hash || location.search).match(/(\.image(\W|$)|\Wzip=)/)) {
             return runSqueak();
         }
         // otherwise, we generate the text to display

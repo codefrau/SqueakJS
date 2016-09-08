@@ -998,6 +998,7 @@ SqueakJS.runImage = function(buffer, name, display, options) {
             display.runFor = function(milliseconds) {
                 var stoptime = Date.now() + milliseconds;
                 do {
+                    if (display.quitFlag) return;
                     display.runNow();
                 } while (Date.now() < stoptime);
             };

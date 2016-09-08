@@ -5540,7 +5540,13 @@ Object.subclass('Squeak.Primitives',
             totalLength = dst.wordsSize();
             if ((dstPos < 0) || (dstPos + count) > totalLength)
                 {this.success = false; return dst;} //would go out of bounds
-            for (var i = 0; i < count; i++)
+            if (src.isFloat && dst.isFloat)
+                dst.float = src.float;
+            else if (src.isFloat)
+                dst.wordsAsFloat64Array()[dstPos] = src.float;
+            else if (dst.isFloat)
+                dst.float = src.wordsAsFloat64Array()[srcPos];
+            else for (var i = 0; i < count; i++)
                 dst.words[dstPos + i] = src.words[srcPos + i];
             return dst;
         } else { //bytes type objects

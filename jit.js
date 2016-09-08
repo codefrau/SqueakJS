@@ -105,9 +105,6 @@ version of the generated JavaScript code:
         return 0;
     }
 
-The compiled method should return the number of bytecodes executed, but for
-statistical purposes only. It's fine to return 0.
-
 Debugging support
 =================
 
@@ -141,9 +138,9 @@ to single-step.
 },
 'accessing', {
     compile: function(method, optClass, optSel) {
-        if (!method.isHot) {
+        if (method.compiled === void 0) {
             // 1st time
-            method.isHot = true;
+            method.compiled = false;
         } else {
             // 2nd time
             this.singleStep = false;
@@ -187,20 +184,20 @@ to single-step.
         this.prevPC = 0;            // pc at start of current instruction
         this.source = [];           // snippets will be joined in the end
         this.sourceLabels = {};     // source pos of generated labels
-        this.needsLabel = {0: true}; // jump targets
+        this.needsLabel = {};       // jump targets
+        this.sourcePos = {};        // source pos of optional vars / statements
+        this.needsVar = {};         // true if var was used
         this.needsBreak = false;    // insert break check for previous bytecode
         if (optClass && optSel)
             this.source.push("// ", optClass, ">>", optSel, "\n");
-        this.source.push(
-            "var context = vm.activeContext,\n",
-            "    stack = context.pointers,\n",
-            "    rcvr = vm.receiver,\n",
-            "    inst = rcvr.pointers,\n",
-            "    temp = vm.homeContext.pointers,\n",
-            "    lit = vm.method.pointers,\n",
-            "    bytecodes = 0 - vm.pc;\n",
-            "while (true) switch (vm.pc) {\n"
-        );
+        this.allVars = ['context', 'stack', 'rcvr', 'inst[', 'temp[', 'lit['];
+        this.sourcePos['context']    = this.source.length; this.source.push("var context = vm.activeContext;\n");
+        this.sourcePos['stack']      = this.source.length; this.source.push("var stack = context.pointers;\n");
+        this.sourcePos['rcvr']       = this.source.length; this.source.push("var rcvr = vm.receiver;\n");
+        this.sourcePos['inst[']      = this.source.length; this.source.push("var inst = rcvr.pointers;\n");
+        this.sourcePos['temp[']      = this.source.length; this.source.push("var temp = vm.homeContext.pointers;\n");
+        this.sourcePos['lit[']       = this.source.length; this.source.push("var lit = vm.method.pointers;\n");
+        this.sourcePos['loop-start'] = this.source.length; this.source.push("while (true) switch (vm.pc) {\ncase 0:\n");
         this.done = false;
         while (!this.done) {
             var byte = method.bytes[this.pc++],
@@ -300,14 +297,13 @@ to single-step.
         var funcName = this.functionNameFor(optClass, optSel);
         if (this.singleStep) {
             if (this.debug) this.source.push("// all valid PCs have a label;\n");
-            this.source.push("default: throw Error('invalid PC'); }"); // all PCs handled
-            return new Function("return function " + funcName + "(vm, singleStep) {\n" + this.source.join("") + "\n}")();
+            this.source.push("default: throw Error('invalid PC');\n}"); // all PCs handled
         } else {
-            if (this.debug) this.source.push("// fall back to single-stepping\n");
-            this.source.push("default: bytecodes += vm.pc; vm.interpretOne(true); return bytecodes;}");
+            this.sourcePos['loop-end'] = this.source.length; this.source.push("default: vm.interpretOne(true); return;\n}");
             this.deleteUnneededLabels();
-            return new Function("return function " + funcName + "(vm) {\n" + this.source.join("") + "\n}")();
         }
+        this.deleteUnneededVariables();
+        return new Function("'use strict';\nreturn function " + funcName + "(vm) {\n" + this.source.join("") + "}")();
     },
     generateExtended: function(bytecode) {
         var byte2, byte3;
@@ -375,10 +371,12 @@ to single-step.
                 return;
             // dup
             case 0x88:
+                this.needsVar['stack'] = true;
                 this.generateInstruction("dup", "var dup = stack[vm.sp]; stack[++vm.sp] = dup");
                 return;
             // thisContext
             case 0x89:
+                this.needsVar['stack'] = true;
                 this.generateInstruction("thisContext", "stack[++vm.sp] = vm.exportThisContext()");
                 return;
             // closures
@@ -424,10 +422,12 @@ to single-step.
                 return;
         }
     },
-    generatePush: function(value, arg1, suffix1, arg2, suffix2) {
+    generatePush: function(target, arg1, suffix1, arg2, suffix2) {
         if (this.debug) this.generateDebugCode("push");
         this.generateLabel();
-        this.source.push("stack[++vm.sp] = ", value);
+        this.needsVar[target] = true;
+        this.needsVar['stack'] = true;
+        this.source.push("stack[++vm.sp] = ", target);
         if (arg1 !== undefined) {
             this.source.push(arg1, suffix1);
             if (arg2 !== undefined) {
@@ -436,10 +436,12 @@ to single-step.
         }
         this.source.push(";\n");
     },
-    generateStoreInto: function(value, arg1, suffix1, arg2, suffix2) {
+    generateStoreInto: function(target, arg1, suffix1, arg2, suffix2) {
         if (this.debug) this.generateDebugCode("store into");
         this.generateLabel();
-        this.source.push(value);
+        this.needsVar[target] = true;
+        this.needsVar['stack'] = true;
+        this.source.push(target);
         if (arg1 !== undefined) {
             this.source.push(arg1, suffix1);
             if (arg2 !== undefined) {
@@ -447,11 +449,14 @@ to single-step.
             }
         }
         this.source.push(" = stack[vm.sp];\n");
+        this.generateDirty(target, arg1);
     },
-    generatePopInto: function(value, arg1, suffix1, arg2, suffix2) {
+    generatePopInto: function(target, arg1, suffix1, arg2, suffix2) {
         if (this.debug) this.generateDebugCode("pop into");
         this.generateLabel();
-        this.source.push(value);
+        this.needsVar[target] = true;
+        this.needsVar['stack'] = true;
+        this.source.push(target);
         if (arg1 !== undefined) {
             this.source.push(arg1, suffix1);
             if (arg2 !== undefined) {
@@ -459,36 +464,38 @@ to single-step.
             }
         }
         this.source.push(" = stack[vm.sp--];\n");
+        this.generateDirty(target, arg1);
     },
     generateReturn: function(what) {
         if (this.debug) this.generateDebugCode("return");
         this.generateLabel();
+        this.needsVar[what] = true;
         this.source.push(
-            "vm.pc = ", this.pc, "; vm.doReturn(", what, "); return bytecodes + ", this.pc, ";\n");
+            "vm.pc = ", this.pc, "; vm.doReturn(", what, "); return;\n");
         this.needsBreak = false; // returning anyway
         this.done = this.pc > this.endPC;
     },
     generateBlockReturn: function() {
         if (this.debug) this.generateDebugCode("block return");
         this.generateLabel();
+        this.needsVar['stack'] = true;
         // actually stack === context.pointers but that would look weird
         this.source.push(
-            "vm.pc = ", this.pc, "; vm.doReturn(stack[vm.sp--], context.pointers[0]); return bytecodes + ", this.pc, ";\n");
+            "vm.pc = ", this.pc, "; vm.doReturn(stack[vm.sp--], context.pointers[0]); return;\n");
         this.needsBreak = false; // returning anyway
     },
     generateJump: function(distance) {
         var destination = this.pc + distance;
         if (this.debug) this.generateDebugCode("jump to " + destination);
         this.generateLabel();
+        this.needsVar['context'] = true;
         this.source.push("vm.pc = ", destination, "; ");
-        if (distance < 0) this.source.push("bytecodes += ", -distance, "; ");
-        else this.source.push("bytecodes -= ", distance, "; ");
         if (distance < 0) this.source.push(
             "\nif (vm.interruptCheckCounter-- <= 0) {\n",
             "   vm.checkForInterrupts();\n",
-            "   if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", destination, ";\n",
+            "   if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return;\n",
             "}\n");
-        if (this.singleStep) this.source.push("\nif (vm.breakOutOfInterpreter) return bytecodes + ", destination, ";\n");
+        if (this.singleStep) this.source.push("\nif (vm.breakOutOfInterpreter) return;\n");
         this.source.push("continue;\n");
         this.needsBreak = false; // already checked
         this.needsLabel[destination] = true;
@@ -498,11 +505,12 @@ to single-step.
         var destination = this.pc + distance;
         if (this.debug) this.generateDebugCode("jump if " + condition + " to " + destination);
         this.generateLabel();
+        this.needsVar['stack'] = true;
         this.source.push(
-            "var cond = stack[vm.sp--]; if (cond === vm.", condition, "Obj) {vm.pc = ", destination, "; bytecodes -= ", distance, "; ");
-        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", destination,"; else ");
+            "var cond = stack[vm.sp--]; if (cond === vm.", condition, "Obj) {vm.pc = ", destination, "; ");
+        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return; else ");
         this.source.push("continue}\n",
-            "else if (cond !== vm.", !condition, "Obj) {vm.sp++; vm.pc = ", this.pc, "; vm.send(vm.specialObjects[25], 0, false); return bytecodes + ", this.pc, "}\n");
+            "else if (cond !== vm.", !condition, "Obj) {vm.sp++; vm.pc = ", this.pc, "; vm.send(vm.specialObjects[25], 0, false); return}\n");
         this.needsLabel[this.pc] = true; // for coming back after #mustBeBoolean send
         this.needsLabel[destination] = true; // obviously
         if (destination > this.endPC) this.endPC = destination;
@@ -514,33 +522,38 @@ to single-step.
             //case 0xC0: return this.popNandPushIfOK(2, this.objectAt(true,true,false)); // at:
             //case 0xC1: return this.popNandPushIfOK(3, this.objectAtPut(true,true,false)); // at:put:
             case 0xC2: // size
+                this.needsVar['stack'] = true;
                 this.source.push(
                     "if (stack[vm.sp].sqClass === vm.specialObjects[7]) stack[vm.sp] = stack[vm.sp].pointersSize();\n",
                     "else if (stack[vm.sp].sqClass === vm.specialObjects[6]) stack[vm.sp] = stack[vm.sp].bytesSize();\n",
-                    "else { vm.pc = ", this.pc, "; vm.sendSpecial(18); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "; }\n");
+                    "else { vm.pc = ", this.pc, "; vm.sendSpecial(18); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return; }\n");
                 this.needsLabel[this.pc] = true;
                 return;
             //case 0xC3: return false; // next
             //case 0xC4: return false; // nextPut:
             //case 0xC5: return false; // atEnd
             case 0xC6: // ==
+                this.needsVar['stack'] = true;
                 this.source.push("var cond = stack[vm.sp-1] === stack[vm.sp];\nstack[--vm.sp] = cond ? vm.trueObj : vm.falseObj;\n");
                 return;
             case 0xC7: // class
+                this.needsVar['stack'] = true;
                 this.source.push("stack[vm.sp] = typeof stack[vm.sp] === 'number' ? vm.specialObjects[5] : stack[vm.sp].sqClass;\n");
                 return;
             case 0xC8: // blockCopy:
+                this.needsVar['rcvr'] = true;
                 this.source.push(
                     "vm.pc = ", this.pc, "; if (!vm.primHandler.quickSendOther(rcvr, ", (byte & 0x0F), ")) ",
-                    "{vm.sendSpecial(", ((byte & 0x0F) + 16), "); return bytecodes + ", this.pc, "}\n");
+                    "{vm.sendSpecial(", ((byte & 0x0F) + 16), "); return}\n");
                 this.needsLabel[this.pc] = true;        // for send
                 this.needsLabel[this.pc + 2] = true;    // for start of block
                 return;
             case 0xC9: // value
             case 0xCA: // value:
             case 0xCB: // do:
+                this.needsVar['rcvr'] = true;
                 this.source.push(
-                    "vm.pc = ", this.pc, "; if (!vm.primHandler.quickSendOther(rcvr, ", (byte & 0x0F), ")) vm.sendSpecial(", ((byte & 0x0F) + 16), "); return bytecodes + ", this.pc, ";\n");
+                    "vm.pc = ", this.pc, "; if (!vm.primHandler.quickSendOther(rcvr, ", (byte & 0x0F), ")) vm.sendSpecial(", ((byte & 0x0F) + 16), "); return;\n");
                 this.needsLabel[this.pc] = true;
                 return;
             //case 0xCC: return false; // new
@@ -549,11 +562,12 @@ to single-step.
             //case 0xCF: return false; // y
         }
         // generic version for the bytecodes not yet handled above
+        this.needsVar['rcvr'] = true;
+        this.needsVar['context'] = true;
         this.source.push(
             "vm.pc = ", this.pc, "; if (!vm.primHandler.quickSendOther(rcvr, ", (byte & 0x0F), "))",
             " vm.sendSpecial(", ((byte & 0x0F) + 16), ");\n",
-            "if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, ";\n",
-            "if (vm.pc !== ", this.pc, ") throw Error('Huh?');\n");
+            "if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return;\n");
         this.needsBreak = false; // already checked
         // if falling back to a full send we need a label for coming back
         this.needsLabel[this.pc] = true;
@@ -566,91 +580,101 @@ to single-step.
         this.needsLabel[this.pc] = true;
         switch (byte) {
             case 0xB0: // PLUS +
+                this.needsVar['stack'] = true;
                 this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
                 "   stack[--vm.sp] = vm.primHandler.signed32BitIntegerFor(a + b);\n",
-                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(0); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
+                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(0); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
                 return;
             case 0xB1: // MINUS -
+                this.needsVar['stack'] = true;
                 this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
                 "   stack[--vm.sp] = vm.primHandler.signed32BitIntegerFor(a - b);\n",
-                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(1); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
+                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(1); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
                 return;
             case 0xB2: // LESS <
+                this.needsVar['stack'] = true;
                 this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
                 "   stack[--vm.sp] = a < b ? vm.trueObj : vm.falseObj;\n",
-                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(2); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
+                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(2); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
                 return;
             case 0xB3: // GRTR >
+                this.needsVar['stack'] = true;
                 this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
                 "   stack[--vm.sp] = a > b ? vm.trueObj : vm.falseObj;\n",
-                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(3); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
+                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(3); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
                 return;
             case 0xB4: // LEQ <=
+                this.needsVar['stack'] = true;
                 this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
                 "   stack[--vm.sp] = a <= b ? vm.trueObj : vm.falseObj;\n",
-                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(4); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
+                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(4); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
                 return;
             case 0xB5: // GEQ >=
+                this.needsVar['stack'] = true;
                 this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
                 "   stack[--vm.sp] = a >= b ? vm.trueObj : vm.falseObj;\n",
-                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(5); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
+                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(5); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
                 return;
             case 0xB6: // EQU =
+                this.needsVar['stack'] = true;
                 this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
                 "   stack[--vm.sp] = a === b ? vm.trueObj : vm.falseObj;\n",
                 "} else if (a === b && a.float === a.float) {\n",   // NaN check
                 "   stack[--vm.sp] = vm.trueObj;\n",
-                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(6); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
+                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(6); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
                 return;
             case 0xB7: // NEQ ~=
+                this.needsVar['stack'] = true;
                 this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
                 "   stack[--vm.sp] = a !== b ? vm.trueObj : vm.falseObj;\n",
                 "} else if (a === b && a.float === a.float) {\n",   // NaN check
                 "   stack[--vm.sp] = vm.falseObj;\n",
-                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(7); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, "}\n");
+                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(7); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
                 return;
             case 0xB8: // TIMES *
-                this.source.push("vm.success = true; vm.resultIsFloat = false; if(!vm.pop2AndPushNumResult(vm.stackIntOrFloat(1) * vm.stackIntOrFloat(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(8); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; vm.resultIsFloat = false; if(!vm.pop2AndPushNumResult(vm.stackIntOrFloat(1) * vm.stackIntOrFloat(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(8); return}\n");
                 return;
             case 0xB9: // DIV /
-                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.quickDivide(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(9); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.quickDivide(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(9); return}\n");
                 return;
             case 0xBA: // MOD \
-                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.mod(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(10); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.mod(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(10); return}\n");
                 return;
             case 0xBB:  // MakePt int@int
-                this.source.push("vm.success = true; if(!vm.primHandler.primitiveMakePoint(1, true)) { vm.pc = ", this.pc, "; vm.sendSpecial(11); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if(!vm.primHandler.primitiveMakePoint(1, true)) { vm.pc = ", this.pc, "; vm.sendSpecial(11); return}\n");
                 return;
             case 0xBC: // bitShift:
-                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.safeShift(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(12); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.safeShift(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(12); return}\n");
                 return;
             case 0xBD: // Divide //
-                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.div(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(13); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.div(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(13); return}\n");
                 return;
             case 0xBE: // bitAnd:
-                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.stackInteger(1) & vm.stackInteger(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(14); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.stackInteger(1) & vm.stackInteger(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(14); return}\n");
                 return;
             case 0xBF: // bitOr:
-                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.stackInteger(1) | vm.stackInteger(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(15); return bytecodes + ", this.pc, "}\n");
+                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.stackInteger(1) | vm.stackInteger(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(15); return}\n");
                 return;
         }
     },
     generateSend: function(prefix, num, suffix, numArgs, superSend) {
         if (this.debug) this.generateDebugCode("send " + (prefix === "lit[" ? this.method.pointers[num].bytesAsString() : "..."));
         this.generateLabel();
+        this.needsVar[prefix] = true;
+        this.needsVar['context'] = true;
         // set pc, activate new method, and return to main loop
         // unless the method was a successfull primitive call (no context change)
         this.source.push(
             "vm.pc = ", this.pc, "; vm.send(", prefix, num, suffix, ", ", numArgs, ", ", superSend, "); ",
-            "if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return bytecodes + ", this.pc, ";\n");
+            "if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return;\n");
         this.needsBreak = false; // already checked
         // need a label for coming back after send
         this.needsLabel[this.pc] = true;
@@ -658,6 +682,7 @@ to single-step.
     generateClosureTemps: function(count, popValues) {
         if (this.debug) this.generateDebugCode("closure temps");
         this.generateLabel();
+        this.needsVar['stack'] = true;
         this.source.push("var array = vm.instantiateClass(vm.specialObjects[7], ", count, ");\n");
         if (popValues) {
             for (var i = 0; i < count; i++)
@@ -672,6 +697,7 @@ to single-step.
             to = from + blockSize;
         if (this.debug) this.generateDebugCode("push closure(" + from + "-" + (to-1) + "): " + numCopied + " copied, " + numArgs + " args");
         this.generateLabel();
+        this.needsVar['stack'] = true;
         this.source.push(
             "var closure = vm.instantiateClass(vm.specialObjects[36], ", numCopied, ");\n",
             "closure.pointers[0] = context; vm.reclaimableContextCount = 0;\n",
@@ -685,8 +711,7 @@ to single-step.
             this.source.push("stack[++vm.sp] = closure;\n");
         }
         this.source.push("vm.pc = ", to, ";\n");
-        this.source.push("bytecodes -= ", blockSize, ";\n");
-        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + ", to,";\n");
+        if (this.singleStep) this.source.push("if (vm.breakOutOfInterpreter) return;\n");
         this.source.push("continue;\n");
         this.needsBreak = false; // already checked
         this.needsLabel[from] = true;   // initial pc when activated
@@ -696,19 +721,32 @@ to single-step.
     generateCallPrimitive: function(index) {
         if (this.debug) this.generateDebugCode("call primitive " + index);
         this.generateLabel();
-        // call prim is actually a no-op
-        if (this.pc !== 3) throw Error("call primitive bytecode not expected here");
+        if (this.method.bytes[this.pc] === 0x81)  {// extended store
+            this.needsVar['stack'] = true;
+            this.source.push("if (vm.primFailCode) {stack[vm.sp] = vm.getErrorObjectFromPrimFailCode(); vm.primFailCode = 0;}\n");
+        }
+    },
+    generateDirty: function(target, arg) {
+        switch(target) {
+            case "inst[": this.source.push("rcvr.dirty = true;\n"); break;
+            case "lit[": this.source.push(target, arg, "].dirty = true;\n"); break;
+            case "temp[": break;
+            default:
+                throw Error("unexpected target " + target);
+        }
     },
     generateLabel: function() {
         // remember label position for deleteUnneededLabels()
-        this.sourceLabels[this.prevPC] = this.source.length;
-        this.source.push("case ", this.prevPC, ":\n");
+        if (this.prevPC) {
+            this.sourceLabels[this.prevPC] = this.source.length;
+            this.source.push("case ", this.prevPC, ":\n");
+        }
         this.prevPC = this.pc;
     },
     generateDebugCode: function(comment) {
         // single-step for previous instructiuon
         if (this.needsBreak) {
-             this.source.push("if (vm.breakOutOfInterpreter) return bytecodes + (vm.pc = ", this.prevPC, ");\n");
+             this.source.push("if (vm.breakOutOfInterpreter) {vm.pc = ", this.prevPC, "; return}\n");
              this.needsLabel[this.prevPC] = true;
         }
         // comment for this instructiuon
@@ -726,10 +764,25 @@ to single-step.
     },
     deleteUnneededLabels: function() {
         // switch statement is more efficient with fewer labels
+        var hasAnyLabel = false;
         for (var i in this.sourceLabels)
-            if (!this.needsLabel[i])
-                for (var j = 0; j < 3; j++)
-                    this.source[this.sourceLabels[i] + j] = "";
+            if (this.needsLabel[i])
+                hasAnyLabel = true;
+            else for (var j = 0; j < 3; j++)
+               this.source[this.sourceLabels[i] + j] = "";
+        if (!hasAnyLabel) {
+            this.source[this.sourcePos['loop-start']] = "";
+            this.source[this.sourcePos['loop-end']] = "";
+        }
+    },
+    deleteUnneededVariables: function() {
+        if (this.needsVar['stack']) this.needsVar['context'] = true;
+        if (this.needsVar['inst[']) this.needsVar['rcvr'] = true;
+        for (var i = 0; i < this.allVars.length; i++) {
+            var v = this.allVars[i];
+            if (!this.needsVar[v])
+                this.source[this.sourcePos[v]] = "";
+        }
     },
 });
 

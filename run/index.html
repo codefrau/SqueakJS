@@ -16,6 +16,13 @@
             fullscreen: true,
             spinner: sqSpinner,
             appName: imageName && imageName.replace(/\.image$/, ""),
+            onQuit: function(vm, display, options) {
+                display.showBanner(SqueakJS.appName + " stopped.");
+                setTimeout(function() {
+                    location.hash = ""; //  show index page
+                    location.href = location.href.replace(/\?.*/, "");
+                }, 0);
+            },
         });
     }
     function exportFile(a) {
@@ -73,7 +80,7 @@
     }
     window.onload = function() {
         // if we have an image or zip in hash then we run Squeak with the options provided in the url
-        if (location.hash.match(/(\.image(\W|$)|\Wzip=)/)) {
+        if ((location.hash || location.search).match(/(\.image(\W|$)|\Wzip=)/)) {
             return runSqueak();
         }
         // otherwise, we generate the text to display

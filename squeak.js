@@ -998,6 +998,7 @@ SqueakJS.runImage = function(buffer, name, display, options) {
             display.runFor = function(milliseconds) {
                 var stoptime = Date.now() + milliseconds;
                 do {
+                    if (display.quitFlag) return;
                     display.runNow();
                 } while (Date.now() < stoptime);
             };
@@ -1008,7 +1009,7 @@ SqueakJS.runImage = function(buffer, name, display, options) {
 };
 
 function processOptions(options) {
-    var search = window.location.hash.slice(1),
+    var search = (location.hash || location.search).slice(1),
         args = search && search.split("&");
     if (args) for (var i = 0; i < args.length; i++) {
         var keyAndVal = args[i].split("="),
@@ -1123,6 +1124,7 @@ function downloadFile(file, display, options, thenDo) {
     var rq = new XMLHttpRequest(),
         proxy = options.proxy || "";
     rq.open('GET', proxy + file.url);
+    rq.setRequestHeader("X-Requested-With", "XMLHttpRequest");
     rq.responseType = 'arraybuffer';
     rq.onprogress = function(e) {
         if (e.lengthComputable) display.showProgress(e.loaded / e.total);
@@ -1140,6 +1142,7 @@ function downloadFile(file, display, options, thenDo) {
         var proxy = 'https://crossorigin.me/',
             retry = new XMLHttpRequest();
         retry.open('GET', proxy + file.url);
+        retry.setRequestHeader("X-Requested-With", "XMLHttpRequest");
         retry.responseType = rq.responseType;
         retry.onprogress = rq.onprogress;
         retry.onload = rq.onload;

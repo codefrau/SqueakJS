@@ -2109,12 +2109,6 @@ Object.subclass('Squeak.Object',
     sameFormatAs: function(obj) {
         return this.sameFormats(this._format, obj._format);
     },
-    classSameShapeAs: function(obj) {
-        // can we change obj's class to this?
-        return this.sameFormats(this.classInstFormat(), obj._format) &&
-            this.isCompact === obj.sqClass.isCompact &&
-            this.classInstSize() === obj.sqClass.classInstSize();
-    },
 },
 'printing', {
     toString: function() {
@@ -2696,10 +2690,6 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
     },
     sameFormats: function(a, b) {
         return a < 16 ? a === b : (a & 0xF8) === (b & 0xF8);
-    },
-    classSameShapeAs: function(obj) {
-        return this.sameFormats(this.classInstFormat(), obj._format) &&
-            this.classInstSize() === obj.sqClass.classInstSize();
     },
 },
 'as class', {
@@ -5409,7 +5399,12 @@ Object.subclass('Squeak.Primitives',
         var cls = this.stackNonInteger(1),
             obj = this.stackNonInteger(0);
         if (!this.success) return false;
-        if (!cls.classSameShapeAs(obj)) return false;
+        // we don't handle differing formats here, image will
+        // try the more general primitiveChangeClass
+        if (cls.classInstFormat() !== obj.sqClass.classInstFormat() ||
+            cls.isCompact !== obj.sqClass.isCompact ||
+            cls.classInstSize() !== obj.sqClass.classInstSize())
+                return false;
         obj.sqClass = cls;
         return this.popNIfOK(argCount);
     },

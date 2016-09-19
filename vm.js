@@ -2109,12 +2109,6 @@ Object.subclass('Squeak.Object',
     sameFormatAs: function(obj) {
         return this.sameFormats(this._format, obj._format);
     },
-    sameShapeAs: function(obj) {
-        // can we change my class to that of obj?
-        return this.sameFormatAs(obj) &&
-            this.sqClass.isCompact === obj.sqClass.isCompact &&
-            this.sqClass.classInstSize() === obj.sqClass.classInstSize();
-    },
     classSameShapeAs: function(obj) {
         // can we change obj's class to this?
         return this.sameFormats(this.classInstFormat(), obj._format) &&
@@ -2702,10 +2696,6 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
     },
     sameFormats: function(a, b) {
         return a < 16 ? a === b : (a & 0xF8) === (b & 0xF8);
-    },
-    sameShapeAs: function(obj) {
-        return this.sameFormatAs(obj) &&
-            this.sqClass.classInstSize() === obj.sqClass.classInstSize();
     },
     classSameShapeAs: function(obj) {
         return this.sameFormats(this.classInstFormat(), obj._format) &&
@@ -5388,7 +5378,29 @@ Object.subclass('Squeak.Primitives',
         var rcvr = this.stackNonInteger(1),
             arg = this.stackNonInteger(0);
         if (!this.success) return false;
-        if (!rcvr.sameShapeAs(arg)) return false;
+        if (rcvr.sqClass.isCompact !== arg.sqClass.isCompact) return false;
+        if (rcvr.isPointers()) {
+            if (!arg.isPointers()) return false;
+            if (rcvr.sqClass.classInstSize() !== arg.sqClass.classInstSize())
+                return false;
+        } else {
+            if (arg.isPointers()) return false;
+            var hasBytes = rcvr.isBytes(),
+                needBytes = arg.isBytes();
+            if (hasBytes && !needBytes) {
+                if (rcvr.bytes) {
+                    if (rcvr.bytes.length & 3) return false;
+                    rcvr.words = new Uint32Array(rcvr.bytes.buffer);
+                    delete rcvr.bytes;
+                }
+            } else if (!hasBytes && needBytes) {
+                if (rcvr.words) {
+                    rcvr.bytes = new Uint8Array(rcvr.words.buffer);
+                    delete rcvr.words;
+                }
+            }
+        }
+        rcvr._format = arg._format;
         rcvr.sqClass = arg.sqClass;
         return this.popNIfOK(argCount);
     },

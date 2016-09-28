@@ -1015,10 +1015,8 @@ Object.subclass('Squeak.Image',
                     segmentBytes = readWord(),
                     segmentBytesHi = readWord();
                 //  if segmentBytes is zero, the end of the image has been reached
-                if (segmentBytes === 0) {
-                    if (deltaWords !== 0x4A000003) throw Error("Magic number at image end not found");
-                } else {
-                    var deltaBytes = deltaWords * 4;
+                if (segmentBytes !== 0) {
+                    var deltaBytes = deltaWordsHi & 0xFF000000 ? (deltaWords & 0x00FFFFFF) * 4 : 0;
                     segmentEnd += segmentBytes;
                     addressOffset += deltaBytes;
                     skippedBytes += 16 + deltaBytes;

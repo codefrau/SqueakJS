@@ -1702,8 +1702,10 @@ Object.subclass('Squeak.Image',
         // read class table pages
         for (var p = 0; p < 4096; p++) {
             var page = oopMap[classPages[p]];
+            if (page.oop) page = rawBits[page.oop]; // page was not properly hidden
             if (page.length === 1024) for (var i = 0; i < 1024; i++) {
                 var entry = oopMap[page[i]];
+                if (!entry) throw Error("Invalid class table entry (oop " + page[i] + ")");
                 if (entry !== nil) {
                     var classIndex = p * 1024 + i;
                     classes[classIndex] = entry;

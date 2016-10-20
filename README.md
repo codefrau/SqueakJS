@@ -101,6 +101,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2016-10-20: 0.9.4 fixes
     2016-09-08: 0.9.3 add partial GC (5x faster become / allInstances)
     2016-08-25: 0.9.2 add keyboard on iOS
     2016-08-03: 0.9.1 fixes

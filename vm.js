@@ -39,7 +39,7 @@ try {
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 0.9.3",
+    vmVersion: "SqueakJS 0.9.4",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -1015,10 +1015,8 @@ Object.subclass('Squeak.Image',
                     segmentBytes = readWord(),
                     segmentBytesHi = readWord();
                 //  if segmentBytes is zero, the end of the image has been reached
-                if (segmentBytes === 0) {
-                    if (deltaWords !== 0x4A000003) throw Error("Magic number at image end not found");
-                } else {
-                    var deltaBytes = deltaWords * 4;
+                if (segmentBytes !== 0) {
+                    var deltaBytes = deltaWordsHi & 0xFF000000 ? (deltaWords & 0x00FFFFFF) * 4 : 0;
                     segmentEnd += segmentBytes;
                     addressOffset += deltaBytes;
                     skippedBytes += 16 + deltaBytes;
@@ -1704,8 +1702,10 @@ Object.subclass('Squeak.Image',
         // read class table pages
         for (var p = 0; p < 4096; p++) {
             var page = oopMap[classPages[p]];
+            if (page.oop) page = rawBits[page.oop]; // page was not properly hidden
             if (page.length === 1024) for (var i = 0; i < 1024; i++) {
                 var entry = oopMap[page[i]];
+                if (!entry) throw Error("Invalid class table entry (oop " + page[i] + ")");
                 if (entry !== nil) {
                     var classIndex = p * 1024 + i;
                     classes[classIndex] = entry;
@@ -2108,18 +2108,6 @@ Object.subclass('Squeak.Object',
     },
     sameFormatAs: function(obj) {
         return this.sameFormats(this._format, obj._format);
-    },
-    sameShapeAs: function(obj) {
-        // can we change my class to that of obj?
-        return this.sameFormatAs(obj) &&
-            this.sqClass.isCompact === obj.sqClass.isCompact &&
-            this.sqClass.classInstSize() === obj.sqClass.classInstSize();
-    },
-    classSameShapeAs: function(obj) {
-        // can we change obj's class to this?
-        return this.sameFormats(this.classInstFormat(), obj._format) &&
-            this.isCompact === obj.sqClass.isCompact &&
-            this.classInstSize() === obj.sqClass.classInstSize();
     },
 },
 'printing', {
@@ -2702,14 +2690,6 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
     },
     sameFormats: function(a, b) {
         return a < 16 ? a === b : (a & 0xF8) === (b & 0xF8);
-    },
-    sameShapeAs: function(obj) {
-        return this.sameFormatAs(obj) &&
-            this.sqClass.classInstSize() === obj.sqClass.classInstSize();
-    },
-    classSameShapeAs: function(obj) {
-        return this.sameFormats(this.classInstFormat(), obj._format) &&
-            this.classInstSize() === obj.sqClass.classInstSize();
     },
 },
 'as class', {
@@ -5388,7 +5368,29 @@ Object.subclass('Squeak.Primitives',
         var rcvr = this.stackNonInteger(1),
             arg = this.stackNonInteger(0);
         if (!this.success) return false;
-        if (!rcvr.sameShapeAs(arg)) return false;
+        if (rcvr.sqClass.isCompact !== arg.sqClass.isCompact) return false;
+        if (rcvr.isPointers()) {
+            if (!arg.isPointers()) return false;
+            if (rcvr.sqClass.classInstSize() !== arg.sqClass.classInstSize())
+                return false;
+        } else {
+            if (arg.isPointers()) return false;
+            var hasBytes = rcvr.isBytes(),
+                needBytes = arg.isBytes();
+            if (hasBytes && !needBytes) {
+                if (rcvr.bytes) {
+                    if (rcvr.bytes.length & 3) return false;
+                    rcvr.words = new Uint32Array(rcvr.bytes.buffer);
+                    delete rcvr.bytes;
+                }
+            } else if (!hasBytes && needBytes) {
+                if (rcvr.words) {
+                    rcvr.bytes = new Uint8Array(rcvr.words.buffer);
+                    delete rcvr.words;
+                }
+            }
+        }
+        rcvr._format = arg._format;
         rcvr.sqClass = arg.sqClass;
         return this.popNIfOK(argCount);
     },
@@ -5397,7 +5399,12 @@ Object.subclass('Squeak.Primitives',
         var cls = this.stackNonInteger(1),
             obj = this.stackNonInteger(0);
         if (!this.success) return false;
-        if (!cls.classSameShapeAs(obj)) return false;
+        // we don't handle differing formats here, image will
+        // try the more general primitiveChangeClass
+        if (cls.classInstFormat() !== obj.sqClass.classInstFormat() ||
+            cls.isCompact !== obj.sqClass.isCompact ||
+            cls.classInstSize() !== obj.sqClass.classInstSize())
+                return false;
         obj.sqClass = cls;
         return this.popNIfOK(argCount);
     },
@@ -6836,7 +6843,7 @@ Object.subclass('Squeak.Primitives',
             fileNames = this.display.droppedFiles || [];
         if (index < 1 || index > fileNames.length) return false;
         var result = this.makeStString(this.filenameToSqueak(fileNames[index - 1]));
-        return this.popNandPushIfOK(argCount, result);
+        return this.popNandPushIfOK(argCount+1, result);
     },
 },
 'SoundPlugin', {
@@ -7363,7 +7370,7 @@ Object.subclass('Squeak.Primitives',
         // we're inside an active callback, get block
         var callback = this.js_activeCallback;
         if (!callback) return this.js_setError("No active callback");
-        return this.popNandPushIfOK(argCount, callback.block);
+        return this.popNandPushIfOK(argCount+1, callback.block);
     },
     js_primitiveGetActiveCallbackArgs: function(argCount) {
         // we're inside an active callback, get args
@@ -7373,7 +7380,7 @@ Object.subclass('Squeak.Primitives',
         try {
             // make array with expected number of arguments for block
             var array = this.makeStArray(callback.args, proxyClass);
-            return this.popNandPushIfOK(argCount, array);
+            return this.popNandPushIfOK(argCount+1, array);
         } catch(err) {
             return this.js_setError(err.message);
         }

@@ -6843,7 +6843,7 @@ Object.subclass('Squeak.Primitives',
             fileNames = this.display.droppedFiles || [];
         if (index < 1 || index > fileNames.length) return false;
         var result = this.makeStString(this.filenameToSqueak(fileNames[index - 1]));
-        return this.popNandPushIfOK(argCount, result);
+        return this.popNandPushIfOK(argCount+1, result);
     },
 },
 'SoundPlugin', {
@@ -7370,7 +7370,7 @@ Object.subclass('Squeak.Primitives',
         // we're inside an active callback, get block
         var callback = this.js_activeCallback;
         if (!callback) return this.js_setError("No active callback");
-        return this.popNandPushIfOK(argCount, callback.block);
+        return this.popNandPushIfOK(argCount+1, callback.block);
     },
     js_primitiveGetActiveCallbackArgs: function(argCount) {
         // we're inside an active callback, get args
@@ -7380,7 +7380,7 @@ Object.subclass('Squeak.Primitives',
         try {
             // make array with expected number of arguments for block
             var array = this.makeStArray(callback.args, proxyClass);
-            return this.popNandPushIfOK(argCount, array);
+            return this.popNandPushIfOK(argCount+1, array);
         } catch(err) {
             return this.js_setError(err.message);
         }

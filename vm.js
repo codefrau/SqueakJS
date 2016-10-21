@@ -1247,6 +1247,8 @@ Object.subclass('Squeak.Image',
             }
             // reset partial GC flag
             if (next.dirty) next.dirty = false;
+            // make sure class is in class table
+            if (next.sqClass.hash === 0) this.enterIntoClassTable(next.sqClass);
             // if marked, continue with next object
             if (next.mark) {
                 obj = next;

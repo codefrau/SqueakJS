@@ -2316,11 +2316,16 @@ Object.subclass('Squeak.Object',
         return ((spec >> 10) & 0xC0) + ((spec >> 1) & 0x3F) - 1;
     },
     instVarNames: function() {
-        var index = this.pointers.length > 12 ? 4 :
-            this.pointers.length > 9 ? 3 : 4; // index changed in newer images
-        return (this.pointers[index].pointers || []).map(function(each) {
-            return each.bytesAsString();
-        });
+        // index changed from 4 to 3 in newer images
+        for (var index = 3; index <= 4; index++) {
+            var varNames = this.pointers[index].pointers;
+            if (varNames && varNames.length && varNames[0].bytes) {
+                return varNames.map(function(each) {
+                    return each.bytesAsString();
+                });
+            }
+        }
+        return [];
     },
     allInstVarNames: function() {
         var superclass = this.superclass();

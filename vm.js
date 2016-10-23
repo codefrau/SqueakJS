@@ -5316,7 +5316,7 @@ Object.subclass('Squeak.Primitives',
         return this.vm.image.enterIntoClassTable(obj);
     },
     newObjectHash: function(obj) {
-        return Math.floor(Math.random() * 0x3FFFFFFE) + 1;
+        return Math.floor(Math.random() * 0x3FFFFE) + 1;
     },
     primitiveSizeInBytesOfInstance: function(argCount) {
         if (argCount > 1) return false;

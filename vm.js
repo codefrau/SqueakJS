@@ -1247,8 +1247,6 @@ Object.subclass('Squeak.Image',
             }
             // reset partial GC flag
             if (next.dirty) next.dirty = false;
-            // make sure class is in class table
-            if (next.sqClass.hash === 0) this.enterIntoClassTable(next.sqClass);
             // if marked, continue with next object
             if (next.mark) {
                 obj = next;
@@ -1759,19 +1757,23 @@ Object.subclass('Squeak.Image',
         }
         return char;
     },
-    maxClassIndex: function() {
-        var index = 1024,
-            table = this.classTable;
-        for (var key in table) {
-            var classID = table[key].hash;
-            if (classID > index) index = classID;
+    ensureClassesInTable: function() {
+        // make sure all classes are in class table
+        // answer number of class pages
+        var obj = this.firstOldObject;
+        var maxIndex = 1024; // at least one page
+        while (obj) {
+            var cls = obj.sqClass;
+            if (cls.hash === 0) this.enterIntoClassTable(cls);
+            if (cls.hash > maxIndex) maxIndex = cls.hash;
+            if (this.classTable[cls.hash] !== cls) throw Error("Class not in class table");
+            obj = obj.nextObject;
         }
-        return index;
+        return (maxIndex >> 10) + 1;
     },
-    classTableBytes: function() {
+    classTableBytes: function(numPages) {
         // space needed for master table and minor pages
-        var pages = (this.maxClassIndex() >> 10) + 1;
-        return (4 + 4104 + pages * (4 + 1024)) * 4;
+        return (4 + 4104 + numPages * (4 + 1024)) * 4;
     },
     writeFreeLists: function(data, pos, littleEndian, oopOffset) {
         // we fake an empty free lists object
@@ -1780,10 +1782,9 @@ Object.subclass('Squeak.Image',
         pos += 32 * 4;  // 32 zeros
         return pos;
     },
-    writeClassTable: function(data, pos, littleEndian, objToOop) {
+    writeClassTable: function(data, pos, littleEndian, objToOop, numPages) {
         // write class tables as Spur expects them, faking their oops
-        var pages = (this.maxClassIndex() >> 10) + 1,
-            nilFalseTrueBytes = 3 * 16,
+        var nilFalseTrueBytes = 3 * 16,
             freeListBytes = 8 + 32 * 4,
             majorTableSlots = 4096 + 8,         // class pages plus 8 hiddenRootSlots
             minorTableSlots = 1024,
@@ -1795,13 +1796,13 @@ Object.subclass('Squeak.Image',
         data.setUint32(pos,      0xFF000000, littleEndian); pos += 4;
         data.setUint32(pos,      0x02000010, littleEndian); pos += 4;
         data.setUint32(pos,      0xFF000000, littleEndian); pos += 4;
-        for (var p = 0; p < pages; p++) {
+        for (var p = 0; p < numPages; p++) {
             data.setUint32(pos, firstPageOop + p * minorTableBytes, littleEndian); pos += 4;
         }
-        pos += (majorTableSlots - pages) * 4;  // rest is nil
+        pos += (majorTableSlots - numPages) * 4;  // rest is nil
         // minor tables
         var classID = 0;
-        for (var p = 0; p < pages; p++) {
+        for (var p = 0; p < numPages; p++) {
             data.setUint32(pos, minorTableSlots, littleEndian); pos += 4;
             data.setUint32(pos,      0xFF000000, littleEndian); pos += 4;
             data.setUint32(pos,      0x02000010, littleEndian); pos += 4;
@@ -1826,7 +1827,8 @@ Object.subclass('Squeak.Image',
         var headerSize = 64,
             trailerSize = 16,
             freeListsSize = 136,
-            hiddenSize = freeListsSize + this.classTableBytes(),
+            numPages = this.ensureClassesInTable(),
+            hiddenSize = freeListsSize + this.classTableBytes(numPages),
             data = new DataView(new ArrayBuffer(headerSize + hiddenSize + this.oldSpaceBytes + trailerSize)),
             littleEndian = true,
             start = Date.now(),
@@ -1864,7 +1866,7 @@ Object.subclass('Squeak.Image',
         pos = obj.writeTo(data, pos, littleEndian, objToOop); obj = obj.nextObject; n++; // write false
         pos = obj.writeTo(data, pos, littleEndian, objToOop); obj = obj.nextObject; n++; // write true
         pos = this.writeFreeLists(data, pos, littleEndian, objToOop); // write hidden free list
-        pos = this.writeClassTable(data, pos, littleEndian, objToOop); // write hidden class table
+        pos = this.writeClassTable(data, pos, littleEndian, objToOop, numPages); // write hidden class table
         while (obj) {
             pos = obj.writeTo(data, pos, littleEndian, objToOop);
             obj = obj.nextObject;

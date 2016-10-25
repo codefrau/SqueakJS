@@ -703,7 +703,8 @@ function createSqueakDisplay(canvas, options) {
     if (display.cursorCanvas) {
         var canvasStyle = window.getComputedStyle(canvas);
         display.cursorCanvas.style.display = "block";
-        display.cursorCanvas.style.position = canvasStyle.position; // absolute or fixed
+	if (canvasStyle.position === "absolute") display.cursorCanvas.style.position = "absolute";
+	else display.cursorCanvas.style.position = "fixed";
         display.cursorCanvas.style.cursor = "none";
         display.cursorCanvas.style.background = "transparent";
         display.cursorCanvas.style.pointerEvents = "none";

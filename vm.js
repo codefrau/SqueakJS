@@ -5247,13 +5247,6 @@ Object.subclass('Squeak.Primitives',
             this.atPutCache.push({});
         }
     },
-    clearAtCache: function() { //clear at-cache pointers (prior to GC)
-        this.nonCachedInfo.array = null;
-        for (var i= 0; i < this.atCacheSize; i++) {
-            this.atCache[i].array = null;
-            this.atPutCache[i].array = null;
-        }
-    },
     makeAtCacheInfo: function(atOrPutCache, atOrPutSelector, array, convertChars, includeInstVars) {
         //Make up an info object and store it in the atCache or the atPutCache.
         //If it's not cacheable (not a non-super send of at: or at:put:)

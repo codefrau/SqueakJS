@@ -1496,12 +1496,18 @@ Object.subclass('Squeak.Image',
         while (obj) {
             // mutate the class
             var mut = mutations[obj.sqClass.oop];
-            if (mut) obj.sqClass = mut;
+            if (mut) {
+                obj.sqClass = mut;
+                if (mut.oop < 0) obj.dirty = true;
+            }
             // and mutate body pointers
             var body = obj.pointers;
             if (body) for (var j = 0; j < body.length; j++) {
                 mut = mutations[body[j].oop];
-                if (mut) body[j] = mut;
+                if (mut) {
+                    body[j] = mut;
+                    if (mut.oop < 0) obj.dirty = true;
+                }
             }
             obj = obj.nextObject;
         }

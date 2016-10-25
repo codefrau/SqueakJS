@@ -1331,7 +1331,6 @@ Object.subclass('Squeak.Image',
         this.allocationCount += this.newSpaceCount - young.length;
         this.youngSpaceCount = young.length;
         this.newSpaceCount = this.youngSpaceCount;
-        this.hasNewInstances = {};
         this.pgcCount++;
         this.pgcMilliseconds += Date.now() - start;
         console.log("Partial GC (" + reason+ "): " + (Date.now() - start) + " ms");
@@ -1396,22 +1395,32 @@ Object.subclass('Squeak.Image',
     appendToYoungSpace: function(objects) {
         // PartialGC: link new objects into young list
         // and give them positive oops temporarily so finalization works
-        var oop = this.lastOldObject.oop;
+        var tempOop = this.lastOldObject.oop + 1;
         for (var i = 0; i < objects.length; i++) {
             var obj = objects[i];
-            obj.oop = ++oop;
+            if (this.hasNewInstances[obj.oop]) {
+                delete this.hasNewInstances[obj.oop];
+                this.hasNewInstances[tempOop] = true;
+            }
+            obj.oop = tempOop;
             obj.nextObject = objects[i + 1];
+            tempOop++;
         }
     },
     cleanupYoungSpace: function(objects) {
         // PartialGC: After finalizing weak refs, make oops
         // in young space negative again
         var obj = objects[0],
-            oop = 0;
+            youngOop = -1;
         while (obj) {
-            obj.oop = --oop;
+            if (this.hasNewInstances[obj.oop]) {
+                delete this.hasNewInstances[obj.oop];
+                this.hasNewInstances[youngOop] = true;
+            }
+            obj.oop = youngOop;
             obj.mark = false;
             obj = obj.nextObject;
+            youngOop--;
         }
     },
 },
@@ -1524,13 +1533,15 @@ Object.subclass('Squeak.Image',
         }
     },
     nextObjectWithGC: function(reason, obj) {
+        // obj is either the last object in old space (after enumerating it)
+        // or young space (after enumerating the list returned by partialGC)
         var limit = obj.oop > 0 ? 0 : this.youngSpaceCount;
         if (this.newSpaceCount <= limit) return null; // no more objects
         if (obj.oop < 0) console.warn("nextObject called on new object (might visit multiple times)");
         return this.partialGC(reason);
     },
     nextObjectWithGCFor: function(obj, clsObj) {
-        if (this.newSpaceCount === 0 || !this.hasNewInstances[clsObj.oop]) return null;
+        if (!this.hasNewInstances[clsObj.oop]) return null;
         return this.nextObjectWithGC("instance of " + clsObj.className(), obj);
     },
     allInstancesOf: function(clsObj) {

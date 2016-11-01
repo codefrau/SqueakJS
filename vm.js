@@ -4922,12 +4922,10 @@ Object.subclass('Squeak.Primitives',
         return exponent;
     },
     ldexp: function(mantissa, exponent) {
-        // construct a float from mantissa and exponent
-        return exponent > 1023 // avoid multiplying by infinity
-            ? mantissa * Math.pow(2, 1023) * Math.pow(2, exponent - 1023)
-            : exponent < -1074 // avoid multiplying by zero
-            ? mantissa * Math.pow(2, -1074) * Math.pow(2, exponent + 1074)
-            : mantissa * Math.pow(2, exponent);
+        // construct a float as mantissa * 2 ^ exponent
+        // avoid multiplying by Infinity and Zero and rounding errors
+        // by halving the exponent (thanks to Nicolas Cellier)
+        return mantissa * Math.pow(2, Math.floor(exponent/2)) * Math.pow(2, Math.floor((exponent+1)/2));
     },
     primitiveLessThanLargeIntegers: function() {
         return this.pop2andPushBoolIfOK(this.stackSigned53BitInt(1) < this.stackSigned53BitInt(0));

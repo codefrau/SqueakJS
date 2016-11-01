@@ -367,6 +367,7 @@ function SocketPlugin() {
     primitiveSocketConnectionStatus: function(argCount) {
       if (argCount !== 1) return false;
       var handle = this.interpreterProxy.stackObjectValue(0).handle;
+      if (handle === undefined) return false;
       var status = handle.status;
       if (status === undefined) status = this.Socket_InvalidSocket;
       this.interpreterProxy.popthenPush(1, status);

@@ -1543,7 +1543,7 @@ Object.subclass('Squeak.Image',
         // or young space (after enumerating the list returned by partialGC)
         var limit = obj.oop > 0 ? 0 : this.youngSpaceCount;
         if (this.newSpaceCount <= limit) return null; // no more objects
-        if (obj.oop < 0) console.warn("nextObject called on new object (might visit multiple times)");
+        if (obj.oop < 0) this.fullGC(reason); // found a non-young new object
         return this.partialGC(reason);
     },
     nextObjectWithGCFor: function(obj, clsObj) {

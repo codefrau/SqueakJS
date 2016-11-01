@@ -1,0 +1,6 @@
+SmalltalkCISpec {
+  #loading : [],
+  #testing : {
+    #classes : [ #ArrayTest, #CollectionTest ]
+  }
+}

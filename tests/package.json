@@ -1,0 +1,20 @@
+{
+  "author": "Bert Freudenberg <bert@freudenbergs.de>",
+  "name": "squeakjs-tests",
+  "description": "SqueakJS test runner",
+  "version": "0.1.0",
+  "homepage": "https://squeak.js.org/",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bertfreudenberg/SqueakJS"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "karma": "^0.13.1",
+    "karma-chrome-launcher": "^2.0.0"
+  },
+  "scripts": {
+     "test": "karma start karma.conf.js"
+  }
+}

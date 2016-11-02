@@ -1,6 +1,17 @@
 SmalltalkCISpec {
   #loading : [],
   #testing : {
-    #classes : [ #ArrayTest, #CollectionTest ]
+    #include : {
+      #classes : [
+        #BasicBehaviorClassMetaclassTest,
+        #CollectionTest, #ArrayTest,
+        #LinkedListTest, #OrderedCollectionTest,
+        #OrderedDictionaryTest, #SequenceableCollectionTest,
+        #SortedCollectionTest,
+        #StackTest,
+        #CharacterTest, #SymbolTest,
+        #BagTest, #SetTest
+      ]
+    }
   }
 }

@@ -63,6 +63,13 @@ module.exports = function(config) {
     // available browser launchers: https://npmjs.org/browse/keyword/karma-launcher
     browsers: ['Chrome'],
 
+    customLaunchers: {
+      ChromeCanary_Travis_CI: {
+        base: 'ChromeCanary',
+        flags: ['--no-sandbox']
+      },
+    },
+
 
     // Continuous Integration mode
     // if true, Karma captures browsers, runs the tests and exits
@@ -70,6 +77,12 @@ module.exports = function(config) {
 
     // Concurrency level
     // how many browser should be started simultaneous
-    concurrency: Infinity
-  })
-}
+    concurrency: Infinity,
+
+    browserDisconnectTimeout: 60000,
+    browserNoActivityTimeout: 60000
+  });
+  if (process.env.TRAVIS) {
+    config.browsers = ['ChromeCanary_Travis_CI'];
+  }
+};

@@ -7,11 +7,11 @@ __karma__.start = function() {
     SqueakJS.runSqueak(null, canvas, {
         appName: 'SqueakJS Tests',
         url: 'base/tests/resources/',
-        files: ['test.image', 'test.changes', 'SqueakV41.sources', 'tests.ston'],
+        files: ['test.image', 'test.changes', 'SqueakV50.sources', 'tests.ston'],
         document: 'tests.st',
         forceDownload: true,
         onQuit: function() {
             __karma__.complete();
         },
     });
-}
+};

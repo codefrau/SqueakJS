@@ -1,0 +1,5 @@
+tests/node_modules
+tests/**/*.image
+tests/**/*.changes
+tests/**/*.sources
+tests/**/*.tgz

@@ -1,0 +1,14 @@
+{
+	"category" : "SqueakJS-Testing",
+	"classinstvars" : [
+		 ],
+	"classvars" : [
+		 ],
+	"commentStamp" : "",
+	"instvars" : [
+		 ],
+	"name" : "SqueakJSTestResult",
+	"pools" : [
+		 ],
+	"super" : "SCITestRunnerResult",
+	"type" : "normal" }

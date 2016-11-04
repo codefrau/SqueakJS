@@ -1,0 +1,14 @@
+{
+	"category" : "BaselineOfSqueakJSTesting",
+	"classinstvars" : [
+		 ],
+	"classvars" : [
+		 ],
+	"commentStamp" : "",
+	"instvars" : [
+		 ],
+	"name" : "BaselineOfSqueakJSTesting",
+	"pools" : [
+		 ],
+	"super" : "BaselineOf",
+	"type" : "normal" }

@@ -1,6 +1,8 @@
 SqueakJS: A Squeak VM for the Web
 =================================
 
+[![Build Status](https://travis-ci.org/bertfreudenberg/SqueakJS.svg?branch=master)](https://travis-ci.org/bertfreudenberg/SqueakJS)
+
 SqueakJS is an HTML5 runtime engine for [Squeak][squeak]</a> Smalltalk written in pure JavaScript by Bert Freudenberg.
 
 The interpreter core is in "vm.js" and plugins are in the "plugins" directory. The Just-in-Time compiler is optional ("jit.js") and can be easily replaced with your own. There are two user interfaces: the regular HTML interface lets you use SqueakJS on your own web page. Just include "squeak.js". The other interface provides a visual debugger implemented also in JavaScript using [Lively][lively]. This does not use "squeak.js" but reimplements the UI in Lively Morphic.

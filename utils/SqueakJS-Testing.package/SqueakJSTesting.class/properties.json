@@ -1,0 +1,14 @@
+{
+	"category" : "SqueakJS-Testing",
+	"classinstvars" : [
+		 ],
+	"classvars" : [
+		 ],
+	"commentStamp" : "",
+	"instvars" : [
+		 ],
+	"name" : "SqueakJSTesting",
+	"pools" : [
+		 ],
+	"super" : "SmalltalkCISqueak",
+	"type" : "normal" }

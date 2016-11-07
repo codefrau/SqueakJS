@@ -1541,6 +1541,7 @@ Object.subclass('Squeak.Image',
     nextObjectWithGC: function(reason, obj) {
         // obj is either the last object in old space (after enumerating it)
         // or young space (after enumerating the list returned by partialGC)
+        // or a random new object
         var limit = obj.oop > 0 ? 0 : this.youngSpaceCount;
         if (this.newSpaceCount <= limit) return null; // no more objects
         if (obj.oop < 0) this.fullGC(reason); // found a non-young new object

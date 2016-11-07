@@ -1175,10 +1175,6 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     processOptions(options);
     if (!imageUrl && options.image) imageUrl = options.image;
     var baseUrl = options.url || (imageUrl && imageUrl.replace(/[^\/]*$/, "")) || "";
-    if (baseUrl.match(/^http:/) && location.protocol.match(/^https/)) {
-        location.protocol = 'http';
-        return;
-    }
     fetchTemplates(options);
     var display = createSqueakDisplay(canvas, options),
         image = {url: null, name: null, image: true, data: null},

@@ -744,7 +744,7 @@ Object.extend(Squeak,
                 Squeak.filePut(path.fullname, buffer);
                 ifFound(buffer);
             } else {
-                alert("Download failed (" + this.status + ") " + url);
+                console.error("Download failed (" + this.status + ") " + url);
                 ifNotFound();
             }
         }

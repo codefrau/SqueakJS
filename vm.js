@@ -39,7 +39,7 @@ try {
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 0.9.4",
+    vmVersion: "SqueakJS 0.9.5",
     vmBuild: "unknown",                 // replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -744,7 +744,7 @@ Object.extend(Squeak,
                 Squeak.filePut(path.fullname, buffer);
                 ifFound(buffer);
             } else {
-                alert("Download failed (" + this.status + ") " + url);
+                console.error("Download failed (" + this.status + ") " + url);
                 ifNotFound();
             }
         }
@@ -1331,7 +1331,6 @@ Object.subclass('Squeak.Image',
         this.allocationCount += this.newSpaceCount - young.length;
         this.youngSpaceCount = young.length;
         this.newSpaceCount = this.youngSpaceCount;
-        this.hasNewInstances = {};
         this.pgcCount++;
         this.pgcMilliseconds += Date.now() - start;
         console.log("Partial GC (" + reason+ "): " + (Date.now() - start) + " ms");
@@ -1396,22 +1395,32 @@ Object.subclass('Squeak.Image',
     appendToYoungSpace: function(objects) {
         // PartialGC: link new objects into young list
         // and give them positive oops temporarily so finalization works
-        var oop = this.lastOldObject.oop;
+        var tempOop = this.lastOldObject.oop + 1;
         for (var i = 0; i < objects.length; i++) {
             var obj = objects[i];
-            obj.oop = ++oop;
+            if (this.hasNewInstances[obj.oop]) {
+                delete this.hasNewInstances[obj.oop];
+                this.hasNewInstances[tempOop] = true;
+            }
+            obj.oop = tempOop;
             obj.nextObject = objects[i + 1];
+            tempOop++;
         }
     },
     cleanupYoungSpace: function(objects) {
         // PartialGC: After finalizing weak refs, make oops
         // in young space negative again
         var obj = objects[0],
-            oop = 0;
+            youngOop = -1;
         while (obj) {
-            obj.oop = --oop;
+            if (this.hasNewInstances[obj.oop]) {
+                delete this.hasNewInstances[obj.oop];
+                this.hasNewInstances[youngOop] = true;
+            }
+            obj.oop = youngOop;
             obj.mark = false;
             obj = obj.nextObject;
+            youngOop--;
         }
     },
 },
@@ -1487,12 +1496,18 @@ Object.subclass('Squeak.Image',
         while (obj) {
             // mutate the class
             var mut = mutations[obj.sqClass.oop];
-            if (mut) obj.sqClass = mut;
+            if (mut) {
+                obj.sqClass = mut;
+                if (mut.oop < 0) obj.dirty = true;
+            }
             // and mutate body pointers
             var body = obj.pointers;
             if (body) for (var j = 0; j < body.length; j++) {
                 mut = mutations[body[j].oop];
-                if (mut) body[j] = mut;
+                if (mut) {
+                    body[j] = mut;
+                    if (mut.oop < 0) obj.dirty = true;
+                }
             }
             obj = obj.nextObject;
         }
@@ -1524,13 +1539,16 @@ Object.subclass('Squeak.Image',
         }
     },
     nextObjectWithGC: function(reason, obj) {
+        // obj is either the last object in old space (after enumerating it)
+        // or young space (after enumerating the list returned by partialGC)
+        // or a random new object
         var limit = obj.oop > 0 ? 0 : this.youngSpaceCount;
         if (this.newSpaceCount <= limit) return null; // no more objects
-        if (obj.oop < 0) console.warn("nextObject called on new object (might visit multiple times)");
+        if (obj.oop < 0) this.fullGC(reason); // found a non-young new object
         return this.partialGC(reason);
     },
     nextObjectWithGCFor: function(obj, clsObj) {
-        if (this.newSpaceCount === 0 || !this.hasNewInstances[clsObj.oop]) return null;
+        if (!this.hasNewInstances[clsObj.oop]) return null;
         return this.nextObjectWithGC("instance of " + clsObj.className(), obj);
     },
     allInstancesOf: function(clsObj) {
@@ -1757,19 +1775,23 @@ Object.subclass('Squeak.Image',
         }
         return char;
     },
-    maxClassIndex: function() {
-        var index = 1024,
-            table = this.classTable;
-        for (var key in table) {
-            var classID = table[key].hash;
-            if (classID > index) index = classID;
+    ensureClassesInTable: function() {
+        // make sure all classes are in class table
+        // answer number of class pages
+        var obj = this.firstOldObject;
+        var maxIndex = 1024; // at least one page
+        while (obj) {
+            var cls = obj.sqClass;
+            if (cls.hash === 0) this.enterIntoClassTable(cls);
+            if (cls.hash > maxIndex) maxIndex = cls.hash;
+            if (this.classTable[cls.hash] !== cls) throw Error("Class not in class table");
+            obj = obj.nextObject;
         }
-        return index;
+        return (maxIndex >> 10) + 1;
     },
-    classTableBytes: function() {
+    classTableBytes: function(numPages) {
         // space needed for master table and minor pages
-        var pages = (this.maxClassIndex() >> 10) + 1;
-        return (4 + 4104 + pages * (4 + 1024)) * 4;
+        return (4 + 4104 + numPages * (4 + 1024)) * 4;
     },
     writeFreeLists: function(data, pos, littleEndian, oopOffset) {
         // we fake an empty free lists object
@@ -1778,10 +1800,9 @@ Object.subclass('Squeak.Image',
         pos += 32 * 4;  // 32 zeros
         return pos;
     },
-    writeClassTable: function(data, pos, littleEndian, objToOop) {
+    writeClassTable: function(data, pos, littleEndian, objToOop, numPages) {
         // write class tables as Spur expects them, faking their oops
-        var pages = (this.maxClassIndex() >> 10) + 1,
-            nilFalseTrueBytes = 3 * 16,
+        var nilFalseTrueBytes = 3 * 16,
             freeListBytes = 8 + 32 * 4,
             majorTableSlots = 4096 + 8,         // class pages plus 8 hiddenRootSlots
             minorTableSlots = 1024,
@@ -1793,13 +1814,13 @@ Object.subclass('Squeak.Image',
         data.setUint32(pos,      0xFF000000, littleEndian); pos += 4;
         data.setUint32(pos,      0x02000010, littleEndian); pos += 4;
         data.setUint32(pos,      0xFF000000, littleEndian); pos += 4;
-        for (var p = 0; p < pages; p++) {
+        for (var p = 0; p < numPages; p++) {
             data.setUint32(pos, firstPageOop + p * minorTableBytes, littleEndian); pos += 4;
         }
-        pos += (majorTableSlots - pages) * 4;  // rest is nil
+        pos += (majorTableSlots - numPages) * 4;  // rest is nil
         // minor tables
         var classID = 0;
-        for (var p = 0; p < pages; p++) {
+        for (var p = 0; p < numPages; p++) {
             data.setUint32(pos, minorTableSlots, littleEndian); pos += 4;
             data.setUint32(pos,      0xFF000000, littleEndian); pos += 4;
             data.setUint32(pos,      0x02000010, littleEndian); pos += 4;
@@ -1824,7 +1845,8 @@ Object.subclass('Squeak.Image',
         var headerSize = 64,
             trailerSize = 16,
             freeListsSize = 136,
-            hiddenSize = freeListsSize + this.classTableBytes(),
+            numPages = this.ensureClassesInTable(),
+            hiddenSize = freeListsSize + this.classTableBytes(numPages),
             data = new DataView(new ArrayBuffer(headerSize + hiddenSize + this.oldSpaceBytes + trailerSize)),
             littleEndian = true,
             start = Date.now(),
@@ -1862,7 +1884,7 @@ Object.subclass('Squeak.Image',
         pos = obj.writeTo(data, pos, littleEndian, objToOop); obj = obj.nextObject; n++; // write false
         pos = obj.writeTo(data, pos, littleEndian, objToOop); obj = obj.nextObject; n++; // write true
         pos = this.writeFreeLists(data, pos, littleEndian, objToOop); // write hidden free list
-        pos = this.writeClassTable(data, pos, littleEndian, objToOop); // write hidden class table
+        pos = this.writeClassTable(data, pos, littleEndian, objToOop, numPages); // write hidden class table
         while (obj) {
             pos = obj.writeTo(data, pos, littleEndian, objToOop);
             obj = obj.nextObject;
@@ -2316,11 +2338,16 @@ Object.subclass('Squeak.Object',
         return ((spec >> 10) & 0xC0) + ((spec >> 1) & 0x3F) - 1;
     },
     instVarNames: function() {
-        var index = this.pointers.length > 12 ? 4 :
-            this.pointers.length > 9 ? 3 : 4; // index changed in newer images
-        return (this.pointers[index].pointers || []).map(function(each) {
-            return each.bytesAsString();
-        });
+        // index changed from 4 to 3 in newer images
+        for (var index = 3; index <= 4; index++) {
+            var varNames = this.pointers[index].pointers;
+            if (varNames && varNames.length && varNames[0].bytes) {
+                return varNames.map(function(each) {
+                    return each.bytesAsString();
+                });
+            }
+        }
+        return [];
     },
     allInstVarNames: function() {
         var superclass = this.superclass();
@@ -4896,12 +4923,15 @@ Object.subclass('Squeak.Primitives',
         return exponent;
     },
     ldexp: function(mantissa, exponent) {
-        // construct a float from mantissa and exponent
-        return exponent > 1023 // avoid multiplying by infinity
-            ? mantissa * Math.pow(2, 1023) * Math.pow(2, exponent - 1023)
-            : exponent < -1074 // avoid multiplying by zero
-            ? mantissa * Math.pow(2, -1074) * Math.pow(2, exponent + 1074)
-            : mantissa * Math.pow(2, exponent);
+        // construct a float as mantissa * 2 ^ exponent
+        // avoid multiplying by Infinity and Zero and rounding errors
+        // by splitting the exponent (thanks to Nicolas Cellier)
+        // 3 multiplies needed for e.g. ldexp(5e-324, 1023+1074)
+        var steps = Math.min(3, Math.ceil(Math.abs(exponent) / 1023));
+        var result = mantissa;
+        for (var i = 0; i < steps; i++)
+            result *= Math.pow(2, Math.floor((exponent + i) / steps));
+        return result;
     },
     primitiveLessThanLargeIntegers: function() {
         return this.pop2andPushBoolIfOK(this.stackSigned53BitInt(1) < this.stackSigned53BitInt(0));
@@ -5227,13 +5257,6 @@ Object.subclass('Squeak.Primitives',
             this.atPutCache.push({});
         }
     },
-    clearAtCache: function() { //clear at-cache pointers (prior to GC)
-        this.nonCachedInfo.array = null;
-        for (var i= 0; i < this.atCacheSize; i++) {
-            this.atCache[i].array = null;
-            this.atPutCache[i].array = null;
-        }
-    },
     makeAtCacheInfo: function(atOrPutCache, atOrPutSelector, array, convertChars, includeInstVars) {
         //Make up an info object and store it in the atCache or the atPutCache.
         //If it's not cacheable (not a non-super send of at: or at:put:)
@@ -5309,7 +5332,7 @@ Object.subclass('Squeak.Primitives',
         return this.vm.image.enterIntoClassTable(obj);
     },
     newObjectHash: function(obj) {
-        return Math.floor(Math.random() * 0x3FFFFFFE) + 1;
+        return Math.floor(Math.random() * 0x3FFFFE) + 1;
     },
     primitiveSizeInBytesOfInstance: function(argCount) {
         if (argCount > 1) return false;

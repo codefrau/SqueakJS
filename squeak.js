@@ -701,9 +701,9 @@ function createSqueakDisplay(canvas, options) {
     };
     // cursorCanvas shows Squeak cursor
     if (display.cursorCanvas) {
-        var canvasStyle = window.getComputedStyle(canvas);
+        var absolute = window.getComputedStyle(canvas).position === "absolute";
         display.cursorCanvas.style.display = "block";
-        display.cursorCanvas.style.position = canvasStyle.position; // absolute or fixed
+	    display.cursorCanvas.style.position = absolute ? "absolute": "fixed";
         display.cursorCanvas.style.cursor = "none";
         display.cursorCanvas.style.background = "transparent";
         display.cursorCanvas.style.pointerEvents = "none";
@@ -1175,10 +1175,6 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     processOptions(options);
     if (!imageUrl && options.image) imageUrl = options.image;
     var baseUrl = options.url || (imageUrl && imageUrl.replace(/[^\/]*$/, "")) || "";
-    if (baseUrl.match(/^http:/) && location.protocol.match(/^https/)) {
-        location.protocol = 'http';
-        return;
-    }
     fetchTemplates(options);
     var display = createSqueakDisplay(canvas, options),
         image = {url: null, name: null, image: true, data: null},

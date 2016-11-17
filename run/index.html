@@ -44,7 +44,9 @@
         var imgList = [],
             fileList = [],
             dirs = [''],
-            nFiles = nDirs = nBytes = 0;
+            nFiles = 0,
+            nDirs = 0,
+            nBytes = 0;
         while (dirs.length > 0) {
             var dir = dirs.pop(),
                 entries = Squeak.dirList(dir);

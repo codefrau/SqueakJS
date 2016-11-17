@@ -2081,7 +2081,7 @@ function primGetModuleName() {
 	var strOop;
 
 	// missing DebugCode;
-	strLen = strlen(getModuleName());
+	strLen = getModuleName().length;
 	strOop = interpreterProxy.instantiateClassindexableSize(interpreterProxy.classString(), strLen);
 	strPtr = strOop.bytes;
 	for (i = 0; i <= (strLen - 1); i++) {

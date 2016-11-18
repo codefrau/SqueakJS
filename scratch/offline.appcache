@@ -1,5 +1,5 @@
 CACHE MANIFEST
-# Nov  8 16:35:14 2016
+# Nov 18 18:25:35 2016
 ../squeak.js
 ../vm.js
 ../jit.js
@@ -31,6 +31,6 @@ scratch.png
 ../lib/addtohomescreen.css
 ../lib/addtohomescreen.js
 ../lib/gh-fork-ribbon.css
-http://freudenbergs.de/bert/squeakjs/scratch/Scratch.image
+https://freudenbergs.de/bert/squeakjs/scratch/Scratch.image
 NETWORK:
 *

@@ -131,6 +131,9 @@ function SocketPlugin() {
               headers[lineItems[0]] = lineItems[1].trim();
             }
           }
+          if (typeof SqueakJS === "object" && SqueakJS.options.ajax) {
+              headers["X-Requested-With"] = "XMLHttpRequest";
+          }
           var init = {
             method: httpMethod,
             headers: headers,
@@ -201,6 +204,10 @@ function SocketPlugin() {
           if (contentType !== undefined) {
             httpRequest.setRequestHeader('Content-type', contentType);
           }
+          if (typeof SqueakJS === "object" && SqueakJS.options.ajax) {
+              httpRequest.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+          }
+          
           httpRequest.responseType = "arraybuffer";
 
           httpRequest.onload = function (oEvent) {
@@ -213,6 +220,9 @@ function SocketPlugin() {
             var retry = new XMLHttpRequest();
             retry.open(httpMethod, url);
             retry.responseType = httpRequest.responseType;
+            if (typeof SqueakJS === "object" && SqueakJS.options.ajaxx) {
+                retry.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+            }
             retry.onload = function(oEvent) {
               console.log('Success: ' + url);
               thisHandle._handleXMLHTTPResponse(this);

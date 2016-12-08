@@ -1039,8 +1039,11 @@ function fetchTemplates(options) {
             options.templates.forEach(function(path){ templates[path] = path; });
             options.templates = templates;
         }
-        for (var path in options.templates)
-            Squeak.fetchTemplateDir(path[0] == "/" ? path : options.root + path, options.templates[path]);
+        for (var path in options.templates) {
+            var dir = path[0] == "/" ? path : options.root + path,
+                url = Squeak.splitUrl(options.templates[path], options.url).full;
+            Squeak.fetchTemplateDir(dir, url);
+        }
     }
 }
 
@@ -1175,6 +1178,7 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     processOptions(options);
     if (!imageUrl && options.image) imageUrl = options.image;
     var baseUrl = options.url || (imageUrl && imageUrl.replace(/[^\/]*$/, "")) || "";
+    options.url = baseUrl;
     fetchTemplates(options);
     var display = createSqueakDisplay(canvas, options),
         image = {url: null, name: null, image: true, data: null},
@@ -1187,7 +1191,7 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     if (options.files) {
         options.files.forEach(function(f) {
             var url = Squeak.splitUrl(f, baseUrl);
-            if (image.name === f) {/* pushed after other files */}
+            if (image.name === url.filename) {/* pushed after other files */}
             else if (!image.url && f.match(/\.image$/)) {
                 image.name = url.filename;
                 image.url = url.full;

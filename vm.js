@@ -641,11 +641,11 @@ Object.extend(Squeak,
     },
     splitUrl: function(url, base) {
         var matches = url.match(/(.*\/)?(.*)/),
-            uptoslash = matches[1] ? matches[1] : '',
-            filename = matches[2] ? matches[2] : null;
-        if (!uptoslash) {
+            uptoslash = matches[1] || '',
+            filename = matches[2] || '';
+        if (!uptoslash.match(/^[a-z]+:\/\//)) {
             if (base && !base.match(/\/$/)) base += '/';
-            uptoslash = base || '';
+            uptoslash = (base || '') + uptoslash;
             url = uptoslash + filename;
         }
         return {full: url, uptoslash: uptoslash, filename: filename};

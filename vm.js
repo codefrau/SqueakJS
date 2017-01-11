@@ -2623,7 +2623,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
     indexableSize: function(primHandler) {
         var fmt = this._format;
         if (fmt < 2) return -1; //not indexable
-        if (fmt === 3 && primHandler.vm.isContext(this) && !primHandler.allowAccessBeyondSP)
+        if (fmt === 3 && primHandler.vm.isContext(this))
             return this.pointers[Squeak.Context_stackPointer]; // no access beyond top of stacks
         if (fmt < 6) return this.pointersSize() - this.instSize(); // pointers
         if (fmt < 12) return this.wordsSize(); // words

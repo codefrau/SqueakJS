@@ -6529,6 +6529,25 @@ Object.subclass('Squeak.Primitives',
             this.microsecondClockLocalState = {epoch: Squeak.Epoch, millis: 0, micros: 0};
         return this.microsecondClock(this.microsecondClockLocalState);
     },
+    primitiveUtcWithOffset: function(argCount) {
+        var d = new Date();
+	var posixMicroseconds = this.pos53BitIntFor(d.getTime() * 1000);
+        var offset = -60 * d.getTimezoneOffset();
+        if (argCount > 0) {
+            // either an Array or a DateAndTime in new UTC format with two ivars
+            var stWordIndexableObject = this.vm.stackValue(0);
+            stWordIndexableObject.pointers[0] = posixMicroseconds;
+            stWordIndexableObject.pointers[1] = offset;
+            this.popNandPushIfOK(argCount + 1, stWordIndexableObject);
+            return true;
+        }
+        var timeAndOffset = [
+            posixMicroseconds,
+            offset,
+        ];
+        this.popNandPushIfOK(argCount + 1, this.makeStArray(timeAndOffset));
+        return true;
+    },
 },
 'FilePlugin', {
     primitiveDirectoryCreate: function(argCount) {

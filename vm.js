@@ -1441,6 +1441,11 @@ Object.subclass('Squeak.Image',
     instantiateClass: function(aClass, indexableSize, filler) {
         var newObject = new (aClass.classInstProto()); // Squeak.Object
         var hash = this.registerObject(newObject);
+        if ((aClass.sqClass.hash === 2541) && (aClass.hash === 0)) {
+            // All classes with instances must be in the class table.
+            // Here, we're instantiating a metaclass.
+            this.enterIntoClassTable(aClass);
+        }
         newObject.initInstanceOf(aClass, indexableSize, hash, filler);
         this.hasNewInstances[aClass.oop] = true;   // need GC to find all instances
         return newObject;

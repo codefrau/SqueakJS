@@ -842,7 +842,7 @@ Object.subclass('Squeak.Image',
     New objects are only referenced by other objects' pointers, and thus can be garbage-collected
     at any time by the Javascript GC.
     A partial GC links new objects to support enumeration of new space.
-    
+
     Weak references are finalized by a full GC. A partial GC only finalizes young weak references.
 
     */
@@ -1608,7 +1608,7 @@ Object.subclass('Squeak.Image',
         return this.formatVersion() | (wholeWord[0] & 0xFF000000);
     },
     loadImageSegment: function(segmentWordArray, outPointerArray) {
-        // The C VM creates real objects from the segment in-place. 
+        // The C VM creates real objects from the segment in-place.
         // We do the same, linking the new objects directly into old-space.
         // The code below is almost the same as readFromBuffer() ... should unify
         var data = new DataView(segmentWordArray.words.buffer),
@@ -1834,7 +1834,7 @@ Object.subclass('Squeak.Image',
                         classObj = null;
                     }
                 }
-                if (classObj) data.setUint32(pos, objToOop(classObj), littleEndian); 
+                if (classObj) data.setUint32(pos, objToOop(classObj), littleEndian);
                 pos += 4;
                 classID++;
             }
@@ -2204,7 +2204,7 @@ Object.subclass('Squeak.Object',
         var fmt = this._format;
         if (fmt > 4 || fmt === 2) return 0;      //indexable fields only
         if (fmt < 2) return this.pointersSize(); //fixed fields only
-        return this.sqClass.classInstSize(); 
+        return this.sqClass.classInstSize();
     },
     indexableSize: function(primHandler) {
         var fmt = this._format;
@@ -4149,7 +4149,7 @@ Object.subclass('Squeak.Interpreter',
             selectorObj = this.method.methodGetLiteral(byte & 0x0F);
         } else if (byte >= 0xB0 ) {
             selectorObj = this.specialSelectors[2 * (byte - 0xB0)];
-        } else if (byte <= 134) { 
+        } else if (byte <= 134) {
             // long form support demands we check the selector
             var litIndex;
             if (byte === 132) {
@@ -6519,7 +6519,7 @@ Object.subclass('Squeak.Primitives',
         var micros = performance.now() * 1000 % 1000 | 0,
             oldMillis = state.millis,
             oldMicros = state.micros;
-        if (oldMillis > millis) millis = oldMillis;                 // rolled over previously 
+        if (oldMillis > millis) millis = oldMillis;                 // rolled over previously
         if (millis === oldMillis && micros < oldMicros) millis++;   // roll over now
         state.millis = millis;
         state.micros = micros;

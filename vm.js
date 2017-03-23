@@ -5975,11 +5975,12 @@ Object.subclass('Squeak.Primitives',
     primitiveGetAttribute: function(argCount) {
         var attr = this.stackInteger(0);
         if (!this.success) return false;
-        var value;
+        var argv = this.display.argv,
+            value = null;
         switch (attr) {
-            case 0: value = this.filenameToSqueak(Squeak.vmPath + Squeak.vmFile); break;
-            case 1: value = this.display.documentName || null; break; // 1.x images want document here
-            case 2: value = this.display.documentName || null; break; // later images want document here
+            case 0: value = (argv && argv[0]) || this.filenameToSqueak(Squeak.vmPath + Squeak.vmFile); break;
+            case 1: value = (argv && argv[1]) || this.display.documentName; break; // 1.x images want document here
+            case 2: value = (argv && argv[2]) || this.display.documentName; break; // later images want document here
             case 1001: value = Squeak.platformName; break;
             case 1002: value = Squeak.osVersion; break;
             case 1003: value = Squeak.platformSubtype; break;
@@ -5989,7 +5990,12 @@ Object.subclass('Squeak.Primitives',
             case 1007: value = Squeak.vmVersion; break; // Interpreter class
             // case 1008: Cogit class
             case 1009: value = Squeak.vmVersion; break; // Platform source version
-            default: return false;
+            default:
+                if (argv && argv.length > attr) {
+                    value = argv[attr];
+                } else {
+                    return false;
+                }
         }
         this.vm.popNandPush(argCount+1, this.makeStObject(value));
         return true;

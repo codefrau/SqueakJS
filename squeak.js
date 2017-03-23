@@ -1183,6 +1183,7 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     var display = createSqueakDisplay(canvas, options),
         image = {url: null, name: null, image: true, data: null},
         files = [];
+    display.argv = options.argv;
     if (imageUrl) {
         var url = Squeak.splitUrl(imageUrl, baseUrl);
         image.url = url.full;

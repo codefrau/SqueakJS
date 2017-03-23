@@ -20,7 +20,7 @@
  * THE SOFTWARE.
  */
 
-"use strict";    
+"use strict";
 
 //////////////////////////////////////////////////////////////////////////////
 // these functions fake the Lively module and class system
@@ -178,9 +178,9 @@ function setupFullscreen(display, canvas, options) {
         if (options.fullscreenCheckbox) options.fullscreenCheckbox.checked = fullscreen;
         setTimeout(window.onresize, 0);
     }
-    
+
     var checkFullscreen;
-    
+
     if (box.requestFullscreen) {
         document.addEventListener(fullscreenEvent, function(){fullscreenChange(box == document[fullscreenElement]);});
         checkFullscreen = function() {
@@ -605,7 +605,7 @@ function createSqueakDisplay(canvas, options) {
     // * if touch ended within this time, generate click (down+up)
     // * otherwise, start mousing with 2nd button
     // When mousing, always generate a move event before down event so that
-    // mouseover eventhandlers in image work better 
+    // mouseover eventhandlers in image work better
     canvas.ontouchstart = function(evt) {
         evt.preventDefault();
         var e = touchToMouse(evt);
@@ -646,7 +646,7 @@ function createSqueakDisplay(canvas, options) {
         evt.preventDefault();
         var e = touchToMouse(evt);
         switch (touch.state) {
-            case 'got1stFinger': 
+            case 'got1stFinger':
                 touch.state = 'mousing';
                 touch.button = e.button = 0;
                 recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
@@ -675,7 +675,7 @@ function createSqueakDisplay(canvas, options) {
                     touch.state = 'idle';
                     recordMouseEvent('mouseup', e, canvas, display, eventQueue, options);
                     return;
-                case 'got1stFinger': 
+                case 'got1stFinger':
                     touch.state = 'idle';
                     touch.button = e.button = 0;
                     recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
@@ -837,7 +837,7 @@ function createSqueakDisplay(canvas, options) {
                     image = buffer;
                     imageName = f.name;
                 }
-                if (loaded.length == files.length) {                
+                if (loaded.length == files.length) {
                     if (image) {
                         SqueakJS.appName = imageName.slice(0, -6);
                         SqueakJS.runImage(image, imageName, display, options);
@@ -957,7 +957,7 @@ var loop; // holds timeout for main loop
 
 SqueakJS.runImage = function(buffer, name, display, options) {
     window.onbeforeunload = function(evt) {
-        var msg = SqueakJS.appName + " is still running";  
+        var msg = SqueakJS.appName + " is still running";
         evt.returnValue = msg;
         return msg;
     };

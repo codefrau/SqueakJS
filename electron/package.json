@@ -1,0 +1,22 @@
+{
+  "name": "electron-squeak",
+  "version": "1.0.0",
+  "description": "Squeak Smalltalk, SqueakJS VM running on electron",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "repository": "https://github.com/jsparkes/SqueakJS",
+  "keywords": [
+    "Squeak",
+    "SqueakJS",
+    "Smalltalk",
+    "Squeak Smalltalk",
+    "demo"
+  ],
+  "author": "GitHub",
+  "license": "CC0-1.0",
+  "devDependencies": {
+    "electron": "^1.4.1"
+  }
+}

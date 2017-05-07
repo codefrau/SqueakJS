@@ -2162,7 +2162,7 @@ Object.subclass('Squeak.Object',
         // one-based index
         var instSize = this.instSize();
         if (index <= instSize)
-            return this.sqClass.allInstVarNames()[index - 1];
+            return this.sqClass.allInstVarNames()[index - 1] || 'ivar' + (index - 1);
         else
             return (index - instSize).toString();
     },

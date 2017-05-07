@@ -6042,6 +6042,9 @@ Object.subclass('Squeak.Primitives',
             case 10: return this.vm.image.pgcMilliseconds;  // total milliseconds in incremental GCs since startup (read-only)
             case 11: return this.vm.image.gcTenured;        // tenures of surving objects since startup (read-only)
             // 12-20 specific to the translating VM
+            case 15:
+            case 16:
+            case 17: return 0;                              // method cache stats
             // 21   root table size (read-only)
             case 22: return 0;                              // root table overflows since startup (read-only)
             case 23: return this.vm.image.extraVMMemory;    // bytes of extra memory to reserve for VM buffers, plugins, etc.

@@ -40,7 +40,8 @@ Object.extend(Squeak,
 "version", {
     // system attributes
     vmVersion: "SqueakJS 0.9.5",
-    vmBuild: "unknown",                 // replace at runtime by last-modified?
+    vmDate: "2016-11-08",               // Maybe replace at build time?
+    vmBuild: "unknown",                 // or replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
     platformName: "Web",
@@ -5989,7 +5990,7 @@ Object.subclass('Squeak.Primitives',
             case 1006: value = Squeak.vmBuild; break;
             case 1007: value = Squeak.vmVersion; break; // Interpreter class
             // case 1008: Cogit class
-            case 1009: value = Squeak.vmVersion; break; // Platform source version
+            case 1009: value = Squeak.vmVersion + ' Date: ' + Squeak.vmDate; break; // Platform source version
             default:
                 if (argv && argv.length > attr) {
                     value = argv[attr];

@@ -4189,7 +4189,7 @@ Object.subclass('Squeak.Primitives',
     initModules: function() {
         this.loadedModules = {};
         this.builtinModules = {
-            JavaScriptPlugin:       this.findPluginFunctions("js_", "", true),
+            JavaScriptPlugin:       this.findPluginFunctions("js_"),
             FilePlugin:             this.findPluginFunctions("", "primitive(Disable)?(File|Directory)"),
             DropPlugin:             this.findPluginFunctions("", "primitiveDropRequest"),
             SoundPlugin:            this.findPluginFunctions("snd_"),

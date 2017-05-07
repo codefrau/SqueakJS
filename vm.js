@@ -204,6 +204,13 @@ Object.extend(Squeak,
     // WeakFinalizerItem layout:
     WeakFinalizerItem_list: 0,
     WeakFinalizerItem_next: 1,
+    // ExternalLibraryFunction layout:
+    ExtLibFunc_handle: 0,
+    ExtLibFunc_flags: 1,
+    ExtLibFunc_argTypes: 2,
+    ExtLibFunc_name: 3,
+    ExtLibFunc_module: 4,
+    ExtLibFunc_errorCodeName: 5,
 },
 "events", {
     Mouse_Blue: 1,
@@ -4194,6 +4201,7 @@ Object.subclass('Squeak.Primitives',
             DropPlugin:             this.findPluginFunctions("", "primitiveDropRequest"),
             SoundPlugin:            this.findPluginFunctions("snd_"),
             JPEGReadWriter2Plugin:  this.findPluginFunctions("jpeg2_"),
+            SqueakFFIPrims:         this.findPluginFunctions("ffi_", "", true),
             SecurityPlugin: {
                 primitiveDisableImageWrite: this.fakePrimitive.bind(this, "SecurityPlugin.primitiveDisableImageWrite", 0),
             },
@@ -7563,6 +7571,18 @@ Object.subclass('Squeak.Primitives',
     },
     js_objectOrGlobal: function(sqObject) {
         return 'jsObject' in sqObject ? sqObject.jsObject : window;
+    },
+},
+'FFI', {
+    ffi_primitiveCalloutWithArgs: function(argCount) {
+        var extLibFunc = this.stackNonInteger(1),
+            argsObj = this.stackNonInteger(0);
+        if (!this.isKindOf(extLibFunc, Squeak.splOb_ClassExternalFunction)) return false;
+        var moduleName = extLibFunc.pointers[Squeak.ExtLibFunc_module].bytesAsString();
+        var funcName = extLibFunc.pointers[Squeak.ExtLibFunc_name].bytesAsString();
+        var args = argsObj.pointers.join(', ');
+        this.vm.warnOnce('FFI: ignoring ' + moduleName + ': ' + funcName + '(' + args + ')');
+        return false;        
     },
 },
 'Obsolete', {

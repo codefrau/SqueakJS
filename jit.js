@@ -155,15 +155,26 @@ to single-step.
         if (!method.compiled || !method.compiled.canSingleStep) {
             this.singleStep = true; // generate breakpoint support
             this.debug = true;
-            var clsAndSel = this.vm.printMethod(method, optClass, optSel).split(">>");    // likely expensive
-            method.compiled = this.generate(method, clsAndSel[0], clsAndSel[1]);
+            if (!optClass) {
+                this.vm.allMethodsDo(function(classObj, methodObj, selectorObj) {
+                    if (methodObj === method) {
+                        optClass = classObj;
+                        optSel = selectorObj;
+                        return true;
+                    }
+                });
+            }
+            var cls = optClass && optClass.className();
+            var sel = optSel && optSel.bytesAsString();
+            var instVars = optClass && optClass.allInstVarNames();
+            method.compiled = this.generate(method, cls, sel, instVars);
             method.compiled.canSingleStep = true;
         }
         // if a compiler does not support single-stepping, return false
         return true;
     },
     functionNameFor: function(cls, sel) {
-        if (!cls || !sel) return "Squeak_DOIT";
+        if (cls === void 0 || cls === '?') return "Squeak_DOIT";
         if (!/[^a-zA-Z0-9:_]/.test(sel))
             return (cls + "_" + sel).replace(/[: ]/g, "_");
         var op = sel.replace(/./g, function(char) {
@@ -177,7 +188,7 @@ to single-step.
 },
 'generating',
 {
-    generate: function(method, optClass, optSel) {
+    generate: function(method, optClass, optSel, optInstVarNames) {
         this.method = method;
         this.pc = 0;                // next bytecode
         this.endPC = 0;             // pc of furthest jump target
@@ -190,6 +201,7 @@ to single-step.
         this.needsBreak = false;    // insert break check for previous bytecode
         if (optClass && optSel)
             this.source.push("// ", optClass, ">>", optSel, "\n");
+        this.instVarNames = optInstVarNames;
         this.allVars = ['context', 'stack', 'rcvr', 'inst[', 'temp[', 'lit['];
         this.sourcePos['context']    = this.source.length; this.source.push("var context = vm.activeContext;\n");
         this.sourcePos['stack']      = this.source.length; this.source.push("var stack = context.pointers;\n");
@@ -377,7 +389,7 @@ to single-step.
             // thisContext
             case 0x89:
                 this.needsVar['stack'] = true;
-                this.generateInstruction("thisContext", "stack[++vm.sp] = vm.exportThisContext()");
+                this.generateInstruction("push thisContext", "stack[++vm.sp] = vm.exportThisContext()");
                 return;
             // closures
             case 0x8A:
@@ -423,7 +435,7 @@ to single-step.
         }
     },
     generatePush: function(target, arg1, suffix1, arg2, suffix2) {
-        if (this.debug) this.generateDebugCode("push");
+        if (this.debug) this.generateDebugCode("push", target, arg1, suffix1, arg2, suffix2);
         this.generateLabel();
         this.needsVar[target] = true;
         this.needsVar['stack'] = true;
@@ -437,7 +449,7 @@ to single-step.
         this.source.push(";\n");
     },
     generateStoreInto: function(target, arg1, suffix1, arg2, suffix2) {
-        if (this.debug) this.generateDebugCode("store into");
+        if (this.debug) this.generateDebugCode("store into", target, arg1, suffix1, arg2, suffix2);
         this.generateLabel();
         this.needsVar[target] = true;
         this.needsVar['stack'] = true;
@@ -452,7 +464,7 @@ to single-step.
         this.generateDirty(target, arg1);
     },
     generatePopInto: function(target, arg1, suffix1, arg2, suffix2) {
-        if (this.debug) this.generateDebugCode("pop into");
+        if (this.debug) this.generateDebugCode("pop into", target, arg1, suffix1, arg2, suffix2);
         this.generateLabel();
         this.needsVar[target] = true;
         this.needsVar['stack'] = true;
@@ -467,7 +479,7 @@ to single-step.
         this.generateDirty(target, arg1);
     },
     generateReturn: function(what) {
-        if (this.debug) this.generateDebugCode("return");
+        if (this.debug) this.generateDebugCode("return", what);
         this.generateLabel();
         this.needsVar[what] = true;
         this.source.push(
@@ -739,21 +751,48 @@ to single-step.
         // remember label position for deleteUnneededLabels()
         if (this.prevPC) {
             this.sourceLabels[this.prevPC] = this.source.length;
-            this.source.push("case ", this.prevPC, ":\n");
+            this.source.push("case ", this.prevPC, ":\n");           // must match deleteUnneededLabels
         }
         this.prevPC = this.pc;
     },
-    generateDebugCode: function(comment) {
+    generateDebugCode: function(command, what, arg1, suffix1, arg2, suffix2) {
         // single-step for previous instructiuon
         if (this.needsBreak) {
              this.source.push("if (vm.breakOutOfInterpreter) {vm.pc = ", this.prevPC, "; return}\n");
              this.needsLabel[this.prevPC] = true;
         }
-        // comment for this instructiuon
+        // comment for this instruction
         var bytecodes = [];
         for (var i = this.prevPC; i < this.pc; i++)
             bytecodes.push((this.method.bytes[i] + 0x100).toString(16).slice(-2).toUpperCase());
-        this.source.push("// ", this.prevPC, " <", bytecodes.join(" "), "> ", comment, "\n");
+        this.source.push("// ", this.prevPC, " <", bytecodes.join(" "), "> ", command);
+        // append argument to comment
+        if (what) {
+            this.source.push(" ");
+            switch (what) {
+                case 'vm.nilObj':    this.source.push('nil'); break;
+                case 'vm.trueObj':   this.source.push('true'); break;
+                case 'vm.falseObj':  this.source.push('false'); break;
+                case 'rcvr':         this.source.push('self'); break;
+                case 'stack[vm.sp]': this.source.push('top of stack'); break;
+                case 'inst[':
+                    if (!this.instVarNames) this.source.push('inst var ', arg1);
+                    else this.source.push(this.instVarNames[arg1]);
+                    break;
+                case 'temp[':
+                    this.source.push('tmp', arg1 - 6);
+                    if (suffix1 !== ']') this.source.push('[', arg2, ']');
+                    break;
+                case 'lit[':
+                    var lit = this.method.pointers[arg1];
+                    if (suffix1 === ']') this.source.push(lit);
+                    else this.source.push(lit.pointers[0].bytesAsString());
+                    break;
+                default:
+                    this.source.push(what);
+            }
+        }
+        this.source.push("\n");
         // enable single-step for next instruction
         this.needsBreak = this.singleStep;
     },

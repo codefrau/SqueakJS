@@ -6579,8 +6579,22 @@ Object.subclass('Squeak.Primitives',
         return this.popNandPushIfOK(1, this.charFromInt(delimitor.charCodeAt(0)));
     },
     primitiveDirectoryEntry: function(argCount) {
-        this.vm.warnOnce("Not yet implemented: primitiveDirectoryEntry");
-        return false; // image falls back on primitiveDirectoryLookup
+        var dirNameObj = this.stackNonInteger(1),
+            fileNameObj = this.stackNonInteger(0);
+        if (!this.success) return false;
+        var sqFileName = fileNameObj.bytesAsString();
+        var fileName = this.filenameFromSqueak(fileNameObj.bytesAsString());
+        var sqDirName = dirNameObj.bytesAsString();
+        var dirName = this.filenameFromSqueak(dirNameObj.bytesAsString());
+        var entries = Squeak.dirList(dirName, true);
+        if (!entries) {
+            var path = Squeak.splitFilePath(dirName);
+            console.log("Directory not found: " + path.fullname);
+            return false;
+        }
+        var entry = entries[fileName];
+        this.popNandPushIfOK(argCount+1, this.makeStObject(entry));  // entry or nil
+        return true;
     },
     primitiveDirectoryLookup: function(argCount) {
         var index = this.stackInteger(0),

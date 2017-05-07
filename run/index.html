@@ -74,7 +74,7 @@
             filestats.innerHTML = nFiles + " files in " + nDirs + " directories, " +
                 (nBytes/1000000).toFixed(1) + " MBytes total";
         }
-        if (imgList.length) images.innerHTML = "<p>Previously run local images:</p><ul>" + imgList.sort(fsort).join("") + "</ul>";
+        if (imgList.length) images.innerHTML = "<p>Select a local image to run:</p><ul>" + imgList.sort(fsort).join("") + "</ul>";
         else images.innerHTML = "<ul>[Once you have dropped local images to this page they will be listed here.]</ul>"
     }
     window.onhashchange = function() {

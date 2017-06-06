@@ -6161,8 +6161,9 @@ Object.subclass('Squeak.Primitives',
             var cursorCanvas = this.display.cursorCanvas,
                 context = cursorCanvas.getContext("2d"),
                 bounds = {left: 0, top: 0, right: cursorForm.width, bottom: cursorForm.height};
-            cursorCanvas.width = cursorForm.width;
-            cursorCanvas.height = cursorForm.height;
+            // For some reason, this makes the cursor disappear on Safari 10.
+            // cursorCanvas.width = cursorForm.width;
+            // cursorCanvas.height = cursorForm.height;
             if (cursorForm.depth === 1) {
                 if (maskForm) {
                     cursorForm = this.cursorMergeMask(cursorForm, maskForm);

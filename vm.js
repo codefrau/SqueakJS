@@ -2518,7 +2518,9 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             nWords = bits.length;
         switch (this._format) {
             case 0: // zero sized object
-                break;
+              // Pharo bug: Pharo 6.0 still has format 0 objects that actually do have inst vars
+              // https://pharo.fogbugz.com/f/cases/19010/ImmediateLayout-and-EphemeronLayout-have-wrong-object-format
+              // so we pretend these are regular objects and rely on nWords 
             case 1: // only inst vars
             case 2: // only indexed vars
             case 3: // inst vars and indexed vars

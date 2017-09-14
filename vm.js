@@ -805,8 +805,9 @@ Object.extend(Squeak,
 "utils", {
     bytesAsString: function(bytes) {
         var chars = [];
-            for (var i = 0; i < bytes.length; i++)
-                chars.push(String.fromCharCode(bytes[i]));
+        for (var i = 0; i < bytes.length; )
+            chars.push(String.fromCharCode.apply(
+                null, bytes.subarray(i, i += 16348)));
         return chars.join('');
     },
 });

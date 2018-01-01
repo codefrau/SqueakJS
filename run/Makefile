@@ -51,7 +51,7 @@ $(BUILD):
 squeak.min.js: Makefile $(SQUEAKJS) $(SQUEAKJSLIBS) $(CLOSURE_COMPILER_DIR)
 	$(CLOSURE_COMPILER) --js_output_file $@ \
 		--create_source_map $@.map \
-		--output_wrapper "%output%\n//# sourceMappingURL=$@.map" \
+		--output_wrapper "%output% //# sourceMappingURL=$@.map" \
 		--compilation_level SIMPLE \
 		--language_in ECMASCRIPT5_STRICT \
 		$(SQUEAKJS) $(SQUEAKJSLIBS)

@@ -1,8 +1,6 @@
 SqueakJS: A Squeak VM for the Web
 =================================
 
-[![Build Status](https://travis-ci.org/bertfreudenberg/SqueakJS.svg?branch=master)](https://travis-ci.org/bertfreudenberg/SqueakJS)
-
 SqueakJS is an HTML5 runtime engine for [Squeak][squeak]</a> Smalltalk written in pure JavaScript by Bert Freudenberg.
 
 The interpreter core is in "vm.js" and plugins are in the "plugins" directory. The Just-in-Time compiler is optional ("jit.js") and can be easily replaced with your own. There are two user interfaces: the regular HTML interface lets you use SqueakJS on your own web page. Just include "squeak.js". The other interface provides a visual debugger implemented also in JavaScript using [Lively][lively]. This does not use "squeak.js" but reimplements the UI in Lively Morphic.
@@ -52,7 +50,7 @@ The reason for having to run from a web server is because the image is loaded wi
 * inside the Lively directory, make a "users/bert" folder and put the SqueakJS directory there
 * open the blank.html page using your web browser
 * get a Squeak morph from the PartsBin
-* save the world under a different name 
+* save the world under a different name
 
 How to modify it
 ----------------
@@ -71,7 +69,7 @@ How to share your changes
 * easiest for me is if you create a [pull request][pullreq]
 * otherwise, send me patches
 
-Contributions are very welcome! 
+Contributions are very welcome!
 
 Things to work on
 -----------------
@@ -103,6 +101,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2018-03-13: 0.9.6 minor fixes
     2016-11-08: 0.9.5 more fixes
     2016-10-20: 0.9.4 fixes
     2016-09-08: 0.9.3 add partial GC (5x faster become / allInstances)
@@ -129,10 +128,10 @@ Changelog
     2014-11-14: 0.6.5 add generated Balloon2D plugin
     2014-11-06: 0.6.4 add generic run page
     2014-10-28: 0.6.3 pass options via URL
-    2014-10-27: add JPEG plugin 
+    2014-10-27: add JPEG plugin
     2014-10-25: add template files
-    2014-10-23: 0.6.2 fixes 
-    2014-10-21: 0.6.1 add image segment loading 
+    2014-10-23: 0.6.2 fixes
+    2014-10-21: 0.6.1 add image segment loading
     2014-10-18: 0.6 move squeak.js out of lib dir
     2014-10-13: 0.5.9 microphone support
     2014-10-09: 0.5.8 fixes

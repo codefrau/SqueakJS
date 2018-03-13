@@ -39,8 +39,8 @@ try {
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 0.9.5",
-    vmDate: "2016-11-08",               // Maybe replace at build time?
+    vmVersion: "SqueakJS 0.9.6",
+    vmDate: "2018-03-13",               // Maybe replace at build time?
     vmBuild: "unknown",                 // or replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -2521,7 +2521,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             case 0: // zero sized object
               // Pharo bug: Pharo 6.0 still has format 0 objects that actually do have inst vars
               // https://pharo.fogbugz.com/f/cases/19010/ImmediateLayout-and-EphemeronLayout-have-wrong-object-format
-              // so we pretend these are regular objects and rely on nWords 
+              // so we pretend these are regular objects and rely on nWords
             case 1: // only inst vars
             case 2: // only indexed vars
             case 3: // inst vars and indexed vars
@@ -7585,7 +7585,7 @@ Object.subclass('Squeak.Primitives',
         var funcName = extLibFunc.pointers[Squeak.ExtLibFunc_name].bytesAsString();
         var args = argsObj.pointers.join(', ');
         this.vm.warnOnce('FFI: ignoring ' + moduleName + ': ' + funcName + '(' + args + ')');
-        return false;        
+        return false;
     },
 },
 'Obsolete', {

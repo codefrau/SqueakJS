@@ -1140,7 +1140,10 @@ function downloadFile(file, display, options, thenDo) {
         else this.onerror(this.statusText);
     };
     rq.onerror = function(e) {
-        if (options.proxy) return alert("Failed to download:\n" + file.url);
+        if (options.proxy) {
+            console.error(Squeak.bytesAsString(new Uint8Array(this.response)));
+            return alert("Failed to download:\n" + file.url);
+        }
         console.warn('Retrying with CORS proxy: ' + file.url);
         var proxy = 'https://crossorigin.me/',
             retry = new XMLHttpRequest();
@@ -1149,7 +1152,9 @@ function downloadFile(file, display, options, thenDo) {
         retry.responseType = rq.responseType;
         retry.onprogress = rq.onprogress;
         retry.onload = rq.onload;
-        retry.onerror = function() {alert("Failed to download:\n" + file.url)};
+        retry.onerror = function() {
+            console.error(Squeak.bytesAsString(new Uint8Array(this.response)));
+            alert("Failed to download:\n" + file.url)};
         retry.send();
     };
     rq.send();

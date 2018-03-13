@@ -33,12 +33,9 @@ window.onload = function() {
         header: sqHeader,
         footer: sqFooter,
         spinner: sqSpinner,
+        files: ["Etoys/EtoysV5.stc"],
         root: "/Etoys",
-        templates: {
-            "ExampleEtoys": "https://freudenbergs.de/bert/squeakjs/Etoys/ExampleEtoys",
-            "fonts":        "https://freudenbergs.de/bert/squeakjs/Etoys/fonts",
-            "locale":       "https://freudenbergs.de/bert/squeakjs/Etoys/locale",
-        },
+        templates: { "/Etoys": "Etoys" },
     });
 };
 

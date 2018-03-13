@@ -39,8 +39,9 @@ try {
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 0.9.5",
-    vmBuild: "unknown",                 // replace at runtime by last-modified?
+    vmVersion: "SqueakJS 0.9.6",
+    vmDate: "2018-03-13",               // Maybe replace at build time?
+    vmBuild: "unknown",                 // or replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
     platformName: "Web",
@@ -203,6 +204,13 @@ Object.extend(Squeak,
     // WeakFinalizerItem layout:
     WeakFinalizerItem_list: 0,
     WeakFinalizerItem_next: 1,
+    // ExternalLibraryFunction layout:
+    ExtLibFunc_handle: 0,
+    ExtLibFunc_flags: 1,
+    ExtLibFunc_argTypes: 2,
+    ExtLibFunc_name: 3,
+    ExtLibFunc_module: 4,
+    ExtLibFunc_errorCodeName: 5,
 },
 "events", {
     Mouse_Blue: 1,
@@ -641,11 +649,11 @@ Object.extend(Squeak,
     },
     splitUrl: function(url, base) {
         var matches = url.match(/(.*\/)?(.*)/),
-            uptoslash = matches[1] ? matches[1] : '',
-            filename = matches[2] ? matches[2] : null;
-        if (!uptoslash) {
+            uptoslash = matches[1] || '',
+            filename = matches[2] || '';
+        if (!uptoslash.match(/^[a-z]+:\/\//)) {
             if (base && !base.match(/\/$/)) base += '/';
-            uptoslash = base || '';
+            uptoslash = (base || '') + uptoslash;
             url = uptoslash + filename;
         }
         return {full: url, uptoslash: uptoslash, filename: filename};
@@ -797,8 +805,9 @@ Object.extend(Squeak,
 "utils", {
     bytesAsString: function(bytes) {
         var chars = [];
-            for (var i = 0; i < bytes.length; i++)
-                chars.push(String.fromCharCode(bytes[i]));
+        for (var i = 0; i < bytes.length; )
+            chars.push(String.fromCharCode.apply(
+                null, bytes.subarray(i, i += 16348)));
         return chars.join('');
     },
 });
@@ -842,7 +851,7 @@ Object.subclass('Squeak.Image',
     New objects are only referenced by other objects' pointers, and thus can be garbage-collected
     at any time by the Javascript GC.
     A partial GC links new objects to support enumeration of new space.
-    
+
     Weak references are finalized by a full GC. A partial GC only finalizes young weak references.
 
     */
@@ -1608,7 +1617,7 @@ Object.subclass('Squeak.Image',
         return this.formatVersion() | (wholeWord[0] & 0xFF000000);
     },
     loadImageSegment: function(segmentWordArray, outPointerArray) {
-        // The C VM creates real objects from the segment in-place. 
+        // The C VM creates real objects from the segment in-place.
         // We do the same, linking the new objects directly into old-space.
         // The code below is almost the same as readFromBuffer() ... should unify
         var data = new DataView(segmentWordArray.words.buffer),
@@ -1834,7 +1843,7 @@ Object.subclass('Squeak.Image',
                         classObj = null;
                     }
                 }
-                if (classObj) data.setUint32(pos, objToOop(classObj), littleEndian); 
+                if (classObj) data.setUint32(pos, objToOop(classObj), littleEndian);
                 pos += 4;
                 classID++;
             }
@@ -2161,7 +2170,7 @@ Object.subclass('Squeak.Object',
         // one-based index
         var instSize = this.instSize();
         if (index <= instSize)
-            return this.sqClass.allInstVarNames()[index - 1];
+            return this.sqClass.allInstVarNames()[index - 1] || 'ivar' + (index - 1);
         else
             return (index - instSize).toString();
     },
@@ -2204,7 +2213,7 @@ Object.subclass('Squeak.Object',
         var fmt = this._format;
         if (fmt > 4 || fmt === 2) return 0;      //indexable fields only
         if (fmt < 2) return this.pointersSize(); //fixed fields only
-        return this.sqClass.classInstSize(); 
+        return this.sqClass.classInstSize();
     },
     indexableSize: function(primHandler) {
         var fmt = this._format;
@@ -2510,7 +2519,9 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             nWords = bits.length;
         switch (this._format) {
             case 0: // zero sized object
-                break;
+              // Pharo bug: Pharo 6.0 still has format 0 objects that actually do have inst vars
+              // https://pharo.fogbugz.com/f/cases/19010/ImmediateLayout-and-EphemeronLayout-have-wrong-object-format
+              // so we pretend these are regular objects and rely on nWords
             case 1: // only inst vars
             case 2: // only indexed vars
             case 3: // inst vars and indexed vars
@@ -2623,7 +2634,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
     indexableSize: function(primHandler) {
         var fmt = this._format;
         if (fmt < 2) return -1; //not indexable
-        if (fmt === 3 && primHandler.vm.isContext(this) && !primHandler.allowAccessBeyondSP)
+        if (fmt === 3 && primHandler.vm.isContext(this))
             return this.pointers[Squeak.Context_stackPointer]; // no access beyond top of stacks
         if (fmt < 6) return this.pointersSize() - this.instSize(); // pointers
         if (fmt < 12) return this.wordsSize(); // words
@@ -4149,7 +4160,7 @@ Object.subclass('Squeak.Interpreter',
             selectorObj = this.method.methodGetLiteral(byte & 0x0F);
         } else if (byte >= 0xB0 ) {
             selectorObj = this.specialSelectors[2 * (byte - 0xB0)];
-        } else if (byte <= 134) { 
+        } else if (byte <= 134) {
             // long form support demands we check the selector
             var litIndex;
             if (byte === 132) {
@@ -4188,11 +4199,12 @@ Object.subclass('Squeak.Primitives',
     initModules: function() {
         this.loadedModules = {};
         this.builtinModules = {
-            JavaScriptPlugin:       this.findPluginFunctions("js_", "", true),
+            JavaScriptPlugin:       this.findPluginFunctions("js_"),
             FilePlugin:             this.findPluginFunctions("", "primitive(Disable)?(File|Directory)"),
             DropPlugin:             this.findPluginFunctions("", "primitiveDropRequest"),
             SoundPlugin:            this.findPluginFunctions("snd_"),
             JPEGReadWriter2Plugin:  this.findPluginFunctions("jpeg2_"),
+            SqueakFFIPrims:         this.findPluginFunctions("ffi_", "", true),
             SecurityPlugin: {
                 primitiveDisableImageWrite: this.fakePrimitive.bind(this, "SecurityPlugin.primitiveDisableImageWrite", 0),
             },
@@ -5975,11 +5987,12 @@ Object.subclass('Squeak.Primitives',
     primitiveGetAttribute: function(argCount) {
         var attr = this.stackInteger(0);
         if (!this.success) return false;
-        var value;
+        var argv = this.display.argv,
+            value = null;
         switch (attr) {
-            case 0: value = this.filenameToSqueak(Squeak.vmPath + Squeak.vmFile); break;
-            case 1: value = this.display.documentName || null; break; // 1.x images want document here
-            case 2: value = this.display.documentName || null; break; // later images want document here
+            case 0: value = (argv && argv[0]) || this.filenameToSqueak(Squeak.vmPath + Squeak.vmFile); break;
+            case 1: value = (argv && argv[1]) || this.display.documentName; break; // 1.x images want document here
+            case 2: value = (argv && argv[2]) || this.display.documentName; break; // later images want document here
             case 1001: value = Squeak.platformName; break;
             case 1002: value = Squeak.osVersion; break;
             case 1003: value = Squeak.platformSubtype; break;
@@ -5988,8 +6001,13 @@ Object.subclass('Squeak.Primitives',
             case 1006: value = Squeak.vmBuild; break;
             case 1007: value = Squeak.vmVersion; break; // Interpreter class
             // case 1008: Cogit class
-            case 1009: value = Squeak.vmVersion; break; // Platform source version
-            default: return false;
+            case 1009: value = Squeak.vmVersion + ' Date: ' + Squeak.vmDate; break; // Platform source version
+            default:
+                if (argv && argv.length > attr) {
+                    value = argv[attr];
+                } else {
+                    return false;
+                }
         }
         this.vm.popNandPush(argCount+1, this.makeStObject(value));
         return true;
@@ -6035,6 +6053,9 @@ Object.subclass('Squeak.Primitives',
             case 10: return this.vm.image.pgcMilliseconds;  // total milliseconds in incremental GCs since startup (read-only)
             case 11: return this.vm.image.gcTenured;        // tenures of surving objects since startup (read-only)
             // 12-20 specific to the translating VM
+            case 15:
+            case 16:
+            case 17: return 0;                              // method cache stats
             // 21   root table size (read-only)
             case 22: return 0;                              // root table overflows since startup (read-only)
             case 23: return this.vm.image.extraVMMemory;    // bytes of extra memory to reserve for VM buffers, plugins, etc.
@@ -6368,7 +6389,7 @@ Object.subclass('Squeak.Primitives',
         return true;
     },
     primitiveTestDisplayDepth: function(argCount) {
-        var supportedDepths =  [1, 2, 4, 8, 16, 32]; // match showOnDisplay()
+        var supportedDepths =  [1, 2, 4, 8, 16, 32]; // match showForm
         return this.pop2andPushBoolIfOK(supportedDepths.indexOf(this.stackInteger(0)) >= 0);
     },
     loadForm: function(formObj, withOffset) {
@@ -6513,7 +6534,7 @@ Object.subclass('Squeak.Primitives',
         var micros = performance.now() * 1000 % 1000 | 0,
             oldMillis = state.millis,
             oldMicros = state.micros;
-        if (oldMillis > millis) millis = oldMillis;                 // rolled over previously 
+        if (oldMillis > millis) millis = oldMillis;                 // rolled over previously
         if (millis === oldMillis && micros < oldMicros) millis++;   // roll over now
         state.millis = millis;
         state.micros = micros;
@@ -6528,6 +6549,25 @@ Object.subclass('Squeak.Primitives',
         if (!this.microsecondClockLocalState)
             this.microsecondClockLocalState = {epoch: Squeak.Epoch, millis: 0, micros: 0};
         return this.microsecondClock(this.microsecondClockLocalState);
+    },
+    primitiveUtcWithOffset: function(argCount) {
+        var d = new Date();
+	var posixMicroseconds = this.pos53BitIntFor(d.getTime() * 1000);
+        var offset = -60 * d.getTimezoneOffset();
+        if (argCount > 0) {
+            // either an Array or a DateAndTime in new UTC format with two ivars
+            var stWordIndexableObject = this.vm.stackValue(0);
+            stWordIndexableObject.pointers[0] = posixMicroseconds;
+            stWordIndexableObject.pointers[1] = offset;
+            this.popNandPushIfOK(argCount + 1, stWordIndexableObject);
+            return true;
+        }
+        var timeAndOffset = [
+            posixMicroseconds,
+            offset,
+        ];
+        this.popNandPushIfOK(argCount + 1, this.makeStArray(timeAndOffset));
+        return true;
     },
 },
 'FilePlugin', {
@@ -6554,8 +6594,22 @@ Object.subclass('Squeak.Primitives',
         return this.popNandPushIfOK(1, this.charFromInt(delimitor.charCodeAt(0)));
     },
     primitiveDirectoryEntry: function(argCount) {
-        this.vm.warnOnce("Not yet implemented: primitiveDirectoryEntry");
-        return false; // image falls back on primitiveDirectoryLookup
+        var dirNameObj = this.stackNonInteger(1),
+            fileNameObj = this.stackNonInteger(0);
+        if (!this.success) return false;
+        var sqFileName = fileNameObj.bytesAsString();
+        var fileName = this.filenameFromSqueak(fileNameObj.bytesAsString());
+        var sqDirName = dirNameObj.bytesAsString();
+        var dirName = this.filenameFromSqueak(dirNameObj.bytesAsString());
+        var entries = Squeak.dirList(dirName, true);
+        if (!entries) {
+            var path = Squeak.splitFilePath(dirName);
+            console.log("Directory not found: " + path.fullname);
+            return false;
+        }
+        var entry = entries[fileName];
+        this.popNandPushIfOK(argCount+1, this.makeStObject(entry));  // entry or nil
+        return true;
     },
     primitiveDirectoryLookup: function(argCount) {
         var index = this.stackInteger(0),
@@ -7520,6 +7574,18 @@ Object.subclass('Squeak.Primitives',
     },
     js_objectOrGlobal: function(sqObject) {
         return 'jsObject' in sqObject ? sqObject.jsObject : window;
+    },
+},
+'FFI', {
+    ffi_primitiveCalloutWithArgs: function(argCount) {
+        var extLibFunc = this.stackNonInteger(1),
+            argsObj = this.stackNonInteger(0);
+        if (!this.isKindOf(extLibFunc, Squeak.splOb_ClassExternalFunction)) return false;
+        var moduleName = extLibFunc.pointers[Squeak.ExtLibFunc_module].bytesAsString();
+        var funcName = extLibFunc.pointers[Squeak.ExtLibFunc_name].bytesAsString();
+        var args = argsObj.pointers.join(', ');
+        this.vm.warnOnce('FFI: ignoring ' + moduleName + ': ' + funcName + '(' + args + ')');
+        return false;
     },
 },
 'Obsolete', {

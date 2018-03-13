@@ -33,12 +33,7 @@ window.onload = function() {
         spinner: sqSpinner,
         fullscreenCheckbox: sqFullscreen,
         root: "/Scratch",
-        templates: {
-            "Projects": "https://freudenbergs.de/bert/squeakjs/scratch/Projects",
-            "Media":    "https://freudenbergs.de/bert/squeakjs/scratch/Media",
-            "Help":     "https://freudenbergs.de/bert/squeakjs/scratch/Help",
-            "locale":   "https://freudenbergs.de/bert/squeakjs/scratch/locale",
-        },
+        templates: ["Projects", "Media", "Help", "locale"],
     });
 };
 

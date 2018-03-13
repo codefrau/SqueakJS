@@ -62,7 +62,7 @@
                     nFiles++;
                     nBytes += entry[4];
                     fileList.push('<li><a href="squeak:' + path + '" onclick="return exportFile(this)" target="_blank">' + path + '</a>' +
-                        (entry[4] >= 100000 ? ' (' + (entry[4]/1000000).toFixed(1) + ' MB)' 
+                        (entry[4] >= 100000 ? ' (' + (entry[4]/1000000).toFixed(1) + ' MB)'
                         : ' (' + (entry[4]/1000).toFixed(1) + ' KB)') + '</li>');
                 }
             };
@@ -73,8 +73,8 @@
             files.innerHTML = "<ul>" + fileList.sort(fsort).join("") + "</ul>";
             filestats.innerHTML = nFiles + " files in " + nDirs + " directories, " +
                 (nBytes/1000000).toFixed(1) + " MBytes total";
-        }          
-        if (imgList.length) images.innerHTML = "<p>Previously run local images:</p><ul>" + imgList.sort(fsort).join("") + "</ul>";
+        }
+        if (imgList.length) images.innerHTML = "<p>Select a local image to run:</p><ul>" + imgList.sort(fsort).join("") + "</ul>";
         else images.innerHTML = "<ul>[Once you have dropped local images to this page they will be listed here.]</ul>"
     }
     window.onhashchange = function() {
@@ -137,7 +137,7 @@
                     });
                 }
                 reader.onerror = function() {
-                    alert("Failed to read " + f.name); 
+                    alert("Failed to read " + f.name);
                     drop.style.borderColor = "";
                 }
                 reader.readAsArrayBuffer(f);
@@ -234,10 +234,10 @@
 
         <h2>Contribute to SqueakJS</h2>
         SqueakJS is free software (MIT license).
-        You're very welcome to <a href="http://lists.squeakfoundation.org/mailman/listinfo/vm-dev">discuss</a>, 
+        You're very welcome to <a href="http://lists.squeakfoundation.org/mailman/listinfo/vm-dev">discuss</a>,
         <a href="https://github.com/bertfreudenberg/SqueakJS/issues">report bugs</a>,
         and <a href="https://github.com/bertfreudenberg/SqueakJS/">contribute code</a>.
-        
+
         <p>Have fun! — Bert Freudenberg</p>
     </div>
     <canvas id="sqCanvas"></canvas>

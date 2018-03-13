@@ -20,7 +20,7 @@
  * THE SOFTWARE.
  */
 
-"use strict";    
+"use strict";
 
 //////////////////////////////////////////////////////////////////////////////
 // these functions fake the Lively module and class system
@@ -178,9 +178,9 @@ function setupFullscreen(display, canvas, options) {
         if (options.fullscreenCheckbox) options.fullscreenCheckbox.checked = fullscreen;
         setTimeout(window.onresize, 0);
     }
-    
+
     var checkFullscreen;
-    
+
     if (box.requestFullscreen) {
         document.addEventListener(fullscreenEvent, function(){fullscreenChange(box == document[fullscreenElement]);});
         checkFullscreen = function() {
@@ -605,7 +605,7 @@ function createSqueakDisplay(canvas, options) {
     // * if touch ended within this time, generate click (down+up)
     // * otherwise, start mousing with 2nd button
     // When mousing, always generate a move event before down event so that
-    // mouseover eventhandlers in image work better 
+    // mouseover eventhandlers in image work better
     canvas.ontouchstart = function(evt) {
         evt.preventDefault();
         var e = touchToMouse(evt);
@@ -646,7 +646,7 @@ function createSqueakDisplay(canvas, options) {
         evt.preventDefault();
         var e = touchToMouse(evt);
         switch (touch.state) {
-            case 'got1stFinger': 
+            case 'got1stFinger':
                 touch.state = 'mousing';
                 touch.button = e.button = 0;
                 recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
@@ -675,7 +675,7 @@ function createSqueakDisplay(canvas, options) {
                     touch.state = 'idle';
                     recordMouseEvent('mouseup', e, canvas, display, eventQueue, options);
                     return;
-                case 'got1stFinger': 
+                case 'got1stFinger':
                     touch.state = 'idle';
                     touch.button = e.button = 0;
                     recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
@@ -837,7 +837,7 @@ function createSqueakDisplay(canvas, options) {
                     image = buffer;
                     imageName = f.name;
                 }
-                if (loaded.length == files.length) {                
+                if (loaded.length == files.length) {
                     if (image) {
                         SqueakJS.appName = imageName.slice(0, -6);
                         SqueakJS.runImage(image, imageName, display, options);
@@ -957,7 +957,7 @@ var loop; // holds timeout for main loop
 
 SqueakJS.runImage = function(buffer, name, display, options) {
     window.onbeforeunload = function(evt) {
-        var msg = SqueakJS.appName + " is still running";  
+        var msg = SqueakJS.appName + " is still running";
         evt.returnValue = msg;
         return msg;
     };
@@ -1039,8 +1039,11 @@ function fetchTemplates(options) {
             options.templates.forEach(function(path){ templates[path] = path; });
             options.templates = templates;
         }
-        for (var path in options.templates)
-            Squeak.fetchTemplateDir(path[0] == "/" ? path : options.root + path, options.templates[path]);
+        for (var path in options.templates) {
+            var dir = path[0] == "/" ? path : options.root + path,
+                url = Squeak.splitUrl(options.templates[path], options.url).full;
+            Squeak.fetchTemplateDir(dir, url);
+        }
     }
 }
 
@@ -1137,7 +1140,10 @@ function downloadFile(file, display, options, thenDo) {
         else this.onerror(this.statusText);
     };
     rq.onerror = function(e) {
-        if (options.proxy) return alert("Failed to download:\n" + file.url);
+        if (options.proxy) {
+            console.error(Squeak.bytesAsString(new Uint8Array(this.response)));
+            return alert("Failed to download:\n" + file.url);
+        }
         console.warn('Retrying with CORS proxy: ' + file.url);
         var proxy = 'https://crossorigin.me/',
             retry = new XMLHttpRequest();
@@ -1146,7 +1152,9 @@ function downloadFile(file, display, options, thenDo) {
         retry.responseType = rq.responseType;
         retry.onprogress = rq.onprogress;
         retry.onload = rq.onload;
-        retry.onerror = function() {alert("Failed to download:\n" + file.url)};
+        retry.onerror = function() {
+            console.error(Squeak.bytesAsString(new Uint8Array(this.response)));
+            alert("Failed to download:\n" + file.url)};
         retry.send();
     };
     rq.send();
@@ -1175,10 +1183,12 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     processOptions(options);
     if (!imageUrl && options.image) imageUrl = options.image;
     var baseUrl = options.url || (imageUrl && imageUrl.replace(/[^\/]*$/, "")) || "";
+    options.url = baseUrl;
     fetchTemplates(options);
     var display = createSqueakDisplay(canvas, options),
         image = {url: null, name: null, image: true, data: null},
         files = [];
+    display.argv = options.argv;
     if (imageUrl) {
         var url = Squeak.splitUrl(imageUrl, baseUrl);
         image.url = url.full;
@@ -1187,7 +1197,7 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     if (options.files) {
         options.files.forEach(function(f) {
             var url = Squeak.splitUrl(f, baseUrl);
-            if (image.name === f) {/* pushed after other files */}
+            if (image.name === url.filename) {/* pushed after other files */}
             else if (!image.url && f.match(/\.image$/)) {
                 image.name = url.filename;
                 image.url = url.full;

@@ -1,5 +1,5 @@
 CACHE MANIFEST
-# Nov 26 18:43:50 2016
+# Mar 13 14:15:29 2018
 ../squeak.js
 ../vm.js
 ../jit.js
@@ -32,5 +32,6 @@ etoys.png
 ../lib/addtohomescreen.js
 ../lib/gh-fork-ribbon.css
 https://freudenbergs.de/bert/squeakjs/etoys.image
+https://freudenbergs.de/bert/squeakjs/Etoys/EtoysV5.stc
 NETWORK:
 *

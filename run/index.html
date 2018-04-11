@@ -28,15 +28,8 @@
     function exportFile(a) {
         var path = Squeak.splitFilePath(a.innerText);
         Squeak.fileGet(path.fullname, function(buffer) {
-            var blob = new Blob([buffer], {type: 'application/octet-stream'}),
-                blobURL = URL.createObjectURL(blob);
-            a.setAttribute('href', blobURL);
-            a.setAttribute('download', path.basename);
-            a.onclick = function(){
-                setTimeout(function(){URL.revokeObjectURL(blobURL)}, 0);
-                return true;
-            };
-            a.click();
+            var blob = new Blob([buffer], {type: 'application/octet-stream'});
+            FileSaver_saveAs(blob, path.basename, true);
         }, alert);
         return false;
     }

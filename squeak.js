@@ -117,6 +117,7 @@ Function.prototype.subclass = function(classPath /* + more args */ ) {
         "plugins/ZipPlugin.js",
         "lib/lz-string.js",
         "lib/jszip.js",
+        "lib/FileSaver.js",
     ].forEach(function(filename) {
         var script = document.createElement('script');
         script.setAttribute("type","text/javascript");

@@ -1,7 +1,7 @@
 module('users.bert.SqueakJS.vm').requires().toRun(function() {
 "use strict";
 /*
- * Copyright (c) 2013-2016 Bert Freudenberg
+ * Copyright (c) 2013-2019 Bert Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -39,8 +39,8 @@ try {
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 0.9.6",
-    vmDate: "2018-03-13",               // Maybe replace at build time?
+    vmVersion: "SqueakJS 0.9.7",
+    vmDate: "2019-01-03",               // Maybe replace at build time?
     vmBuild: "unknown",                 // or replace at runtime by last-modified?
     vmPath: "/",
     vmFile: "vm.js",
@@ -5083,11 +5083,9 @@ Object.subclass('Squeak.Primitives',
         return array;
     },
     makeStString: function(jsString) {
-        var bytes = [];
+        var stString = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassString], jsString.length);
         for (var i = 0; i < jsString.length; ++i)
-            bytes.push(jsString.charCodeAt(i) & 0xFF);
-        var stString = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassString], bytes.length);
-        stString.bytes = bytes;
+            stString.bytes[i] = jsString.charCodeAt(i) & 0xFF;
         return stString;
     },
     makeStObject: function(obj, proxyClass) {
@@ -6490,6 +6488,7 @@ Object.subclass('Squeak.Primitives',
         this.display.signalInputEvent = function() {
             this.signalSemaphoreWithIndex(this.inputEventSemaIndex);
         }.bind(this);
+        this.display.signalInputEvent();
         return true;
     },
     primitiveInputWord: function(argCount) {

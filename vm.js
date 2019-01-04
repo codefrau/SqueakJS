@@ -5083,11 +5083,9 @@ Object.subclass('Squeak.Primitives',
         return array;
     },
     makeStString: function(jsString) {
-        var bytes = [];
+        var stString = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassString], jsString.length);
         for (var i = 0; i < jsString.length; ++i)
-            bytes.push(jsString.charCodeAt(i) & 0xFF);
-        var stString = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassString], bytes.length);
-        stString.bytes = bytes;
+            stString.bytes[i] = jsString.charCodeAt(i) & 0xFF;
         return stString;
     },
     makeStObject: function(obj, proxyClass) {

@@ -101,6 +101,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2019-01-03: 0.9.7 minor fixes
     2018-03-13: 0.9.6 minor fixes
     2016-11-08: 0.9.5 more fixes
     2016-10-20: 0.9.4 fixes

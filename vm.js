@@ -3952,7 +3952,7 @@ Object.subclass('Squeak.Interpreter',
         });
     },
     allGlobalsDo: function(callback) {
-        // callback(globalNameObj, globalObj) should return true to break out of iteration
+        // callback(globalNameObj, globalObj), truish result breaks out of iteration
         var globals = this.globals;
         for (var i = 0; i < globals.length; i++) {
             var assn = globals[i];
@@ -3963,7 +3963,7 @@ Object.subclass('Squeak.Interpreter',
         }
     },
     allMethodsDo: function(callback) {
-        // callback(classObj, methodObj, selectorObj) should return true to break out of iteration
+        // callback(classObj, methodObj, selectorObj), truish result breaks out of iteration
         var self = this;
         this.allGlobalsDo(function(globalNameObj, globalObj) {
             if (globalObj.pointers && globalObj.pointers.length >= 9) {

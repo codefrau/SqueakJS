@@ -3976,7 +3976,7 @@ Object.subclass('Squeak.Interpreter',
                     if (!methods) continue;
                     var selectors = mdict.pointers;
                     for (var j = 0; j < methods.length; j++) {
-                        if (callback.call(this, cls, methods[j], selectors[2+j]))
+                        if (!methods[j].isNil && callback.call(this, cls, methods[j], selectors[2+j]))
                             return true;
                     }
                 }

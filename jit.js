@@ -142,7 +142,7 @@ to single-step.
 },
 'accessing', {
     compile: function(method, optClass, optSel) {
-        if (method.compiled === void 0) {
+        if (method.compiled === undefined) {
             // 1st time
             method.compiled = false;
         } else {
@@ -178,7 +178,7 @@ to single-step.
         return true;
     },
     functionNameFor: function(cls, sel) {
-        if (cls === void 0 || cls === '?') return "Squeak_DOIT";
+        if (cls === undefined || cls === '?') return "Squeak_DOIT";
         if (!/[^a-zA-Z0-9:_]/.test(sel))
             return (cls + "_" + sel).replace(/[: ]/g, "_");
         var op = sel.replace(/./g, function(char) {

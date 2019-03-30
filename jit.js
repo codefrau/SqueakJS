@@ -85,11 +85,15 @@ version of the generated JavaScript code:
     6 <21> pushConst: 42
     7 <7C> return: topOfStack
 
+    context = vm.activeContext
     while (true) switch (vm.pc) {
     case 0:
         stack[++vm.sp] = inst[0];
-        vm.pc = 2; vm.send(#selector);
-        return 0;
+        vm.pc = 2; vm.send(#selector); // activate new method
+        return; // return to main loop
+        // Main loop will execute the activated method. When
+        // that method returns, this method will be called
+        // again with vm.pc == 2 and jump directly to case 2
     case 2:
         if (stack[vm.sp--] === vm.trueObj) {
             vm.pc = 6;
@@ -102,7 +106,7 @@ version of the generated JavaScript code:
     case 6:
         stack[++vm.sp] = 42;
         vm.pc = 7; vm.doReturn(stack[vm.sp]);
-        return 0;
+        return;
     }
 
 Debugging support
@@ -215,11 +219,11 @@ to single-step.
             var byte = method.bytes[this.pc++],
                 byte2 = 0;
             switch (byte & 0xF8) {
-                // load receiver variable
+                // load inst var
                 case 0x00: case 0x08:
                     this.generatePush("inst[", byte & 0x0F, "]");
                     break;
-                // load temporary variable
+                // load temp var
                 case 0x10: case 0x18:
                     this.generatePush("temp[", 6 + (byte & 0xF), "]");
                     break;
@@ -231,11 +235,11 @@ to single-step.
                 case 0x40: case 0x48: case 0x50: case 0x58:
                     this.generatePush("lit[", 1 + (byte & 0x1F), "].pointers[1]");
                     break;
-                // storeAndPop rcvr
+                // storeAndPop inst var
                 case 0x60:
                     this.generatePopInto("inst[", byte & 0x07, "]");
                     break;
-                // storeAndPop temp
+                // storeAndPop temp var
                 case 0x68:
                     this.generatePopInto("temp[", 6 + (byte & 0x07), "]");
                     break;

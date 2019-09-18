@@ -2,6 +2,9 @@
  * This Socket plugin only fulfills http:/https: requests by intercepting them
  * and sending as XMLHttpRequest. To make connections to servers without CORS,
  * it uses the crossorigin.me proxy.
+ * DNS requests are done through DNS over HTTPS (DoH). Quad9 (IP 9.9.9.9) is used
+ * as server because it seems to take privacy of users serious. Other servers can
+ * be found at https://en.wikipedia.org/wiki/Public_recursive_name_server
  */
 
 function SocketPlugin() {
@@ -16,7 +19,13 @@ function SocketPlugin() {
     needProxy: new Set(),
 
     // DNS Lookup
+    // Cache elements: key is name, value is { address: 1.2.3.4, validUntil: Date.now() + 30000 }
+    status: 0, // Resolver_Uninitialized,
+    lookupCache: {
+      localhost: { address: [ 127, 0, 0, 1], validUntil: Number.MAX_SAFE_INTEGER }
+    },
     lastLookup: null,
+    lookupSemaIdx: 0,
 
     // Constants
     TCP_Socket_Type: 0,
@@ -37,10 +46,110 @@ function SocketPlugin() {
       return true;
     },
 
+    _signalSemaphore: function(semaIndex) {
+      if (semaIndex <= 0) return;
+      this.primHandler.signalSemaphoreWithIndex(semaIndex);
+    },
+
+    _signalLookupSemaphore: function() { this._signalSemaphore(this.lookupSemaIdx); },
+
+    _getAddressFromLookupCache: function(name, skipExpirationCheck) {
+      if (name) {
+
+        // Check for valid dotted decimal name first
+        var dottedDecimalsMatch = name.match(/^\d+\.\d+\.\d+\.\d+$/);
+        if (dottedDecimalsMatch) {
+          var result = name.split(".").map(function(d) { return +d; });
+          if (result.every(function(d) { return d <= 255; })) {
+            return new Uint8Array(result);
+          }
+        }
+
+        // Lookup in cache
+        var cacheEntry = this.lookupCache[name];
+        if (cacheEntry && (skipExpirationCheck || cacheEntry.validUntil >= Date.now())) {
+          return new Uint8Array(cacheEntry.address);
+        }
+      }
+      return null;
+    },
+
+    _addAddressFromResponseToLookupCache: function(response) {
+      // Check for valid response
+      if (!response || response.Status !== 0 || !response.Question || !response.Answer) {
+        return;
+      }
+
+      // Clean up all response elements by removing trailing dots in names
+      var removeTrailingDot = function(element, field) {
+        if (element[field] && element[field].replace) {
+          element[field] = element[field].replace(/\.$/, "");
+        }
+      };
+      var originalQuestion = response.Question[0]; 
+      removeTrailingDot(originalQuestion, "name");
+      response.Answer.forEach(function(answer) {
+        removeTrailingDot(answer, "name");
+        removeTrailingDot(answer, "data");
+      });
+
+      // Get address by traversing alias chain
+      var lookup = originalQuestion.name;
+      var address = null;
+      var ttl = 24 * 60 * 60; // One day as safe default
+      var hasAddress = response.Answer.some(function(answer) {
+        if (answer.name === lookup) {
+
+          // Time To Live can be set on alias and address, keep shortest period
+          if (answer.TTL) {
+            ttl = Math.min(ttl, answer.TTL);
+          }
+
+          if (answer.type === 1) {
+            // Retrieve IP address as array with 4 numeric values
+            address = answer.data.split(".").map(function(numberString) { return +numberString; });
+            return true;
+          } else if (answer.type === 5) {
+            // Lookup name points to alias, follow alias from here on
+            lookup = answer.data;
+          }
+        }
+        return false;
+      });
+
+      // Store address found
+      if (hasAddress) {
+        this.lookupCache[originalQuestion.name] = { address: address, validUntil: Date.now() + (ttl * 1000) };
+      }
+    },
+
+    _compareAddresses: function(address1, address2) {
+      return address1.every(function(addressPart, index) {
+        return address2[index] === addressPart;
+      });
+    },
+
+    _reverseLookupNameForAddress: function(address) {
+      // Currently public API's for IP to hostname are not standardized yet (like DoH).
+      // Assume most lookup's will be for reversing earlier name to address lookups.
+      // Therefor use the lookup cache and otherwise create a dotted decimals name.
+      var thisHandle = this;
+      var result = null;
+      Object.keys(this.lookupCache).some(function(name) {
+        if (thisHandle._compareAddresses(address, thisHandle.lookupCache[name].address)) {
+          result = name;
+          return true;
+        }
+        return false;
+      });
+      return result || address.join(".");
+    },
+
     // A socket handle emulates socket behavior
     _newSocketHandle: function(sendBufSize, connSemaIdx, readSemaIdx, writeSemaIdx) {
       var plugin = this;
       return {
+        hostAddress: null,
         host: null,
         port: null,
 
@@ -57,13 +166,9 @@ function SocketPlugin() {
 
         status: plugin.Socket_Unconnected,
 
-        _signalSemaphore: function(semaIndex) {
-          if (semaIndex <= 0) return;
-          plugin.primHandler.signalSemaphoreWithIndex(semaIndex);
-        },
-        _signalConnSemaphore: function() { this._signalSemaphore(this.connSemaIndex); },
-        _signalReadSemaphore: function() { this._signalSemaphore(this.readSemaIndex); },
-        _signalWriteSemaphore: function() { this._signalSemaphore(this.writeSemaIndex); },
+        _signalConnSemaphore: function() { plugin._signalSemaphore(this.connSemaIndex); },
+        _signalReadSemaphore: function() { plugin._signalSemaphore(this.readSemaIndex); },
+        _signalWriteSemaphore: function() { plugin._signalSemaphore(this.writeSemaIndex); },
 
         _otherEndClosed: function() {
           this.status = plugin.Socket_OtherEndClosed;
@@ -259,8 +364,9 @@ function SocketPlugin() {
           this._signalReadSemaphore();
         },
 
-        connect: function(host, port) {
-          this.host = host;
+        connect: function(hostAddress, port) {
+          this.hostAddress = hostAddress;
+          this.host = plugin._reverseLookupNameForAddress(hostAddress);
           this.port = port;
           this.status = plugin.Socket_Connected;
           this._signalConnSemaphore();
@@ -345,32 +451,180 @@ function SocketPlugin() {
     },
 
     primitiveInitializeNetwork: function(argCount) {
-      this.interpreterProxy.pop(1);
+      if (argCount !== 1) return false;
+      this.lookupSemaIdx = this.interpreterProxy.stackIntegerValue(0);
+      this.status = this.Resolver_Ready;
+      this.interpreterProxy.pop(argCount);
       return true;
     },
 
     primitiveResolverNameLookupResult: function(argCount) {
       if (argCount !== 0) return false;
-      var inet;
-      if (this.lastLookup !== null) {
-        inet = this.primHandler.makeStString(this.lastLookup);
-        this.lastLookup = null;
-      } else {
-        inet = this.interpreterProxy.nilObject();
+
+      // Validate that lastLookup is in fact a name (and not an address)
+      if (!this.lastLookup || !this.lastLookup.substr) {
+        this.interpreterProxy.popthenPush(argCount, this.interpreterProxy.nilObject());
+        return true;
       }
-      this.interpreterProxy.popthenPush(1, inet);
+
+      // Retrieve result from cache
+      var address = this._getAddressFromLookupCache(this.lastLookup, true);
+      this.interpreterProxy.popthenPush(argCount, address ?
+        this.primHandler.makeStByteArray(address) :
+        this.interpreterProxy.nilObject()
+      );
       return true;
     },
 
     primitiveResolverStartNameLookup: function(argCount) {
       if (argCount !== 1) return false;
-      this.lastLookup = this.interpreterProxy.stackValue(0).bytesAsString();
-      this.interpreterProxy.popthenPush(1, this.interpreterProxy.nilObject());
+
+      // Start new lookup, ignoring if one is in progress
+      var lookup = this.lastLookup = this.interpreterProxy.stackValue(0).bytesAsString();
+
+      // Perform lookup in local cache
+      var result = this._getAddressFromLookupCache(lookup, false);
+      if (result) {
+        this.status = this.Resolver_Ready;
+        this._signalLookupSemaphore();
+      } else {
+
+        // Perform DNS request
+        var dnsQueryURL = `https:///9.9.9.9:5053/dns-query?name=${encodeURIComponent(this.lastLookup)}&type=A`;
+        var queryStarted = false;
+        if (window.fetch) {
+          var thisHandle = this;
+          var init = {
+            method: "GET",
+            mode: "cors",
+            credentials: "omit",
+            cache: "no-store", // do not use the browser cache for DNS requests (a separate cache is kept)
+            referrer: "no-referrer",
+            referrerPolicy: "no-referrer",
+          };
+          window.fetch(dnsQueryURL, init)
+            .then(function(response) {
+              return response.json();
+            })
+            .then(function(response) {
+              thisHandle._addAddressFromResponseToLookupCache(response);
+            })
+            .catch(function(error) {
+              console.error("Name lookup failed", error);
+            })
+            .then(function() {
+
+              // If no other lookup is started, signal the receiver (ie resolver) is ready
+              if (lookup === thisHandle.lastLookup) {
+                thisHandle.status = thisHandle.Resolver_Ready;
+                thisHandle._signalLookupSemaphore();
+              }
+            })
+          ;
+          queryStarted = true;
+        } else {
+          var thisHandle = this;
+          var lookupReady = function() {
+
+            // If no other lookup is started, signal the receiver (ie resolver) is ready
+            if (lookup === thisHandle.lastLookup) {
+              thisHandle.status = thisHandle.Resolver_Ready;
+              thisHandle._signalLookupSemaphore();
+            }
+          };
+          var httpRequest = new XMLHttpRequest();
+          httpRequest.open("GET", dnsQueryURL, true);
+          httpRequest.timeout = 2000; // milliseconds
+          httpRequest.responseType = "json";
+          httpRequest.onload = function(oEvent) {
+            thisHandle._addAddressFromResponseToLookupCache(this.response);
+            lookupReady();
+          };
+          httpRequest.onerror = function(error) {
+            console.error("Name lookup failed", error);
+            lookupReady();
+          };
+          httpRequest.send();
+
+          queryStarted = true;
+        }
+
+        // Mark the receiver (ie resolver) is busy
+        if (queryStarted) {
+          this.status = this.Resolver_Busy;
+          this._signalLookupSemaphore();
+        }
+      }
+
+      this.interpreterProxy.popthenPush(argCount, this.interpreterProxy.nilObject());
+      return true;
+    },
+
+    primitiveResolverAddressLookupResult: function(argCount) {
+      if (argCount !== 0) return false;
+
+      // Validate that lastLookup is in fact an address (and not a name)
+      if (!this.lastLookup || !this.lastLookup.every) {
+        this.interpreterProxy.popthenPush(argCount, this.interpreterProxy.nilObject());
+        return true;
+      }
+
+      // Retrieve result from cache
+      var name = this._reverseLookupNameForAddress(this.lastLookup);
+      var result = this.primHandler.makeStString(name);
+      this.interpreterProxy.popthenPush(argCount, result);
+      return true;
+    },
+
+    primitiveResolverStartAddressLookup: function(argCount) {
+      if (argCount !== 1) return false;
+
+      // Start new lookup, ignoring if one is in progress
+      this.lastLookup = this.interpreterProxy.stackBytes(0);
+      this.interpreterProxy.popthenPush(argCount, this.interpreterProxy.nilObject());
+
+      // Immediately signal the lookup is ready (since all lookups are done internally)
+      this.status = this.Resolver_Ready;
+      this._signalLookupSemaphore();
+
       return true;
     },
 
     primitiveResolverStatus: function(argCount) {
-      this.interpreterProxy.popthenPush(1, this.Resolver_Ready);
+      if (argCount !== 0) return false;
+      this.interpreterProxy.popthenPush(argCount, this.status);
+      return true;
+    },
+
+    primitiveResolverAbortLookup: function(argCount) {
+      if (argCount !== 0) return false;
+
+      // Unable to abort send request (although future browsers might support AbortController),
+      // just cancel the handling of the request by resetting the lastLookup value
+      this.lastLookup = null;
+      this.status = this.Resolver_Ready;
+      this._signalLookupSemaphore();
+
+      this.interpreterProxy.popthenPush(argCount, this.interpreterProxy.nilObject());
+      return true;
+    },
+
+    primitiveSocketRemoteAddress: function(argCount) {
+      if (argCount !== 1) return false;
+      var handle = this.interpreterProxy.stackObjectValue(0).handle;
+      if (handle === undefined) return false;
+      this.interpreterProxy.popthenPush(argCount, handle.hostAddress ?
+        this.primHandler.makeStByteArray(handle.hostAddress) :
+        this.interpreterProxy.nilObject()
+      );
+      return true;
+    },
+
+    primitiveSocketRemotePort: function(argCount) {
+      if (argCount !== 1) return false;
+      var handle = this.interpreterProxy.stackObjectValue(0).handle;
+      if (handle === undefined) return false;
+      this.interpreterProxy.popthenPush(argCount, handle.port);
       return true;
     },
 
@@ -388,9 +642,9 @@ function SocketPlugin() {
       if (argCount !== 3) return false;
       var handle = this.interpreterProxy.stackObjectValue(2).handle;
       if (handle === undefined) return false;
-      var host = this.interpreterProxy.stackObjectValue(1).bytesAsString();
+      var hostAddress = this.interpreterProxy.stackBytes(1);
       var port = this.interpreterProxy.stackIntegerValue(0);
-      handle.connect(host, port);
+      handle.connect(hostAddress, port);
       this.interpreterProxy.popthenPush(argCount,
                                         this.interpreterProxy.nilObject());
       return true;

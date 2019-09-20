@@ -1,7 +1,21 @@
 /*
- * This Socket plugin only fulfills http:/https: requests by intercepting them
- * and sending as XMLHttpRequest. To make connections to servers without CORS,
- * it uses the crossorigin.me proxy.
+ * This Socket plugin only fulfills http:/https:/ws:/wss: requests by intercepting them
+ * and sending as either XMLHttpRequest or Fetch or WebSocket.
+ * To make connections to servers without CORS, it uses the crossorigin.me proxy.
+ *
+ * When a WebSocket connection is created in the Smalltalk image a low level socket is
+ * assumed to be provided by this plugin. Since low level sockets are not supported
+ * in the browser a WebSocket is used here. This does however require the WebSocket
+ * protocol (applied by the Smalltalk image) to be 'reversed' or 'faked' here in the
+ * plugin.
+ * The WebSocket handshake protocol is faked within the plugin and a regular WebSocket
+ * connection is set up with the other party resulting in a real handshake.
+ * When a (WebSocket) message is sent from the Smalltalk runtime it will be packed
+ * inside a frame (fragment). This Socket plugin will extract the message from the
+ * frame and send it using the WebSocket object (which will put it into a frame
+ * again). A bit of unnecessary byte and bit fiddling unfortunately.
+ * See the following site for an explanation of the WebSocket protocol:
+ * https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers
  */
 
 function SocketPlugin() {
@@ -48,6 +62,8 @@ function SocketPlugin() {
         readSemaIndex: readSemaIdx,
         writeSemaIndex: writeSemaIdx,
 
+        webSocket: null,
+
         sendBuffer: null,
         sendTimeout: null,
 
@@ -56,6 +72,21 @@ function SocketPlugin() {
         responseReceived: false,
 
         status: plugin.Socket_Unconnected,
+
+        _byteArrayToString: function(byteArray) {
+          // For performance use String.fromCharCode with array as arguments
+          // This will result in a stack overflow on browsers for large arrays, so use old fashioned loop there
+          if (byteArray.byteLength < 10000) {
+            return String.fromCharCode.apply(null, byteArray);
+          } else {
+            var string = "";
+            var length = byteArray.length;
+            for (var i = 0; i < length; i++) {
+              string += String.fromCharCode(byteArray[i]);
+            }
+            return string;
+          }
+        },
 
         _signalSemaphore: function(semaIndex) {
           if (semaIndex <= 0) return;
@@ -67,6 +98,7 @@ function SocketPlugin() {
 
         _otherEndClosed: function() {
           this.status = plugin.Socket_OtherEndClosed;
+          this.webSocket = null;
           this._signalConnSemaphore();
         },
 
@@ -91,7 +123,26 @@ function SocketPlugin() {
         },
 
         _performRequest: function() {
+          // Assume a send is requested through WebSocket if connection is present
+          if (this.webSocket) {
+            this._performWebSocketSend();
+            return;
+          }
+
           var request = new TextDecoder("utf-8").decode(this.sendBuffer);
+
+          // Remove request from send buffer
+          var endOfRequestIndex = this.sendBuffer.findIndex(function(element, index, array) {
+            // Check for presence of "\r\n\r\n" denoting the end of the request (do simplistic but fast check)
+            return array[index] === "\r" && array[index + 2] === "\r" && array[index + 1] === "\n" && array[index + 3] === "\n";
+          });
+          if (endOfRequestIndex >= 0) {
+            this.sendBuffer = this.sendBuffer.subarray(endOfRequestIndex + 4);
+          } else {
+            this.sendBuffer = null;
+          }
+
+          // Extract header fields
           var headerLines = request.split('\r\n\r\n')[0].split('\n');
           // Split header lines and parse first line
           var firstHeaderLineItems = headerLines[0].split(' ');
@@ -104,6 +155,8 @@ function SocketPlugin() {
           var targetURL = firstHeaderLineItems[1];
 
           // Extract possible data to send
+          var seenUpgrade = false;
+          var seenWebSocket = false;
           var data = null;
           for (var i = 1; i < headerLines.length; i++) {
             var line = headerLines[i];
@@ -111,11 +164,16 @@ function SocketPlugin() {
               var contentLength = parseInt(line.substr(16));
               var end = this.sendBuffer.byteLength;
               data = this.sendBuffer.subarray(end - contentLength, end);
-              break;
+            } else if (line.match(/Connection: Upgrade/i)) {
+              seenUpgrade = true;
+            } else if (line.match(/Upgrade: WebSocket/i)) {
+              seenWebSocket = true;
             }
           }
 
-          if (window.fetch) {
+          if (httpMethod === "GET" && seenUpgrade && seenWebSocket) {
+            this._performWebSocketRequest(targetURL, httpMethod, data, headerLines);
+          } else if (window.fetch) {
             this._performFetchAPIRequest(targetURL, httpMethod, data, headerLines);
           } else {
             this._performXMLHTTPRequest(targetURL, httpMethod, data, headerLines);
@@ -259,6 +317,213 @@ function SocketPlugin() {
           this._signalReadSemaphore();
         },
 
+        _performWebSocketRequest: function(targetURL, httpMethod, data, requestLines){
+          var url = this._getURL(targetURL);
+
+          // Extract WebSocket key and subprotocol
+          var webSocketSubProtocol;
+          var webSocketKey;
+          for (var i = 1; i < requestLines.length; i++) {
+            var requestLine = requestLines[i].split(":");
+            if (requestLine[0] === "Sec-WebSocket-Protocol") {
+              webSocketSubProtocol = requestLine[1].trim();
+              if (webSocketKey) {
+                break;  // Only break if both webSocketSubProtocol and webSocketKey are found
+              }
+            } else if (requestLine[0] === "Sec-WebSocket-Key") {
+              webSocketKey = requestLine[1].trim();
+              if (webSocketSubProtocol) {
+                break;  // Only break if both webSocketSubProtocol and webSocketKey are found
+              }
+            }
+          }
+
+          // Keep track of WebSocket for future send and receive operations
+          this.webSocket = new WebSocket(url.replace(/^http/, "ws"), webSocketSubProtocol);
+ 
+          var thisHandle = this;
+          this.webSocket.onopen = function() {
+            if (thisHandle.status !== plugin.Socket_Connected) {
+              thisHandle.status = plugin.Socket_Connected;
+              thisHandle._signalConnSemaphore();
+              thisHandle._signalWriteSemaphore(); // Immediately ready to write
+            }
+
+            // Send the (fake) handshake back to the caller
+            var acceptKey = sha1.array(webSocketKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+            var acceptKeyString = thisHandle._byteArrayToString(acceptKey);
+            thisHandle._performWebSocketReceive(
+              "HTTP/1.1 101 Switching Protocols\r\n" +
+              "Upgrade: websocket\r\n" +
+              "Connection: Upgrade\r\n" +
+              "Sec-WebSocket-Accept: " + btoa(acceptKeyString) + "\r\n\r\n",
+               true
+            );
+          };
+          this.webSocket.onmessage = function(event) {
+            thisHandle._performWebSocketReceive(event.data);
+          };
+          this.webSocket.onerror = function(e) {
+            thisHandle._otherEndClosed();
+            console.error("Error in WebSocket:", e);
+          };
+          this.webSocket.onclose = function() {
+            thisHandle._otherEndClosed();
+          };
+        },
+
+        _performWebSocketReceive: function(message, skipFramePacking) {
+
+          // Process received message
+          var dataIsBinary = !message.substr;
+          if (!dataIsBinary) {
+            message = new TextEncoder("utf-8").encode(message);
+          }
+          if (!skipFramePacking) {
+
+            // Create WebSocket frame from message for Smalltalk runtime
+            var frameLength = 1 + message.length + 4; // 1 byte for initial header bits & opcode and 4 bytes for mask
+            var payloadLengthByte;
+            if (message.byteLength < 126) {
+              frameLength += 1; // 1 byte for payload length
+              payloadLengthByte = message.length;
+            } else if (message.byteLength < 0xffff) {
+              frameLength += 2; // 2 bytes for payload length
+              payloadLengthByte = 126;
+            } else {
+              frameLength += 8; // 8 bytes for payload length
+              payloadLengthByte = 127;
+            }
+            var frame = new Uint8Array(frameLength);
+            frame[0] = dataIsBinary ? 0x82 : 0x81;  // Final bit 0x80 set and opcode 0x01 for text and 0x02 for binary
+            frame[1] = 0x80 | payloadLengthByte;  // Mask bit 0x80 and payload length byte
+            var nextByteIndex;
+            if (payloadLengthByte === 126) {
+              frame[2] = message.length >> 8;
+              frame[3] = message.length & 0xff;
+              nextByteIndex = 4;
+            } else if (payloadLengthByte === 127) {
+              frame[2] = message.length >> 56;
+              frame[3] = (message.length >> 48) & 0xff;
+              frame[4] = (message.length >> 40) & 0xff;
+              frame[5] = (message.length >> 32) & 0xff;
+              frame[6] = (message.length >> 24) & 0xff;
+              frame[7] = (message.length >> 16) & 0xff;
+              frame[8] = (message.length >> 8) & 0xff;
+              frame[9] = message.length & 0xff;
+              nextByteIndex = 10;
+            } else {
+              nextByteIndex = 2;
+            }
+
+            // Add 'empty' mask (requiring no transformation)
+            // Otherwise a (random) mask and the following line should be added:
+            // var payload = message.map(function(b, index) { return b ^ maskKey[index & 0x03]; });
+            var maskKey = new Uint8Array(4);
+            frame.set(maskKey, nextByteIndex);
+            nextByteIndex += 4;
+            var payload = message;
+            frame.set(payload, nextByteIndex);
+
+            // Make sure the frame is set as the response
+            message = frame;
+          }
+
+          // Store received message in response buffer
+          if (!this.response || !this.response.length) {
+            this.response = [ message ];
+          } else {
+            this.response.push(message);
+          }
+          this.responseReceived = true;
+          this._signalReadSemaphore();
+        },
+
+        _performWebSocketSend: function() {
+          // Decode sendBuffer which is a WebSocket frame (from Smalltalk runtime)
+
+          // Read frame header fields
+          var firstByte = this.sendBuffer[0];
+          var finalBit = firstByte >> 7;
+          var opcode = firstByte & 0x0f;
+          var dataIsBinary;
+          if (opcode === 0x00) {
+            // Continuation frame
+            console.error("No support for WebSocket frame continuation yet!");
+            return true;
+          } else if (opcode === 0x01) {
+            // Text frame
+            dataIsBinary = false;
+          } else if (opcode === 0x02) {
+            // Binary frame
+            dataIsBinary = true;
+          } else if (opcode === 0x08) {
+            // Close connection
+            this.webSocket.close();
+            this.webSocket = null;
+            return;
+          } else if (opcode === 0x09 || opcode === 0x0a) {
+            // Ping/pong frame (ignoring it, is handled by WebSocket implementation itself)
+            return;
+          } else {
+            console.error("Unsupported WebSocket frame opcode " + opcode);
+            return;
+          }
+          var secondByte = this.sendBuffer[1];
+          var maskBit = secondByte >> 7;
+          var payloadLength = secondByte & 0x7f;
+          var nextByteIndex;
+          if (payloadLength === 126) {
+            payloadLength = (this.sendBuffer[2] << 8) | this.sendBuffer[3];
+            nextByteIndex = 4;
+          } else if (payloadLength === 127) {
+            payloadLength =
+              (this.sendBuffer[2] << 56) |
+              (this.sendBuffer[3] << 48) |
+              (this.sendBuffer[4] << 40) |
+              (this.sendBuffer[5] << 32) |
+              (this.sendBuffer[6] << 24) |
+              (this.sendBuffer[7] << 16) |
+              (this.sendBuffer[8] << 8) |
+              this.sendBuffer[9]
+            ;
+            nextByteIndex = 10;
+          } else {
+            nextByteIndex = 2;
+          }
+          var maskKey;
+          if (maskBit) {
+            maskKey = this.sendBuffer.subarray(nextByteIndex, nextByteIndex + 4);
+            nextByteIndex += 4;
+          }
+
+          // Read (remaining) payload
+          var payloadData = this.sendBuffer.subarray(nextByteIndex, nextByteIndex + payloadLength);
+          nextByteIndex += payloadLength;
+
+          // Unmask the payload
+          if (maskBit) {
+            payloadData = payloadData.map(function(b, index) { return b ^ maskKey[index & 0x03]; });
+          }
+
+          // Extract data from payload
+          var data;
+          if (dataIsBinary) {
+            data = payloadData;
+          } else {
+            data = this._byteArrayToString(payloadData);
+          }
+
+          // Remove frame from send buffer
+          this.sendBuffer = this.sendBuffer.subarray(nextByteIndex);
+          this.webSocket.send(data);
+
+          // Send remaining frames
+          if (this.sendBuffer.byteLength > 0) {
+            this._performWebSocketSend();
+          }
+        },
+
         connect: function(host, port) {
           this.host = host;
           this.port = port;
@@ -271,6 +536,10 @@ function SocketPlugin() {
           if (this.status == plugin.Socket_Connected ||
               this.status == plugin.Socket_OtherEndClosed ||
               this.status == plugin.Socket_WaitingForConnection) {
+            if(this.webSocket) {
+              this.webSocket.close();
+              this.webSocket = null;
+            }
             this.status = plugin.Socket_Unconnected;
             this._signalConnSemaphore();
           }
@@ -283,14 +552,18 @@ function SocketPlugin() {
         dataAvailable: function() {
           if (this.status == plugin.Socket_InvalidSocket) return false;
           if (this.status == plugin.Socket_Connected) {
-            if (this.response && this.response.length > 0) {
-              this._signalReadSemaphore();
-              return true; 
-            }
-            if (this.responseSentCompletly) {
-              // Signal older Socket implementations that they reached the end
-              this.status = plugin.Socket_OtherEndClosed;
-              this._signalConnSemaphore();
+            if (this.webSocket) {
+              return this.response && this.response.length > 0;
+            } else {
+              if (this.response && this.response.length > 0) {
+                this._signalReadSemaphore();
+                return true; 
+              }
+              if (this.responseSentCompletly) {
+                // Signal older Socket implementations that they reached the end
+                this.status = plugin.Socket_OtherEndClosed;
+                this._signalConnSemaphore();
+              }
             }
           }
           return false;
@@ -310,7 +583,7 @@ function SocketPlugin() {
           } else {
             this.response.shift();
           }
-          if (this.responseReceived && this.response.length === 0) {
+          if (this.responseReceived && this.response.length === 0 && !this.webSocket) {
             this.responseSentCompletly = true;
           }
 
@@ -324,7 +597,8 @@ function SocketPlugin() {
           this.lastSend = Date.now();
           var newBytes = data.bytes.subarray(start, end);
           if (this.sendBuffer === null) {
-            this.sendBuffer = newBytes;
+            // Make copy of buffer otherwise the stream buffer will overwrite it on next call (inside Smalltalk image)
+            this.sendBuffer = newBytes.slice();
           } else {
             var newLength = this.sendBuffer.byteLength + newBytes.byteLength;
             var newBuffer = new Uint8Array(newLength);
@@ -475,6 +749,12 @@ function SocketPlugin() {
     primitiveSocketSendDone: function(argCount) {
       if (argCount !== 1) return false;
       this.interpreterProxy.popthenPush(1, this.interpreterProxy.trueObject());
+      return true;
+    },
+
+    primitiveSocketListenWithOrWithoutBacklog: function(argCount) {
+      if (argCount < 2) return false;
+      this.interpreterProxy.popthenPush(argCount, this.interpreterProxy.nilObject());
       return true;
     },
   };

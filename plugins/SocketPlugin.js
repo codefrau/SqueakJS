@@ -399,17 +399,17 @@ function SocketPlugin() {
             frame[1] = 0x80 | payloadLengthByte;  // Mask bit 0x80 and payload length byte
             var nextByteIndex;
             if (payloadLengthByte === 126) {
-              frame[2] = message.length >> 8;
+              frame[2] = message.length >>> 8;
               frame[3] = message.length & 0xff;
               nextByteIndex = 4;
             } else if (payloadLengthByte === 127) {
-              frame[2] = message.length >> 56;
-              frame[3] = (message.length >> 48) & 0xff;
-              frame[4] = (message.length >> 40) & 0xff;
-              frame[5] = (message.length >> 32) & 0xff;
-              frame[6] = (message.length >> 24) & 0xff;
-              frame[7] = (message.length >> 16) & 0xff;
-              frame[8] = (message.length >> 8) & 0xff;
+              frame[2] = message.length >>> 56;
+              frame[3] = (message.length >>> 48) & 0xff;
+              frame[4] = (message.length >>> 40) & 0xff;
+              frame[5] = (message.length >>> 32) & 0xff;
+              frame[6] = (message.length >>> 24) & 0xff;
+              frame[7] = (message.length >>> 16) & 0xff;
+              frame[8] = (message.length >>> 8) & 0xff;
               frame[9] = message.length & 0xff;
               nextByteIndex = 10;
             } else {
@@ -444,7 +444,7 @@ function SocketPlugin() {
 
           // Read frame header fields
           var firstByte = this.sendBuffer[0];
-          var finalBit = firstByte >> 7;
+          var finalBit = firstByte >>> 7;
           var opcode = firstByte & 0x0f;
           var dataIsBinary;
           if (opcode === 0x00) {
@@ -470,7 +470,7 @@ function SocketPlugin() {
             return;
           }
           var secondByte = this.sendBuffer[1];
-          var maskBit = secondByte >> 7;
+          var maskBit = secondByte >>> 7;
           var payloadLength = secondByte & 0x7f;
           var nextByteIndex;
           if (payloadLength === 126) {

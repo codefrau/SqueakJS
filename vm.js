@@ -3584,7 +3584,14 @@ Object.subclass('Squeak.Interpreter',
         }
         var trueArgCount = args.pointersSize();
         var stack = this.activeContext.pointers;
-        this.arrayCopy(args.pointers, 0, stack, this.sp - 1, trueArgCount);
+        var startingStackPositionOfArguments;
+
+	if (supered)
+	  startingStackPositionOfArguments = this.sp - 2;
+	else
+	  startingStackPositionOfArguments = this.sp -1;
+		      
+	this.arrayCopy(args.pointers, 0, stack, startingStackPositionOfArguments, trueArgCount);
         this.sp += trueArgCount - argCount; //pop selector and array then push args
         var entry = this.findSelectorInClass(selector, trueArgCount, lookupClass);
         this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);

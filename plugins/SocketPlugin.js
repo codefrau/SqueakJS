@@ -73,21 +73,6 @@ function SocketPlugin() {
 
         status: plugin.Socket_Unconnected,
 
-        _byteArrayToString: function(byteArray) {
-          // For performance use String.fromCharCode with array as arguments
-          // This will result in a stack overflow on browsers for large arrays, so use old fashioned loop there
-          if (byteArray.byteLength < 10000) {
-            return String.fromCharCode.apply(null, byteArray);
-          } else {
-            var string = "";
-            var length = byteArray.length;
-            for (var i = 0; i < length; i++) {
-              string += String.fromCharCode(byteArray[i]);
-            }
-            return string;
-          }
-        },
-
         _signalSemaphore: function(semaIndex) {
           if (semaIndex <= 0) return;
           plugin.primHandler.signalSemaphoreWithIndex(semaIndex);
@@ -350,8 +335,8 @@ function SocketPlugin() {
             }
 
             // Send the (fake) handshake back to the caller
-            var acceptKey = sha1.array(webSocketKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
-            var acceptKeyString = thisHandle._byteArrayToString(acceptKey);
+            var acceptKey = new Uint8Array(sha1.array(webSocketKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"));
+            var acceptKeyString = Squeak.bytesAsString(acceptKey);
             thisHandle._performWebSocketReceive(
               "HTTP/1.1 101 Switching Protocols\r\n" +
               "Upgrade: websocket\r\n" +
@@ -510,7 +495,7 @@ function SocketPlugin() {
           if (dataIsBinary) {
             data = payloadData;
           } else {
-            data = this._byteArrayToString(payloadData);
+            data = Squeak.bytesAsString(payloadData);
           }
 
           // Remove frame from send buffer

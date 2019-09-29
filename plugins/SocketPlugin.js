@@ -382,16 +382,15 @@ function SocketPlugin() {
           if (!skipFramePacking) {
 
             // Create WebSocket frame from message for Smalltalk runtime
-            var frameLength = 1 + message.length + 4; // 1 byte for initial header bits & opcode and 4 bytes for mask
+            var frameLength = 1 + 1 + message.length + 4; // 1 byte for initial header bits & opcode, 1 byte for length and 4 bytes for mask
             var payloadLengthByte;
             if (message.byteLength < 126) {
-              frameLength += 1; // 1 byte for payload length
               payloadLengthByte = message.length;
             } else if (message.byteLength < 0xffff) {
-              frameLength += 2; // 2 bytes for payload length
+              frameLength += 2; // 2 additional bytes for payload length
               payloadLengthByte = 126;
             } else {
-              frameLength += 8; // 8 bytes for payload length
+              frameLength += 8; // 8 additional bytes for payload length
               payloadLengthByte = 127;
             }
             var frame = new Uint8Array(frameLength);

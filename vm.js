@@ -3589,7 +3589,7 @@ Object.subclass('Squeak.Interpreter',
 	if (supered)
 	  startingStackPositionOfArguments = this.sp - 2;
 	else
-	  startingStackPositionOfArguments = this.sp -1;
+	  startingStackPositionOfArguments = this.sp - 1;
 		      
 	this.arrayCopy(args.pointers, 0, stack, startingStackPositionOfArguments, trueArgCount);
         this.sp += trueArgCount - argCount; //pop selector and array then push args

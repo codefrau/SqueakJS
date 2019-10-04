@@ -241,24 +241,24 @@ Object.extend(Squeak,
     MillisecondClockMask: 0x1FFFFFFF,
 },
 "error codes", {
-	PrimNoErr: 0,
-	PrimErrGenericFailure: 1,
-	PrimErrBadReceiver: 2,
-	PrimErrBadArgument: 3,
-	PrimErrBadIndex: 4,
-	PrimErrBadNumArgs: 5,
-	PrimErrInappropriate: 6,
-	PrimErrUnsupported: 7,
-	PrimErrNoModification: 8,
-	PrimErrNoMemory: 9,
-	PrimErrNoCMemory: 10,
-	PrimErrNotFound: 11,
-	PrimErrBadMethod: 12,
-	PrimErrNamedInternal: 13,
-	PrimErrObjectMayMove: 14,
-	PrimErrLimitExceeded: 15,
-	PrimErrObjectIsPinned: 16,
-	PrimErrWritePastObject: 17,
+    PrimNoErr: 0,
+    PrimErrGenericFailure: 1,
+    PrimErrBadReceiver: 2,
+    PrimErrBadArgument: 3,
+    PrimErrBadIndex: 4,
+    PrimErrBadNumArgs: 5,
+    PrimErrInappropriate: 6,
+    PrimErrUnsupported: 7,
+    PrimErrNoModification: 8,
+    PrimErrNoMemory: 9,
+    PrimErrNoCMemory: 10,
+    PrimErrNotFound: 11,
+    PrimErrBadMethod: 12,
+    PrimErrNamedInternal: 13,
+    PrimErrObjectMayMove: 14,
+    PrimErrLimitExceeded: 15,
+    PrimErrObjectIsPinned: 16,
+    PrimErrWritePastObject: 17,
 },
 "modules", {
     // don't clobber registered modules
@@ -2494,20 +2494,20 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             }
 //      Definition of Spur's format code...
 //
-// 		0	= 0 sized objects (UndefinedObject True False et al)
-// 		1	= non-indexable objects with inst vars (Point et al)
-// 		2	= indexable objects with no inst vars (Array et al)
-// 		3	= indexable objects with inst vars (MethodContext AdditionalMethodState et al)
-// 		4	= weak indexable objects with inst vars (WeakArray et al)
-// 		5	= weak non-indexable objects with inst vars (ephemerons) (Ephemeron)
-// 		6	= unused
-// 		7	= immediates (SmallInteger, Character)
-// 		8	= unused
-// 		9	= 64-bit indexable
-// 	10-11	= 32-bit indexable (Bitmap)					(plus one odd bit, unused in 32-bits)
-// 	12-15	= 16-bit indexable							(plus two odd bits, one unused in 32-bits)
-// 	16-23	= 8-bit indexable							(plus three odd bits, one unused in 32-bits)
-// 	24-31	= compiled methods (CompiledMethod)	(plus three odd bits, one unused in 32-bits)
+//     0 = 0 sized objects (UndefinedObject True False et al)
+//     1 = non-indexable objects with inst vars (Point et al)
+//     2 = indexable objects with no inst vars (Array et al)
+//     3 = indexable objects with inst vars (MethodContext AdditionalMethodState et al)
+//     4 = weak indexable objects with inst vars (WeakArray et al)
+//     5 = weak non-indexable objects with inst vars (ephemerons) (Ephemeron)
+//     6 = unused
+//     7 = immediates (SmallInteger, Character)
+//     8 = unused
+//     9 = 64-bit indexable
+// 10-11 = 32-bit indexable (Bitmap)          (plus one odd bit, unused in 32-bits)
+// 12-15 = 16-bit indexable                   (plus two odd bits, one unused in 32-bits)
+// 16-23 = 8-bit indexable                    (plus three odd bits, one unused in 32-bits)
+// 24-31 = compiled methods (CompiledMethod)  (plus three odd bits, one unused in 32-bits)
     },
     installFromImage: function(oopMap, rawBits, classTable, floatClass, littleEndian, getCharacter) {
         //Install this object by decoding format, and rectifying pointers
@@ -2753,7 +2753,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         nWords += nWords >= 255 ? 4 : 2;                            // header words
         if (nWords < 4) nWords = 4;                                 // minimum object size
         return nWords * 4;
-	},
+    },
 },
 'as method', {
     methodNumLits: function() {
@@ -5108,7 +5108,7 @@ Object.subclass('Squeak.Primitives',
             stObj.jsObject = obj;
             return stObj;
         }
-	// A direct test of the buffer's constructor doesn't work on Safari 10.0.
+        // A direct test of the buffer's constructor doesn't work on Safari 10.0.
         if (typeof obj === "string" || obj.constructor.name === "Uint8Array") return this.makeStString(obj);
         if (obj.constructor.name === "Array") return this.makeStArray(obj);
         throw Error("cannot make smalltalk object");
@@ -5118,7 +5118,7 @@ Object.subclass('Squeak.Primitives',
         return rcvr.pointers.indexOf(arg) >= 0;
     },
     asUint8Array: function(buffer) {
-	// A direct test of the buffer's constructor doesn't work on Safari 10.0.
+        // A direct test of the buffer's constructor doesn't work on Safari 10.0.
         if (buffer.constructor.name === "Uint8Array") return buffer;
         if (buffer.constructor.name === "ArrayBuffer") return new Uint8Array(buffer);
         if (typeof buffer === "string") {
@@ -5958,7 +5958,7 @@ Object.subclass('Squeak.Primitives',
             this.transferTo(this.wakeHighestPriority());
         }
         return true;
-	},
+    },
     primitiveExitCriticalSection: function(argCount) {
         var criticalSection = this.vm.top();
         if (this.isEmptyList(criticalSection)) {
@@ -5986,7 +5986,7 @@ Object.subclass('Squeak.Primitives',
             this.popNandPushIfOK(argCount + 1, this.vm.nilObj);
         }
         return true;
-	},
+    },
 },
 'vm functions', {
     primitiveGetAttribute: function(argCount) {
@@ -6082,46 +6082,46 @@ Object.subclass('Squeak.Primitives',
             // 39   Number of finalization signals for Weak Objects pending when current IGC/FGC completed (read-only)
             case 40: return 4; // BytesPerWord for this image
             case 41: return this.vm.image.formatVersion();
-    		//42	number of stack pages in use (Cog Stack VM only, otherwise nil)
-		    //43	desired number of stack pages (stored in image file header, max 65535; Cog VMs only, otherwise nil)
-		    case 44: return 0; // size of eden, in bytes
-            // 45	desired size of eden, in bytes (stored in image file header; Cog VMs only, otherwise nil)
-            // 46	size of machine code zone, in bytes (stored in image file header; Cog JIT VM only, otherwise nil)
-            // 47	desired size of machine code zone, in bytes (applies at startup only, stored in image file header; Cog JIT VM only)
+            //42    number of stack pages in use (Cog Stack VM only, otherwise nil)
+            //43    desired number of stack pages (stored in image file header, max 65535; Cog VMs only, otherwise nil)
+            case 44: return 0; // size of eden, in bytes
+            // 45   desired size of eden, in bytes (stored in image file header; Cog VMs only, otherwise nil)
+            // 46   size of machine code zone, in bytes (stored in image file header; Cog JIT VM only, otherwise nil)
+            // 47   desired size of machine code zone, in bytes (applies at startup only, stored in image file header; Cog JIT VM only)
             case 48: return 0;
-            // 48	various properties of the Cog VM as an integer encoding an array of bit flags.
+            // 48   various properties of the Cog VM as an integer encoding an array of bit flags.
             //      Bit 0: tells the VM that the image's Process class has threadId as its 5th inst var (after nextLink, suspendedContext, priority & myList)
             //      Bit 1: on Cog JIT VMs asks the VM to set the flag bit in interpreted methods
             //      Bit 2: if set, preempting a process puts it to the head of its run queue, not the back,
-            // 	i.e. preempting a process by a higher priority one will not cause the preempted process to yield
-            // 		to others at the same priority.
+            //             i.e. preempting a process by a higher priority one will not cause the preempted process to yield
+            //             to others at the same priority.
             //      Bit 3: in a muilt-threaded VM, if set, the Window system will only be accessed from the first VM thread
             //      Bit 4: in a Spur vm, if set, causes weaklings and ephemerons to be queued individually for finalization
-            // 49	the size of the external semaphore table (read-write; Cog VMs only)
+            // 49   the size of the external semaphore table (read-write; Cog VMs only)
             // 50-51 reserved for VM parameters that persist in the image (such as eden above)
-            // 52	root (remembered) table maximum size (read-only)
-            // 53	the number of oldSpace segments (Spur only, otherwise nil)
-            case 54: return this.vm.image.bytesLeft();	// total size of free old space (Spur only, otherwise nil)
-            // 55	ratio of growth and image size at or above which a GC will be performed post scavenge (Spur only, otherwise nil)
-            // 56	number of process switches since startup (read-only)
-            // 57	number of ioProcessEvents calls since startup (read-only)
-            // 58	number of forceInterruptCheck (Cog VMs) or quickCheckInterruptCalls (non-Cog VMs) calls since startup (read-only)
-            // 59	number of check event calls since startup (read-only)
-            // 60	number of stack page overflows since startup (read-only; Cog VMs only)
-            // 61	number of stack page divorces since startup (read-only; Cog VMs only)
-            // 62	number of machine code zone compactions since startup (read-only; Cog VMs only)
-            // 63	milliseconds taken by machine code zone compactions since startup (read-only; Cog VMs only)
-            // 64	current number of machine code methods (read-only; Cog VMs only)
-            // 65	In newer Cog VMs a set of flags describing VM features,
+            // 52   root (remembered) table maximum size (read-only)
+            // 53   the number of oldSpace segments (Spur only, otherwise nil)
+            case 54: return this.vm.image.bytesLeft();  // total size of free old space (Spur only, otherwise nil)
+            // 55   ratio of growth and image size at or above which a GC will be performed post scavenge (Spur only, otherwise nil)
+            // 56   number of process switches since startup (read-only)
+            // 57   number of ioProcessEvents calls since startup (read-only)
+            // 58   number of forceInterruptCheck (Cog VMs) or quickCheckInterruptCalls (non-Cog VMs) calls since startup (read-only)
+            // 59   number of check event calls since startup (read-only)
+            // 60   number of stack page overflows since startup (read-only; Cog VMs only)
+            // 61   number of stack page divorces since startup (read-only; Cog VMs only)
+            // 62   number of machine code zone compactions since startup (read-only; Cog VMs only)
+            // 63   milliseconds taken by machine code zone compactions since startup (read-only; Cog VMs only)
+            // 64   current number of machine code methods (read-only; Cog VMs only)
+            // 65   In newer Cog VMs a set of flags describing VM features,
             //      if non-zero bit 0 implies multiple bytecode set support;
             //      if non-zero bit 0 implies read-only object support
             //      (read-only; Cog VMs only; nil in older Cog VMs, a boolean answering multiple bytecode support in not so old Cog VMs)
-            // 66	the byte size of a stack page in the stack zone  (read-only; Cog VMs only)
-            // 67	the maximum allowed size of old space in bytes, 0 implies no internal limit (Spur VMs only).
+            // 66   the byte size of a stack page in the stack zone  (read-only; Cog VMs only)
+            // 67   the maximum allowed size of old space in bytes, 0 implies no internal limit (Spur VMs only).
             // 68 - 69 reserved for more Cog-related info
-            // 70	the value of VM_PROXY_MAJOR (the interpreterProxy major version number)
-            // 71	the value of VM_PROXY_MINOR (the interpreterProxy minor version number)"
-		}
+            // 70   the value of VM_PROXY_MAJOR (the interpreterProxy major version number)
+            // 71   the value of VM_PROXY_MINOR (the interpreterProxy minor version number)"
+        }
         return null;
     },
     primitiveImageName: function(argCount) {
@@ -6558,7 +6558,7 @@ Object.subclass('Squeak.Primitives',
     },
     primitiveUtcWithOffset: function(argCount) {
         var d = new Date();
-	var posixMicroseconds = this.pos53BitIntFor(d.getTime() * 1000);
+        var posixMicroseconds = this.pos53BitIntFor(d.getTime() * 1000);
         var offset = -60 * d.getTimezoneOffset();
         if (argCount > 0) {
             // either an Array or a DateAndTime in new UTC format with two ivars
@@ -7679,135 +7679,135 @@ Object.subclass('Squeak.Primitives',
     primitiveFFTPermuteData: function(argCount) {
         return this.namedPrimitive("FFTPlugin", "primitiveFFTPermuteData", argCount);
     },
-	gePrimitiveMergeFillFrom: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveMergeFillFrom", argCount);
-	},
-	gePrimitiveCopyBuffer: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveCopyBuffer", argCount);
-	},
-	gePrimitiveAddRect: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveAddRect", argCount);
-	},
-	gePrimitiveAddGradientFill: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveAddGradientFill", argCount);
-	},
-	gePrimitiveSetClipRect: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveSetClipRect", argCount);
-	},
-	gePrimitiveSetBitBltPlugin: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveSetBitBltPlugin", argCount);
-	},
-	gePrimitiveRegisterExternalEdge: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveRegisterExternalEdge", argCount);
-	},
-	gePrimitiveGetClipRect: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveGetClipRect", argCount);
-	},
-	gePrimitiveAddBezier: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveAddBezier", argCount);
-	},
-	gePrimitiveInitializeProcessing: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveInitializeProcessing", argCount);
-	},
-	gePrimitiveRenderImage: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveRenderImage", argCount);
-	},
-	gePrimitiveGetOffset: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveGetOffset", argCount);
-	},
-	gePrimitiveSetDepth: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveSetDepth", argCount);
-	},
-	gePrimitiveAddBezierShape: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveAddBezierShape", argCount);
-	},
-	gePrimitiveSetEdgeTransform: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveSetEdgeTransform", argCount);
-	},
-	gePrimitiveGetTimes: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveGetTimes", argCount);
-	},
-	gePrimitiveNextActiveEdgeEntry: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveNextActiveEdgeEntry", argCount);
-	},
-	gePrimitiveAddBitmapFill: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveAddBitmapFill", argCount);
-	},
-	gePrimitiveGetDepth: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveGetDepth", argCount);
-	},
-	gePrimitiveAbortProcessing: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveAbortProcessing", argCount);
-	},
-	gePrimitiveNextGlobalEdgeEntry: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveNextGlobalEdgeEntry", argCount);
-	},
-	gePrimitiveGetFailureReason: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveGetFailureReason", argCount);
-	},
-	gePrimitiveDisplaySpanBuffer: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveDisplaySpanBuffer", argCount);
-	},
-	gePrimitiveGetCounts: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveGetCounts", argCount);
-	},
-	gePrimitiveChangedActiveEdgeEntry: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveChangedActiveEdgeEntry", argCount);
-	},
-	gePrimitiveRenderScanline: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveRenderScanline", argCount);
-	},
-	gePrimitiveGetBezierStats: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveGetBezierStats", argCount);
-	},
-	gePrimitiveFinishedProcessing: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveFinishedProcessing", argCount);
-	},
-	gePrimitiveNeedsFlush: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveNeedsFlush", argCount);
-	},
-	gePrimitiveAddLine: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveAddLine", argCount);
-	},
-	gePrimitiveSetOffset: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveSetOffset", argCount);
-	},
-	gePrimitiveNextFillEntry: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveNextFillEntry", argCount);
-	},
-	gePrimitiveInitializeBuffer: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveInitializeBuffer", argCount);
-	},
-	gePrimitiveDoProfileStats: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveDoProfileStats", argCount);
-	},
-	gePrimitiveAddActiveEdgeEntry: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveAddActiveEdgeEntry", argCount);
-	},
-	gePrimitiveSetAALevel: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveSetAALevel", argCount);
-	},
-	gePrimitiveNeedsFlushPut: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveNeedsFlushPut", argCount);
-	},
-	gePrimitiveAddCompressedShape: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveAddCompressedShape", argCount);
-	},
-	gePrimitiveSetColorTransform: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveSetColorTransform", argCount);
-	},
-	gePrimitiveAddOval: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveAddOval", argCount);
-	},
-	gePrimitiveRegisterExternalFill: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveRegisterExternalFill", argCount);
-	},
-	gePrimitiveAddPolygon: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveAddPolygon", argCount);
-	},
-	gePrimitiveGetAALevel: function(argCount) {
-	    return this.namedPrimitive("B2DPlugin", "primitiveGetAALevel", argCount);
-	},
+    gePrimitiveMergeFillFrom: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveMergeFillFrom", argCount);
+    },
+    gePrimitiveCopyBuffer: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveCopyBuffer", argCount);
+    },
+    gePrimitiveAddRect: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveAddRect", argCount);
+    },
+    gePrimitiveAddGradientFill: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveAddGradientFill", argCount);
+    },
+    gePrimitiveSetClipRect: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveSetClipRect", argCount);
+    },
+    gePrimitiveSetBitBltPlugin: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveSetBitBltPlugin", argCount);
+    },
+    gePrimitiveRegisterExternalEdge: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveRegisterExternalEdge", argCount);
+    },
+    gePrimitiveGetClipRect: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveGetClipRect", argCount);
+    },
+    gePrimitiveAddBezier: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveAddBezier", argCount);
+    },
+    gePrimitiveInitializeProcessing: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveInitializeProcessing", argCount);
+    },
+    gePrimitiveRenderImage: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveRenderImage", argCount);
+    },
+    gePrimitiveGetOffset: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveGetOffset", argCount);
+    },
+    gePrimitiveSetDepth: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveSetDepth", argCount);
+    },
+    gePrimitiveAddBezierShape: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveAddBezierShape", argCount);
+    },
+    gePrimitiveSetEdgeTransform: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveSetEdgeTransform", argCount);
+    },
+    gePrimitiveGetTimes: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveGetTimes", argCount);
+    },
+    gePrimitiveNextActiveEdgeEntry: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveNextActiveEdgeEntry", argCount);
+    },
+    gePrimitiveAddBitmapFill: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveAddBitmapFill", argCount);
+    },
+    gePrimitiveGetDepth: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveGetDepth", argCount);
+    },
+    gePrimitiveAbortProcessing: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveAbortProcessing", argCount);
+    },
+    gePrimitiveNextGlobalEdgeEntry: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveNextGlobalEdgeEntry", argCount);
+    },
+    gePrimitiveGetFailureReason: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveGetFailureReason", argCount);
+    },
+    gePrimitiveDisplaySpanBuffer: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveDisplaySpanBuffer", argCount);
+    },
+    gePrimitiveGetCounts: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveGetCounts", argCount);
+    },
+    gePrimitiveChangedActiveEdgeEntry: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveChangedActiveEdgeEntry", argCount);
+    },
+    gePrimitiveRenderScanline: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveRenderScanline", argCount);
+    },
+    gePrimitiveGetBezierStats: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveGetBezierStats", argCount);
+    },
+    gePrimitiveFinishedProcessing: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveFinishedProcessing", argCount);
+    },
+    gePrimitiveNeedsFlush: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveNeedsFlush", argCount);
+    },
+    gePrimitiveAddLine: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveAddLine", argCount);
+    },
+    gePrimitiveSetOffset: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveSetOffset", argCount);
+    },
+    gePrimitiveNextFillEntry: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveNextFillEntry", argCount);
+    },
+    gePrimitiveInitializeBuffer: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveInitializeBuffer", argCount);
+    },
+    gePrimitiveDoProfileStats: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveDoProfileStats", argCount);
+    },
+    gePrimitiveAddActiveEdgeEntry: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveAddActiveEdgeEntry", argCount);
+    },
+    gePrimitiveSetAALevel: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveSetAALevel", argCount);
+    },
+    gePrimitiveNeedsFlushPut: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveNeedsFlushPut", argCount);
+    },
+    gePrimitiveAddCompressedShape: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveAddCompressedShape", argCount);
+    },
+    gePrimitiveSetColorTransform: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveSetColorTransform", argCount);
+    },
+    gePrimitiveAddOval: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveAddOval", argCount);
+    },
+    gePrimitiveRegisterExternalFill: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveRegisterExternalFill", argCount);
+    },
+    gePrimitiveAddPolygon: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveAddPolygon", argCount);
+    },
+    gePrimitiveGetAALevel: function(argCount) {
+        return this.namedPrimitive("B2DPlugin", "primitiveGetAALevel", argCount);
+    },
 });
 
 Object.subclass('Squeak.InterpreterProxy',

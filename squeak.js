@@ -26,7 +26,6 @@
 // these functions fake the Lively module and class system
 // just enough so the loading of vm.js succeeds
 //////////////////////////////////////////////////////////////////////////////
-
 window.module = function(dottedPath) {
     if (dottedPath === "") return window;
     var path = dottedPath.split("."),
@@ -64,7 +63,7 @@ Object.extend = function(obj /* + more args */ ) {
                 obj[name] = arguments[i][name];
 };
 
-Function.prototype.subclass = function(classPath /* + more args */ ) {
+Function.prototype.subclass = Function.prototype.subclass || function(classPath /* + more args */ ) {
     // create subclass
     var subclass = function() {
         if (this.initialize) this.initialize.apply(this, arguments);
@@ -76,7 +75,7 @@ Function.prototype.subclass = function(classPath /* + more args */ ) {
     subclass.prototype = new protoclass();
     // skip arg 0, copy properties of other args to prototype
     for (var i = 1; i < arguments.length; i++)
-        Object.extend(subclass.prototype, arguments[i]);
+    Object.extend(subclass.prototype, arguments[i]);
     // add class to module
     var modulePath = classPath.split("."),
         className = modulePath.pop();
@@ -89,9 +88,9 @@ Function.prototype.subclass = function(classPath /* + more args */ ) {
 //////////////////////////////////////////////////////////////////////////////
 
 (function(){
-    var scripts = document.getElementsByTagName("script"),
-        squeakjs = scripts[scripts.length - 1],
-        vmDir = squeakjs.src.replace(/[^\/]*$/, "");
+    var scripts = document && document.getElementsByTagName("script"),
+        squeakjs = scripts & scripts[scripts.length - 1],
+        vmDir = squeakjs && squeakjs.src.replace(/[^\/]*$/, "");
     if (squeakjs.src.match(/squeak\.min\.js$/)) return;
     [   "vm.js",
         "jit.js",
@@ -956,7 +955,7 @@ function updateSpinner(spinner, idleMS, vm, display) {
 
 var loop; // holds timeout for main loop
 
-SqueakJS.runImage = function(buffer, name, display, options) {
+SqueakJS.runImage = function(buffer, name, display, options,then) {
     window.onbeforeunload = function(evt) {
         var msg = SqueakJS.appName + " is still running";
         evt.returnValue = msg;
@@ -973,7 +972,7 @@ SqueakJS.runImage = function(buffer, name, display, options) {
         image.readFromBuffer(buffer, function startRunning() {
             display.quitFlag = false;
             var vm = new Squeak.Interpreter(image, display);
-            SqueakJS.vm = vm;
+            then(vm);
             localStorage["squeakImageName"] = name;
             setupSwapButtons(options);
             display.clear();
@@ -985,7 +984,7 @@ SqueakJS.runImage = function(buffer, name, display, options) {
                     else vm.interpret(50, function runAgain(ms) {
                         if (ms == "sleep") ms = 200;
                         if (spinner) updateSpinner(spinner, ms, vm, display);
-                        loop = window.setTimeout(run, ms);
+                        vm.loop = window.setTimeout(run, ms);
                     });
                 } catch(error) {
                     console.error(error);
@@ -993,7 +992,7 @@ SqueakJS.runImage = function(buffer, name, display, options) {
                 }
             }
             display.runNow = function() {
-                window.clearTimeout(loop);
+                window.clearTimeout(vm.loop);
                 run();
             };
             display.runFor = function(milliseconds) {
@@ -1179,7 +1178,7 @@ function fetchFiles(files, display, options, thenDo) {
     getNextFile();
 }
 
-SqueakJS.runSqueak = function(imageUrl, canvas, options) {
+SqueakJS.runSqueak = function(imageUrl, canvas, options,then) {
     // we need to fetch all files first, then run the image
     processOptions(options);
     if (!imageUrl && options.image) imageUrl = options.image;
@@ -1227,7 +1226,7 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
         if (!image.name) return alert("could not find an image");
         if (!image.data) return alert("could not find image " + image.name);
         SqueakJS.appName = options.appName || image.name.replace(/\.image$/, "");
-        SqueakJS.runImage(image.data, options.root + image.name, display, options);
+        SqueakJS.runImage(image.data, options.root + image.name, display, options,then);
     });
     return display;
 };

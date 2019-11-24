@@ -2767,17 +2767,19 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
 
 Object.subclass('Squeak.Interpreter',
 'initialization', {
-    initialize: function(image, display) {
+    initialize: function(image, display,appName) {
         console.log('squeak: initializing interpreter ' + Squeak.vmVersion);
         this.Squeak = Squeak;   // store locally to avoid dynamic lookup in Lively
         this.image = image;
         this.image.vm = this;
         this.primHandler = new Squeak.Primitives(this, display);
+        this.appName = appName;
         this.loadImageState();
         this.hackImage();
         this.initVMState();
         this.loadInitialContext();
         this.initCompiler();
+        if(window.ol)this.olInit(window.ol);
         console.log('squeak: ready');
     },
     loadImageState: function() {
@@ -2903,6 +2905,29 @@ Object.subclass('Squeak.Interpreter',
         if (this.findMethod("PharoClassInstaller>>initialize")) {
             Squeak.platformName = "unix";
         }
+    },
+    olInit: function(ol){
+        var self = this;
+        var runtime;
+        var params = {getParam: function(p){
+            if(typeof p === 'string' && p.beginsWith('vpr_'))return self.primHandler.vmParameterAt(parseInt(p.replace('vpr_','')))
+            return;
+            },
+            setParam: function(p,v){
+            
+            
+            }};
+ol.runtimes.set(this.appName,{
+onLoaded: function(callback){runtime = this;callback()},
+debugger_activeStackFrame: function(){return self.activeContext},
+getParam: params.getParam,
+setParam: params.setParam,
+});
+ol.environments.set(this.appName, {
+    getParam: params.getParam,
+    setParam: params.setParam,
+getRuntime: function(){return runtime}, 
+});
     },
 },
 'interpreting', {
@@ -6093,6 +6118,11 @@ p().then(function(v){return b(method,props,v)}).then(callback)
 });
 return this.popNandPushIfOK(argCount+1, dict)
 },
+ol_getHands: function(){
+    var self = this;
+    return window.hands && window.hands.filter(function(h){return h.has(selfs.display.context.canvas)})
+
+},
 ol_primitiveMakeInspectPlugin: function(argCount){
     var dict = this.stackNonInteger(argCount - 1);
     var b = this.ol_fromStBlock(dict.pointers[0]);
@@ -6108,7 +6138,7 @@ return function(ce,props){
 
     }
     window.ol.inspector.addModule({
-    inspect: doJSInspectFunc('inspect')
+    inspect: doJSInspectFunc('inspect'),
     
     });
     return this.popNandPushIfOK(argCount+1, dict)

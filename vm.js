@@ -2768,6 +2768,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
 Object.subclass('Squeak.Interpreter',
 'initialization', {
     initialize: function(image, display,appName) {
+        (window.olRuntime || window).module((appName  || 'SqueakJS')+ '.squeak').requires().toRun(function(c){
         console.log('squeak: initializing interpreter ' + Squeak.vmVersion);
         this.Squeak = Squeak;   // store locally to avoid dynamic lookup in Lively
         this.image = image;
@@ -2780,7 +2781,9 @@ Object.subclass('Squeak.Interpreter',
         this.loadInitialContext();
         this.initCompiler();
         if(window.ol)this.olInit(window.ol);
+        if(c)c();
         console.log('squeak: ready');
+    }.bind(this))
     },
     loadImageState: function() {
         this.specialObjects = this.image.specialObjectsArray.pointers;

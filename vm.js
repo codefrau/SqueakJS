@@ -5120,11 +5120,12 @@ Object.subclass('Squeak.Primitives',
             stString.bytes[i] = jsString.charCodeAt(i) & 0xFF;
         return stString;
     },
+    isRightMetaclass: function(obj){return obj.sqClass.sqClass.sqClass == this.vm.specialObjects[Squeak.splOb_ClassCharacter].sqClass.sqClass || obj.sqClass.sqClass == this.vm.specialObjects[Squeak.splOb_ClassCharacter].sqClass.sqClass},
     makeStObject: function(obj, proxyClass) {
         if (obj === undefined || obj === null) return this.vm.nilObj;
         if (obj === true) return this.vm.trueObj;
         if (obj === false) return this.vm.falseObj;
-        if (obj.sqClass) return obj;
+        if (obj.sqClass && this.isRightMetaclass(obj)) return obj;
         if (typeof obj === "number")
             if (obj === (obj|0)) return this.makeLargeIfNeeded(obj);
             else return this.makeFloat(obj);

@@ -356,7 +356,7 @@ function createSqueakDisplay(canvas, options) {
         if (options.footer) options.footer.style.display = 'none';
     }
     var display = {
-        context: canvas.getContext("2d"),
+        get context(){return canvas.getContext("2d")},
         fullscreen: false,
         width: 0,   // if 0, VM uses canvas.width
         height: 0,  // if 0, VM uses canvas.height

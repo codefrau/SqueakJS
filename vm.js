@@ -6022,7 +6022,7 @@ Object.subclass('Squeak.Primitives',
         0 args: return an Array of VM parameter values;
         1 arg:  return the indicated VM parameter;
         2 args: set the VM indicated parameter. */
-        var paramsArraySize = this.vm.image.isSpur ? 54 : 44;
+        var paramsArraySize = this.vm.image.isSpur ? 71 : 44;
         switch (argCount) {
             case 0:
                 var arrayObj = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassArray], paramsArraySize);

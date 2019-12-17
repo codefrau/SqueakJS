@@ -6082,6 +6082,7 @@ Object.subclass('Squeak.Primitives',
             case 44: return 0; // size of eden, in bytes
             // 45   desired size of eden, in bytes (stored in image file header; Cog VMs only, otherwise nil)
             // 46   size of machine code zone, in bytes (stored in image file header; Cog JIT VM only, otherwise nil)
+            case 46: return 0;
             // 47   desired size of machine code zone, in bytes (applies at startup only, stored in image file header; Cog JIT VM only)
             case 48: return 0;
             // 48   various properties of the Cog VM as an integer encoding an array of bit flags.
@@ -6111,6 +6112,7 @@ Object.subclass('Squeak.Primitives',
             //      if non-zero bit 0 implies multiple bytecode set support;
             //      if non-zero bit 0 implies read-only object support
             //      (read-only; Cog VMs only; nil in older Cog VMs, a boolean answering multiple bytecode support in not so old Cog VMs)
+            case 65: return 0;
             // 66   the byte size of a stack page in the stack zone  (read-only; Cog VMs only)
             // 67   the maximum allowed size of old space in bytes, 0 implies no internal limit (Spur VMs only).
             // 68 - 69 reserved for more Cog-related info

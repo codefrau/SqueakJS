@@ -3569,12 +3569,13 @@ Object.subclass('Squeak.Interpreter',
         return true;
     },
     primitivePerformWithArgs: function(argCount, supered) {
-        var rcvr = this.stackValue(argCount);
-        var selector = this.stackValue(argCount - 1);
-        var args = this.stackValue(argCount - 2);
+        var rcvrPos = supered ? 3 : 2;
+        var rcvr = this.stackValue(rcvrPos);
+        var selector = this.stackValue(rcvrPos - 1);
+        var args = this.stackValue(rcvrPos - 2);
         if (args.sqClass !== this.specialObjects[Squeak.splOb_ClassArray])
             return false;
-        var lookupClass = supered ? this.stackValue(argCount - 3) : this.getClass(rcvr);
+        var lookupClass = supered ? this.top() : this.getClass(rcvr);
         if (supered) { // verify that lookupClass is in fact in superclass chain of receiver;
             var cls = this.getClass(rcvr);
             while (cls !== lookupClass) {
@@ -3583,11 +3584,9 @@ Object.subclass('Squeak.Interpreter',
             }
         }
         var trueArgCount = args.pointersSize();
+        var selectorIndex = this.sp - (rcvrPos - 1);
         var stack = this.activeContext.pointers;
-        var trueArgCount = args.pointersSize();
-        var trueArgStart = supered ? this.sp - 2 : this.sp - 1;
-        var stack = this.activeContext.pointers;
-        this.arrayCopy(args.pointers, 0, stack, trueArgStart, trueArgCount);
+        this.arrayCopy(args.pointers, 0, stack, selectorIndex, trueArgCount);
         this.sp += trueArgCount - argCount; //pop selector and array then push args
         var entry = this.findSelectorInClass(selector, trueArgCount, lookupClass);
         this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);

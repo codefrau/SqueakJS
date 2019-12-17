@@ -4210,6 +4210,9 @@ Object.subclass('Squeak.Primitives',
             SecurityPlugin: {
                 primitiveDisableImageWrite: this.fakePrimitive.bind(this, "SecurityPlugin.primitiveDisableImageWrite", 0),
             },
+            LocalePlugin: {
+                primitiveTimezoneOffset: this.fakePrimitive.bind(this, "LocalePlugin.primitiveTimezoneOffset", 0),
+            },
         };
         this.patchModules = {
             ScratchPlugin:          this.findPluginFunctions("scratch_"),

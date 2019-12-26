@@ -1,5 +1,5 @@
 "use strict";
-module("users.bert.SqueakJS.vm").requires().toRun(function(){
+sq_module("users.bert.SqueakJS.vm").requires().toRun(function(){
 /*
  * Copyright (c) 2013-2019 Bert Freudenberg
  *
@@ -35,7 +35,8 @@ try {
   console.warn("localStorage not available, faking");
   localStorage = {};
 }
-
+Object.defineProperty(Squeak,'platformSubtype',{get: function(){if(window.kernel)return 'ObjectLand'; return 'unknown'}});
+Object.defineProperty(Squeak,'OLBridge_typeField',{get: function(){if(window.kernel)return 2; return 1}});
 Object.extend(Squeak,
 "version", {
     // system attributes
@@ -45,7 +46,6 @@ Object.extend(Squeak,
     vmPath: "/",
     vmFile: "vm.js",
     platformName: "Web",
-    platformSubtype: "unknown",
     osVersion: navigator.userAgent,     // might want to parse
     windowSystem: "HTML",
 },
@@ -493,6 +493,12 @@ Object.extend(Squeak,
         return SqueakDBFake;
     },
     fileGet: function(filepath, thenDo, errorDo) {
+        function fileThen(contents){
+if(typeof contents === 'string')return thenDo(contents);
+if(typeof contents === 'object' && contents.theModuleName && contents.path){window.require(contents.theModuleName).readFile(contents.path,function(err,data){if(err)return errorDo(err); return thenDo(data)})};
+if(window.kernel && window.kernel.olfs && typeof res === 'object' && contents.olfsInode){return window.kernel.olfs.getInode(contents.olfsInode,thenDo)};
+
+        }
         if (!errorDo) errorDo = function(err) { console.log(err) };
         var path = this.splitFilePath(filepath);
         if (!path.basename) return errorDo("Invalid path: " + filepath);
@@ -503,17 +509,17 @@ Object.extend(Squeak,
             var getReq = fileStore.get(path.fullname);
             getReq.onerror = function(e) { errorDo(e.target.error.name) };
             getReq.onsuccess = function(e) {
-                if (this.result !== undefined) return thenDo(this.result);
+                if (this.result !== undefined) return fileThen(this.result);
                 // might be a template
                 Squeak.fetchTemplateFile(path.fullname,
-                    function gotTemplate(template) {thenDo(template)},
+                    function gotTemplate(template) {fileThen(template)},
                     function noTemplate() {
                         // if no indexedDB then we have checked fake db already
                         if (typeof indexedDB == "undefined") return errorDo("file not found: " + path.fullname);
                         // fall back on fake db, may be file is there
                         var fakeReq = Squeak.dbFake().get(path.fullname);
                         fakeReq.onerror = function(e) { errorDo("file not found: " + path.fullname) };
-                        fakeReq.onsuccess = function(e) { thenDo(this.result); }
+                        fakeReq.onsuccess = function(e) { fileThen(this.result); }
                     });
             };
         });
@@ -535,13 +541,22 @@ Object.extend(Squeak,
         entry[4] = contents.byteLength || contents.length || 0;
         localStorage["squeak:" + path.dirname] = JSON.stringify(directory);
         // put file contents (async)
+        this.dbTransaction("readonly", "get " + filepath, function(fileStore) {
+            var r = fileStore.get(path.fullname);
+            r.onsuccess = function(){
+                var res = this.result;
+                var isStoreUsed = false;
         this.dbTransaction("readwrite", "put " + filepath,
             function(fileStore) {
-                fileStore.put(contents, path.fullname);
+                if(typeof res === 'string' || typeof res === 'undefined'){fileStore.put(contents, path.fullname);return isStoreUsed = true};
+                if(typeof res === 'object' && res.theModuleName && res.path){return window.require(res.theModuleName).writeFile(res.path,contents,function(err){if(!err && optSuccess)optSuccess()})};
+                if(window.kernel && window.kernel.olfs && typeof res === 'object' && res.olfsInode){return window.kernel.olfs.putInode(res.olfsInode,contents,optSuccess)};
             },
             function transactionComplete() {
-                if (optSuccess) optSuccess();
+                if (optSuccess && isStoreUsed) optSuccess();
             });
+        };
+        });
         return entry;
     },
     fileDelete: function(filepath, entryOnly) {
@@ -2768,7 +2783,6 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
 Object.subclass('Squeak.Interpreter',
 'initialization', {
     initialize: function(image, display,appName) {
-        (window.olRuntime || window).module((appName  || 'SqueakJS')+ '.squeak').requires().toRun(function(c){
         console.log('squeak: initializing interpreter ' + Squeak.vmVersion);
         this.Squeak = Squeak;   // store locally to avoid dynamic lookup in Lively
         this.image = image;
@@ -2783,7 +2797,6 @@ Object.subclass('Squeak.Interpreter',
         if(window.ol)this.olInit(window.ol);
         if(c)c();
         console.log('squeak: ready');
-    }.bind(this))
     },
     loadImageState: function() {
         this.specialObjects = this.image.specialObjectsArray.pointers;
@@ -6201,7 +6214,7 @@ return function(ce,props){
 
  },
  ol_s_render: function(renderBlock,h){
-return renderBlock(h).then(v => h(window.ol.sqWrapper,[v]))
+return renderBlock(h).then(function(v){h(window.ol.sqWrapper,[v])})
 
  },
 },
@@ -6923,6 +6936,16 @@ return renderBlock(h).then(v => h(window.ol.sqWrapper,[v]))
         return true;
     },
     primitiveFileRead: function(argCount) {
+        var self = this;
+        function ok(b,l){
+            if(b.then)return self.freeze(function(f){b.then(function(bb){ok(bb,l); f()})})
+            var srcArray = b,
+            dstArray = arrayObj.bytes;
+        count = Math.min(count, (l ||b.length) - handle.filePos);
+        for (var i = 0; i < count; i++)
+            dstArray[startIndex + i] = srcArray[handle.filePos++];
+
+        }
         var count = this.stackInteger(0),
             startIndex = this.stackInteger(1) - 1, // make zero based
             arrayObj = this.stackNonInteger(2),
@@ -6937,17 +6960,17 @@ return renderBlock(h).then(v => h(window.ol.sqWrapper,[v]))
             return false;
         if (typeof handle.file === "string") {
             //this.fileConsoleRead(handle.file, array, startIndex, count);
+            var b = this[handle.file] && this[handle.file]();
+            if(b){
+            ok(b);
+            };
             this.popNandPushIfOK(argCount+1, 0);
             return true;
         }
         return this.fileContentsDo(handle.file, function(file) {
             if (!file.contents)
                 return this.popNandPushIfOK(argCount+1, 0);
-            var srcArray = file.contents,
-                dstArray = arrayObj.bytes;
-            count = Math.min(count, file.size - handle.filePos);
-            for (var i = 0; i < count; i++)
-                dstArray[startIndex + i] = srcArray[handle.filePos++];
+                ok(file.contents,file.size);
             this.popNandPushIfOK(argCount+1, count);
         }.bind(this));
     },
@@ -6976,8 +6999,8 @@ return renderBlock(h).then(v => h(window.ol.sqWrapper,[v]))
     },
     primitiveFileStdioHandles: function(argCount) {
         var handles = [
-            null, // stdin
-            this.makeFileHandle('console.log', 'log', true),
+            this.makeFileHandle('stdin','stdin',true), // stdin
+            this.makeFileHandle('stdout', 'stdout', true),
             this.makeFileHandle('console.error', 'error', true),
         ];
         this.popNandPushIfOK(argCount + 1, this.makeStArray(handles));
@@ -7112,7 +7135,7 @@ return renderBlock(h).then(v => h(window.ol.sqWrapper,[v]))
             buffer = this.fileConsoleBuffer[logOrError] + Squeak.bytesAsString(bytes),
             lines = buffer.match('([^]*)\n(.*)');
         if (lines) {
-            console[logOrError](lines[1]);  // up to last newline
+            (['log','error'].includes(logOrError) ? console[logOrError] : this[logOrError])(lines[1]);  // up to last newline
             buffer = lines[2];              // after last newline
         }
         this.fileConsoleBuffer[logOrError] = buffer;

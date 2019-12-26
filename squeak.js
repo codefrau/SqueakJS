@@ -21,37 +21,58 @@
  */
 
 "use strict";
-
+if(!completeAssign)try{completeAssign = function(target, ...sources) {
+    sources.forEach(source => {
+      let descriptors = Object.keys(source).reduce((descriptors, key) => {
+        descriptors[key] = Object.getOwnPropertyDescriptor(source, key);
+        return descriptors;
+      }, {});
+      // by default, Object.assign copies enumerable Symbols too
+      Object.getOwnPropertySymbols(source).forEach(sym => {
+        let descriptor = Object.getOwnPropertyDescriptor(source, sym);
+        if (descriptor.enumerable) {
+          descriptors[sym] = descriptor;
+        }
+      });
+      Object.defineProperties(target, descriptors);
+    });
+    return target;
+  }}catch(err){}
+  
 //////////////////////////////////////////////////////////////////////////////
 // these functions fake the Lively module and class system
 // just enough so the loading of vm.js succeeds
 //////////////////////////////////////////////////////////////////////////////
-window.module = function(dottedPath) {
+window.sq_module = function(dottedPath) {
     if (dottedPath === "") return window;
     var path = dottedPath.split("."),
         name = path.pop(),
-        parent = module(path.join(".")),
+        parent = sq_module(path.join(".")),
         self = parent[name];
-    if (!self) parent[name] = self = {
+    if (!self || !self.requires) parent[name] = self = Object.assign(self || {},{
         loaded: false,
         pending: [],
-        requires: function(req) {
+        whenLoaded: function(c){this.pending.push(c)},
+        requires: function() {
+            let reqs = [].slice.call(arguments);
             return {
                 toRun: function(code) {
+                    let numLoaded = 0;
+                    function optLoad(){
+                        numLoaded++;
+                        if(numLoaded == reqs.length)load();
+
+                    }
                     function load() {
                         code();
                         self.loaded = true;
                         self.pending.forEach(function(f){f();});
                     }
-                    if (req && !module(req).loaded) {
-                        module(req).pending.push(load);
-                    } else {
-                        load();
-                    }
+                    reqs.forEach(function(req){    if(!req.loaded)return sq_module(req).pending.push(optLoad); optLOad()});
                 }
             };
         },
-    };
+    });
     return self;
 };
 
@@ -89,7 +110,7 @@ Function.prototype.subclass = Function.prototype.subclass || function(classPath 
 
 (function(){
     var scripts = document && document.getElementsByTagName("script"),
-        squeakjs = scripts & scripts[scripts.length - 1],
+        squeakjs = scripts & (scripts.filter(function(s){return s.src.match('squeak')})[0]),
         vmDir = squeakjs && squeakjs.src.replace(/[^\/]*$/, "");
     if (squeakjs.src.match(/squeak\.min\.js$/)) return;
     [   "vm.js",
@@ -125,7 +146,7 @@ Function.prototype.subclass = Function.prototype.subclass || function(classPath 
     });
 })();
 
-module("SqueakJS").requires("users.bert.SqueakJS.vm").toRun(function() {
+sq_module("SqueakJS").requires("users.bert.SqueakJS.vm").toRun(function() {
 
 // if in private mode set localStorage to a regular dict
 var localStorage = window.localStorage;

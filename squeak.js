@@ -21,24 +21,6 @@
  */
 
 "use strict";
-if(!completeAssign)try{completeAssign = function(target, ...sources) {
-    sources.forEach(source => {
-      let descriptors = Object.keys(source).reduce((descriptors, key) => {
-        descriptors[key] = Object.getOwnPropertyDescriptor(source, key);
-        return descriptors;
-      }, {});
-      // by default, Object.assign copies enumerable Symbols too
-      Object.getOwnPropertySymbols(source).forEach(sym => {
-        let descriptor = Object.getOwnPropertyDescriptor(source, sym);
-        if (descriptor.enumerable) {
-          descriptors[sym] = descriptor;
-        }
-      });
-      Object.defineProperties(target, descriptors);
-    });
-    return target;
-  }}catch(err){}
-  
 //////////////////////////////////////////////////////////////////////////////
 // these functions fake the Lively module and class system
 // just enough so the loading of vm.js succeeds
@@ -54,10 +36,10 @@ window.sq_module = function(dottedPath) {
         pending: [],
         whenLoaded: function(c){this.pending.push(c)},
         requires: function() {
-            let reqs = [].slice.call(arguments);
+            var reqs = [].slice.call(arguments);
             return {
                 toRun: function(code) {
-                    let numLoaded = 0;
+                    var numLoaded = 0;
                     function optLoad(){
                         numLoaded++;
                         if(numLoaded == reqs.length)load();

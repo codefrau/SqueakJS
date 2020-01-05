@@ -35,7 +35,7 @@ try {
   console.warn("localStorage not available, faking");
   localStorage = {};
 }
-Object.defineProperty(Squeak,'platformSubtype',{get: function(){if(window.kernel)return 'ObjectLand'; return 'unknown'}});
+Object.defineProperty(Squeak,'platformSubtype',{get: function(){if(window.kernel)return window.kernel.name; return 'unknown'}});
 Object.defineProperty(Squeak,'OLBridge_typeField',{get: function(){if(window.kernel)return 2; return 1}});
 Object.extend(Squeak,
 "version", {
@@ -4244,7 +4244,6 @@ Object.subclass('Squeak.Primitives',
         this.loadedModules = {};
         this.builtinModules = {
             JavaScriptPlugin:       this.findPluginFunctions("js_"),
-            ObjectLandPlugin: this.findPluginFunctions("ol_"),
             FilePlugin:             this.findPluginFunctions("", "primitive(Disable)?(File|Directory)"),
             DropPlugin:             this.findPluginFunctions("", "primitiveDropRequest"),
             SoundPlugin:            this.findPluginFunctions("snd_"),
@@ -6026,197 +6025,6 @@ Object.subclass('Squeak.Primitives',
         }
         return true;
     },
-},
-'object land primitives', {
-    ol_primitiveInitCallbacks: function(argCount) {
-        // set callback semaphore for js_fromStBlock()
-        this.ol_callbackSema = this.stackInteger(0);
-        this.ol_activeCallback = null;
-        return this.popNIfOK(argCount);
-    },
-    ol_primitiveGetActiveCallbackBlock: function(argCount) {
-        // we're inside an active callback, get block
-        var callback = this.ol_activeCallback;
-        if (!callback) return this.js_setError("No active callback");
-        return this.popNandPushIfOK(argCount+1, callback.block);
-    },
-    ol_primitiveGetActiveCallbackArgs: function(argCount) {
-        // we're inside an active callback, get args
-        var proxyClass = this.stackNonInteger(argCount),
-            callback = this.ol_activeCallback;
-        if (!callback) return this.js_setError("No active callback");
-        try {
-            // make array with expected number of arguments for block
-            var array = this.makeStArray(callback.args, proxyClass);
-            return this.popNandPushIfOK(argCount+1, array);
-        } catch(err) {
-            return this.js_setError(err.message);
-        }
-    },
-    ol_primitiveReturnFromCallback: function(argCount) {
-        if (argCount !== 1) return false;
-        if (!this.js_activeCallback)
-            return this.js_setError("No active callback");
-        // set result so the interpret loop in js_executeCallback() terminates
-        this.js_activeCallback.result = this.vm.pop();
-        this.vm.breakOut(); // stop interpreting ASAP
-        return true;
-    },
-    ol_executeCallback: function(block, args, resolve, reject) {
-        if (this.ol_activeCallback)
-            return console.error("Callback: already active");
-        // make block and args available to primitiveGetActiveCallback
-        this.ol_activeCallback = {
-            block: block,
-            args: args,
-            result: null,
-        };
-        // switch to callback handler process ASAP
-        this.signalSemaphoreWithIndex(this.ol_callbackSema);
-        this.vm.forceInterruptCheck();
-        // interpret until primitiveReturnFromCallback sets result
-        var timeout = Date.now() + 500;
-        while (Date.now() < timeout && !this.ol_activeCallback.result)
-            this.vm.interpret();
-        var result = this.ol_activeCallback.result;
-        this.ol_activeCallback = null;
-        if (result) {
-            // return result to JS caller as JS object or string
-            try { resolve(this.js_fromStObject(result)); }
-            catch(err) { resolve(result.toString()); }
-        } else {
-            reject(Error("SqueakJS timeout"));
-        }
-    },
-    ol_executeCallbackAsync: function(block, args, resolve, reject) {
-        var squeak = this;
-        function again() {squeak.ol_executeCallbackAsync(block, args, resolve, reject)}
-        if (!this.js_activeCallback && !this.vm.frozen) {
-            this.ol_executeCallback(block, args, resolve, reject);
-        } else {
-            setTimeout(again, 0);
-        }
-    },
-    ol_fromStBlock: function(block) {
-        // create callback function from block or closure
-        if (!this.ol_callbackSema) // image recognizes error string and will try again
-            throw Error("CallbackSemaphore not set");
-        // block holds onto thisContext
-        this.vm.reclaimableContextCount = 0;
-        var numArgs = block.pointers[Squeak.BlockContext_argumentCount];
-        if (typeof numArgs !== 'number')
-            numArgs = block.pointers[Squeak.Closure_numArgs];
-        var squeak = this;
-        return function evalSqueakBlock(/* arguments */) {
-            var args = [];
-            for (var i = 0; i < numArgs; i++)
-                args.push(arguments[i]);
-            return new Promise(function(resolve, reject) {
-                function evalAsync() {
-                    squeak.ol_executeCallbackAsync(block, args, resolve, reject);
-                }
-                setTimeout(evalAsync, 0);
-            });
-        }
-    },
-ol_primitiveMakePlugin: function(argCount){
-var dict = this.stackNonInteger(argCount - 1);
-var b = this.ol_fromStBlock(dict.pointers[0]);
-var p = dict.pointers[1] && this.ol_fromStBlock(dict.pointers[1]);
-window.ol.api.addModule({
-init: function(ce,props){
-return function(method,callback){
-p().then(function(v){return b(method,props,v)}).then(callback)
-
-};
-
-},
-
-});
-return this.popNandPushIfOK(argCount+1, dict)
-},
-ol_getHands: function(){
-    var self = this;
-    return window.hands && window.hands.filter(function(h){return h.has(selfs.display.context.canvas)})
-
-},
-ol_primitiveMakeInspectPlugin: function(argCount){
-    var dict = this.stackNonInteger(argCount - 1);
-    var b = this.ol_fromStBlock(dict.pointers[0]);
-    var p = dict.pointers[1] && this.ol_fromStBlock(dict.pointers[1]);
-    function doJSInspectFunc(type){
-return function(ce,props){
-    return function(method,callback){
-    p().then(function(v){return b(type,method,props,v)}).then(callback)
-    
-    };
-    
-    }
-
-    }
-    window.ol.inspector.addModule({
-    inspect: doJSInspectFunc('inspect'),
-    
-    });
-    return this.popNandPushIfOK(argCount+1, dict)
-    },
- ol_primitivea_doesNotUnderstand: function(argCount){
-// This is JS's doesNotUnderstand handler,
-        // as well as JS class's doesNotUnderstand handler.
-        // Property name is the selector up to first colon.
-        // If it is 'new', create an instance;
-        // otherwise if the property is a function, call it;
-        // otherwise if the property exists, get/set it;
-        // otherwise, fail.
-        var rcvr = this.stackNonInteger(1),
-            obj = this.js_objectOrGlobal(rcvr),
-            message = this.stackNonInteger(0).pointers,
-            selector = message[0].bytesAsString(),
-            args = message[1].pointers || [],
-            isGlobal = !('jsObject' in rcvr),
-            jsResult = null;
-        try {
-            var propName = '_' + selector.replace(':','_');
-            if (!isGlobal && propName === "new") {
-                if (args.length === 0) {
-                    // new this()
-                    jsResult = new obj();
-                } else {
-                    // new this(arg0, arg1, ...)
-                    var newArgs = [null].concat(this.js_fromStArray(args));
-                    jsResult = new (Function.prototype.bind.apply(obj, newArgs));
-                }
-            } else {
-                if (!(propName in obj))
-                    return this.js_setError("Property not found: " + propName);
-                var propValue = obj[propName];
-                if (typeof propValue == "function" && (!isGlobal || args.length > 0)) {
-                    // do this[selector](arg0, arg1, ...)
-                    jsResult = propValue.apply(obj, this.js_fromStArray(args));
-                } else {
-                    if (args.length == 0) {
-                        // do this[selector]
-                        jsResult = propValue;
-                    } else if (args.length == 1) {
-                        // do this[selector] = arg0
-                        obj[propName] = this.js_fromStObject(args[0]);
-                    } else {
-                        // cannot do this[selector] = arg0, arg1, ...
-                        return this.js_setError("Property " + propName + " is not a function");
-                    }
-                }
-            }
-        } catch(err) {
-            return this.js_setError(err.message);
-        }
-        var stResult = this.makeStObject(jsResult, rcvr.sqClass);
-        return this.popNandPushIfOK(argCount + 1, stResult);
-
- },
- ol_s_render: function(renderBlock,h){
-return renderBlock(h).then(function(v){h(window.ol.sqWrapper,[v])})
-
- },
 },
 'vm functions', {
     primitiveGetAttribute: function(argCount) {

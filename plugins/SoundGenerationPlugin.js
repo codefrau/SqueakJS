@@ -5,7 +5,7 @@
 	SoundGenerationPlugin VMMaker-bf.353 uuid: 8ae25e7e-8d2c-451e-8277-598b30e9c002
  */
 
-module("users.bert.SqueakJS.plugins.SoundGenerationPlugin").requires("users.bert.SqueakJS.vm").toRun(function() {
+(function SoundGenerationPlugin() {
 "use strict";
 
 var VM_PROXY_MAJOR = 1;
@@ -615,14 +615,20 @@ function setInterpreter(anInterpreter) {
 }
 
 
-Squeak.registerExternalModule("SoundGenerationPlugin", {
-	primitiveMixFMSound: primitiveMixFMSound,
-	primitiveMixSampledSound: primitiveMixSampledSound,
-	setInterpreter: setInterpreter,
-	getModuleName: getModuleName,
-	primitiveApplyReverb: primitiveApplyReverb,
-	primitiveMixPluckedSound: primitiveMixPluckedSound,
-	primitiveMixLoopedSampledSound: primitiveMixLoopedSampledSound,
-});
+function registerPlugin() {
+	if (typeof Squeak === "object" && Squeak.registerExternalModule) {
+		Squeak.registerExternalModule("SoundGenerationPlugin", {
+			primitiveMixFMSound: primitiveMixFMSound,
+			primitiveMixSampledSound: primitiveMixSampledSound,
+			setInterpreter: setInterpreter,
+			getModuleName: getModuleName,
+			primitiveApplyReverb: primitiveApplyReverb,
+			primitiveMixPluckedSound: primitiveMixPluckedSound,
+			primitiveMixLoopedSampledSound: primitiveMixLoopedSampledSound,
+		});
+	} else self.setTimeout(registerPlugin, 100);
+}
 
-}); // end of module
+registerPlugin();
+
+})(); // Register module/plugin

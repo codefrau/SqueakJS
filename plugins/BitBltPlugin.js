@@ -5,7 +5,7 @@
 	BitBltSimulation VMMaker-bf.353 uuid: 8ae25e7e-8d2c-451e-8277-598b30e9c002
  */
 
-module("users.bert.SqueakJS.plugins.BitBltPlugin").requires("users.bert.SqueakJS.vm").toRun(function() {
+(function BitBltPlugin() {
 "use strict";
 
 var VM_PROXY_MAJOR = 1;
@@ -4687,19 +4687,25 @@ function warpPickSourcePixelsxDeltahyDeltahxDeltavyDeltavdstShiftIncflags(nPixel
 }
 
 
-Squeak.registerExternalModule("BitBltPlugin", {
-	primitiveCopyBits: primitiveCopyBits,
-	copyBits: copyBits,
-	moduleUnloaded: moduleUnloaded,
-	primitiveDrawLoop: primitiveDrawLoop,
-	primitiveDisplayString: primitiveDisplayString,
-	initialiseModule: initialiseModule,
-	loadBitBltFrom: loadBitBltFrom,
-	setInterpreter: setInterpreter,
-	primitiveWarpBits: primitiveWarpBits,
-	getModuleName: getModuleName,
-	primitivePixelValueAt: primitivePixelValueAt,
-	copyBitsFromtoat: copyBitsFromtoat,
-});
+function registerPlugin() {
+	if (typeof Squeak === "object" && Squeak.registerExternalModule) {
+		Squeak.registerExternalModule("BitBltPlugin", {
+			primitiveCopyBits: primitiveCopyBits,
+			copyBits: copyBits,
+			moduleUnloaded: moduleUnloaded,
+			primitiveDrawLoop: primitiveDrawLoop,
+			primitiveDisplayString: primitiveDisplayString,
+			initialiseModule: initialiseModule,
+			loadBitBltFrom: loadBitBltFrom,
+			setInterpreter: setInterpreter,
+			primitiveWarpBits: primitiveWarpBits,
+			getModuleName: getModuleName,
+			primitivePixelValueAt: primitivePixelValueAt,
+			copyBitsFromtoat: copyBitsFromtoat,
+		});
+	} else self.setTimeout(registerPlugin, 100);
+}
 
-}); // end of module
+registerPlugin();
+
+})(); // Register module/plugin

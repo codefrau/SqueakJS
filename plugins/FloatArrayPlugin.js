@@ -5,7 +5,7 @@
 	FloatArrayPlugin VMMaker-bf.353 uuid: 8ae25e7e-8d2c-451e-8277-598b30e9c002
  */
 
-module("users.bert.SqueakJS.plugins.FloatArrayPlugin").requires("users.bert.SqueakJS.vm").toRun(function() {
+(function FloatArrayPlugin() {
 "use strict";
 
 var VM_PROXY_MAJOR = 1;
@@ -552,25 +552,31 @@ function setInterpreter(anInterpreter) {
 }
 
 
-Squeak.registerExternalModule("FloatArrayPlugin", {
-	primitiveMulFloatArray: primitiveMulFloatArray,
-	primitiveEqual: primitiveEqual,
-	primitiveAtPut: primitiveAtPut,
-	primitiveAt: primitiveAt,
-	primitiveNormalize: primitiveNormalize,
-	primitiveSubFloatArray: primitiveSubFloatArray,
-	primitiveDivFloatArray: primitiveDivFloatArray,
-	primitiveAddScalar: primitiveAddScalar,
-	primitiveDotProduct: primitiveDotProduct,
-	primitiveSubScalar: primitiveSubScalar,
-	setInterpreter: setInterpreter,
-	primitiveSum: primitiveSum,
-	getModuleName: getModuleName,
-	primitiveHashArray: primitiveHashArray,
-	primitiveMulScalar: primitiveMulScalar,
-	primitiveLength: primitiveLength,
-	primitiveAddFloatArray: primitiveAddFloatArray,
-	primitiveDivScalar: primitiveDivScalar,
-});
+function registerPlugin() {
+	if (typeof Squeak === "object" && Squeak.registerExternalModule) {
+		Squeak.registerExternalModule("FloatArrayPlugin", {
+			primitiveMulFloatArray: primitiveMulFloatArray,
+			primitiveEqual: primitiveEqual,
+			primitiveAtPut: primitiveAtPut,
+			primitiveAt: primitiveAt,
+			primitiveNormalize: primitiveNormalize,
+			primitiveSubFloatArray: primitiveSubFloatArray,
+			primitiveDivFloatArray: primitiveDivFloatArray,
+			primitiveAddScalar: primitiveAddScalar,
+			primitiveDotProduct: primitiveDotProduct,
+			primitiveSubScalar: primitiveSubScalar,
+			setInterpreter: setInterpreter,
+			primitiveSum: primitiveSum,
+			getModuleName: getModuleName,
+			primitiveHashArray: primitiveHashArray,
+			primitiveMulScalar: primitiveMulScalar,
+			primitiveLength: primitiveLength,
+			primitiveAddFloatArray: primitiveAddFloatArray,
+			primitiveDivScalar: primitiveDivScalar,
+		});
+	} else self.setTimeout(registerPlugin, 100);
+}
 
-}); // end of module
+registerPlugin();
+
+})(); // Register module/plugin

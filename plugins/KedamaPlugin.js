@@ -5,7 +5,7 @@
 	KedamaPlugin Kedama-Plugins-yo.1 uuid: 3fc7d691-0149-ba4d-a339-5d27cd44a2f8
  */
 
-module("users.bert.SqueakJS.plugins.KedamaPlugin").requires("users.bert.SqueakJS.vm").toRun(function() {
+(function KedamaPlugin() {
 "use strict";
 
 var VM_PROXY_MAJOR = 1;
@@ -2546,47 +2546,53 @@ function zoomBitmap() {
 }
 
 
-Squeak.registerExternalModule("KedamaPlugin", {
-	makeMaskLog: makeMaskLog,
-	vectorGetDistanceTo: vectorGetDistanceTo,
-	getScalarHeading: getScalarHeading,
-	shutdownModule: shutdownModule,
-	primitiveAddScalar: primitiveAddScalar,
-	primSetPixelsAtXY: primSetPixelsAtXY,
-	turtleScalarSetX: turtleScalarSetX,
-	primPixelAtXY: primPixelAtXY,
-	primUpHill: primUpHill,
-	primScalarForward: primScalarForward,
-	primitiveDivArrays: primitiveDivArrays,
-	getModuleName: getModuleName,
-	primitiveSubArrays: primitiveSubArrays,
-	scalarGetAngleTo: scalarGetAngleTo,
-	randomRange: randomRange,
-	setInterpreter: setInterpreter,
-	kedamaSetRandomSeed: kedamaSetRandomSeed,
-	drawTurtlesInArray: drawTurtlesInArray,
-	turtleScalarSetY: turtleScalarSetY,
-	randomIntoIntegerArray: randomIntoIntegerArray,
-	getHeadingArrayInto: getHeadingArrayInto,
-	makeTurtlesMap: makeTurtlesMap,
-	setHeadingArrayFrom: setHeadingArrayFrom,
-	turtlesSetX: turtlesSetX,
-	setScalarHeading: setScalarHeading,
-	makeMask: makeMask,
-	primitiveDivScalar: primitiveDivScalar,
-	primitiveSubScalar: primitiveSubScalar,
-	primPixelsAtXY: primPixelsAtXY,
-	vectorGetAngleTo: vectorGetAngleTo,
-	primitiveMulArrays: primitiveMulArrays,
-	primPixelAtXYPut: primPixelAtXYPut,
-	zoomBitmap: zoomBitmap,
-	initialiseModule: initialiseModule,
-	primitiveAddArrays: primitiveAddArrays,
-	scalarGetDistanceTo: scalarGetDistanceTo,
-	turtlesSetY: turtlesSetY,
-	randomIntoFloatArray: randomIntoFloatArray,
-	primTurtlesForward: primTurtlesForward,
-	primitiveMulScalar: primitiveMulScalar,
-});
+function registerPlugin() {
+	if (typeof Squeak === "object" && Squeak.registerExternalModule) {
+		Squeak.registerExternalModule("KedamaPlugin", {
+			makeMaskLog: makeMaskLog,
+			vectorGetDistanceTo: vectorGetDistanceTo,
+			getScalarHeading: getScalarHeading,
+			shutdownModule: shutdownModule,
+			primitiveAddScalar: primitiveAddScalar,
+			primSetPixelsAtXY: primSetPixelsAtXY,
+			turtleScalarSetX: turtleScalarSetX,
+			primPixelAtXY: primPixelAtXY,
+			primUpHill: primUpHill,
+			primScalarForward: primScalarForward,
+			primitiveDivArrays: primitiveDivArrays,
+			getModuleName: getModuleName,
+			primitiveSubArrays: primitiveSubArrays,
+			scalarGetAngleTo: scalarGetAngleTo,
+			randomRange: randomRange,
+			setInterpreter: setInterpreter,
+			kedamaSetRandomSeed: kedamaSetRandomSeed,
+			drawTurtlesInArray: drawTurtlesInArray,
+			turtleScalarSetY: turtleScalarSetY,
+			randomIntoIntegerArray: randomIntoIntegerArray,
+			getHeadingArrayInto: getHeadingArrayInto,
+			makeTurtlesMap: makeTurtlesMap,
+			setHeadingArrayFrom: setHeadingArrayFrom,
+			turtlesSetX: turtlesSetX,
+			setScalarHeading: setScalarHeading,
+			makeMask: makeMask,
+			primitiveDivScalar: primitiveDivScalar,
+			primitiveSubScalar: primitiveSubScalar,
+			primPixelsAtXY: primPixelsAtXY,
+			vectorGetAngleTo: vectorGetAngleTo,
+			primitiveMulArrays: primitiveMulArrays,
+			primPixelAtXYPut: primPixelAtXYPut,
+			zoomBitmap: zoomBitmap,
+			initialiseModule: initialiseModule,
+			primitiveAddArrays: primitiveAddArrays,
+			scalarGetDistanceTo: scalarGetDistanceTo,
+			turtlesSetY: turtlesSetY,
+			randomIntoFloatArray: randomIntoFloatArray,
+			primTurtlesForward: primTurtlesForward,
+			primitiveMulScalar: primitiveMulScalar,
+		});
+	} else self.setTimeout(registerPlugin, 100);
+}
 
-}); // end of module
+registerPlugin();
+
+})(); // Register module/plugin

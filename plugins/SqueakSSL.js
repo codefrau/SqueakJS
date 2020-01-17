@@ -120,7 +120,7 @@ function SqueakSSL() {
 function registerSqueakSSL() {
     if (typeof Squeak === "object" && Squeak.registerExternalModule) {
         Squeak.registerExternalModule('SqueakSSL', SqueakSSL());
-    } else window.setTimeout(registerSqueakSSL, 100);
+    } else self.setTimeout(registerSqueakSSL, 100);
 };
 
 registerSqueakSSL();

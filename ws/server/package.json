@@ -1,0 +1,10 @@
+{
+  "name": "SqueakJS",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "ws": "^7.2.1"
+  }
+}

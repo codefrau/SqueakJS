@@ -5,8 +5,8 @@
 
 TARGET=../gh-pages/benchmark
 MANIFEST=$(TARGET)/offline.appcache
-FILES=../squeak.js ../vm.js ../jit.js ../plugins/*.js benchmark.html benchmark.css benchmark.js benchmark.image \
-	../lib/lz-string.js
+FILES=../squeak.js ../globals.js ../vm.*.js ../jit.js ../plugins/*.js benchmark.html benchmark.css benchmark.js benchmark.image \
+	../lib/lz-string.js ../lib/jszip.js ../lib/sha1.js
 EXTRA=
 
 $(MANIFEST): Makefile $(TARGET)

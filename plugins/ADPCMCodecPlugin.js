@@ -5,7 +5,7 @@
 	ADPCMCodecPlugin VMMaker-bf.353 uuid: 8ae25e7e-8d2c-451e-8277-598b30e9c002
  */
 
-module("users.bert.SqueakJS.plugins.ADPCMCodecPlugin").requires("users.bert.SqueakJS.vm").toRun(function() {
+(function ADPCMCodecPlugin() {
 "use strict";    
 
 var VM_PROXY_MAJOR = 1;
@@ -572,13 +572,19 @@ function setInterpreter(anInterpreter) {
 }
 
 
-Squeak.registerExternalModule("ADPCMCodecPlugin", {
-	primitiveDecodeStereo: primitiveDecodeStereo,
-	primitiveEncodeStereo: primitiveEncodeStereo,
-	setInterpreter: setInterpreter,
-	primitiveEncodeMono: primitiveEncodeMono,
-	primitiveDecodeMono: primitiveDecodeMono,
-	getModuleName: getModuleName,
-});
+function registerPlugin() {
+	if (typeof Squeak === "object" && Squeak.registerExternalModule) {
+		Squeak.registerExternalModule("ADPCMCodecPlugin", {
+			primitiveDecodeStereo: primitiveDecodeStereo,
+			primitiveEncodeStereo: primitiveEncodeStereo,
+			setInterpreter: setInterpreter,
+			primitiveEncodeMono: primitiveEncodeMono,
+			primitiveDecodeMono: primitiveDecodeMono,
+			getModuleName: getModuleName,
+		});
+	} else self.setTimeout(registerPlugin, 100);
+}
 
-}); // end of module
+registerPlugin();
+
+})(); // Register module/plugin

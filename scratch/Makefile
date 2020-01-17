@@ -5,8 +5,8 @@
 
 TARGET=../gh-pages/scratch
 MANIFEST=$(TARGET)/offline.appcache
-FILES=../squeak.js ../vm.js ../jit.js ../plugins/*.js index.html scratch.css scratch.js scratch.png \
-	../lib/lz-string.js ../lib/addtohomescreen.css ../lib/addtohomescreen.js ../lib/gh-fork-ribbon.css
+FILES=../squeak.js ../globals.js ../vm.*.js ../jit.js ../plugins/*.js index.html scratch.css scratch.js scratch.png \
+	../lib/lz-string.js ../lib/jszip.js ../lib/sha1.js ../lib/addtohomescreen.css ../lib/addtohomescreen.js ../lib/gh-fork-ribbon.css
 EXTRA=https://freudenbergs.de/bert/squeakjs/scratch/Scratch.image
 
 $(MANIFEST): Makefile $(TARGET)

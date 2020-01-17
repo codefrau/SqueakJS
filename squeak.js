@@ -23,120 +23,59 @@
 "use strict";
 
 //////////////////////////////////////////////////////////////////////////////
-// these functions fake the Lively module and class system
-// just enough so the loading of vm.js succeeds
-//////////////////////////////////////////////////////////////////////////////
-
-window.module = function(dottedPath) {
-    if (dottedPath === "") return window;
-    var path = dottedPath.split("."),
-        name = path.pop(),
-        parent = module(path.join(".")),
-        self = parent[name];
-    if (!self) parent[name] = self = {
-        loaded: false,
-        pending: [],
-        requires: function(req) {
-            return {
-                toRun: function(code) {
-                    function load() {
-                        code();
-                        self.loaded = true;
-                        self.pending.forEach(function(f){f();});
-                    }
-                    if (req && !module(req).loaded) {
-                        module(req).pending.push(load);
-                    } else {
-                        load();
-                    }
-                }
-            };
-        },
-    };
-    return self;
-};
-
-Object.extend = function(obj /* + more args */ ) {
-    // skip arg 0, copy properties of other args to obj
-    for (var i = 1; i < arguments.length; i++)
-        if (typeof arguments[i] == 'object')
-            for (var name in arguments[i])
-                obj[name] = arguments[i][name];
-};
-
-Function.prototype.subclass = function(classPath /* + more args */ ) {
-    // create subclass
-    var subclass = function() {
-        if (this.initialize) this.initialize.apply(this, arguments);
-        return this;
-    };
-    // set up prototype
-    var protoclass = function() { };
-    protoclass.prototype = this.prototype;
-    subclass.prototype = new protoclass();
-    // skip arg 0, copy properties of other args to prototype
-    for (var i = 1; i < arguments.length; i++)
-        Object.extend(subclass.prototype, arguments[i]);
-    // add class to module
-    var modulePath = classPath.split("."),
-        className = modulePath.pop();
-    module(modulePath.join('.'))[className] = subclass;
-    return subclass;
-};
-
-//////////////////////////////////////////////////////////////////////////////
 // load vm, plugins, and other libraries
 //////////////////////////////////////////////////////////////////////////////
 
-(function(){
-    var scripts = document.getElementsByTagName("script"),
-        squeakjs = scripts[scripts.length - 1],
-        vmDir = squeakjs.src.replace(/[^\/]*$/, "");
-    if (squeakjs.src.match(/squeak\.min\.js$/)) return;
-    [   "vm.js",
-        "jit.js",
-        "plugins/ADPCMCodecPlugin.js",
-        "plugins/B2DPlugin.js",
-        "plugins/BitBltPlugin.js",
-        "plugins/FFTPlugin.js",
-        "plugins/FloatArrayPlugin.js",
-        "plugins/GeniePlugin.js",
-        "plugins/JPEGReaderPlugin.js",
-        "plugins/KedamaPlugin.js",
-        "plugins/KedamaPlugin2.js",
-        "plugins/Klatt.js",
-        "plugins/LargeIntegers.js",
-        "plugins/Matrix2x3Plugin.js",
-        "plugins/MiscPrimitivePlugin.js",
-        "plugins/ScratchPlugin.js",
-        "plugins/SocketPlugin.js",
-        "plugins/SpeechPlugin.js",
-        "plugins/SqueakSSL.js",
-        "plugins/SoundGenerationPlugin.js",
-        "plugins/StarSqueakPlugin.js",
-        "plugins/ZipPlugin.js",
-        "lib/lz-string.js",
-        "lib/jszip.js",
-        "lib/FileSaver.js",
-    ].forEach(function(filename) {
-        var script = document.createElement('script');
-        script.setAttribute("type","text/javascript");
-        script.setAttribute("src", vmDir + filename);
-        document.getElementsByTagName("head")[0].appendChild(script);
-    });
-})();
-
-module("SqueakJS").requires("users.bert.SqueakJS.vm").toRun(function() {
-
-// if in private mode set localStorage to a regular dict
-var localStorage = window.localStorage;
-try {
-  localStorage["squeak-foo:"] = "bar";
-  if (localStorage["squeak-foo:"] !== "bar") throw Error();
-  delete localStorage["squeak-foo:"];
-} catch(e) {
-  localStorage = {};
-}
+import "./globals.js";
+import "./vm.js";
+import "./vm.object.js";
+import "./vm.object.spur.js";
+import "./vm.image.js";
+import "./vm.interpreter.js";
+import "./vm.interpreter.proxy.js";
+import "./vm.instruction.stream.js";
+import "./vm.instruction.printer.js";
+import "./vm.primitives.js";
+import "./jit.js";
+import "./vm.audio.browser.js";
+import "./vm.display.js";
+import "./vm.display.browser.js";
+import "./vm.files.browser.js";
+import "./vm.input.js";
+import "./vm.input.browser.js";
+import "./vm.plugins.js";
+import "./vm.plugins.ffi.js";
+import "./vm.plugins.javascript.js";
+import "./vm.plugins.obsolete.js";
+import "./vm.plugins.drop.browser.js";
+import "./vm.plugins.file.browser.js";
+import "./vm.plugins.jpeg2.browser.js";
+import "./vm.plugins.scratch.browser.js";
+import "./vm.plugins.sound.browser.js";
+import "./plugins/ADPCMCodecPlugin.js";
+import "./plugins/B2DPlugin.js";
+import "./plugins/BitBltPlugin.js";
+import "./plugins/FFTPlugin.js";
+import "./plugins/FloatArrayPlugin.js";
+import "./plugins/GeniePlugin.js";
+import "./plugins/JPEGReaderPlugin.js";
+import "./plugins/KedamaPlugin.js";
+import "./plugins/KedamaPlugin2.js";
+import "./plugins/Klatt.js";
+import "./plugins/LargeIntegers.js";
+import "./plugins/Matrix2x3Plugin.js";
+import "./plugins/MiscPrimitivePlugin.js";
+import "./plugins/ScratchPlugin.js";
+import "./plugins/SocketPlugin.js";
+import "./plugins/SpeechPlugin.js";
+import "./plugins/SqueakSSL.js";
+import "./plugins/SoundGenerationPlugin.js";
+import "./plugins/StarSqueakPlugin.js";
+import "./plugins/ZipPlugin.js";
+import "./lib/lz-string.js";
+import "./lib/jszip.js";
+import "./lib/FileSaver.js";
+import "./lib/sha1.js";
 
 //////////////////////////////////////////////////////////////////////////////
 // display & event setup
@@ -210,14 +149,14 @@ function setupFullscreen(display, canvas, options) {
 
 function setupSwapButtons(options) {
     if (options.swapCheckbox) {
-        var imageName = localStorage["squeakImageName"] || "default",
-            settings = JSON.parse(localStorage["squeakSettings:" + imageName] || "{}");
+        var imageName = Squeak.Settings["squeakImageName"] || "default",
+            settings = JSON.parse(Squeak.Settings["squeakSettings:" + imageName] || "{}");
         if ("swapButtons" in settings) options.swapButtons = settings.swapButtons;
         options.swapCheckbox.checked = options.swapButtons;
         options.swapCheckbox.onclick = function() {
             options.swapButtons = options.swapCheckbox.checked;
             settings["swapButtons"] = options.swapButtons;
-            localStorage["squeakSettings:" + imageName] = JSON.stringify(settings);
+            Squeak.Settings["squeakSettings:" + imageName] = JSON.stringify(settings);
         };
     }
 }
@@ -704,7 +643,7 @@ function createSqueakDisplay(canvas, options) {
     if (display.cursorCanvas) {
         var absolute = window.getComputedStyle(canvas).position === "absolute";
         display.cursorCanvas.style.display = "block";
-	    display.cursorCanvas.style.position = absolute ? "absolute": "fixed";
+        display.cursorCanvas.style.position = absolute ? "absolute": "fixed";
         display.cursorCanvas.style.cursor = "none";
         display.cursorCanvas.style.background = "transparent";
         display.cursorCanvas.style.pointerEvents = "none";
@@ -963,6 +902,12 @@ SqueakJS.runImage = function(buffer, name, display, options) {
         return msg;
     };
     window.clearTimeout(loop);
+    Object.extend(Squeak, {
+        vmPath: "/",
+        platformSubtype: "Browser",
+        osVersion: navigator.userAgent,     // might want to parse
+        windowSystem: "HTML",
+    });
     display.reset();
     display.clear();
     display.showBanner("Loading " + SqueakJS.appName);
@@ -974,7 +919,7 @@ SqueakJS.runImage = function(buffer, name, display, options) {
             display.quitFlag = false;
             var vm = new Squeak.Interpreter(image, display);
             SqueakJS.vm = vm;
-            localStorage["squeakImageName"] = name;
+            Squeak.Settings["squeakImageName"] = name;
             setupSwapButtons(options);
             display.clear();
             display.showBanner("Starting " + SqueakJS.appName);
@@ -1229,6 +1174,7 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
         SqueakJS.appName = options.appName || image.name.replace(/\.image$/, "");
         SqueakJS.runImage(image.data, options.root + image.name, display, options);
     });
+    Squeak.noFloatDecodeWorkaround = !!options.noFloatDecodeWorkaround;
     return display;
 };
 
@@ -1243,8 +1189,6 @@ SqueakJS.onQuit = function(vm, display, options) {
     if (options.onQuit) options.onQuit(vm, display, options);
     else display.showBanner(SqueakJS.appName + " stopped.");
 };
-
-}); // end module
 
 //////////////////////////////////////////////////////////////////////////////
 // browser stuff

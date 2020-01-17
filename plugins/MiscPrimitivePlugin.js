@@ -5,7 +5,7 @@
 	MiscPrimitivePlugin VMMaker-bf.353 uuid: 8ae25e7e-8d2c-451e-8277-598b30e9c002
  */
 
-module("users.bert.SqueakJS.plugins.MiscPrimitivePlugin").requires("users.bert.SqueakJS.vm").toRun(function() {
+(function MiscPrimitivePlugin() {
 "use strict";
 
 var VM_PROXY_MAJOR = 1;
@@ -617,18 +617,24 @@ function setInterpreter(anInterpreter) {
 }
 
 
-Squeak.registerExternalModule("MiscPrimitivePlugin", {
-	primitiveConvert8BitSigned: primitiveConvert8BitSigned,
-	primitiveCompareString: primitiveCompareString,
-	primitiveTranslateStringWithTable: primitiveTranslateStringWithTable,
-	primitiveStringHash: primitiveStringHash,
-	primitiveCompressToByteArray: primitiveCompressToByteArray,
-	primitiveFindSubstring: primitiveFindSubstring,
-	primitiveIndexOfAsciiInString: primitiveIndexOfAsciiInString,
-	setInterpreter: setInterpreter,
-	primitiveDecompressFromByteArray: primitiveDecompressFromByteArray,
-	getModuleName: getModuleName,
-	primitiveFindFirstInString: primitiveFindFirstInString,
-});
+function registerPlugin() {
+	if (typeof Squeak === "object" && Squeak.registerExternalModule) {
+		Squeak.registerExternalModule("MiscPrimitivePlugin", {
+			primitiveConvert8BitSigned: primitiveConvert8BitSigned,
+			primitiveCompareString: primitiveCompareString,
+			primitiveTranslateStringWithTable: primitiveTranslateStringWithTable,
+			primitiveStringHash: primitiveStringHash,
+			primitiveCompressToByteArray: primitiveCompressToByteArray,
+			primitiveFindSubstring: primitiveFindSubstring,
+			primitiveIndexOfAsciiInString: primitiveIndexOfAsciiInString,
+			setInterpreter: setInterpreter,
+			primitiveDecompressFromByteArray: primitiveDecompressFromByteArray,
+			getModuleName: getModuleName,
+			primitiveFindFirstInString: primitiveFindFirstInString,
+		});
+	} else self.setTimeout(registerPlugin, 100);
+}
 
-}); // end of module
+registerPlugin();
+
+})(); // Register module/plugin

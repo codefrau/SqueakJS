@@ -5,7 +5,7 @@
 	JPEGReaderPlugin VMMaker-bf.353 uuid: 8ae25e7e-8d2c-451e-8277-598b30e9c002
  */
 
-module("users.bert.SqueakJS.plugins.JPEGReaderPlugin").requires("users.bert.SqueakJS.vm").toRun(function() {
+(function JPEGReaderPlugin() {
 "use strict";
 
 var VM_PROXY_MAJOR = 1;
@@ -909,13 +909,19 @@ function yColorComponentFrom(oop) {
 }
 
 
-Squeak.registerExternalModule("JPEGReaderPlugin", {
-	setInterpreter: setInterpreter,
-	primitiveIdctInt: primitiveIdctInt,
-	primitiveColorConvertMCU: primitiveColorConvertMCU,
-	primitiveColorConvertGrayscaleMCU: primitiveColorConvertGrayscaleMCU,
-	primitiveDecodeMCU: primitiveDecodeMCU,
-	getModuleName: getModuleName,
-});
+function registerPlugin() {
+	if (typeof Squeak === "object" && Squeak.registerExternalModule) {
+		Squeak.registerExternalModule("JPEGReaderPlugin", {
+			setInterpreter: setInterpreter,
+			primitiveIdctInt: primitiveIdctInt,
+			primitiveColorConvertMCU: primitiveColorConvertMCU,
+			primitiveColorConvertGrayscaleMCU: primitiveColorConvertGrayscaleMCU,
+			primitiveDecodeMCU: primitiveDecodeMCU,
+			getModuleName: getModuleName,
+		});
+	} else self.setTimeout(registerPlugin, 100);
+}
 
-}); // end of module
+registerPlugin();
+
+})(); // Register module/plugin

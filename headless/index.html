@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<!-- For browser that do support ES6 modules for WebWorkers -->
+<!--
+	<script type="module">
+		new Worker("../squeak_headless.js?imageName=../headless/headless.image", { type: "module" });
+	</script>
+-->
+	<!-- For browsers without support for ES6 modules for WebWorkers use bundled JS file -->
+	<script>
+		console.log("Starting SqueakJS in a WebWorker...");
+		new Worker("../dist/squeak_headless_bundle.js?imageName=../headless/headless.image");
+	</script>
+</head>
+<body>
+	Please open the developer console to see the console messages produced by the Smalltalk image.
+</body>
+</html>

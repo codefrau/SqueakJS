@@ -7,7 +7,8 @@ emitJSHeaderOn: aStream
 	aStream nextPutAll: ' */';cr.
 	aStream nextPutAll: (self fileHeaderVersionStampForSourceClass: vmClass).
 	aStream nextPutAll: '
-module("users.bert.SqueakJS.plugins.', pluginName, '").requires("users.bert.SqueakJS.vm").toRun(function() {
+(function ', pluginName, '() {
+"use strict";
 
 var VM_PROXY_MAJOR = ', InterpreterPrimitives vmProxyMajorVersion, ';
 var VM_PROXY_MINOR = ', InterpreterPrimitives vmProxyMinorVersion, ';

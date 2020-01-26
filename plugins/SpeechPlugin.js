@@ -10,7 +10,7 @@ function SpeechPlugin() {
     semaphoreIndex: null,
     shouldListen: false,
     recognition: null,
-    synth: window.speechSynthesis,
+    synth: self.speechSynthesis,
 
     setInterpreter: function(anInterpreter) {
       this.interpreterProxy = anInterpreter;
@@ -121,12 +121,12 @@ function SpeechPlugin() {
 
 function registerSpeechPlugin() {
     if (typeof Squeak === "object" && Squeak.registerExternalModule) {
-        if (('webkitSpeechRecognition' in window)) {
+        if (('webkitSpeechRecognition' in self)) {
           Squeak.registerExternalModule('SpeechPlugin', SpeechPlugin());
         } else {
           console.warn('SpeechPlugin: Web Speech API is not supported by this browser.');
         }
-    } else window.setTimeout(registerSpeechPlugin, 100);
+    } else self.setTimeout(registerSpeechPlugin, 100);
 };
 
 registerSpeechPlugin();

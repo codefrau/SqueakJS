@@ -5,10 +5,10 @@
 
 TARGET=../gh-pages/demo
 MANIFEST=$(TARGET)/offline.appcache
-FILES=../squeak.js ../vm.js ../jit.js ../plugins/*.js \
+FILES=../squeak.js ../globals.js ../vm.*.js ../jit.js ../plugins/*.js \
 	simple.html simple.css simple.js SimplePlugin.js \
 	squeakjs.image  squeakjs.changes JSBridge.st icon.png \
-	../lib/lz-string.js ../lib/gh-fork-ribbon.css \
+	../lib/lz-string.js ../lib/jszip.js ../lib/sha1.js ../lib/gh-fork-ribbon.css \
 	../lib/addtohomescreen.css  ../lib/addtohomescreen.js 
 EXTRA=
 

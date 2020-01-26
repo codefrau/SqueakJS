@@ -5,7 +5,7 @@
 	ScratchPlugin VMMaker-bf.353 uuid: 8ae25e7e-8d2c-451e-8277-598b30e9c002
  */
 
-module("users.bert.SqueakJS.plugins.ScratchPlugin").requires("users.bert.SqueakJS.vm").toRun(function() {
+(function ScratchPlugin() {
 "use strict";
 
 var VM_PROXY_MAJOR = 1;
@@ -1232,23 +1232,29 @@ function setInterpreter(anInterpreter) {
 }
 
 
-Squeak.registerExternalModule("ScratchPlugin", {
-	primitiveCondenseSound: primitiveCondenseSound,
-	getModuleName: getModuleName,
-	primitiveFisheye: primitiveFisheye,
-	primitiveWaterRipples1: primitiveWaterRipples1,
-	primitiveHalfSizeDiagonal: primitiveHalfSizeDiagonal,
-	primitiveScale: primitiveScale,
-	primitiveDoubleSize: primitiveDoubleSize,
-	setInterpreter: setInterpreter,
-	primitiveWhirl: primitiveWhirl,
-	primitiveBlur: primitiveBlur,
-	primitiveBrightnessShift: primitiveBrightnessShift,
-	primitiveHalfSizeAverage: primitiveHalfSizeAverage,
-	primitiveSaturationShift: primitiveSaturationShift,
-	primitiveHueShift: primitiveHueShift,
-	primitiveInterpolate: primitiveInterpolate,
-	primitiveExtractChannel: primitiveExtractChannel,
-});
+function registerPlugin() {
+	if (typeof Squeak === "object" && Squeak.registerExternalModule) {
+		Squeak.registerExternalModule("ScratchPlugin", {
+			primitiveCondenseSound: primitiveCondenseSound,
+			getModuleName: getModuleName,
+			primitiveFisheye: primitiveFisheye,
+			primitiveWaterRipples1: primitiveWaterRipples1,
+			primitiveHalfSizeDiagonal: primitiveHalfSizeDiagonal,
+			primitiveScale: primitiveScale,
+			primitiveDoubleSize: primitiveDoubleSize,
+			setInterpreter: setInterpreter,
+			primitiveWhirl: primitiveWhirl,
+			primitiveBlur: primitiveBlur,
+			primitiveBrightnessShift: primitiveBrightnessShift,
+			primitiveHalfSizeAverage: primitiveHalfSizeAverage,
+			primitiveSaturationShift: primitiveSaturationShift,
+			primitiveHueShift: primitiveHueShift,
+			primitiveInterpolate: primitiveInterpolate,
+			primitiveExtractChannel: primitiveExtractChannel,
+		});
+	} else self.setTimeout(registerPlugin, 100);
+}
 
-}); // end of module
+registerPlugin();
+
+})(); // Register module/plugin

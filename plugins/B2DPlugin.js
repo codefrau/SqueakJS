@@ -5,7 +5,7 @@
 	BalloonEnginePlugin VMMaker-bf.353 uuid: 8ae25e7e-8d2c-451e-8277-598b30e9c002
  */
 
-module("users.bert.SqueakJS.plugins.B2DPlugin").requires("users.bert.SqueakJS.vm").toRun(function() {
+(function B2DPlugin() {
 "use strict";    
 
 var VM_PROXY_MAJOR = 1;
@@ -7681,54 +7681,60 @@ function workBufferPut(wbOop) {
 }
 
 
-Squeak.registerExternalModule("B2DPlugin", {
-	primitiveMergeFillFrom: primitiveMergeFillFrom,
-	primitiveCopyBuffer: primitiveCopyBuffer,
-	primitiveAddRect: primitiveAddRect,
-	primitiveAddGradientFill: primitiveAddGradientFill,
-	primitiveSetClipRect: primitiveSetClipRect,
-	initialiseModule: initialiseModule,
-	primitiveSetBitBltPlugin: primitiveSetBitBltPlugin,
-	primitiveRegisterExternalEdge: primitiveRegisterExternalEdge,
-	primitiveGetClipRect: primitiveGetClipRect,
-	primitiveAddBezier: primitiveAddBezier,
-	primitiveInitializeProcessing: primitiveInitializeProcessing,
-	primitiveRenderImage: primitiveRenderImage,
-	primitiveGetOffset: primitiveGetOffset,
-	primitiveSetDepth: primitiveSetDepth,
-	primitiveAddBezierShape: primitiveAddBezierShape,
-	primitiveSetEdgeTransform: primitiveSetEdgeTransform,
-	getModuleName: getModuleName,
-	primitiveGetTimes: primitiveGetTimes,
-	primitiveNextActiveEdgeEntry: primitiveNextActiveEdgeEntry,
-	primitiveAddBitmapFill: primitiveAddBitmapFill,
-	primitiveGetDepth: primitiveGetDepth,
-	primitiveAbortProcessing: primitiveAbortProcessing,
-	primitiveNextGlobalEdgeEntry: primitiveNextGlobalEdgeEntry,
-	primitiveGetFailureReason: primitiveGetFailureReason,
-	primitiveDisplaySpanBuffer: primitiveDisplaySpanBuffer,
-	moduleUnloaded: moduleUnloaded,
-	primitiveGetCounts: primitiveGetCounts,
-	primitiveChangedActiveEdgeEntry: primitiveChangedActiveEdgeEntry,
-	primitiveRenderScanline: primitiveRenderScanline,
-	primitiveGetBezierStats: primitiveGetBezierStats,
-	primitiveFinishedProcessing: primitiveFinishedProcessing,
-	setInterpreter: setInterpreter,
-	primitiveNeedsFlush: primitiveNeedsFlush,
-	primitiveAddLine: primitiveAddLine,
-	primitiveSetOffset: primitiveSetOffset,
-	primitiveNextFillEntry: primitiveNextFillEntry,
-	primitiveInitializeBuffer: primitiveInitializeBuffer,
-	primitiveDoProfileStats: primitiveDoProfileStats,
-	primitiveAddActiveEdgeEntry: primitiveAddActiveEdgeEntry,
-	primitiveSetAALevel: primitiveSetAALevel,
-	primitiveNeedsFlushPut: primitiveNeedsFlushPut,
-	primitiveAddCompressedShape: primitiveAddCompressedShape,
-	primitiveSetColorTransform: primitiveSetColorTransform,
-	primitiveAddOval: primitiveAddOval,
-	primitiveRegisterExternalFill: primitiveRegisterExternalFill,
-	primitiveAddPolygon: primitiveAddPolygon,
-	primitiveGetAALevel: primitiveGetAALevel,
-});
+function registerPlugin() {
+	if (typeof Squeak === "object" && Squeak.registerExternalModule) {
+		Squeak.registerExternalModule("B2DPlugin", {
+			primitiveMergeFillFrom: primitiveMergeFillFrom,
+			primitiveCopyBuffer: primitiveCopyBuffer,
+			primitiveAddRect: primitiveAddRect,
+			primitiveAddGradientFill: primitiveAddGradientFill,
+			primitiveSetClipRect: primitiveSetClipRect,
+			initialiseModule: initialiseModule,
+			primitiveSetBitBltPlugin: primitiveSetBitBltPlugin,
+			primitiveRegisterExternalEdge: primitiveRegisterExternalEdge,
+			primitiveGetClipRect: primitiveGetClipRect,
+			primitiveAddBezier: primitiveAddBezier,
+			primitiveInitializeProcessing: primitiveInitializeProcessing,
+			primitiveRenderImage: primitiveRenderImage,
+			primitiveGetOffset: primitiveGetOffset,
+			primitiveSetDepth: primitiveSetDepth,
+			primitiveAddBezierShape: primitiveAddBezierShape,
+			primitiveSetEdgeTransform: primitiveSetEdgeTransform,
+			getModuleName: getModuleName,
+			primitiveGetTimes: primitiveGetTimes,
+			primitiveNextActiveEdgeEntry: primitiveNextActiveEdgeEntry,
+			primitiveAddBitmapFill: primitiveAddBitmapFill,
+			primitiveGetDepth: primitiveGetDepth,
+			primitiveAbortProcessing: primitiveAbortProcessing,
+			primitiveNextGlobalEdgeEntry: primitiveNextGlobalEdgeEntry,
+			primitiveGetFailureReason: primitiveGetFailureReason,
+			primitiveDisplaySpanBuffer: primitiveDisplaySpanBuffer,
+			moduleUnloaded: moduleUnloaded,
+			primitiveGetCounts: primitiveGetCounts,
+			primitiveChangedActiveEdgeEntry: primitiveChangedActiveEdgeEntry,
+			primitiveRenderScanline: primitiveRenderScanline,
+			primitiveGetBezierStats: primitiveGetBezierStats,
+			primitiveFinishedProcessing: primitiveFinishedProcessing,
+			setInterpreter: setInterpreter,
+			primitiveNeedsFlush: primitiveNeedsFlush,
+			primitiveAddLine: primitiveAddLine,
+			primitiveSetOffset: primitiveSetOffset,
+			primitiveNextFillEntry: primitiveNextFillEntry,
+			primitiveInitializeBuffer: primitiveInitializeBuffer,
+			primitiveDoProfileStats: primitiveDoProfileStats,
+			primitiveAddActiveEdgeEntry: primitiveAddActiveEdgeEntry,
+			primitiveSetAALevel: primitiveSetAALevel,
+			primitiveNeedsFlushPut: primitiveNeedsFlushPut,
+			primitiveAddCompressedShape: primitiveAddCompressedShape,
+			primitiveSetColorTransform: primitiveSetColorTransform,
+			primitiveAddOval: primitiveAddOval,
+			primitiveRegisterExternalFill: primitiveRegisterExternalFill,
+			primitiveAddPolygon: primitiveAddPolygon,
+			primitiveGetAALevel: primitiveGetAALevel,
+		});
+	} else self.setTimeout(registerPlugin, 100);
+}
 
-}); // end of module
+registerPlugin();
+
+})(); // Register module/plugin

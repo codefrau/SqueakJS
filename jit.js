@@ -1,4 +1,3 @@
-module('users.bert.SqueakJS.jit').requires("users.bert.SqueakJS.vm").toRun(function() {
 "use strict";
 /*
  * Copyright (c) 2014-2019 Bert Freudenberg
@@ -190,8 +189,7 @@ to single-step.
         return cls.replace(/[ ]/, "_") + "__" + op + "__";
     },
 },
-'generating',
-{
+'generating', {
     generate: function(method, optClass, optSel, optInstVarNames) {
         this.method = method;
         this.pc = 0;                // next bytecode
@@ -828,5 +826,3 @@ to single-step.
         }
     },
 });
-
-}); // end of module

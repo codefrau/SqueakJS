@@ -1,9 +1,13 @@
-SqueakJS: A Squeak VM for the Web
-=================================
+SqueakJS: A Squeak VM for the Web and Node.js
+=============================================
 
 SqueakJS is an HTML5 runtime engine for [Squeak][squeak]</a> Smalltalk written in pure JavaScript by Bert Freudenberg.
 
-The interpreter core is in "vm.js" and plugins are in the "plugins" directory. The Just-in-Time compiler is optional ("jit.js") and can be easily replaced with your own. There are two user interfaces: the regular HTML interface lets you use SqueakJS on your own web page. Just include "squeak.js". The other interface provides a visual debugger implemented also in JavaScript using [Lively][lively]. This does not use "squeak.js" but reimplements the UI in Lively Morphic.
+The interpreter core is divided in a number of "vm.\*.js" modules, internal plugins in "vm.plugins.\*.js" modules and external plugins in the "plugins" directory. The Just-in-Time compiler is optional ("jit.js") and can be easily replaced with your own.
+There are a number of interfaces:
+* browser: the regular HTML interface lets you use SqueakJS on your own web page. Just include "squeak.js".
+* headless browser: a headless VM. It lets you use SqueakJS in your browser without a direct UI (you can create your own UI with a plugin). Include "squeak\_headless.js" and add an "imageName" parameter to your website URL (eg. https://example.com/my/page.html?imageName=./example.image) or call the Javascript function "fetchImageAndRun('https://example.com/my/example.image')" to start the specified image.
+* Node.js: another headless VM. It lets you use SqueakJS as a Node.js application. Just run "node squeak\_node.js <image name>".
 
 For discussions, please use the [vm-dev mailing list][vm-dev]. Also, please visit the [project home page][homepage]!
 
@@ -16,22 +20,33 @@ Running it
 * Or similarly, [Scratch][scratch], also in here.
 * Go to the [SqueakJS debugger][debug] page with the Lively interface.
 
-**Run your own Squeak image**
+**Run your own Squeak image in the browser**
 
 * Drag an image from your local files into the [launcher][run].
-* You can also drag files into the [Lively Debugger][debug] page.
 * ... and all the other demo pages (see above) accept dropped images, too.
+
+**Run your own Squeak image from the command line**
+
+* Install a recent version of Node.js
+* Run example image: `node squeak\_node.js headless/headless.image`
+
+**Run an interactive shell based on WebSocket communication with Cuis image**
+
+* Install a recent version of Node.js
+* Go to [ws][ws] and execute `start\_server.sh` in a first shell and `start\_client.sh` in a second shell.
+* After initialization it should be possible to issue Smalltalk statements which will be executed in the Smalltalk image.
+* Try commands like: `Object allSubclasses size` `1837468731248764723 * 321653125376153761` `Collection allSubclasses collect: [ :c | c name ]`
 
 **Which Browser**
 
 All modern browsers should work (Chrome, Safari, IE, FireFox), though Chrome performs best currently. Safari on iPad works somewhat. YMMV.
 Fixes to improve browser compatibility are highly welcome!
 
+If your browser does not support ES6 modules try the full or headless SqueakJS VM as a single file (aka bundle) in the [dist][dist] directory.
+
 
 Installing locally
 ------------------
-**Without Lively (simpler)**
-
 * download and unpack the [ZIP archive][zip] (or clone the [github repo][repo])
 * serve the SqueakJS directory using a local web server.
 
@@ -44,23 +59,8 @@ Installing locally
 Now Squeak should be running.
 The reason for having to run from a web server is because the image is loaded with an XMLHttpRequest which does not work with a file URL. Alternatively, you could just open SqueakJS/run/index.html and drop in a local image.
 
-**In Lively (nicer for debugging)**
-
-* install [Lively][lively]
-* inside the Lively directory, make a "users/bert" folder and put the SqueakJS directory there
-* open the blank.html page using your web browser
-* get a Squeak morph from the PartsBin
-* save the world under a different name
-
 How to modify it
 ----------------
-**In Lively**
-
-* if you installed with Lively, use that to change the code
-* all changes take effect immediately
-
-**Without Lively**
-
 * use any text editor
 * you have to reload the page for your changes to take effect
 
@@ -93,9 +93,7 @@ There's a gazillion exciting things to do :)
   [mini]:     http://bertfreudenberg.github.io/SqueakJS/demo/simple.html
   [etoys]:    http://bertfreudenberg.github.io/SqueakJS/etoys/
   [scratch]:  http://bertfreudenberg.github.io/SqueakJS/scratch/
-  [debug]:    http://lively-web.org/users/bert/squeak.html
   [zip]:      https://github.com/bertfreudenberg/SqueakJS/archive/master.zip
-  [lively]:   https://github.com/LivelyKernel/LivelyKernel
   [pullreq]:  https://help.github.com/articles/using-pull-requests
 
 

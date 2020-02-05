@@ -749,7 +749,7 @@ function SocketPlugin() {
       } else {
 
         // Perform DNS request
-        var dnsQueryURL = `https://9.9.9.9:5053/dns-query?name=${encodeURIComponent(this.lastLookup)}&type=A`;
+        var dnsQueryURL = "https://9.9.9.9:5053/dns-query?name=" + encodeURIComponent(this.lastLookup) + "&type=A";
         var queryStarted = false;
         if (self.fetch) {
           var thisHandle = this;

@@ -39,7 +39,7 @@ Object.subclass('Squeak.Primitives',
             this.identityHash = this.identityHashSpur;
         }
     },
-    initDisplay(display) {
+    initDisplay: function(display) {
         // Placeholder (can be replaced by a display module at runtime, before starting the Squeak interpreter)
         this.display = display;
     },

@@ -18,7 +18,6 @@ Running it
 * [Run a minimal image][mini]. This is the simple demo included in this repo.
 * Or run [Etoys][etoys]. Everything except the image and template files is in this repo.
 * Or similarly, [Scratch][scratch], also in here.
-* Go to the [SqueakJS debugger][debug] page with the Lively interface.
 
 **Run your own Squeak image in the browser**
 
@@ -42,7 +41,7 @@ Running it
 All modern browsers should work (Chrome, Safari, IE, FireFox), though Chrome performs best currently. Safari on iPad works somewhat. YMMV.
 Fixes to improve browser compatibility are highly welcome!
 
-If your browser does not support ES6 modules try the full or headless SqueakJS VM as a single file (aka bundle) in the [dist][dist] directory.
+If your browser does not support ES6 modules try the full or headless SqueakJS VM as a single file (aka bundle) in the [Distribution][dist] directory.
 
 
 Installing locally
@@ -58,6 +57,13 @@ Installing locally
 
 Now Squeak should be running.
 The reason for having to run from a web server is because the image is loaded with an XMLHttpRequest which does not work with a file URL. Alternatively, you could just open SqueakJS/run/index.html and drop in a local image.
+
+Using (self contained) bundled files
+------------------------------------
+* select your preferred type of interface (browser or headless)
+* use the appropriate file (`squeak_bundle.js` resp. `squeak_headless_bundle.js`) from the [Distribution][dist] directory
+* use the minified (ie file ending with `.min.js`) version if download/parsing speed is important
+* additionally use the source map (ie file ending with `.js.map`) together with minified file for debugging
 
 How to modify it
 ----------------
@@ -79,7 +85,7 @@ As for optimizing I think the way to go is an optimizing JIT compiler. The curre
 
 To make SqueakJS useful beyond running existing Squeak images, we should use the JavaScript bridge to write a native HTML UI which would certainly be much faster than BitBlt.
 
-Better Networking would be interesting, too. The SocketPlugin currently only allows HTTP requests. How about implementing it more generally via WebSockets? Parallelize the VM with WebWorkers?
+Better Networking would be interesting, too. The SocketPlugin currently does allows HTTP(S) requests and WebSockets. How about implementing low level Socket support based on HTTP-tunneling? The VM can run in a WebWorker. How about parallelizing the VM with WebWorkers?
 
 There's a gazillion exciting things to do :)
 
@@ -93,6 +99,8 @@ There's a gazillion exciting things to do :)
   [mini]:     http://bertfreudenberg.github.io/SqueakJS/demo/simple.html
   [etoys]:    http://bertfreudenberg.github.io/SqueakJS/etoys/
   [scratch]:  http://bertfreudenberg.github.io/SqueakJS/scratch/
+  [ws]:       http://bertfreudenberg.github.io/SqueakJS/ws/
+  [dist]:     http://bertfreudenberg.github.io/SqueakJS/dist/
   [zip]:      https://github.com/bertfreudenberg/SqueakJS/archive/master.zip
   [pullreq]:  https://help.github.com/articles/using-pull-requests
 

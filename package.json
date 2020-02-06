@@ -1,0 +1,16 @@
+{
+  "name": "SqueakJS",
+  "repository": "https://github.com/bertfreudenberg/SqueakJS",
+  "license": "MIT",
+  "scripts": {
+    "build:cleanup": "rimraf dist",
+    "build:bundle": "rollup squeak.js --file dist/squeak_bundle.js --format iife && rollup squeak_headless.js --file dist/squeak_headless_bundle.js",
+    "build:minify": "uglifyjs dist/squeak_bundle.js -o dist/squeak_bundle.min.js -c -m --source-map && uglifyjs dist/squeak_headless_bundle.js -o dist/squeak_headless_bundle.min.js -c -m --source-map",
+    "build": "npm run build:cleanup && npm run build:bundle && npm run build:minify"
+  },
+  "devDependencies": {
+    "rimraf": "^3",
+    "rollup": "^1",
+    "uglify-js": "^3"
+  }
+}

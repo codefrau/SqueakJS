@@ -1,7 +1,7 @@
 SqueakJS: A Squeak VM for the Web and Node.js
 =============================================
 
-SqueakJS is an HTML5 runtime engine for [Squeak][squeak]</a> Smalltalk written in pure JavaScript by Bert Freudenberg.
+SqueakJS is an HTML5 runtime engine for [Squeak][squeak]</a> Smalltalk written in pure JavaScript by Vanessa Freudenberg.
 
 The interpreter core is divided in a number of "vm.\*.js" modules, internal plugins in "vm.plugins.\*.js" modules and external plugins in the "plugins" directory. The Just-in-Time compiler is optional ("jit.js") and can be easily replaced with your own.
 There are a number of interfaces:
@@ -79,7 +79,7 @@ Contributions are very welcome!
 
 Things to work on
 -----------------
-SqueakJS is intended to run any Squeak image. It can already load anything from the original 1996 Squeak release to the latest 2016 release. But various pieces (primitives in various plugins) are still missing, in particular media support (MIDI, 3D graphics). Also, it would be nice to make it work on as many browsers as possible, especially on mobile touch devices.
+SqueakJS is intended to run any Squeak image. It can already load any 32-bit image from the original 1996 Squeak release to the latest Cog-Spur release. But various pieces (primitives in various plugins) are still missing, in particular media support (MIDI, 3D graphics). Also, we should add support for loading 64-bit Spur images (converting to 32 bits on load), and execute SISTA byecode. And, it would be nice to make it work on as many browsers as possible, especially on mobile touch devices.
 
 As for optimizing I think the way to go is an optimizing JIT compiler. The current JIT is very simple and does not optimize at all. Since we can't access or manipulate the JavaScript stack, we might want that compiler to inline as much as possible, but keep the call sequence flat so we can return to the browser at any time. Even better (but potentially more complicated) is actually using the JavaScript stack, just like Eliot's Stack VM uses the C stack. To make BitBlt fast, we could probably use WebGL.
 
@@ -89,24 +89,25 @@ Better Networking would be interesting, too. The SocketPlugin currently does all
 
 There's a gazillion exciting things to do :)
 
-  --  Bert Freudenberg
+  --  Vanessa Freudenberg
 
   [squeak]:   http://squeak.org/
-  [repo]:     https://github.com/bertfreudenberg/SqueakJS
+  [repo]:     https://github.com/codefrau/SqueakJS
   [vm-dev]:   http://lists.squeakfoundation.org/mailman/listinfo/vm-dev
-  [homepage]: http://bertfreudenberg.github.io/SqueakJS/
-  [run]:      http://bertfreudenberg.github.io/SqueakJS/run/
-  [mini]:     http://bertfreudenberg.github.io/SqueakJS/demo/simple.html
-  [etoys]:    http://bertfreudenberg.github.io/SqueakJS/etoys/
-  [scratch]:  http://bertfreudenberg.github.io/SqueakJS/scratch/
-  [ws]:       http://bertfreudenberg.github.io/SqueakJS/ws/
-  [dist]:     http://bertfreudenberg.github.io/SqueakJS/dist/
-  [zip]:      https://github.com/bertfreudenberg/SqueakJS/archive/master.zip
+  [homepage]: http://squeak.js.org/
+  [run]:      http://squeak.js.org/run/
+  [mini]:     http://squeak.js.org/demo/simple.html
+  [etoys]:    http://squeak.js.org/etoys/
+  [scratch]:  http://squeak.js.org/scratch/
+  [ws]:       http://squeak.js.org/ws/
+  [dist]:     http://squeak.js.org/dist/
+  [zip]:      https://github.com/codefrau/SqueakJS/archive/master.zip
   [pullreq]:  https://help.github.com/articles/using-pull-requests
 
 
 Changelog
 ---------
+    2020-04-08: renamed github account to "codefrau"
     2020-01-26: 0.9.8 split into modules (ErikOnBike), fixes
     2019-01-03: 0.9.7 minor fixes
     2018-03-13: 0.9.6 minor fixes

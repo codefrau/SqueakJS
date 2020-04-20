@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016 Bert Freudenberg
+ * Copyright (c) 2013-2020 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,7 +24,7 @@ var fullscreen = navigator.standalone ||
     window.matchMedia('(max-device-width: 800px) and (max-device-height: 800px)').matches;
 
 window.onload = function() {
-    var url = "https://freudenbergs.de/bert/squeakjs/etoys.image";
+    var url = "https://freudenbergs.de/vanessa/squeakjs/etoys.image";
     SqueakJS.runSqueak(url, sqCanvas, {
         appName: "Etoys",
         fixedWidth: 1200,

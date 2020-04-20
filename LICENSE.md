@@ -1,6 +1,6 @@
 The MIT License (MIT)
 
-Copyright (c) 2013-2019 Bert Freudenberg
+Copyright (c) 2013-2020 Vanessa Freudenberg
 Copyright (c) 2016 Fabio Niephaus, Google Inc.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

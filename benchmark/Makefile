@@ -1,5 +1,5 @@
 # File: Makefile
-# Author: Bert Freudenberg
+# Author: Vanessa Freudenberg
 #
 # copy files to publishing directory and create an offline manifest
 
@@ -21,4 +21,3 @@ $(TARGET): $(FILES)
 	@mkdir -pv $@ $@/../lib $@/../plugins
 	@for f in $^ ; do install -pvm 444 $$f $@/$$f ; done
 	@touch $@
-

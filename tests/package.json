@@ -1,5 +1,5 @@
 {
-  "author": "Bert Freudenberg <bert@freudenbergs.de>",
+  "author": "Vanessa Freudenberg <vanessa@codefrau.net>",
   "name": "squeakjs-tests",
   "description": "SqueakJS test runner",
   "version": "0.1.0",
@@ -7,7 +7,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bertfreudenberg/SqueakJS"
+    "url": "https://github.com/codefrau/SqueakJS"
   },
   "dependencies": {},
   "devDependencies": {

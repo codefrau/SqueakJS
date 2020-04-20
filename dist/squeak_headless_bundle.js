@@ -52,7 +52,7 @@ Function.prototype.subclass = function(classPath /* + more args */ ) {
 };
 
 /*
- * Copyright (c) 2013-2019 Bert Freudenberg
+ * Copyright (c) 2013-2020 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -271,7 +271,7 @@ Object.extend(Squeak,
 });
 
 /*
- * Copyright (c) 2013-2019 Bert Freudenberg
+ * Copyright (c) 2013-2020 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -843,7 +843,7 @@ Object.subclass('Squeak.Object',
 });
 
 /*
- * Copyright (c) 2013-2019 Bert Freudenberg
+ * Copyright (c) 2013-2020 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -1162,7 +1162,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
 });
 
 /*
- * Copyright (c) 2013-2019 Bert Freudenberg
+ * Copyright (c) 2013-2020 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -2277,7 +2277,7 @@ Object.subclass('Squeak.Image',
 });
 
 /*
- * Copyright (c) 2013-2019 Bert Freudenberg
+ * Copyright (c) 2013-2020 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -3707,7 +3707,7 @@ Object.subclass('Squeak.Interpreter',
 });
 
 /*
- * Copyright (c) 2013-2019 Bert Freudenberg
+ * Copyright (c) 2013-2020 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -4013,7 +4013,7 @@ Object.subclass('Squeak.InterpreterProxy',
 });
 
 /*
- * Copyright (c) 2013-2019 Bert Freudenberg
+ * Copyright (c) 2013-2020 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -4152,7 +4152,7 @@ Object.subclass('Squeak.InstructionStream',
 });
 
 /*
- * Copyright (c) 2013-2019 Bert Freudenberg
+ * Copyright (c) 2013-2020 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -4313,7 +4313,7 @@ Object.subclass('Squeak.InstructionPrinter',
 });
 
 /*
- * Copyright (c) 2013-2019 Bert Freudenberg
+ * Copyright (c) 2013-2020 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -6342,7 +6342,7 @@ Object.subclass('Squeak.Primitives',
 });
 
 /*
- * Copyright (c) 2014-2019 Bert Freudenberg
+ * Copyright (c) 2014-2020 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -7170,7 +7170,7 @@ to single-step.
 });
 
 /*
- * Copyright (c) 2013-2019 Bert Freudenberg
+ * Copyright (c) 2013-2020 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -7224,7 +7224,7 @@ Object.extend(Squeak.Primitives.prototype,
 });
 
 /*
- * Copyright (c) 2013-2019 Bert Freudenberg
+ * Copyright (c) 2013-2020 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -7268,7 +7268,7 @@ Object.extend(Squeak.Primitives.prototype,
 });
 
 /*
- * Copyright (c) 2013-2019 Bert Freudenberg
+ * Copyright (c) 2013-2020 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -7314,7 +7314,7 @@ Object.extend(Squeak,
 });
 
 /*
- * Copyright (c) 2013-2019 Bert Freudenberg
+ * Copyright (c) 2013-2020 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -7354,7 +7354,7 @@ Object.extend(Squeak.Primitives.prototype,
 });
 
 /*
- * Copyright (c) 2013-2019 Bert Freudenberg
+ * Copyright (c) 2013-2020 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -7412,7 +7412,7 @@ Object.extend(Squeak.Primitives.prototype,
 
 /*
  * This plugin simply adds "console.log" functionality.
- * 
+ *
  * Add the following method to the Smalltalk image (to Object for example) to use it:
  * primLog: messageString level: levelString
  *

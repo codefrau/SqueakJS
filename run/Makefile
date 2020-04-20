@@ -1,5 +1,5 @@
 # File: Makefile
-# Author: Bert Freudenberg
+# Author: Vanessa Freudenberg
 #
 # concatenate all SqueakJS files into squeak-all.js
 # replace ../squeak.js with squeak-all.js in index.html

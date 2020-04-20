@@ -1,6 +1,6 @@
 {
   "name": "SqueakJS",
-  "repository": "https://github.com/bertfreudenberg/SqueakJS",
+  "repository": "https://github.com/codefrau/SqueakJS",
   "license": "MIT",
   "scripts": {
     "build:cleanup": "rimraf dist",

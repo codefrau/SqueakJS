@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013,2014 Bert Freudenberg
+ * Copyright (c) 2013-Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -44,7 +44,7 @@ window.onload = function() {
     }
 
     function saveToLively(contents) {
-        var address = (window.google && 
+        var address = (window.google &&
             google.loader &&
             google.loader.ClientLocation &&
             google.loader.ClientLocation.address) || {city: "unknown city", country: "unknown country"};

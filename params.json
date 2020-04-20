@@ -1,1 +1,7 @@
-{"name":"SqueakJS","tagline":"A Squeak VM in Javascript","body":"To see SqueakJS in action visit [Lively Squeak][livelysqueak]. Alternatively (especially if you are on a mobile device) try [Simple Squeak][simplesqueak].\r\n\r\nI'm currently working on loading more demanding images. The Lively Squeak interface supports dropping a Squeak image from your local disk into the world. E.g., the [Etoys][etoys] image loads, but does not run successfully yet. The Simple Squeak page works fine on an iPad, but not as well on Android.\r\n\r\nContributions are very welcome! \r\n\r\n  --  Bert Freudenberg, December 2013\r\n\r\n  [livelysqueak]: http://lively-web.org/users/bert/squeak.html\r\n  [simplesqueak]: http://rawgithub.com/bertfreudenberg/SqueakJS/master/simple.html\r\n  [etoys]:        http://squeakland.org/","google":"","note":"Don't delete this file! It's used internally to help with page regeneration."}
+{
+    "name": "SqueakJS",
+    "tagline": "A Squeak VM in Javascript",
+    "body": "This is a Virtual Machine for Squeak Smalltalk written in pure JavaScript.\r\n\r\nContributions are very welcome! \r\n\r\n  --  Vanessa Freudenberg",
+    "google": "",
+    "note": "Don't delete this file! It's used internally to help with page regeneration."
+}

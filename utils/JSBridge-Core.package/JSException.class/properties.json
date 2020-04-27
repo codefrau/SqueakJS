@@ -1,0 +1,14 @@
+{
+	"category" : "JSBridge-Core",
+	"classinstvars" : [
+		 ],
+	"classvars" : [
+		 ],
+	"commentStamp" : "WRB 4/27/2020 10:15",
+	"instvars" : [
+		"jsError" ],
+	"name" : "JSException",
+	"pools" : [
+		 ],
+	"super" : "Exception",
+	"type" : "normal" }

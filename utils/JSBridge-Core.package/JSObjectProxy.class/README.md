@@ -42,6 +42,9 @@ JS eval: 'sqPlus(3, 4).then(function(result) {
 "Which even works from Squeak ..."
 (JS sqPlus: 3 and: 4) then: [:result | JS alert: result].
 
+"But instead of using JavaScript's then() function, you can use Smalltalk's semaphores!"
+JS await: (JS sqPlus: 3 and: 4).
+
 "If you don't need a result, just ignore the Promise"
 JS setTimeout: [JS alert: 'Hi'] ms: 1000.
 

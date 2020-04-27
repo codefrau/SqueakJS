@@ -1,0 +1,1 @@
+An exception for JavaScript errors -- holds the error

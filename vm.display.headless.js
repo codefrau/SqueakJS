@@ -35,6 +35,7 @@ Object.extend(Squeak.Primitives.prototype,
 	primitiveReverseDisplay: function() { return false; },
 	primitiveDeferDisplayUpdates: function() { return false; },
 	primitiveForceDisplayUpdate: function() { return false; },
+	primitiveScanCharacters: function() { return false; },
 	primitiveSetFullScreen: function() { return false; },
 	primitiveShowDisplayRect: function() { return false; },
 	primitiveBeCursor: function(argCount) {

@@ -191,7 +191,7 @@ Object.subclass('Squeak.Primitives',
             case 100: return this.vm.primitivePerformWithArgs(argCount, true); // Object.perform:withArguments:inSuperclass: (Blue Book: primitiveSignalAtTick)
             case 101: return this.primitiveBeCursor(argCount); // Cursor.beCursor
             case 102: return this.primitiveBeDisplay(argCount); // DisplayScreen.beDisplay
-            case 103: return false; // primitiveScanCharacters
+            case 103: return this.primitiveScanCharacters(argCount);
             case 104: return false; // primitiveDrawLoop
             case 105: return this.popNandPushIfOK(argCount+1, this.doStringReplace()); // string and array replace
             case 106: return this.primitiveScreenSize(argCount); // actualScreenSize

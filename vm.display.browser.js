@@ -268,6 +268,70 @@ Object.extend(Squeak.Primitives.prototype,
         this.vm.popN(argCount);
         return true;
     },
+    primitiveScanCharacters: function(argCount) {
+        if (argCount !== 6) return false;
+        // Load the arguments
+        var kernDelta = this.stackInteger(0);
+        var stops = this.stackNonInteger(1);
+        var scanRightX = this.stackInteger(2);
+        var sourceString = this.stackNonInteger(3);
+        var scanStopIndex = this.stackInteger(4);
+        var scanStartIndex = this.stackInteger(5);
+        if (!this.success) return false;
+        if (stops.pointersSize() < 258 || !sourceString.isBytes()) return false;
+        if (!(scanStartIndex > 0 && scanStopIndex > 0 && scanStopIndex <= sourceString.bytesSize())) return false;
+        // Load receiver and required instVars
+        var rcvr = this.stackNonInteger(6);
+        if (!this.success || rcvr.pointersSize() < 4) return false;
+        var scanDestX = this.checkSmallInt(rcvr.pointers[0]);
+        var scanLastIndex = this.checkSmallInt(rcvr.pointers[1]);
+        var scanXTable = this.checkNonInteger(rcvr.pointers[2]);
+        var scanMap = this.checkNonInteger(rcvr.pointers[3]);
+        if (!this.success || scanMap.pointersSize() !== 256) return false;
+        var maxGlyph = scanXTable.pointersSize() - 2;
+        // Okay, here we go. We have eliminated nearly all failure
+        // conditions, to optimize the inner fetches.
+        var EndOfRun = 257;
+        var CrossedX = 258;
+        var scanLastIndex = scanStartIndex;
+        while (scanLastIndex <= scanStopIndex) {
+            // Known to be okay since scanStartIndex > 0 and scanStopIndex <= sourceString size
+            var ascii = sourceString.bytes[scanLastIndex - 1];
+            // Known to be okay since stops size >= 258
+            var stopReason = stops.pointers[ascii];
+            if (!stopReason.isNil) {
+                // Store everything back and get out of here since some stop conditionn needs to be checked"
+                this.ensureSmallInt(scanDestX); if (!this.success) return false;
+                rcvr.pointers[0] = scanDestX;
+                rcvr.pointers[1] = scanLastIndex;
+                return this.popNandPushIfOK(7, stopReason);
+            }
+            // Known to be okay since scanMap size = 256
+            var glyphIndex = this.checkSmallInt(scanMap.pointers[ascii]);
+            // fail if the glyphIndex is out of range
+            if (!this.success || glyphIndex < 0 || glyphIndex > maxGlyph) return false;
+            var sourceX = this.checkSmallInt(scanXTable.pointers[glyphIndex]);
+            var sourceX2 = this.checkSmallInt(scanXTable.pointers[glyphIndex + 1]);
+            // Above may fail if non-integer entries in scanXTable
+            if (!this.success) return false;
+            var nextDestX = scanDestX + sourceX2 - sourceX;
+            if (nextDestX > scanRightX) {
+                // Store everything back and get out of here since we got to the right edge
+                this.ensureSmallInt(scanDestX); if (!this.success) return false;
+                rcvr.pointers[0] = scanDestX;
+                rcvr.pointers[1] = scanLastIndex;
+                stopReason = stops.pointers[CrossedX - 1];
+                return this.popNandPushIfOK(7, stopReason);
+            }
+            scanDestX = nextDestX + kernDelta;
+            scanLastIndex = scanLastIndex + 1;
+        }
+        this.ensureSmallInt(scanDestX); if (!this.success) return false;
+        rcvr.pointers[0] = scanDestX;
+        rcvr.pointers[1] = scanLastIndex;
+        stopReason = stops.pointers[EndOfRun - 1];
+        return this.popNandPushIfOK(7, stopReason);
+    },
     primitiveScreenSize: function(argCount) {
         var display = this.display,
             w = display.width || display.context.canvas.width,

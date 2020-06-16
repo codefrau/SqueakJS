@@ -328,7 +328,7 @@ Object.extend(Squeak.Primitives.prototype,
         }
         this.ensureSmallInt(scanDestX); if (!this.success) return false;
         rcvr.pointers[0] = scanDestX;
-        rcvr.pointers[1] = scanLastIndex;
+        rcvr.pointers[1] = scanStopIndex;
         stopReason = stops.pointers[EndOfRun - 1];
         return this.popNandPushIfOK(7, stopReason);
     },

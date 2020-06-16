@@ -77,6 +77,13 @@ import "./lib/jszip.js";
 import "./lib/FileSaver.js";
 import "./lib/sha1.js";
 
+Object.extend(Squeak, {
+    vmPath: "/",
+    platformSubtype: "Browser",
+    osVersion: navigator.userAgent,     // might want to parse
+    windowSystem: "HTML",
+});
+
 //////////////////////////////////////////////////////////////////////////////
 // display & event setup
 //////////////////////////////////////////////////////////////////////////////
@@ -902,12 +909,6 @@ SqueakJS.runImage = function(buffer, name, display, options) {
         return msg;
     };
     window.clearTimeout(loop);
-    Object.extend(Squeak, {
-        vmPath: "/",
-        platformSubtype: "Browser",
-        osVersion: navigator.userAgent,     // might want to parse
-        windowSystem: "HTML",
-    });
     display.reset();
     display.clear();
     display.showBanner("Loading " + SqueakJS.appName);

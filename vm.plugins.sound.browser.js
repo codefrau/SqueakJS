@@ -66,7 +66,8 @@ Object.extend(Squeak.Primitives.prototype,
         this.audioNextTimeSlot += source.buffer.duration;
         // source.onended is unreliable, using a timeout instead
         window.setTimeout(function() {
-            if (!this.audioContext) return;
+            // if the vm was shut down, forceInterruptCheck will be null
+            if (!this.audioContext || !this.vm.forceInterruptCheck) return;
             // console.log("sound " + this.audioContext.currentTime.toFixed(3) +
             //    ": done, next time slot " + this.audioNextTimeSlot.toFixed(3));
             this.audioBuffersUnused.push(source.buffer);

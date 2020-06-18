@@ -371,6 +371,9 @@ Object.subclass('Squeak.Object',
         if (!this.bytes) return null;
         return this.uint32Array = new Uint32Array(this.bytes.buffer, 0, this.bytes.length >>> 2);
     },
+    bytesOrWords: function() {
+        return this.bytes || this.wordsAsUint8Array();
+    },
     setAddr: function(addr) {
         // Move this object to addr by setting its oop. Answer address after this object.
         // Used to assign an oop for the first time when tenuring this object during GC.

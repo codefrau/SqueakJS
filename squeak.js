@@ -484,7 +484,8 @@ function createSqueakDisplay(canvas, options) {
             cursorCanvas.style.height = (cursorCanvas.height * scale|0) + "px";
         }
         if (!options.pixelated) {
-            if (scale >= 3) {
+            var pixelScale = window.devicePixelRatio * scale;
+            if (pixelScale % 1 === 0 || pixelScale > 5) {
                 canvas.classList.add("pixelated");
                 cursorCanvas && cursorCanvas.classList.add("pixelated");
             } else {
@@ -856,11 +857,22 @@ function createSqueakDisplay(canvas, options) {
             if (imgData) display.context.putImageData(imgData, 0, 0);
         }
         // set cursor scale
-        if (display.cursorCanvas && options.fixedWidth) {
-            var cursorCanvas = display.cursorCanvas,
-                scale = canvas.offsetWidth / canvas.width;
+        var cursorCanvas = display.cursorCanvas,
+            scale = canvas.offsetWidth / canvas.width;
+        if (cursorCanvas && options.fixedWidth) {
             cursorCanvas.style.width = (cursorCanvas.width * scale) + "px";
             cursorCanvas.style.height = (cursorCanvas.height * scale) + "px";
+        }
+        // set pixelation
+        if (!options.pixelated) {
+            var pixelScale = window.devicePixelRatio * scale;
+            if (pixelScale % 1 === 0 || pixelScale > 5) {
+                canvas.classList.add("pixelated");
+                cursorCanvas && cursorCanvas.classList.add("pixelated");
+            } else {
+                canvas.classList.remove("pixelated");
+                cursorCanvas && display.cursorCanvas.classList.remove("pixelated");
+            }
         }
     };
     window.onresize();

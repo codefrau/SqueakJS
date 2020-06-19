@@ -103,24 +103,24 @@ Object.subclass('Squeak.Primitives',
             case 19: return false;                                 // Guard primitive for simulation -- *must* fail
             // LargeInteger Primitives (20-39)
             // 32-bit logic is aliased to Integer prims above
-            case 20: return false; // primitiveRemLargeIntegers
-            case 21: return false; // primitiveAddLargeIntegers
-            case 22: return false; // primitiveSubtractLargeIntegers
+            case 20: this.vm.warnOnce("missing primitive: 20 (primitiveRemLargeIntegers)"); return false;
+            case 21: this.vm.warnOnce("missing primitive: 21 (primitiveAddLargeIntegers)"); return false;
+            case 22: this.vm.warnOnce("missing primitive: 22 (primitiveSubtractLargeIntegers)"); return false;
             case 23: return this.primitiveLessThanLargeIntegers();
             case 24: return this.primitiveGreaterThanLargeIntegers();
             case 25: return this.primitiveLessOrEqualLargeIntegers();
             case 26: return this.primitiveGreaterOrEqualLargeIntegers();
             case 27: return this.primitiveEqualLargeIntegers();
             case 28: return this.primitiveNotEqualLargeIntegers();
-            case 29: return false; // primitiveMultiplyLargeIntegers
-            case 30: return false; // primitiveDivideLargeIntegers
-            case 31: return false; // primitiveModLargeIntegers
-            case 32: return false; // primitiveDivLargeIntegers
-            case 33: return false; // primitiveQuoLargeIntegers
-            case 34: return false; // primitiveBitAndLargeIntegers
-            case 35: return false; // primitiveBitOrLargeIntegers
-            case 36: return false; // primitiveBitXorLargeIntegers
-            case 37: return false; // primitiveBitShiftLargeIntegers
+            case 29: this.vm.warnOnce("missing primitive: 29 (primitiveMultiplyLargeIntegers)"); return false;
+            case 30: this.vm.warnOnce("missing primitive: 30 (primitiveDivideLargeIntegers)"); return false;
+            case 31: this.vm.warnOnce("missing primitive: 31 (primitiveModLargeIntegers)"); return false;
+            case 32: this.vm.warnOnce("missing primitive: 32 (primitiveDivLargeIntegers)"); return false;
+            case 33: this.vm.warnOnce("missing primitive: 33 (primitiveQuoLargeIntegers)"); return false;
+            case 34: this.vm.warnOnce("missing primitive: 34 (primitiveBitAndLargeIntegers)"); return false;
+            case 35: this.vm.warnOnce("missing primitive: 35 (primitiveBitOrLargeIntegers)"); return false;
+            case 36: this.vm.warnOnce("missing primitive: 36 (primitiveBitXorLargeIntegers)"); return false;
+            case 37: this.vm.warnOnce("missing primitive: 37 (primitiveBitShiftLargeIntegers)"); return false;
             case 38: return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,false)); // Float basicAt
             case 39: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,false)); // Float basicAtPut
             // Float Primitives (40-59)
@@ -136,7 +136,7 @@ Object.subclass('Squeak.Primitives',
             case 49: return this.popNandPushFloatIfOK(argCount+1,this.stackFloat(1)*this.stackFloat(0));  // Float.mul
             case 50: return this.popNandPushFloatIfOK(argCount+1,this.safeFDiv(this.stackFloat(1),this.stackFloat(0)));  // Float.div
             case 51: return this.popNandPushIfOK(argCount+1,this.floatAsSmallInt(this.stackFloat(0)));  // Float.asInteger
-            case 52: return false; // Float.fractionPart (modf)
+            case 52: this.vm.warnOnce("missing primitive: 52 (Float.fractionPart (modf))"); return false;
             case 53: return this.popNandPushIntIfOK(argCount+1, this.frexp_exponent(this.stackFloat(0)) - 1); // Float.exponent
             case 54: return this.popNandPushFloatIfOK(2, this.ldexp(this.stackFloat(1), this.stackFloat(0))); // Float.timesTwoPower
             case 55: return this.popNandPushFloatIfOK(argCount+1, Math.sqrt(this.stackFloat(0))); // SquareRoot
@@ -150,9 +150,9 @@ Object.subclass('Squeak.Primitives',
             case 62: return this.popNandPushIfOK(argCount+1, this.objectSize(false)); // size
             case 63: return this.popNandPushIfOK(argCount+1, this.objectAt(false,true,false)); // String.basicAt:
             case 64: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,true,false)); // String.basicAt:put:
-            case 65: return false; // primitiveNext
-            case 66: return false; // primitiveNextPut
-            case 67: return false; // primitiveAtEnd
+            case 65: this.vm.warnOnce("missing primitive: 65 (primitiveNext)"); return false;
+            case 66: this.vm.warnOnce("missing primitive: 66 (primitiveNextPut)"); return false;
+            case 67: this.vm.warnOnce("missing primitive: 67 (primitiveAtEnd)"); return false;
             // StorageManagement Primitives (68-79)
             case 68: return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,true)); // Method.objectAt:
             case 69: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,true)); // Method.objectAt:put:
@@ -180,19 +180,19 @@ Object.subclass('Squeak.Primitives',
             // Input/Output Primitives (90-109)
             case 90: return this.primitiveMousePoint(argCount); // mousePoint
             case 91: return this.primitiveTestDisplayDepth(argCount); // cursorLocPut in old images
-            // case 92: return false; // primitiveSetDisplayMode
+            case 92: this.vm.warnOnce("missing primitive: 92 (primitiveSetDisplayMode)"); return false;
             case 93: return this.primitiveInputSemaphore(argCount);
             case 94: return this.primitiveGetNextEvent(argCount);
             case 95: return this.primitiveInputWord(argCount);
             case 96: return this.namedPrimitive('BitBltPlugin', 'primitiveCopyBits', argCount);
             case 97: return this.primitiveSnapshot(argCount);
-            //case 98: return false; // primitiveStoreImageSegment
+            case 98: this.vm.warnOnce("missing primitive 98 (primitiveStoreImageSegment)"); return false;
             case 99: return this.primitiveLoadImageSegment(argCount);
             case 100: return this.vm.primitivePerformWithArgs(argCount, true); // Object.perform:withArguments:inSuperclass: (Blue Book: primitiveSignalAtTick)
             case 101: return this.primitiveBeCursor(argCount); // Cursor.beCursor
             case 102: return this.primitiveBeDisplay(argCount); // DisplayScreen.beDisplay
             case 103: return this.primitiveScanCharacters(argCount);
-            case 104: return false; // primitiveDrawLoop
+            case 104: this.vm.warnOnce("missing primitive: 104 (primitiveDrawLoop)"); return false;
             case 105: return this.popNandPushIfOK(argCount+1, this.doStringReplace()); // string and array replace
             case 106: return this.primitiveScreenSize(argCount); // actualScreenSize
             case 107: return this.primitiveMouseButtons(argCount); // Sensor mouseButtons
@@ -210,7 +210,7 @@ Object.subclass('Squeak.Primitives',
             case 118: return this.primitiveDoPrimitiveWithArgs(argCount);
             case 119: return this.vm.flushMethodCacheForSelector(this.vm.top()); // before Squeak 2.3 uses 116
             // Miscellaneous Primitives (120-149)
-            case 120: return false; //primitiveCalloutToFFI
+            case 120: this.vm.warnOnce("missing primitive:121 (primitiveCalloutToFFI)"); return false;
             case 121: return this.primitiveImageName(argCount); //get+set imageName
             case 122: return this.primitiveReverseDisplay(argCount); // Blue Book: primitiveImageVolume
             case 123: this.vm.warnOnce("missing primitive: 123 (primitiveValueUninterruptably)"); return false;
@@ -251,12 +251,13 @@ Object.subclass('Squeak.Primitives',
             case 156: if (this.oldPrims) return this.primitiveFileDelete(argCount);
             case 157: if (this.oldPrims) return this.primitiveFileSize(argCount);
             case 158: if (this.oldPrims) return this.primitiveFileWrite(argCount);
+                break;  // fail 150-158 if fell through
             case 159: if (this.oldPrims) return this.primitiveFileRename(argCount);
-                break;  // fail 150-159 if fell through
+                this.vm.warnOnce("missing primitive: 159 (primitiveHashMultiply)"); return false;
             case 160: if (this.oldPrims) return this.primitiveDirectoryCreate(argCount);
                 else return this.primitiveAdoptInstance(argCount);
-            case 161: if (this.oldPrims) return this.primitiveDirectoryDelimitor(argCount); // new: primitiveSetIdentityHash
-                break;  // fail
+            case 161: if (this.oldPrims) return this.primitiveDirectoryDelimitor(argCount);
+                this.vm.warnOnce("missing primitive: 161 (primitiveSetIdentityHash)"); return false;
             case 162: if (this.oldPrims) return this.primitiveDirectoryLookup(argCount);
                 break;  // fail
             case 163: if (this.oldPrims) return this.primitiveDirectoryDelete(argCount);
@@ -365,7 +366,7 @@ Object.subclass('Squeak.Primitives',
             // Other Primitives (230-249)
             case 230: return this.primitiveRelinquishProcessorForMicroseconds(argCount);
             case 231: return this.primitiveForceDisplayUpdate(argCount);
-            // case 232:  return this.primitiveFormPrint(argCount);
+            case 232: this.vm.warnOnce("missing primitive: 232 (primitiveFormPrint)"); return false;
             case 233: return this.primitiveSetFullScreen(argCount);
             case 234: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveDecompressFromByteArray', argCount);
             case 235: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompareString', argCount);

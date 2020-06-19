@@ -275,7 +275,8 @@ Object.subclass('Squeak.Primitives',
             case 171: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStartWithSemaphore', argCount);
                 else return this.popNandPushIfOK(argCount+1, this.stackNonInteger(0).hash); //primitiveImmediateAsInteger
             case 172: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStop', argCount);
-                break;  // fail
+                this.vm.warnOnce("missing primitive: 172 (primitiveFetchMourner)");
+                return this.popNandPushIfOK(argCount, this.vm.nilObj); // do not fail
             case 173: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundAvailableSpace', argCount);
                 else return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,true)); // slotAt:
             case 174: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySamples', argCount);

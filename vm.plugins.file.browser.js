@@ -158,8 +158,11 @@ Object.extend(Squeak.Primitives.prototype,
             handle = this.stackNonInteger(3);
         if (!this.success || !handle.file) return false;
         if (!count) return this.popNandPushIfOK(argCount+1, 0);
-        var bytes = arrayObj.bytesOrWords() || [];
-        if (startIndex < 0 || startIndex + count > bytes.length)
+        if (!arrayObj.bytes) {
+            console.log("File reading into non-bytes object not implemented yet");
+            return false;
+        }
+        if (startIndex < 0 || startIndex + count > arrayObj.bytes.length)
             return false;
         if (typeof handle.file === "string") {
             //this.fileConsoleRead(handle.file, array, startIndex, count);
@@ -170,7 +173,7 @@ Object.extend(Squeak.Primitives.prototype,
             if (!file.contents)
                 return this.popNandPushIfOK(argCount+1, 0);
             var srcArray = file.contents,
-                dstArray = bytes;
+                dstArray = arrayObj.bytes;
             count = Math.min(count, file.size - handle.filePos);
             for (var i = 0; i < count; i++)
                 dstArray[startIndex + i] = srcArray[handle.filePos++];

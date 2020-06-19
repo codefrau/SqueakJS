@@ -156,13 +156,10 @@ Object.extend(Squeak.Primitives.prototype,
             startIndex = this.stackInteger(1) - 1, // make zero based
             arrayObj = this.stackNonInteger(2),
             handle = this.stackNonInteger(3);
-        if (!this.success || !handle.file) return false;
+        if (!this.success || !arrayObj.isWordsOrBytes() || !handle.file) return false;
         if (!count) return this.popNandPushIfOK(argCount+1, 0);
-        if (!arrayObj.bytes) {
-            console.log("File reading into non-bytes object not implemented yet");
-            return false;
-        }
-        if (startIndex < 0 || startIndex + count > arrayObj.bytes.length)
+        var size = arrayObj.isWords() ? arrayObj.wordsSize() : arrayObj.bytesSize();
+        if (startIndex < 0 || startIndex + count > size)
             return false;
         if (typeof handle.file === "string") {
             //this.fileConsoleRead(handle.file, array, startIndex, count);
@@ -172,11 +169,21 @@ Object.extend(Squeak.Primitives.prototype,
         return this.fileContentsDo(handle.file, function(file) {
             if (!file.contents)
                 return this.popNandPushIfOK(argCount+1, 0);
-            var srcArray = file.contents,
+            var srcArray, dstArray;
+            if (arrayObj.isWords()) {
+                srcArray = new Uint32Array(file.contents.buffer);
+                dstArray = arrayObj.words,
+                count = Math.min(count, (file.size - handle.filePos) >>> 2);
+                for (var i = 0; i < count; i++)
+                    dstArray[startIndex + i] = srcArray[handle.filePos + i];
+                handle.filePos += count << 2;
+            } else {
+                srcArray = file.contents;
                 dstArray = arrayObj.bytes;
-            count = Math.min(count, file.size - handle.filePos);
-            for (var i = 0; i < count; i++)
-                dstArray[startIndex + i] = srcArray[handle.filePos++];
+                count = Math.min(count, file.size - handle.filePos);
+                for (var i = 0; i < count; i++)
+                    dstArray[startIndex + i] = srcArray[handle.filePos++];
+            }
             this.popNandPushIfOK(argCount+1, count);
         }.bind(this));
     },

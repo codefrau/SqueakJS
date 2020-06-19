@@ -865,7 +865,6 @@ Object.subclass('Squeak.Image',
             oopOffset = segmentWordArray.oop,
             oopMap = {},
             rawBits = {};
-        readLoop:
         while (pos < data.byteLength) {
             var nWords = 0,
                 classInt = 0,
@@ -873,7 +872,6 @@ Object.subclass('Squeak.Image',
             switch (header & Squeak.HeaderTypeMask) {
                 case Squeak.HeaderTypeSizeAndClass:
                     nWords = header >>> 2;
-                    if (pos > data.byteLength - 8) break readLoop;  // some segments have extra zeroes
                     classInt = readWord();
                     header = readWord();
                     break;

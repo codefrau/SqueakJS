@@ -405,7 +405,7 @@ Object.extend(Squeak.Primitives.prototype,
             beep.type = 'square';
             beep.frequency.value = 880;
             beep.start();
-            beep.stop(ctx.currentTime + 0.2);
+            beep.stop(ctx.currentTime + 0.05);
         } else {
             this.vm.warnOnce("could not initialize audio");
         }

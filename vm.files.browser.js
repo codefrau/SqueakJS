@@ -135,7 +135,11 @@ Object.extend(Squeak,
         if (window.SqueakDB) return startTransaction();
 
         // otherwise, open SqueakDB first
-        var openReq = indexedDB.open("squeak");
+        var openReq;
+        try {
+            // fails in restricted iframe
+            openReq = indexedDB.open("squeak");
+        } catch (err) {}
 
         // UIWebView implements the interface but only returns null
         // https://stackoverflow.com/questions/27415998/indexeddb-open-returns-null-on-safari-ios-8-1-1-and-halts-execution-on-cordova

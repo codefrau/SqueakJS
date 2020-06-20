@@ -6,8 +6,10 @@ self.SqueakJS = {};
 
 // Setup a storage for settings
 // Try (a working) localStorage and fall back to regular dictionary otherwise
-var localStorage = self.localStorage;
+var localStorage;
 try {
+    // fails in restricted iframe
+    localStorage = self.localStorage;
     localStorage["squeak-foo:"] = "bar";
     if (localStorage["squeak-foo:"] !== "bar") throw Error();
     delete localStorage["squeak-foo:"];

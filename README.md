@@ -101,12 +101,14 @@ There's a gazillion exciting things to do :)
   [scratch]:  http://squeak.js.org/scratch/
   [ws]:       http://squeak.js.org/ws/
   [dist]:     http://squeak.js.org/dist/
-  [zip]:      https://github.com/codefrau/SqueakJS/archive/master.zip
+  [zip]:      https://github.com/codefrau/SqueakJS/archive/main.zip
   [pullreq]:  https://help.github.com/articles/using-pull-requests
 
 
 Changelog
 ---------
+    2020-06-20: renamed "master" branch to "main"
+    2020-06-20: 0.9.9 JSBridge additions (Bill Burdick), fixes
     2020-04-08: renamed github account to "codefrau"
     2020-01-26: 0.9.8 split into modules (ErikOnBike), fixes
     2019-01-03: 0.9.7 minor fixes

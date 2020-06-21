@@ -7,8 +7,10 @@
 
 	// Setup a storage for settings
 	// Try (a working) localStorage and fall back to regular dictionary otherwise
-	var localStorage = self.localStorage;
+	var localStorage;
 	try {
+		// fails in restricted iframe
+		localStorage = self.localStorage;
 		localStorage["squeak-foo:"] = "bar";
 		if (localStorage["squeak-foo:"] !== "bar") throw Error();
 		delete localStorage["squeak-foo:"];
@@ -17,42 +19,47 @@
 	}
 	self.Squeak.Settings = localStorage;
 
-	// Extend object by adding specified properties
-	Object.extend = function(obj /* + more args */ ) {
-		// skip arg 0, copy properties of other args to obj
-		for (var i = 1; i < arguments.length; i++)
-			if (typeof arguments[i] == 'object')
-				for (var name in arguments[i])
-					obj[name] = arguments[i][name];
-	};
-
-	// Create subclass using specified class path and given properties
-	Function.prototype.subclass = function(classPath /* + more args */ ) {
-		// create subclass
-		var subclass = function() {
-			if (this.initialize) this.initialize.apply(this, arguments);
-			return this;
+	if (!Object.extend) {
+		// Extend object by adding specified properties
+		Object.extend = function(obj /* + more args */ ) {
+			// skip arg 0, copy properties of other args to obj
+			for (var i = 1; i < arguments.length; i++)
+				if (typeof arguments[i] == 'object')
+					for (var name in arguments[i])
+						obj[name] = arguments[i][name];
 		};
-		// set up prototype
-		var protoclass = function() { };
-		protoclass.prototype = this.prototype;
-		subclass.prototype = new protoclass();
-		// skip arg 0, copy properties of other args to prototype
-		for (var i = 1; i < arguments.length; i++)
-			Object.extend(subclass.prototype, arguments[i]);
-		// add class to superclass
-		var superclassPath = classPath.split("."),
-			className = superclassPath.pop(),
-			superclass = superclassPath.length > 0 ?
-				// Walk classes 'path' (if non-empty class path)
-				superclassPath.reduce(function(superclass, path) {
-					return superclass[path];
-				}, self) :
-				// A root class is installed (if empty class path)
-				self;
-		superclass[className] = subclass;
-		return subclass;
-	};
+	}
+
+	if (!Function.prototype.subclass) {
+		// Create subclass using specified class path and given properties
+		Function.prototype.subclass = function(classPath /* + more args */ ) {
+			// create subclass
+			var subclass = function() {
+				if (this.initialize) this.initialize.apply(this, arguments);
+				return this;
+			};
+			// set up prototype
+			var protoclass = function() { };
+			protoclass.prototype = this.prototype;
+			subclass.prototype = new protoclass();
+			// skip arg 0, copy properties of other args to prototype
+			for (var i = 1; i < arguments.length; i++)
+				Object.extend(subclass.prototype, arguments[i]);
+			// add class to superclass
+			var superclassPath = classPath.split("."),
+				className = superclassPath.pop(),
+				superclass = superclassPath.length > 0 ?
+					// Walk classes 'path' (if non-empty class path)
+					superclassPath.reduce(function(superclass, path) {
+						return superclass[path];
+					}, self) :
+					// A root class is installed (if empty class path)
+					self;
+			superclass[className] = subclass;
+			return subclass;
+		};
+
+	}
 
 	/*
 	 * Copyright (c) 2013-2020 Vanessa Freudenberg
@@ -79,8 +86,8 @@
 	Object.extend(Squeak,
 	"version", {
 		// system attributes
-		vmVersion: "SqueakJS 0.9.8",
-		vmDate: "2020-01-26",               // Maybe replace at build time?
+		vmVersion: "SqueakJS 0.9.9",
+		vmDate: "2020-06-20",               // Maybe replace at build time?
 		vmBuild: "unknown",                 // or replace at runtime by last-modified?
 		vmPath: "unknown",                  // Replace at runtime
 		vmFile: "vm.js",
@@ -3507,9 +3514,14 @@
 						var methods = mdict.pointers[1].pointers;
 						if (!methods) continue;
 						var selectors = mdict.pointers;
+						if (methods.length + 2 !== selectors.length) continue;
 						for (var j = 0; j < methods.length; j++) {
-							if (!methods[j].isNil && callback.call(this, cls, methods[j], selectors[2+j]))
-								return true;
+							var method = methods[j];
+							var selector = selectors[2+j];
+							if (!method.isMethod || !method.isMethod()) continue;
+							if (!selector.bytesSize || !selector.bytesSize()) continue;
+							var result = callback.call(null, cls, method, selector);
+							if (result) return true;
 						}
 					}
 				}
@@ -4419,24 +4431,24 @@
 				case 19: return false;                                 // Guard primitive for simulation -- *must* fail
 				// LargeInteger Primitives (20-39)
 				// 32-bit logic is aliased to Integer prims above
-				case 20: return false; // primitiveRemLargeIntegers
-				case 21: return false; // primitiveAddLargeIntegers
-				case 22: return false; // primitiveSubtractLargeIntegers
+				case 20: this.vm.warnOnce("missing primitive: 20 (primitiveRemLargeIntegers)"); return false;
+				case 21: this.vm.warnOnce("missing primitive: 21 (primitiveAddLargeIntegers)"); return false;
+				case 22: this.vm.warnOnce("missing primitive: 22 (primitiveSubtractLargeIntegers)"); return false;
 				case 23: return this.primitiveLessThanLargeIntegers();
 				case 24: return this.primitiveGreaterThanLargeIntegers();
 				case 25: return this.primitiveLessOrEqualLargeIntegers();
 				case 26: return this.primitiveGreaterOrEqualLargeIntegers();
 				case 27: return this.primitiveEqualLargeIntegers();
 				case 28: return this.primitiveNotEqualLargeIntegers();
-				case 29: return false; // primitiveMultiplyLargeIntegers
-				case 30: return false; // primitiveDivideLargeIntegers
-				case 31: return false; // primitiveModLargeIntegers
-				case 32: return false; // primitiveDivLargeIntegers
-				case 33: return false; // primitiveQuoLargeIntegers
-				case 34: return false; // primitiveBitAndLargeIntegers
-				case 35: return false; // primitiveBitOrLargeIntegers
-				case 36: return false; // primitiveBitXorLargeIntegers
-				case 37: return false; // primitiveBitShiftLargeIntegers
+				case 29: this.vm.warnOnce("missing primitive: 29 (primitiveMultiplyLargeIntegers)"); return false;
+				case 30: this.vm.warnOnce("missing primitive: 30 (primitiveDivideLargeIntegers)"); return false;
+				case 31: this.vm.warnOnce("missing primitive: 31 (primitiveModLargeIntegers)"); return false;
+				case 32: this.vm.warnOnce("missing primitive: 32 (primitiveDivLargeIntegers)"); return false;
+				case 33: this.vm.warnOnce("missing primitive: 33 (primitiveQuoLargeIntegers)"); return false;
+				case 34: this.vm.warnOnce("missing primitive: 34 (primitiveBitAndLargeIntegers)"); return false;
+				case 35: this.vm.warnOnce("missing primitive: 35 (primitiveBitOrLargeIntegers)"); return false;
+				case 36: this.vm.warnOnce("missing primitive: 36 (primitiveBitXorLargeIntegers)"); return false;
+				case 37: this.vm.warnOnce("missing primitive: 37 (primitiveBitShiftLargeIntegers)"); return false;
 				case 38: return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,false)); // Float basicAt
 				case 39: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,false)); // Float basicAtPut
 				// Float Primitives (40-59)
@@ -4452,7 +4464,7 @@
 				case 49: return this.popNandPushFloatIfOK(argCount+1,this.stackFloat(1)*this.stackFloat(0));  // Float.mul
 				case 50: return this.popNandPushFloatIfOK(argCount+1,this.safeFDiv(this.stackFloat(1),this.stackFloat(0)));  // Float.div
 				case 51: return this.popNandPushIfOK(argCount+1,this.floatAsSmallInt(this.stackFloat(0)));  // Float.asInteger
-				case 52: return false; // Float.fractionPart (modf)
+				case 52: this.vm.warnOnce("missing primitive: 52 (Float.fractionPart (modf))"); return false;
 				case 53: return this.popNandPushIntIfOK(argCount+1, this.frexp_exponent(this.stackFloat(0)) - 1); // Float.exponent
 				case 54: return this.popNandPushFloatIfOK(2, this.ldexp(this.stackFloat(1), this.stackFloat(0))); // Float.timesTwoPower
 				case 55: return this.popNandPushFloatIfOK(argCount+1, Math.sqrt(this.stackFloat(0))); // SquareRoot
@@ -4466,9 +4478,9 @@
 				case 62: return this.popNandPushIfOK(argCount+1, this.objectSize(false)); // size
 				case 63: return this.popNandPushIfOK(argCount+1, this.objectAt(false,true,false)); // String.basicAt:
 				case 64: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,true,false)); // String.basicAt:put:
-				case 65: return false; // primitiveNext
-				case 66: return false; // primitiveNextPut
-				case 67: return false; // primitiveAtEnd
+				case 65: this.vm.warnOnce("missing primitive: 65 (primitiveNext)"); return false;
+				case 66: this.vm.warnOnce("missing primitive: 66 (primitiveNextPut)"); return false;
+				case 67: this.vm.warnOnce("missing primitive: 67 (primitiveAtEnd)"); return false;
 				// StorageManagement Primitives (68-79)
 				case 68: return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,true)); // Method.objectAt:
 				case 69: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,true)); // Method.objectAt:put:
@@ -4496,19 +4508,19 @@
 				// Input/Output Primitives (90-109)
 				case 90: return this.primitiveMousePoint(argCount); // mousePoint
 				case 91: return this.primitiveTestDisplayDepth(argCount); // cursorLocPut in old images
-				// case 92: return false; // primitiveSetDisplayMode
+				case 92: this.vm.warnOnce("missing primitive: 92 (primitiveSetDisplayMode)"); return false;
 				case 93: return this.primitiveInputSemaphore(argCount);
 				case 94: return this.primitiveGetNextEvent(argCount);
 				case 95: return this.primitiveInputWord(argCount);
 				case 96: return this.namedPrimitive('BitBltPlugin', 'primitiveCopyBits', argCount);
 				case 97: return this.primitiveSnapshot(argCount);
-				//case 98: return false; // primitiveStoreImageSegment
+				case 98: this.vm.warnOnce("missing primitive 98 (primitiveStoreImageSegment)"); return false;
 				case 99: return this.primitiveLoadImageSegment(argCount);
 				case 100: return this.vm.primitivePerformWithArgs(argCount, true); // Object.perform:withArguments:inSuperclass: (Blue Book: primitiveSignalAtTick)
 				case 101: return this.primitiveBeCursor(argCount); // Cursor.beCursor
 				case 102: return this.primitiveBeDisplay(argCount); // DisplayScreen.beDisplay
-				case 103: return false; // primitiveScanCharacters
-				case 104: return false; // primitiveDrawLoop
+				case 103: return this.primitiveScanCharacters(argCount);
+				case 104: this.vm.warnOnce("missing primitive: 104 (primitiveDrawLoop)"); return false;
 				case 105: return this.popNandPushIfOK(argCount+1, this.doStringReplace()); // string and array replace
 				case 106: return this.primitiveScreenSize(argCount); // actualScreenSize
 				case 107: return this.primitiveMouseButtons(argCount); // Sensor mouseButtons
@@ -4526,10 +4538,10 @@
 				case 118: return this.primitiveDoPrimitiveWithArgs(argCount);
 				case 119: return this.vm.flushMethodCacheForSelector(this.vm.top()); // before Squeak 2.3 uses 116
 				// Miscellaneous Primitives (120-149)
-				case 120: return false; //primitiveCalloutToFFI
+				case 120: this.vm.warnOnce("missing primitive:121 (primitiveCalloutToFFI)"); return false;
 				case 121: return this.primitiveImageName(argCount); //get+set imageName
 				case 122: return this.primitiveReverseDisplay(argCount); // Blue Book: primitiveImageVolume
-				//case 123: return false; //TODO primitiveValueUninterruptably
+				case 123: this.vm.warnOnce("missing primitive: 123 (primitiveValueUninterruptably)"); return false;
 				case 124: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore));
 				case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
 				case 126: return this.primitiveDeferDisplayUpdates(argCount);
@@ -4567,12 +4579,13 @@
 				case 156: if (this.oldPrims) return this.primitiveFileDelete(argCount);
 				case 157: if (this.oldPrims) return this.primitiveFileSize(argCount);
 				case 158: if (this.oldPrims) return this.primitiveFileWrite(argCount);
+					break;  // fail 150-158 if fell through
 				case 159: if (this.oldPrims) return this.primitiveFileRename(argCount);
-					break;  // fail 150-159 if fell through
+					this.vm.warnOnce("missing primitive: 159 (primitiveHashMultiply)"); return false;
 				case 160: if (this.oldPrims) return this.primitiveDirectoryCreate(argCount);
 					else return this.primitiveAdoptInstance(argCount);
-				case 161: if (this.oldPrims) return this.primitiveDirectoryDelimitor(argCount); // new: primitiveSetIdentityHash
-					break;  // fail
+				case 161: if (this.oldPrims) return this.primitiveDirectoryDelimitor(argCount);
+					this.vm.warnOnce("missing primitive: 161 (primitiveSetIdentityHash)"); return false;
 				case 162: if (this.oldPrims) return this.primitiveDirectoryLookup(argCount);
 					break;  // fail
 				case 163: if (this.oldPrims) return this.primitiveDirectoryDelete(argCount);
@@ -4590,7 +4603,8 @@
 				case 171: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStartWithSemaphore', argCount);
 					else return this.popNandPushIfOK(argCount+1, this.stackNonInteger(0).hash); //primitiveImmediateAsInteger
 				case 172: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStop', argCount);
-					break;  // fail
+					this.vm.warnOnce("missing primitive: 172 (primitiveFetchMourner)");
+					return this.popNandPushIfOK(argCount, this.vm.nilObj); // do not fail
 				case 173: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundAvailableSpace', argCount);
 					else return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,true)); // slotAt:
 				case 174: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySamples', argCount);
@@ -4681,7 +4695,7 @@
 				// Other Primitives (230-249)
 				case 230: return this.primitiveRelinquishProcessorForMicroseconds(argCount);
 				case 231: return this.primitiveForceDisplayUpdate(argCount);
-				// case 232:  return this.primitiveFormPrint(argCount);
+				case 232: this.vm.warnOnce("missing primitive: 232 (primitiveFormPrint)"); return false;
 				case 233: return this.primitiveSetFullScreen(argCount);
 				case 234: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveDecompressFromByteArray', argCount);
 				case 235: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompareString', argCount);
@@ -7549,6 +7563,70 @@
 			this.vm.popN(argCount);
 			return true;
 		},
+		primitiveScanCharacters: function(argCount) {
+			if (argCount !== 6) return false;
+			// Load the arguments
+			var kernDelta = this.stackInteger(0);
+			var stops = this.stackNonInteger(1);
+			var scanRightX = this.stackInteger(2);
+			var sourceString = this.stackNonInteger(3);
+			var scanStopIndex = this.stackInteger(4);
+			var scanStartIndex = this.stackInteger(5);
+			if (!this.success) return false;
+			if (stops.pointersSize() < 258 || !sourceString.isBytes()) return false;
+			if (!(scanStartIndex > 0 && scanStopIndex > 0 && scanStopIndex <= sourceString.bytesSize())) return false;
+			// Load receiver and required instVars
+			var rcvr = this.stackNonInteger(6);
+			if (!this.success || rcvr.pointersSize() < 4) return false;
+			var scanDestX = this.checkSmallInt(rcvr.pointers[0]);
+			var scanLastIndex = this.checkSmallInt(rcvr.pointers[1]);
+			var scanXTable = this.checkNonInteger(rcvr.pointers[2]);
+			var scanMap = this.checkNonInteger(rcvr.pointers[3]);
+			if (!this.success || scanMap.pointersSize() !== 256) return false;
+			var maxGlyph = scanXTable.pointersSize() - 2;
+			// Okay, here we go. We have eliminated nearly all failure
+			// conditions, to optimize the inner fetches.
+			var EndOfRun = 257;
+			var CrossedX = 258;
+			var scanLastIndex = scanStartIndex;
+			while (scanLastIndex <= scanStopIndex) {
+				// Known to be okay since scanStartIndex > 0 and scanStopIndex <= sourceString size
+				var ascii = sourceString.bytes[scanLastIndex - 1];
+				// Known to be okay since stops size >= 258
+				var stopReason = stops.pointers[ascii];
+				if (!stopReason.isNil) {
+					// Store everything back and get out of here since some stop conditionn needs to be checked"
+					this.ensureSmallInt(scanDestX); if (!this.success) return false;
+					rcvr.pointers[0] = scanDestX;
+					rcvr.pointers[1] = scanLastIndex;
+					return this.popNandPushIfOK(7, stopReason);
+				}
+				// Known to be okay since scanMap size = 256
+				var glyphIndex = this.checkSmallInt(scanMap.pointers[ascii]);
+				// fail if the glyphIndex is out of range
+				if (!this.success || glyphIndex < 0 || glyphIndex > maxGlyph) return false;
+				var sourceX = this.checkSmallInt(scanXTable.pointers[glyphIndex]);
+				var sourceX2 = this.checkSmallInt(scanXTable.pointers[glyphIndex + 1]);
+				// Above may fail if non-integer entries in scanXTable
+				if (!this.success) return false;
+				var nextDestX = scanDestX + sourceX2 - sourceX;
+				if (nextDestX > scanRightX) {
+					// Store everything back and get out of here since we got to the right edge
+					this.ensureSmallInt(scanDestX); if (!this.success) return false;
+					rcvr.pointers[0] = scanDestX;
+					rcvr.pointers[1] = scanLastIndex;
+					stopReason = stops.pointers[CrossedX - 1];
+					return this.popNandPushIfOK(7, stopReason);
+				}
+				scanDestX = nextDestX + kernDelta;
+				scanLastIndex = scanLastIndex + 1;
+			}
+			this.ensureSmallInt(scanDestX); if (!this.success) return false;
+			rcvr.pointers[0] = scanDestX;
+			rcvr.pointers[1] = scanStopIndex;
+			stopReason = stops.pointers[EndOfRun - 1];
+			return this.popNandPushIfOK(7, stopReason);
+		},
 		primitiveScreenSize: function(argCount) {
 			var display = this.display,
 				w = display.width || display.context.canvas.width,
@@ -7622,7 +7700,7 @@
 				beep.type = 'square';
 				beep.frequency.value = 880;
 				beep.start();
-				beep.stop(ctx.currentTime + 0.2);
+				beep.stop(ctx.currentTime + 0.05);
 			} else {
 				this.vm.warnOnce("could not initialize audio");
 			}
@@ -7761,7 +7839,11 @@
 			if (window.SqueakDB) return startTransaction();
 
 			// otherwise, open SqueakDB first
-			var openReq = indexedDB.open("squeak");
+			var openReq;
+			try {
+				// fails in restricted iframe
+				openReq = indexedDB.open("squeak");
+			} catch (err) {}
 
 			// UIWebView implements the interface but only returns null
 			// https://stackoverflow.com/questions/27415998/indexeddb-open-returns-null-on-safari-ios-8-1-1-and-halts-execution-on-cordova
@@ -9075,13 +9157,10 @@
 				startIndex = this.stackInteger(1) - 1, // make zero based
 				arrayObj = this.stackNonInteger(2),
 				handle = this.stackNonInteger(3);
-			if (!this.success || !handle.file) return false;
+			if (!this.success || !arrayObj.isWordsOrBytes() || !handle.file) return false;
 			if (!count) return this.popNandPushIfOK(argCount+1, 0);
-			if (!arrayObj.bytes) {
-				console.log("File reading into non-bytes object not implemented yet");
-				return false;
-			}
-			if (startIndex < 0 || startIndex + count > arrayObj.bytes.length)
+			var size = arrayObj.isWords() ? arrayObj.wordsSize() : arrayObj.bytesSize();
+			if (startIndex < 0 || startIndex + count > size)
 				return false;
 			if (typeof handle.file === "string") {
 				//this.fileConsoleRead(handle.file, array, startIndex, count);
@@ -9091,11 +9170,21 @@
 			return this.fileContentsDo(handle.file, function(file) {
 				if (!file.contents)
 					return this.popNandPushIfOK(argCount+1, 0);
-				var srcArray = file.contents,
+				var srcArray, dstArray;
+				if (arrayObj.isWords()) {
+					srcArray = new Uint32Array(file.contents.buffer);
+					dstArray = arrayObj.words,
+					count = Math.min(count, (file.size - handle.filePos) >>> 2);
+					for (var i = 0; i < count; i++)
+						dstArray[startIndex + i] = srcArray[handle.filePos + i];
+					handle.filePos += count << 2;
+				} else {
+					srcArray = file.contents;
 					dstArray = arrayObj.bytes;
-				count = Math.min(count, file.size - handle.filePos);
-				for (var i = 0; i < count; i++)
-					dstArray[startIndex + i] = srcArray[handle.filePos++];
+					count = Math.min(count, file.size - handle.filePos);
+					for (var i = 0; i < count; i++)
+						dstArray[startIndex + i] = srcArray[handle.filePos++];
+				}
 				this.popNandPushIfOK(argCount+1, count);
 			}.bind(this));
 		},
@@ -9565,7 +9654,7 @@
 			source.connect(this.audioContext.destination);
 			if (this.audioNextTimeSlot < this.audioContext.currentTime) {
 				if (this.audioNextTimeSlot > 0)
-					console.warn("sound " + this.audioContext.currentTime.toFixed(3) +
+					console.log("sound " + this.audioContext.currentTime.toFixed(3) +
 						": buffer underrun by " + (this.audioContext.currentTime - this.audioNextTimeSlot).toFixed(3) + " s");
 				this.audioNextTimeSlot = this.audioContext.currentTime;
 			}
@@ -9576,7 +9665,8 @@
 			this.audioNextTimeSlot += source.buffer.duration;
 			// source.onended is unreliable, using a timeout instead
 			window.setTimeout(function() {
-				if (!this.audioContext) return;
+				// if the vm was shut down, forceInterruptCheck will be null
+				if (!this.audioContext || !this.vm.forceInterruptCheck) return;
 				// console.log("sound " + this.audioContext.currentTime.toFixed(3) +
 				//    ": done, next time slot " + this.audioNextTimeSlot.toFixed(3));
 				this.audioBuffersUnused.push(source.buffer);
@@ -53265,6 +53355,13 @@
 	 * THE SOFTWARE.
 	 */
 
+	Object.extend(Squeak, {
+		vmPath: "/",
+		platformSubtype: "Browser",
+		osVersion: navigator.userAgent,     // might want to parse
+		windowSystem: "HTML",
+	});
+
 	//////////////////////////////////////////////////////////////////////////////
 	// display & event setup
 	//////////////////////////////////////////////////////////////////////////////
@@ -53664,7 +53761,8 @@
 				cursorCanvas.style.height = (cursorCanvas.height * scale|0) + "px";
 			}
 			if (!options.pixelated) {
-				if (scale >= 3) {
+				var pixelScale = window.devicePixelRatio * scale;
+				if (pixelScale % 1 === 0 || pixelScale > 5) {
 					canvas.classList.add("pixelated");
 					cursorCanvas && cursorCanvas.classList.add("pixelated");
 				} else {
@@ -54036,11 +54134,22 @@
 				if (imgData) display.context.putImageData(imgData, 0, 0);
 			}
 			// set cursor scale
-			if (display.cursorCanvas && options.fixedWidth) {
-				var cursorCanvas = display.cursorCanvas,
-					scale = canvas.offsetWidth / canvas.width;
+			var cursorCanvas = display.cursorCanvas,
+				scale = canvas.offsetWidth / canvas.width;
+			if (cursorCanvas && options.fixedWidth) {
 				cursorCanvas.style.width = (cursorCanvas.width * scale) + "px";
 				cursorCanvas.style.height = (cursorCanvas.height * scale) + "px";
+			}
+			// set pixelation
+			if (!options.pixelated) {
+				var pixelScale = window.devicePixelRatio * scale;
+				if (pixelScale % 1 === 0 || pixelScale > 5) {
+					canvas.classList.add("pixelated");
+					cursorCanvas && cursorCanvas.classList.add("pixelated");
+				} else {
+					canvas.classList.remove("pixelated");
+					cursorCanvas && display.cursorCanvas.classList.remove("pixelated");
+				}
 			}
 		};
 		window.onresize();
@@ -54089,12 +54198,6 @@
 			return msg;
 		};
 		window.clearTimeout(loop);
-		Object.extend(Squeak, {
-			vmPath: "/",
-			platformSubtype: "Browser",
-			osVersion: navigator.userAgent,     // might want to parse
-			windowSystem: "HTML",
-		});
 		display.reset();
 		display.clear();
 		display.showBanner("Loading " + SqueakJS.appName);

@@ -29,10 +29,16 @@ Object.extend(Squeak,
         if (!files) {
             // find existing files
             files = {};
+            // ... in localStorage
             Object.keys(Squeak.Settings).forEach(function(key) {
                 var match = key.match(/squeak-file(\.lz)?:(.*)$/);
                 if (match) {files[match[2]] = true};
             });
+            // ... or in memory
+            if (window.SqueakDBFake) Object.keys(SqueakDBFake.bigFiles).forEach(function(path) {
+                files[path] = true;
+            });
+            // ... or in IndexedDB (the normal case)
             if (typeof indexedDB !== "undefined") {
                 return this.dbTransaction("readonly", "fsck cursor", function(fileStore) {
                     var cursorReq = fileStore.openCursor();

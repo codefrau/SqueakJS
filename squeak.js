@@ -1769,7 +1769,7 @@
 					for (var i = 0; i < n; i++) {
 						var child = body[i];
 						if (typeof child === "object" && child.oop < 0)
-							todo.push(body[i]);
+							todo.push(child);
 					}
 				}
 			}
@@ -1932,6 +1932,7 @@
 			return this.partialGC(reason);
 		},
 		nextObjectWithGCFor: function(obj, clsObj) {
+			// this is nextObjectWithGC but avoids GC if no instances in new space
 			if (!this.hasNewInstances[clsObj.oop]) return null;
 			return this.nextObjectWithGC("instance of " + clsObj.className(), obj);
 		},
@@ -7738,9 +7739,15 @@
 			if (!files) {
 				// find existing files
 				files = {};
+				// ... in localStorage
 				Object.keys(Squeak.Settings).forEach(function(key) {
 					var match = key.match(/squeak-file(\.lz)?:(.*)$/);
 					if (match) {files[match[2]] = true;}            });
+				// ... or in memory
+				if (window.SqueakDBFake) Object.keys(SqueakDBFake.bigFiles).forEach(function(path) {
+					files[path] = true;
+				});
+				// ... or in IndexedDB (the normal case)
 				if (typeof indexedDB !== "undefined") {
 					return this.dbTransaction("readonly", "fsck cursor", function(fileStore) {
 						var cursorReq = fileStore.openCursor();

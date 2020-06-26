@@ -601,7 +601,7 @@ Object.subclass('Squeak.Image',
                 for (var i = 0; i < n; i++) {
                     var child = body[i];
                     if (typeof child === "object" && child.oop < 0)
-                        todo.push(body[i]);
+                        todo.push(child);
                 }
             }
         }
@@ -764,6 +764,7 @@ Object.subclass('Squeak.Image',
         return this.partialGC(reason);
     },
     nextObjectWithGCFor: function(obj, clsObj) {
+        // this is nextObjectWithGC but avoids GC if no instances in new space
         if (!this.hasNewInstances[clsObj.oop]) return null;
         return this.nextObjectWithGC("instance of " + clsObj.className(), obj);
     },

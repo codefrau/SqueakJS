@@ -62,8 +62,6 @@ Using (self contained) bundled files
 ------------------------------------
 * select your preferred type of interface (browser or headless)
 * use the appropriate file (`squeak_bundle.js` resp. `squeak_headless_bundle.js`) from the [Distribution][dist] directory
-* use the minified (ie file ending with `.min.js`) version if download/parsing speed is important
-* additionally use the source map (ie file ending with `.js.map`) together with minified file for debugging
 
 How to modify it
 ----------------
@@ -101,6 +99,7 @@ There's a gazillion exciting things to do :)
   [scratch]:  http://squeak.js.org/scratch/
   [ws]:       http://squeak.js.org/ws/
   [dist]:     http://squeak.js.org/dist/
+  [dist]:     https://github.com/codefrau/SqueakJS/main/dist
   [zip]:      https://github.com/codefrau/SqueakJS/archive/main.zip
   [pullreq]:  https://help.github.com/articles/using-pull-requests
 

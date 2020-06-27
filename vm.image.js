@@ -178,6 +178,7 @@ Object.subclass('Squeak.Image',
             }
             this.firstOldObject = oopMap[oldBaseAddr+4];
             this.lastOldObject = object;
+            this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
             this.oldSpaceBytes = objectMemorySize;
         } else {
             // Read all Spur object memory segments
@@ -243,6 +244,7 @@ Object.subclass('Squeak.Image',
             this.oldSpaceBytes -= skippedBytes;
             this.firstOldObject = oopMap[oldBaseAddr];
             this.lastOldObject = object;
+            this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
         }
 
         if (true) {
@@ -262,6 +264,7 @@ Object.subclass('Squeak.Image',
                 object = object.nextObject;
             }
             this.lastOldObject = renamedObj;
+            this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
         }
 
         // properly link objects by mapping via oopMap
@@ -457,6 +460,7 @@ Object.subclass('Squeak.Image',
             var next = obj.nextObject;
             if (!next) {// we're done
                 this.lastOldObject = obj;
+                this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
                 this.oldSpaceBytes -= removedBytes;
                 this.oldSpaceCount -= removedCount;
                 return;
@@ -493,6 +497,7 @@ Object.subclass('Squeak.Image',
         }
         oldObj.nextObject = null;   // might have been in young space
         this.lastOldObject = oldObj;
+        this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
         this.oldSpaceCount += newObjects.length;
         this.gcTenured += newObjects.length;
     },

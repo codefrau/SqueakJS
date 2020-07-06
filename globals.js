@@ -4,18 +4,20 @@
 if (!self.Squeak) self.Squeak = {};
 
 // Setup a storage for settings
-// Try (a working) localStorage and fall back to regular dictionary otherwise
-var localStorage;
-try {
-    // fails in restricted iframe
-    localStorage = self.localStorage;
-    localStorage["squeak-foo:"] = "bar";
-    if (localStorage["squeak-foo:"] !== "bar") throw Error();
-    delete localStorage["squeak-foo:"];
-} catch(e) {
-    localStorage = {};
+if (!Squeak.Settings) {
+    // Try (a working) localStorage and fall back to regular dictionary otherwise
+    var settings;
+    try {
+        // fails in restricted iframe
+        settings = self.localStorage;
+        settings["squeak-foo:"] = "bar";
+        if (settings["squeak-foo:"] !== "bar") throw Error();
+        delete settings["squeak-foo:"];
+    } catch(e) {
+        settings = {};
+    }
+    Squeak.Settings = settings;
 }
-self.Squeak.Settings = localStorage;
 
 if (!Object.extend) {
     // Extend object by adding specified properties

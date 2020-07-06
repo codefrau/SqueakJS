@@ -30,6 +30,11 @@ if (!Object.extend) {
     };
 }
 
+
+// This mimics the Lively Kernel's subclassing scheme.
+// When running there, Lively's subclasses and modules are used.
+// Modules serve as namespaces in Lively. SqueakJS uses a flat namespace
+// named "Squeak", but the code below still supports hierarchical names.
 if (!Function.prototype.subclass) {
     // Create subclass using specified class path and given properties
     Function.prototype.subclass = function(classPath /* + more args */ ) {
@@ -45,17 +50,16 @@ if (!Function.prototype.subclass) {
         // skip arg 0, copy properties of other args to prototype
         for (var i = 1; i < arguments.length; i++)
             Object.extend(subclass.prototype, arguments[i]);
-        // add class to superclass
-        var superclassPath = classPath.split("."),
-            className = superclassPath.pop(),
-            superclass = superclassPath.length > 0 ?
-                // Walk classes 'path' (if non-empty class path)
-                superclassPath.reduce(function(superclass, path) {
-                    return superclass[path];
-                }, self) :
-                // A root class is installed (if empty class path)
-                self;
-        superclass[className] = subclass;
+        // add class to namespace
+        var path = classPath.split("."),
+            className = path.pop(),
+            // Walk path starting at the global namespace (self)
+            // creating intermediate namespaces if necessary
+            namespace = path.reduce(function(namespace, path) {
+                if (!namespace[path]) namespace[path] = {};
+                return namespace[path];
+            }, self);
+        namespace[className] = subclass;
         return subclass;
     };
 

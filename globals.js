@@ -1,8 +1,7 @@
 "use strict";
 
-// Create two initial namespaces
-self.Squeak = {};
-self.SqueakJS = {};
+// Create Squeak VM namespace
+if (!self.Squeak) self.Squeak = {};
 
 // Setup a storage for settings
 // Try (a working) localStorage and fall back to regular dictionary otherwise

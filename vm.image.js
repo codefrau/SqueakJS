@@ -86,11 +86,20 @@ Object.subclass('Squeak.Image',
         var data = new DataView(arraybuffer),
             littleEndian = false,
             pos = 0;
-        var readWord = function() {
+        var readWord32 = function() {
             var int = data.getUint32(pos, littleEndian);
             pos += 4;
             return int;
         };
+        var readWord64 = function() {
+            var i0 = data.getUint32(pos, littleEndian),
+                i1 = data.getUint32(pos+4, littleEndian);
+            pos += 8;
+            if (i1 >= 0x200000) return [i1, i0]; // probably SmallFloat
+            return i1 * 0x100000000 + i0;
+        };
+        var readWord = readWord32;
+        var wordSize = 4;
         var readBits = function(nWords, isPointers) {
             if (isPointers) { // do endian conversion
                 var oops = [];
@@ -98,8 +107,8 @@ Object.subclass('Squeak.Image',
                     oops.push(readWord());
                 return oops;
             } else { // words (no endian conversion yet)
-                var bits = new Uint32Array(arraybuffer, pos, nWords);
-                pos += nWords*4;
+                var bits = new Uint32Array(arraybuffer, pos, nWords * wordSize / 4);
+                pos += nWords * wordSize;
                 return bits;
             }
         };
@@ -119,16 +128,17 @@ Object.subclass('Squeak.Image',
         var nativeFloats = [6505, 6521, 68003, 68021].indexOf(version) >= 0;
         this.hasClosures = [6504, 6505, 6521, 68002, 68003, 68021].indexOf(version) >= 0;
         this.isSpur = [6521, 68021].indexOf(version) >= 0;
-        if (version >= 68000) throw Error("64 bit images not supported yet");
+        var is64Bit = version >= 68000;
+        if (is64Bit && !this.isSpur) throw Error("64 bit non-spur images not supported yet");
+        if (is64Bit)  { readWord = readWord64; wordSize = 8; }
         // parse image header
-        var imageHeaderSize = readWord();
+        var imageHeaderSize = readWord32(); // always 32 bits
         var objectMemorySize = readWord(); //first unused location in heap
         var oldBaseAddr = readWord(); //object memory base address of image
         var specialObjectsOopInt = readWord(); //oop of array of special oops
-        this.lastHash = readWord(); //Should be loaded from, and saved to the image header
         this.savedHeaderWords = [];
-        for (var i = 0; i < 6; i++)
-            this.savedHeaderWords.push(readWord());
+        for (var i = 0; i < (is64Bit ? 10 : 7); i++)
+            this.savedHeaderWords.push(readWord32());
         var firstSegSize = readWord();
         var prevObj;
         var oopMap = {};
@@ -193,20 +203,22 @@ Object.subclass('Squeak.Image',
                 while (pos < segmentEnd - 16) {
                     // read objects in segment
                     var objPos = pos,
-                        formatAndClass = readWord(),
-                        sizeAndHash = readWord(),
+                        formatAndClass = readWord32(),
+                        sizeAndHash = readWord32(),
                         size = sizeAndHash >>> 24;
-                    if (size === 255) { // reinterpret word as size, read header again
+                    if (size === 255) { // this was the extended size header, read actual header
                         size = formatAndClass;
-                        formatAndClass = readWord();
-                        sizeAndHash = readWord();
+                        // In 64 bit images the size can actually be 56 bits. LOL. Nope.
+                        // if (is64Bit) size += (sizeAndHash & 0x00FFFFFF) * 0x100000000; 
+                        formatAndClass = readWord32();
+                        sizeAndHash = readWord32();
                     }
                     var oop = addressOffset + pos - 8 - headerSize,
                         format = (formatAndClass >>> 24) & 0x1F,
                         classID = formatAndClass & 0x003FFFFF,
                         hash = sizeAndHash & 0x003FFFFF;
                     var bits = readBits(size, format < 10 && classID > 0);
-                    pos += (size < 2 ? 2 - size : size & 1) * 4; // align on 8 bytes, 16 min
+                    if (!is64Bit) pos += (size < 2 ? 2 - size : size & 1) * 4; // align on 8 bytes, 16 min
                     // low class ids are internal to Spur
                     if (classID >= 32) {
                         var object = new Squeak.ObjectSpur();
@@ -228,10 +240,10 @@ Object.subclass('Squeak.Image',
                 }
                 if (pos !== segmentEnd - 16) throw Error("invalid segment");
                 // last 16 bytes in segment is a bridge object
-                var deltaWords = readWord(),
-                    deltaWordsHi = readWord(),
-                    segmentBytes = readWord(),
-                    segmentBytesHi = readWord();
+                var deltaWords = readWord32(),
+                    deltaWordsHi = readWord32(),
+                    segmentBytes = readWord32(),
+                    segmentBytesHi = readWord32();
                 //  if segmentBytes is zero, the end of the image has been reached
                 if (segmentBytes !== 0) {
                     var deltaBytes = deltaWordsHi & 0xFF000000 ? (deltaWords & 0x00FFFFFF) * 4 : 0;

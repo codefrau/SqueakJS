@@ -233,8 +233,7 @@ Object.subclass('Squeak.Image',
                         oopAdjust[oop] = skippedBytes;
                     } else {
                         skippedBytes += pos - objPos;
-                        if (!freePageList) freePageList = bits;         // first hidden obj
-                        else if (!classPages) classPages = bits;        // second hidden obj
+                        if (classID === 16 && !classPages) classPages = bits;
                         if (classID) oopMap[oldBaseAddr + oop] = bits;  // used in spurClassTable()
                     }
                 }

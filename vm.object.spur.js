@@ -87,6 +87,8 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                     this.pointers = this.decodePointers(nWords, oops, oopMap, getCharacter);
                 }
                 break;
+            case 11: // 32 bit array (odd length in 64 bits)
+                nWords--;
             case 10: // 32 bit array
                 if (this.sqClass === floatClass) {
                     //These words are actually a Float
@@ -105,10 +107,16 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                 } else if (nWords > 0) {
                     this.words = this.decodeWords(nWords, bits, littleEndian);
                 }
-                break
+                break;
             case 12: // 16 bit array
             case 13: // 16 bit array (odd length)
                 throw Error("16 bit arrays not supported yet");
+            case 20: // 8 bit array, length-4 (64 bit image)
+            case 21: // ... length-5
+            case 22: // ... length-6 
+            case 23: // ... length-7
+                nWords--;
+                // fall through
             case 16: // 8 bit array
             case 17: // ... length-1
             case 18: // ... length-2
@@ -116,17 +124,23 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                 if (nWords > 0)
                     this.bytes = this.decodeBytes(nWords, bits, 0, this._format & 3);
                 break;
+            case 28: // CompiledMethod, length-4 (64 bit image)
+            case 29: // ... length-5
+            case 30: // ... length-6
+            case 31: // ... length-7
+                nWords--;
+                // fall through
             case 24: // CompiledMethod
-            case 25: // CompiledMethod
-            case 26: // CompiledMethod
-            case 27: // CompiledMethod
+            case 25: // ... length-1
+            case 26: // ... length-2
+            case 27: // ... length-3
                 var rawHeader = this.decodeWords(1, bits, littleEndian)[0];
                 if (rawHeader & 0x80000000) throw Error("Alternate bytecode set not supported")
                 var numLits = (rawHeader >> 1) & 0x7FFF,
                     oops = this.decodeWords(numLits+1, bits, littleEndian);
                 this.pointers = this.decodePointers(numLits+1, oops, oopMap, getCharacter); //header+lits
                 this.bytes = this.decodeBytes(nWords-(numLits+1), bits, numLits+1, this._format & 3);
-                break
+                break;
             default:
                 throw Error("Unknown object format: " + this._format);
 

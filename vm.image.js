@@ -1105,7 +1105,6 @@ Object.subclass('Squeak.Image',
         writeWord(hiddenSize + this.oldSpaceBytes + trailerSize); // end of memory
         writeWord(this.firstOldObject.addr()); // base addr (0)
         writeWord(objToOop(this.specialObjectsArray));
-        writeWord(this.lastHash);
         this.savedHeaderWords.forEach(writeWord);
         writeWord(hiddenSize + this.oldSpaceBytes + trailerSize); //first segment size
         while (pos < headerSize)

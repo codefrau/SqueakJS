@@ -297,7 +297,7 @@ Object.subclass('Squeak.Image',
             if (obj) {
                 var stop = done + (this.oldSpaceCount / 20 | 0);    // do it in 20 chunks
                 while (obj && done < stop) {
-                    obj.installFromImage(oopMap, rawBits, compactClasses, floatClass, littleEndian, nativeFloats);
+                    obj.installFromImage(oopMap, rawBits, compactClasses, floatClass, littleEndian, nativeFloats, is64Bit && function makeFloat(bits) { return this.instantiateFloat(floatClass, bits)}.bind(this));
                     obj = obj.nextObject;
                     done++;
                 }
@@ -1008,6 +1008,13 @@ Object.subclass('Squeak.Image',
             this.characterTable[unicode] = char;
         }
         return char;
+    },
+    instantiateFloat: function(floatClass, bits) {
+        var float = new (floatClass.classInstProto("BoxedFloat64"));
+        this.registerObjectSpur(float);
+        this.hasNewInstances[floatClass.oop] = true;
+        float.initInstanceOfFloat(floatClass, bits);
+        return float;
     },
     ensureClassesInTable: function() {
         // make sure all classes are in class table

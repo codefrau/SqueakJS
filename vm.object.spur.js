@@ -64,7 +64,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
 // 16-23 = 8-bit indexable                    (plus three odd bits, one unused in 32-bits)
 // 24-31 = compiled methods (CompiledMethod)  (plus three odd bits, one unused in 32-bits)
     },
-    installFromImage: function(oopMap, rawBits, classTable, floatClass, littleEndian, getCharacter) {
+    installFromImage: function(oopMap, rawBits, classTable, floatClass, littleEndian, getCharacter, is64Bit) {
         //Install this object by decoding format, and rectifying pointers
         var classID = this.sqClass;
         if (classID < 32) throw Error("Invalid class ID: " + classID);
@@ -84,7 +84,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             case 5: // only inst vars (weak)
                 if (nWords > 0) {
                     var oops = bits; // endian conversion was already done
-                    this.pointers = this.decodePointers(nWords, oops, oopMap, getCharacter);
+                    this.pointers = this.decodePointers(nWords, oops, oopMap, getCharacter, is64Bit);
                 }
                 break;
             case 11: // 32 bit array (odd length in 64 bits)
@@ -147,24 +147,61 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         }
         this.mark = false; // for GC
     },
-    decodePointers: function(nWords, theBits, oopMap, getCharacter) {
+    decodePointers: function(nWords, theBits, oopMap, getCharacter, is64Bit) {
         //Convert immediate objects and look up object pointers in oopMap
         var ptrs = new Array(nWords);
         for (var i = 0; i < nWords; i++) {
             var oop = theBits[i];
-            if ((oop & 1) === 1) {          // SmallInteger
+            // in 64 bits, oops > 53 bits are read as [hi, lo]
+            if (typeof oop !== "number") {
+                if ((oop[1] & 7) === 4) {
+                    ptrs[i] = this.decodeSmallFloat(oop[0], oop[1], is64Bit); 
+                } else if ((oop[1] & 7) === 1) {
+                    throw Error("Large SmallIntegers not implemented yet")
+                } else if ((oop[1] & 7) === 2) {
+                    throw Error("Large Immediate Characters not implemented yet");
+                } else {
+                    throw Error("Large OOPs not implemented yet");
+                }
+            } else if ((oop & 1) === 1) {          // SmallInteger
+                if (oop > 0xFFFFFFFF) throw Error("Large SmallIntegers not implemented yet");
                 ptrs[i] = oop >> 1;
             } else if ((oop & 3) === 2) {   // Character
+                if (oop > 0x1FFFFFFFF) throw Error("Large Immediate Characters not implemented yet");
                 ptrs[i] = getCharacter(oop >>> 2);
+            } else if (is64Bit && (oop & 7) === 4) {   // SmallFloat
+                ptrs[i] = this.decodeSmallFloat(oop / 0x100000000 >>> 0, oop >>> 0, is64Bit);
             } else {                        // Object
                 ptrs[i] = oopMap[oop] || 42424242;
                 // when loading a context from image segment, there is
                 // garbage beyond its stack pointer, resulting in the oop
                 // not being found in oopMap. We just fill in an arbitrary
                 // SmallInteger - it's never accessed anyway
+                
+                // until 64 bit is working correctly, leave this here as a check ...
+                if (ptrs[i] === 42424242) debugger;
             }
         }
         return ptrs;
+    },
+    decodeSmallFloat: function(hi, lo, makeFloat) {
+        // SmallFloats are stored with full 52 bit mantissa, but shortened exponent. 
+        // The lowest 3 bits are tags, the next is the sign bit
+        var newHi = 0,
+            newLo = 0,
+            sign = (lo & 8) << (32-4),               // shift sign bit to msb
+            isZero = (hi | (lo & 0xFFFFFFF0)) === 0; // ignore sign and tag bits
+        if (isZero) {
+            // zero is special - can be positive or negative
+            newHi = sign;
+        } else {
+            // shift everything right by 4, fix exponent, add sign
+            newHi = (hi >>> 4) + 0x38000000 | sign;
+            newLo = (lo >>> 4) | (hi & 0xF) << (32-4);
+            // 1023 is the bias of the 11-bit exponent in an IEEE 754 64-bit float,
+            // and 127 is the bias of our 8-bit exponent. 1023-127 == 0x380
+        }
+        return makeFloat(new Uint32Array([newLo, newHi]));
     },
     initInstanceOfChar: function(charClass, unicode) {
         this.oop = (unicode << 2) | 2;
@@ -172,6 +209,13 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         this.hash = unicode;
         this._format = 7;
         this.mark = true;   // stays always marked so not traced by GC
+    },
+    initInstanceOfFloat: function(floatClass, bits) {
+        this.sqClass = floatClass;
+        this.hash = 0;
+        this._format = 10;
+        this.isFloat = true;
+        this.float = this.decodeFloat(bits, true, true);
     },
     classNameFromImage: function(oopMap, rawBits) {
         var name = oopMap[rawBits[this.oop][Squeak.Class_name]];

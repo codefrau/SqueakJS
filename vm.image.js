@@ -92,11 +92,11 @@ Object.subclass('Squeak.Image',
             return int;
         };
         var readWord64 = function() {
-            var i0 = data.getUint32(pos, littleEndian),
-                i1 = data.getUint32(pos+4, littleEndian);
+            var lo = data.getUint32(pos, littleEndian),
+                hi = data.getUint32(pos+4, littleEndian);
             pos += 8;
-            if (i1 >= 0x200000) return [i1, i0]; // probably SmallFloat
-            return i1 * 0x100000000 + i0;
+            if (hi >= 0x200000) return [hi, lo]; // probably SmallFloat
+            return hi * 0x100000000 + lo;
         };
         var readWord = readWord32;
         var wordSize = 4;

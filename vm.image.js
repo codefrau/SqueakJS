@@ -95,6 +95,7 @@ Object.subclass('Squeak.Image',
             var lo = data.getUint32(pos, littleEndian),
                 hi = data.getUint32(pos+4, littleEndian);
             pos += 8;
+            if (hi == 0xFFFFFFFF && lo >= 0x80000000) return lo; // negative
             if (hi >= 0x200000) return [hi, lo]; // probably SmallFloat
             return hi * 0x100000000 + lo;
         };

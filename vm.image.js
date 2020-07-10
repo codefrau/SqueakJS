@@ -285,8 +285,7 @@ Object.subclass('Squeak.Image',
         var floatClass     = oopMap[rawBits[splObs.oop][Squeak.splOb_ClassFloat]];
         // Spur needs different arguments for installFromImage()
         if (this.isSpur) {
-            var charClass = oopMap[rawBits[splObs.oop][Squeak.splOb_ClassCharacter]];
-            this.initCharacterTable(charClass);
+            this.initImmediateClasses(oopMap, rawBits, splObs);
             compactClasses = this.spurClassTable(oopMap, rawBits, classPages, splObs);
             nativeFloats = this.getCharacter.bind(this);
             this.initSpurOverrides();
@@ -297,7 +296,14 @@ Object.subclass('Squeak.Image',
             if (obj) {
                 var stop = done + (this.oldSpaceCount / 20 | 0);    // do it in 20 chunks
                 while (obj && done < stop) {
-                    obj.installFromImage(oopMap, rawBits, compactClasses, floatClass, littleEndian, nativeFloats, is64Bit && function makeFloat(bits) { return this.instantiateFloat(floatClass, bits)}.bind(this));
+                    obj.installFromImage(oopMap, rawBits, compactClasses, floatClass, littleEndian, nativeFloats, is64Bit && {
+                            makeFloat: function makeFloat(bits) {
+                                return this.instantiateFloat(bits);
+                            }.bind(this),
+                            makeLargeFromSmall: function makeLargeFromSmall(hi, lo) {
+                                return this.instantiateLargeFromSmall(hi, lo);
+                            }.bind(this),
+                        });
                     obj = obj.nextObject;
                     done++;
                 }
@@ -995,9 +1001,17 @@ Object.subclass('Squeak.Image',
         console.error("class table full?"); // todo: clean out old class table entries
         return null;
     },
-    initCharacterTable: function(characterClass) {
-        characterClass.classInstProto("Character"); // provide name
-        this.characterClass = characterClass;
+    initImmediateClasses: function(oopMap, rawBits, splObs) {
+        var special = rawBits[splObs.oop];
+        this.characterClass = oopMap[special[Squeak.splOb_ClassCharacter]];
+        this.floatClass = oopMap[special[Squeak.splOb_ClassFloat]];
+        this.largePosIntClass = oopMap[special[Squeak.splOb_ClassLargePositiveInteger]];
+        this.largeNegIntClass = oopMap[special[Squeak.splOb_ClassLargeNegativeInteger]];
+        // init named prototypes
+        this.characterClass.classInstProto("Character");
+        this.floatClass.classInstProto("BoxedFloat64");
+        this.largePosIntClass.classInstProto("LargePositiveInteger");
+        this.largeNegIntClass.classInstProto("LargeNegativeInteger");
         this.characterTable = {};
     },
     getCharacter: function(unicode) {
@@ -1009,12 +1023,28 @@ Object.subclass('Squeak.Image',
         }
         return char;
     },
-    instantiateFloat: function(floatClass, bits) {
-        var float = new (floatClass.classInstProto("BoxedFloat64"));
+    instantiateFloat: function(bits) {
+        var float = new this.floatClass.instProto;
         this.registerObjectSpur(float);
-        this.hasNewInstances[floatClass.oop] = true;
-        float.initInstanceOfFloat(floatClass, bits);
+        this.hasNewInstances[this.floatClass.oop] = true;
+        float.initInstanceOfFloat(this.floatClass, bits);
         return float;
+    },
+    instantiateLargeFromSmall: function(hi, lo) {
+        lo = lo >> 3 | hi << 29; // shift 3 bits from hi to lo
+        hi = hi >> 3; // shift down, make signed
+        var negative = hi < 0;
+        if (negative) { hi = -hi; lo = -lo; if (lo !== 0) hi--; }
+        var size = hi <= 0xFF ? 5 : hi <= 0xFFFF ? 6 : hi <= 0xFFFFFF ? 7 : 8;
+        var largeIntClass = negative ? this.largeNegIntClass : this.largePosIntClass;
+        var largeInt = new largeIntClass.instProto;
+        this.registerObjectSpur(largeInt);
+        this.hasNewInstances[largeIntClass.oop] = true;
+        largeInt.initInstanceOfLargeInt(largeIntClass, size);
+        var bytes = largeInt.bytes;
+        for (var i = 0; i < 4; i++) { bytes[i] = lo & 255; lo >>= 8; }
+        for (var i = 4; i < size; i++) { bytes[i] = hi & 255; hi >>= 8; }
+        return largeInt;
     },
     ensureClassesInTable: function() {
         // make sure all classes are in class table

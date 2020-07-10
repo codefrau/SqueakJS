@@ -157,15 +157,18 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                 if ((oop[1] & 7) === 4) {
                     ptrs[i] = this.decodeSmallFloat(oop[0], oop[1], is64Bit); 
                 } else if ((oop[1] & 7) === 1) {
-                    throw Error("Large SmallIntegers not implemented yet")
+                    ptrs[i] = is64Bit.makeLargeInteger(oop[0], oop[1]);
                 } else if ((oop[1] & 7) === 2) {
                     throw Error("Large Immediate Characters not implemented yet");
                 } else {
                     throw Error("Large OOPs not implemented yet");
                 }
             } else if ((oop & 1) === 1) {          // SmallInteger
-                if (oop > 0xFFFFFFFF) throw Error("Large SmallIntegers not implemented yet");
-                ptrs[i] = oop >> 1;
+                if (is64Bit) {
+                    oop <= 0x3FFFFFFFF  // if just 2 more bits 
+                        ? oop / 8 >> 0  // then convert directly 
+                        : is64Bit.makeLargeFromSmall(oop / 0x100000000 >>> 0, oop >>> 0);
+                } else ptrs[i] = oop >> 1;
             } else if ((oop & 3) === 2) {   // Character
                 if (oop > 0x1FFFFFFFF) throw Error("Large Immediate Characters not implemented yet");
                 ptrs[i] = getCharacter(oop >>> 2);
@@ -184,7 +187,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         }
         return ptrs;
     },
-    decodeSmallFloat: function(hi, lo, makeFloat) {
+    decodeSmallFloat: function(hi, lo, is64Bit) {
         // SmallFloats are stored with full 52 bit mantissa, but shortened exponent. 
         // The lowest 3 bits are tags, the next is the sign bit
         var newHi = 0,
@@ -201,7 +204,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             // 1023 is the bias of the 11-bit exponent in an IEEE 754 64-bit float,
             // and 127 is the bias of our 8-bit exponent. 1023-127 == 0x380
         }
-        return makeFloat(new Uint32Array([newLo, newHi]));
+        return is64Bit.makeFloat(new Uint32Array([newLo, newHi]));
     },
     initInstanceOfChar: function(charClass, unicode) {
         this.oop = (unicode << 2) | 2;
@@ -216,6 +219,13 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         this._format = 10;
         this.isFloat = true;
         this.float = this.decodeFloat(bits, true, true);
+    },
+    initInstanceOfLargeInt: function(largeIntClass, size) {
+        this.sqClass = largeIntClass;
+        this.hash = 0;
+        this._format = 16;
+        // this._format |= -indexableSize & 3;       //deferred to writeTo()
+        this.bytes = new Uint8Array(size);
     },
     classNameFromImage: function(oopMap, rawBits) {
         var name = oopMap[rawBits[this.oop][Squeak.Class_name]];

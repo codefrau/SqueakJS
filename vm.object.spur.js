@@ -165,8 +165,9 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                 }
             } else if ((oop & 1) === 1) {          // SmallInteger
                 if (is64Bit) {
-                    oop <= 0x3FFFFFFFF  // if just 2 more bits 
-                        ? oop / 8 >> 0  // then convert directly 
+                    // if it fits in a 31 bit SmallInt ...
+                    ptrs[i] = (oop >= 0 ? oop <= 0x1FFFFFFFF : oop >= -0x200000000)
+                        ? oop / 4 >> 1  // ... then convert directly, otherwise make large
                         : is64Bit.makeLargeFromSmall(oop / 0x100000000 >>> 0, oop >>> 0);
                 } else ptrs[i] = oop >> 1;
             } else if ((oop & 3) === 2) {   // Character

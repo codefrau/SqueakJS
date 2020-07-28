@@ -169,7 +169,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                 if ((oop[1] & 7) === 4) {
                     ptrs[i] = this.decodeSmallFloat(oop[0], oop[1], is64Bit); 
                 } else if ((oop[1] & 7) === 1) {
-                    ptrs[i] = is64Bit.makeLargeInteger(oop[0], oop[1]);
+                    ptrs[i] = is64Bit.makeLargeFromSmall(oop[0], oop[1]);
                 } else if ((oop[1] & 7) === 2) {
                     throw Error("Large Immediate Characters not implemented yet");
                 } else {

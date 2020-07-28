@@ -136,9 +136,11 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             case 27: // ... length-3
                 var rawHeader = this.decodeWords(1, bits, littleEndian)[0];
                 if (rawHeader & 0x80000000) throw Error("Alternate bytecode set not supported")
-                var numLits = (rawHeader >> 1) & 0x7FFF,
-                    oops = this.decodeWords(numLits+1, bits, littleEndian);
-                this.pointers = this.decodePointers(numLits+1, oops, oopMap, getCharacter); //header+lits
+                var numLits = (rawHeader >> (is64Bit ? 3 : 1)) & 0x7FFF,
+                    oops = is64Bit
+                      ? this.decodeWords64(numLits+1, bits, littleEndian)
+                      : this.decodeWords(numLits+1, bits, littleEndian);
+                this.pointers = this.decodePointers(numLits+1, oops, oopMap, getCharacter, is64Bit); //header+lits
                 this.bytes = this.decodeBytes(nWords-(numLits+1), bits, numLits+1, this._format & 3);
                 break;
             default:
@@ -146,6 +148,16 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
 
         }
         this.mark = false; // for GC
+    },
+    decodeWords64: function(nWords, theBits, littleEndian) {
+        // we assume littleEndian for now
+        var words = new Array(nWords);
+        for (var i = 0; i < nWords; i++) {
+            var lo = theBits[i*2], 
+                hi = theBits[i*2+1];
+            words[i] = Squeak.word64FromUint32(hi, lo);
+        }
+        return words;
     },
     decodePointers: function(nWords, theBits, oopMap, getCharacter, is64Bit) {
         //Convert immediate objects and look up object pointers in oopMap

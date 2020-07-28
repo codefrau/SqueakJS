@@ -216,4 +216,13 @@ Object.extend(Squeak,
                 null, bytes.subarray(i, i += 16348)));
         return chars.join('');
     },
+    word64FromUint32: function(hi, lo) {
+        // Max safe integer as Uint64: 001FFFFF_FFFFFFFF
+        // Min safe integer as Uint64: FFE00000_00000001
+        if (hi < 0x00200000) { // positive, <= 53 bits
+            return hi * 0x100000000 + lo;
+        } else if (hi > 0xFFE00000) { // negative, <= 53 bits
+            return (hi>>0) * 0x100000000 + lo;
+        } else return [hi, lo]; // probably SmallFloat
+    },
 });

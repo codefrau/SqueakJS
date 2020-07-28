@@ -92,16 +92,11 @@ Object.subclass('Squeak.Image',
             return int;
         };
         var readWord64 = function() {
-            var lo = data.getUint32(pos, littleEndian),
-                hi = data.getUint32(pos+4, littleEndian);
+            // we assume littleEndian for now
+            var lo = data.getUint32(pos, true),
+                hi = data.getUint32(pos+4, true);
             pos += 8;
-            // Max safe integer as Uint64: 001FFFFF_FFFFFFFF
-            // Min safe integer as Uint64: FFE00000_00000001
-            if (hi < 0x00200000) { // positive, <= 53 bits
-                return hi * 0x100000000 + lo;
-            } else if (hi > 0xFFE00000) { // negative, <= 53 bits
-                return (hi>>0) * 0x100000000 + lo;
-            } else return [hi, lo]; // probably SmallFloat
+            return Squeak.word64FromUint32(hi, lo);
         };
         var readWord = readWord32;
         var wordSize = 4;

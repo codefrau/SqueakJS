@@ -148,11 +148,19 @@ Object.subclass('Squeak.Interpreter',
             //{method: "String>>translatedInAllDomains", primitive: returnSelf},
             // Squeak: disable syntax highlighting for speed
             //{method: "PluggableTextMorphPlus>>useDefaultStyler", primitive: returnSelf},
+            // Squeak 5.3 disable wizard by replacing #open send with pop
+            {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}},
         ].forEach(function(each) {
             var m = this.findMethod(each.method);
             if (m) {
-                m.pointers[0] |= each.primitive;
-                console.warn("Hacking " + each.method);
+                var prim = each.primitive,
+                    byte = each.bytecode,
+                    hacked = true;
+                if (prim) m.pointers[0] |= prim;
+                else if (byte && m.bytes[byte.pc] === byte.old) m.bytes[byte.pc] = byte.hack;
+                else hacked = false;
+                if (hacked) console.warn("Hacking " + each.method);
+                else console.error("Failed to hack " + each.method);
             }
         }, this);
         // Pharo

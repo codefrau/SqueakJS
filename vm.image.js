@@ -218,7 +218,10 @@ Object.subclass('Squeak.Image',
                         classID = formatAndClass & 0x003FFFFF,
                         hash = sizeAndHash & 0x003FFFFF;
                     var bits = readBits(size, format < 10 && classID > 0);
-                    if (!is64Bit) pos += (size < 2 ? 2 - size : size & 1) * 4; // align on 8 bytes, 16 min
+                    // align on 8 bytes, min size 16 bytes
+                    pos += is64Bit
+                      ? (size < 1 ? 1 - size : 0) * 8 
+                      : (size < 2 ? 2 - size : size & 1) * 4;
                     // low class ids are internal to Spur
                     if (classID >= 32) {
                         var object = new Squeak.ObjectSpur();

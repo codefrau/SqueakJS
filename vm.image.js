@@ -1037,7 +1037,7 @@ Object.subclass('Squeak.Image',
         hi = hi >> 3; // shift down, make signed
         var negative = hi < 0;
         if (negative) { hi = -hi; lo = -lo; if (lo !== 0) hi--; }
-        var size = hi <= 0xFF ? 5 : hi <= 0xFFFF ? 6 : hi <= 0xFFFFFF ? 7 : 8;
+        var size = hi === 0 ? 4 : hi <= 0xFF ? 5 : hi <= 0xFFFF ? 6 : hi <= 0xFFFFFF ? 7 : 8;
         var largeIntClass = negative ? this.largeNegIntClass : this.largePosIntClass;
         var largeInt = new largeIntClass.instProto;
         this.registerObjectSpur(largeInt);

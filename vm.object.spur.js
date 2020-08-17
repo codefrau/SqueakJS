@@ -180,13 +180,13 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                     // if it fits in a 31 bit SmallInt ...
                     ptrs[i] = (oop >= 0 ? oop <= 0x1FFFFFFFF : oop >= -0x200000000)
                         ? oop / 4 >> 1  // ... then convert directly, otherwise make large
-                        : is64Bit.makeLargeFromSmall(oop / 0x100000000 >>> 0, oop >>> 0);
+                        : is64Bit.makeLargeFromSmall((oop - (oop >>> 0)) / 0x100000000 >>> 0, oop >>> 0);
                 } else ptrs[i] = oop >> 1;
             } else if ((oop & 3) === 2) {   // Character
                 if (oop < 0 || oop > 0x1FFFFFFFF) throw Error("Large Immediate Characters not implemented yet");
                 ptrs[i] = getCharacter(oop >>> (is64Bit ? 3 : 2));
             } else if (is64Bit && (oop & 7) === 4) {   // SmallFloat
-                ptrs[i] = this.decodeSmallFloat(oop / 0x100000000 >>> 0, oop >>> 0, is64Bit);
+                ptrs[i] = this.decodeSmallFloat((oop - (oop >>> 0)) / 0x100000000 >>> 0, oop >>> 0, is64Bit);
             } else {                        // Object
                 ptrs[i] = oopMap[oop] || 42424242;
                 // when loading a context from image segment, there is

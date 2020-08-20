@@ -1033,8 +1033,10 @@ Object.subclass('Squeak.Image',
         return float;
     },
     instantiateLargeFromSmall: function(hi, lo) {
-        lo = lo >> 3 | hi << 29; // shift 3 bits from hi to lo
-        hi = hi >> 3; // shift down, make signed
+        // get rid of 3 tag bits
+        lo = hi << 29 | lo >>> 3 ; // shift 3 bits from hi to lo
+        hi = hi >> 3; // shift by 3 with sign extension
+        // value is always positive, class determines sign
         var negative = hi < 0;
         if (negative) { hi = -hi; lo = -lo; if (lo !== 0) hi--; }
         var size = hi === 0 ? 4 : hi <= 0xFF ? 5 : hi <= 0xFFFF ? 6 : hi <= 0xFFFFFF ? 7 : 8;

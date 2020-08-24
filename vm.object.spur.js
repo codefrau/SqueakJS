@@ -219,6 +219,18 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         }
         return is64Bit.makeFloat(new Uint32Array([newLo, newHi]));
     },
+    overhead64: function(bits) {
+        // the number of bytes this object is larger in 64 bits than in 32 bits
+        // (due to 8-byte alignment even in 32 bits this only affects pointer objects)
+        if (this._format <= 5) {
+            // pointer objects
+            return bits.length * 4; // each oop has 8 instead of 4 bytes
+        } else if (this._format >= 24) {
+            // compiled methods
+            var numLits = (bits[0] >> 3) & 0x7FFF; // assumes 64 bit little endian
+            return (numLits + 1) * 4; // each literal has 8 instead of 4 bytes
+        } else return 0; // no pointers
+    },
     initInstanceOfChar: function(charClass, unicode) {
         this.oop = (unicode << 2) | 2;
         this.sqClass = charClass;

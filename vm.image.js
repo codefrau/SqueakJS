@@ -234,6 +234,8 @@ Object.subclass('Squeak.Image',
                         //rawBits holds raw content bits for objects
                         rawBits[oop] = bits;
                         oopAdjust[oop] = skippedBytes;
+                        // account for size difference of 32 vs 64 bit oops
+                        if (is64Bit) skippedBytes += object.overhead64(bits);
                     } else {
                         skippedBytes += pos - objPos;
                         if (classID === 16 && !classPages) classPages = bits;

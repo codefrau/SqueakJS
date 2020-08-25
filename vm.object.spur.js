@@ -89,6 +89,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                 break;
             case 11: // 32 bit array (odd length in 64 bits)
                 nWords--;
+                this._format = 10;
             case 10: // 32 bit array
                 if (this.sqClass === floatClass) {
                     //These words are actually a Float
@@ -116,6 +117,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             case 22: // ... length-6 
             case 23: // ... length-7
                 nWords--;
+                this._format -= 4;
                 // fall through
             case 16: // 8 bit array
             case 17: // ... length-1

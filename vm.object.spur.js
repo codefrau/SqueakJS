@@ -139,9 +139,10 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                 var numLits = (rawHeader >> (is64Bit ? 3 : 1)) & 0x7FFF,
                     oops = is64Bit
                       ? this.decodeWords64(numLits+1, bits, littleEndian)
-                      : this.decodeWords(numLits+1, bits, littleEndian);
+                      : this.decodeWords(numLits+1, bits, littleEndian),
+                    ptrWords = is64Bit ? (numLits + 1) * 2 : numLits + 1;
                 this.pointers = this.decodePointers(numLits+1, oops, oopMap, getCharacter, is64Bit); //header+lits
-                this.bytes = this.decodeBytes(nWords-(numLits+1), bits, numLits+1, this._format & 3);
+                this.bytes = this.decodeBytes(nWords-ptrWords, bits, ptrWords, this._format & 3);
                 break;
             default:
                 throw Error("Unknown object format: " + this._format);

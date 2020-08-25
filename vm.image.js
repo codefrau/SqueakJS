@@ -318,6 +318,7 @@ Object.subclass('Squeak.Image',
                 this.decorateKnownObjects();
                 if (this.isSpur) {
                     this.fixSkippedOops(oopAdjust);
+                    if (is64Bit) this.fixPCs();
                 } else {
                     this.fixCompiledMethods();
                     this.fixCompactOops();
@@ -402,6 +403,25 @@ Object.subclass('Squeak.Image',
         obj = this.lastOldObject;
         if (obj.addr() + obj.totalBytes() !== this.oldSpaceBytes)
             throw Error("image size doesn't match object sizes")
+    },
+    fixPCs: function() {
+        // In 64 bits literals take up twice as much space
+        // The pc starts after the last literal. Fix it.
+        var clsMethodContext = this.specialObjectsArray.pointers[Squeak.splOb_ClassMethodContext],
+            pc = Squeak.Context_instructionPointer,
+            method = Squeak.Context_method,
+            clsBlockClosure = this.specialObjectsArray.pointers[Squeak.splOb_ClassBlockClosure],
+            startpc = Squeak.Closure_startpc,
+            outerContext = Squeak.Closure_outerContext,
+            obj = this.firstOldObject;
+        while (obj) {
+            if (obj.sqClass === clsMethodContext) {
+                obj.pointers[pc] -= obj.pointers[method].pointers.length * 4;
+            } else if (obj.sqClass === clsBlockClosure) {
+                obj.pointers[startpc] -= obj.pointers[outerContext].pointers[method].pointers.length * 4;
+            }
+            obj = obj.nextObject;
+        }
     },
 },
 'garbage collection - full', {

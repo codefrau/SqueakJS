@@ -17,9 +17,6 @@ RUN /usr/sbin/useradd \
      --password "$1$AvxnsNsn$jUwLZCqF3uxnKgXLUqyX41" \
      lively
 
-# git
-ADD gitconfig /home/lively/.gitconfig
-
 # nodejs tooling
 RUN npm install -g \
   nodemon forever

@@ -131,6 +131,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             case 30: // ... length-6
             case 31: // ... length-7
                 nWords--;
+                this._format -= 4;
                 // fall through
             case 24: // CompiledMethod
             case 25: // ... length-1

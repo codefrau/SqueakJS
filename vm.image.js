@@ -209,7 +209,7 @@ Object.subclass('Squeak.Image',
                     if (size === 255) { // this was the extended size header, read actual header
                         size = formatAndClass;
                         // In 64 bit images the size can actually be 56 bits. LOL. Nope.
-                        // if (is64Bit) size += (sizeAndHash & 0x00FFFFFF) * 0x100000000; 
+                        // if (is64Bit) size += (sizeAndHash & 0x00FFFFFF) * 0x100000000;
                         formatAndClass = readWord32();
                         sizeAndHash = readWord32();
                     }
@@ -220,7 +220,7 @@ Object.subclass('Squeak.Image',
                     var bits = readBits(size, format < 10 && classID > 0);
                     // align on 8 bytes, min size 16 bytes
                     pos += is64Bit
-                      ? (size < 1 ? 1 - size : 0) * 8 
+                      ? (size < 1 ? 1 - size : 0) * 8
                       : (size < 2 ? 2 - size : size & 1) * 4;
                     // low class ids are internal to Spur
                     if (classID >= 32) {
@@ -235,7 +235,10 @@ Object.subclass('Squeak.Image',
                         rawBits[oop] = bits;
                         oopAdjust[oop] = skippedBytes;
                         // account for size difference of 32 vs 64 bit oops
-                        if (is64Bit) skippedBytes += object.overhead64(bits);
+                        if (is64Bit) { 
+                            var overhead = object.overhead64(bits);
+                            skippedBytes += overhead.bytes;
+                        }
                     } else {
                         skippedBytes += pos - objPos;
                         if (classID === 16 && !classPages) classPages = bits;

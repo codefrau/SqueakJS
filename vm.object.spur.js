@@ -226,14 +226,25 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
     overhead64: function(bits) {
         // the number of bytes this object is larger in 64 bits than in 32 bits
         // (due to 8-byte alignment even in 32 bits this only affects pointer objects)
+        var overhead = 0;
         if (this._format <= 5) {
             // pointer objects
-            return bits.length * 4; // each oop has 8 instead of 4 bytes
+            overhead = bits.length & ~1; // each oop occupied 2 words instead of 1 ...
+            // ... but odd lengths have a filler word so we make it even
         } else if (this._format >= 24) {
             // compiled methods
             var numLits = (bits[0] >> 3) & 0x7FFF; // assumes 64 bit little endian
-            return (numLits + 1) * 4; // each literal has 8 instead of 4 bytes
-        } else return 0; // no pointers
+            var overhead = numLits + 1;  // each oop occupied 2 words instead of 1 ...
+            var oddOops = (overhead & 1) === 1;
+            var oddBytes = this._format >= 28;
+            // ... but odd total lengths have a filler word so we subtract that
+            if (oddOops !== oddBytes) overhead--;
+        } else {
+            // non-pointer objects have no oop overhead
+        }
+        return { 
+            bytes: overhead * 4, 
+        }
     },
     initInstanceOfChar: function(charClass, unicode) {
         this.oop = (unicode << 2) | 2;

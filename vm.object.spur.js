@@ -232,18 +232,19 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         if (this._format <= 5) {
             // pointer objects
             overhead = bits.length & ~1; // each oop occupied 2 words instead of 1 ...
-            // ... but odd lengths have a filler word so we make it even
+            // ... but odd lengths get padded so we subtract 1
             // words32 === words64 because same number of oops
         } else if (this._format >= 24) {
             // compiled methods
             var numLits = (bits[0] >> 3) & 0x7FFF; // assumes 64 bit little endian
             var overhead = numLits + 1;  // each oop occupied 2 words instead of 1 ...
-            words64 = bits.length / 2;
-            words32 = bits.length - overhead;
             var oddOops = (overhead & 1) === 1;
             var oddBytes = this._format >= 28;
-            // ... but odd total lengths have a filler word so we subtract that
-            if (oddOops !== oddBytes) overhead--;
+            // ... odd-word lengths would get padded so we subtract 1,
+            // but if there is also odd-word bytecodes it cancels out so we save 1 word instead
+            if (oddOops) overhead += oddBytes ? +1 : -1;
+            words64 = bits.length / 2;
+            words32 = bits.length - overhead;
         } else {
             // non-pointer objects have no oop overhead
             words32 = bits.length;

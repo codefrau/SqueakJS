@@ -197,7 +197,6 @@ Object.subclass('Squeak.Image',
             this.oldSpaceBytes = firstSegSize - 16;
             var segmentEnd = pos + firstSegSize,
                 addressOffset = 0,
-                freePageList = null,
                 classPages = null,
                 skippedBytes = 0,
                 oopAdjust = {};

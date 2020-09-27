@@ -137,8 +137,10 @@ Object.subclass('Squeak.Image',
         var oldBaseAddr = readWord(); //object memory base address of image
         var specialObjectsOopInt = readWord(); //oop of array of special oops
         this.savedHeaderWords = [];
-        for (var i = 0; i < (is64Bit ? 10 : 7); i++)
+        for (var i = 0; i < 7; i++) {
             this.savedHeaderWords.push(readWord32());
+            if (is64Bit && i < 3) readWord32(); // skip half
+        }
         var firstSegSize = readWord();
         var prevObj;
         var oopMap = {};

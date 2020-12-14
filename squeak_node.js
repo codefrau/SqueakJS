@@ -29,6 +29,7 @@
 // The VM will try to load plugins when named primitives are used for the first time.
 // These plugins do not need to be imported up front.
 
+var os = require("os");
 var fs = require("fs");
 var process = require("process");
 var path = require("path");
@@ -99,7 +100,7 @@ require("./vm.plugins.file.node");
 Object.extend(Squeak, {
     vmPath: process.cwd() + path.sep,
     platformSubtype: "Node.js",
-    osVersion: "Node.js " + process.version,
+    osVersion: process.version + " " + os.platform() + " " + os.release() + " " + os.arch(),
     windowSystem: "none",
 });
 

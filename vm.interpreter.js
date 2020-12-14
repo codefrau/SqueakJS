@@ -151,7 +151,7 @@ Object.subclass('Squeak.Interpreter',
             // 64 bit Squeak does not flush word size on snapshot
             {method: "SmalltalkImage>>wordSize", literal: {index: 1, old: 8, hack: 4}},
             // Squeak 5.3 disable wizard by replacing #open send with pop
-            {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}},
+            // {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}},
         ].forEach(function(each) {
             var m = this.findMethod(each.method);
             if (m) {

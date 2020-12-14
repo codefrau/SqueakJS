@@ -29,7 +29,7 @@ Object.extend(Squeak,
     vmBuild: "unknown",                 // or replace at runtime by last-modified?
     vmPath: "unknown",                  // Replace at runtime
     vmFile: "vm.js",
-    platformName: "SqueakJS",
+    platformName: "JS",
     platformSubtype: "unknown",         // Replace at runtime
     osVersion: "unknown",               // Replace at runtime
     windowSystem: "unknown",            // Replace at runtime

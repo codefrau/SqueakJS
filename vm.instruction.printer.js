@@ -40,8 +40,12 @@ Object.subclass('Squeak.InstructionPrinter',
         this.oldPC = this.scanner.pc;
         this.endPC = 0;                 // adjusted while scanning
         this.done = false;
-        while (!this.done)
-            this.scanner.interpretNextInstructionFor(this);
+        try {
+            while (!this.done)
+                this.scanner.interpretNextInstructionFor(this);
+        } catch(ex) {
+            this.print("!!! " + ex.message);
+        }
         return this.result;
     },
     print: function(instruction) {

@@ -265,7 +265,7 @@ Object.subclass('Squeak.Interpreter',
             // Closures
             case 0x8A: this.pushNewArray(this.nextByte());   // create new temp vector
                 return;
-            case 0x8B: this.callPrimBytecode();
+            case 0x8B: this.callPrimBytecode(0x81);
                 return;
             case 0x8C: b2 = this.nextByte(); // remote push from temp vector
                 this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2]);
@@ -529,45 +529,45 @@ Object.subclass('Squeak.Interpreter',
                     this.send(literal, (b2 & 7) + (extB << 3), true); return;
                 }
             case 0xEC: this.nono(); return; // unused
-            case 0xED: // Long jump, forward and back
+            case 0xED: // long jump, forward and back
                 var offset = this.nextByte() + (extB << 8);
                 this.pc += offset;
                 if (offset < 0)        // check for process switch on backward jumps (loops)
                     if (this.interruptCheckCounter-- <= 0) this.checkForInterrupts();
                 return;
-            case 0xEE: // Long conditional jump on true
+            case 0xEE: // long conditional jump on true
                 this.jumpIfTrue(this.nextByte() + (extB << 8)); return;
-            case 0xEF: // Long conditional jump on false
+            case 0xEF: // long conditional jump on false
                 this.jumpIfFalse(this.nextByte() + (extB << 8)); return;
-            case 0xF0: // Pop into receiver
+            case 0xF0: // pop into receiver
                 this.receiver.dirty = true;
                 this.receiver.pointers[this.nextByte() + (extA << 8)] = this.pop();
                 return;
-            case 0xF1: // Pop into literal
+            case 0xF1: // pop into literal
                 var assoc = this.method.methodGetLiteral(this.nextByte() + (extA << 8));
                 assoc.dirty = true;
                 assoc.pointers[Squeak.Assn_value] = this.pop();
                 return;
-            case 0xF2: // Pop into temp
+            case 0xF2: // pop into temp
                 this.homeContext.pointers[Squeak.Context_tempFrameStart + this.nextByte()] = this.pop();
                 return;
-            case 0xF3: // Store into receiver
+            case 0xF3: // store into receiver
                 this.receiver.dirty = true;
                 this.receiver.pointers[this.nextByte() + (extA << 8)] = this.top();
                 return;
-            case 0xF4: // Store into literal
+            case 0xF4: // store into literal
                 var assoc = this.method.methodGetLiteral(this.nextByte() + (extA << 8));
                 assoc.dirty = true;
                 assoc.pointers[Squeak.Assn_value] = this.top();
                 return;
-            case 0xF5: // Store into temp
+            case 0xF5: // store into temp
                 this.homeContext.pointers[Squeak.Context_tempFrameStart + this.nextByte()] = this.top();
                 return;
             case 0xF6: case 0xF7: this.nono(); return; // unused
 
             // 3 Byte Bytecodes
 
-            case 0xF8: this.callPrimBytecodeSista(); return;
+            case 0xF8: this.callPrimBytecode(0xF5); return;
             case 0xF9: this.pushFullClosureCopy(extA, extB); return;
             case 0xFA: this.pushClosureCopyExtended(extA, extB); return;
             case 0xFB: b2 = this.nextByte(); // remote push from temp vector
@@ -786,18 +786,10 @@ Object.subclass('Squeak.Interpreter',
             this.specialSelectors[(lobits*2)+1],
             false);  //specialSelectors is  {...sel,nArgs,sel,nArgs,...)
     },
-    callPrimBytecode: function() {
+    callPrimBytecode: function(extendedStoreBytecode) {
         this.pc += 2; // skip over primitive number
         if (this.primFailCode) {
-            if (this.method.bytes[this.pc] === 0x81) // extended store
-                this.stackTopPut(this.getErrorObjectFromPrimFailCode());
-            this.primFailCode = 0;
-        }
-    },
-    callPrimBytecodeSista: function() {
-        this.pc += 2; // skip over primitive number
-        if (this.primFailCode) {
-            if (this.method.bytes[this.pc] === 0xF5) // extended store
+            if (this.method.bytes[this.pc] === extendedStoreBytecode)
                 this.stackTopPut(this.getErrorObjectFromPrimFailCode());
             this.primFailCode = 0;
         }

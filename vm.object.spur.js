@@ -429,6 +429,9 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
     },
 },
 'as method', {
+    methodSignFlag: function() {
+        return this.pointers[0] < 0;
+    },
     methodNumLits: function() {
         return this.pointers[0] & 0x7FFF;
     },

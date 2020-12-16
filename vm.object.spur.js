@@ -138,14 +138,15 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             case 26: // ... length-2
             case 27: // ... length-3
                 var rawHeader = this.decodeWords(1, bits, littleEndian)[0];
-                if (rawHeader & 0x80000000) throw Error("Alternate bytecode set not supported")
-                var numLits = (rawHeader >> (is64Bit ? 3 : 1)) & 0x7FFF,
+                var intHeader = rawHeader >> (is64Bit ? 3 : 1);
+                var numLits = intHeader & 0x7FFF,
                     oops = is64Bit
                       ? this.decodeWords64(numLits+1, bits, littleEndian)
                       : this.decodeWords(numLits+1, bits, littleEndian),
                     ptrWords = is64Bit ? (numLits + 1) * 2 : numLits + 1;
                 this.pointers = this.decodePointers(numLits+1, oops, oopMap, getCharacter, is64Bit); //header+lits
                 this.bytes = this.decodeBytes(nWords-ptrWords, bits, ptrWords, this._format & 3);
+                if (is64Bit) this.pointers[0] = (bits[1] & 0x80000000) | intHeader; // fix header
                 break;
             default:
                 throw Error("Unknown object format: " + this._format);
@@ -430,7 +431,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
 },
 'as method', {
     methodSignFlag: function() {
-        return typeof this.pointers[0] === "object" && this.pointers[0].sqClass.className() === "LargeNegativeInteger";
+        return this.pointers[0] < 0;
     },
     methodNumLits: function() {
         return this.pointers[0] & 0x7FFF;

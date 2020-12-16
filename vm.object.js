@@ -516,6 +516,9 @@ Object.subclass('Squeak.Object',
     },
 },
 'as method', {
+    methodSignFlag: function() {
+        return false;
+    },
     methodNumLits: function() {
         return (this.pointers[0]>>9) & 0xFF;
     },

@@ -176,6 +176,9 @@ Object.subclass('Squeak.Interpreter',
 },
 'interpreting', {
     interpretOne: function(singleStep) {
+        if (this.method.methodSignFlag()) {
+            return this.interpretOneSista(singleStep);
+        }
         if (this.method.compiled) {
             if (singleStep) {
                 if (!this.compiler.enableSingleStepping(this.method)) {
@@ -191,7 +194,7 @@ Object.subclass('Squeak.Interpreter',
         var b, b2;
         this.byteCodeCount++;
         b = this.nextByte();
-        switch (b) { /* The Main Bytecode Dispatch Loop */
+        switch (b) { /* The Main V3 Bytecode Dispatch Loop */
 
             // load receiver variable
             case 0x00: case 0x01: case 0x02: case 0x03: case 0x04: case 0x05: case 0x06: case 0x07:
@@ -345,6 +348,238 @@ Object.subclass('Squeak.Interpreter',
             case 0xF0: case 0xF1: case 0xF2: case 0xF3: case 0xF4: case 0xF5: case 0xF6: case 0xF7:
             case 0xF8: case 0xF9: case 0xFA: case 0xFB: case 0xFC: case 0xFD: case 0xFE: case 0xFF:
                 this.send(this.method.methodGetSelector(b&0xF), 2, false); return;
+        }
+        throw Error("not a bytecode: " + b);
+    },
+    interpretOneSista: function(singleStep) {
+        this.interpretOneSistaWithExtensions(singleStep, 0, 0);
+    },
+    interpretOneSistaWithExtensions: function(singleStep, extA, extB) {
+        if (this.method.compiled) {
+            if (singleStep) {
+                if (!this.compiler.enableSingleStepping(this.method)) {
+                    this.method.compiled = null;
+                    return this.interpretOneSista(singleStep);
+                }
+                this.breakNow();
+            }
+            this.method.compiled(this);
+            return;
+        }
+        var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively
+        var b, b2;
+        this.byteCodeCount++;
+        b = this.nextByte();
+        switch (b) { /* The Main Sista Bytecode Dispatch Loop */
+
+            // 1 Byte Bytecodes
+
+            // load receiver variable
+            case 0x00: case 0x01: case 0x02: case 0x03: case 0x04: case 0x05: case 0x06: case 0x07:
+            case 0x08: case 0x09: case 0x0A: case 0x0B: case 0x0C: case 0x0D: case 0x0E: case 0x0F:
+                this.push(this.receiver.pointers[b&0xF]); return;
+
+            // load literal variable
+            case 0x10: case 0x11: case 0x12: case 0x13: case 0x14: case 0x15: case 0x16: case 0x17:
+            case 0x18: case 0x19: case 0x1A: case 0x1B: case 0x1C: case 0x1D: case 0x1E: case 0x1F:
+                this.push((this.method.methodGetLiteral(b&0xF)).pointers[Squeak.Assn_value]); return;
+
+            // load literal constant
+            case 0x20: case 0x21: case 0x22: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27:
+            case 0x28: case 0x29: case 0x2A: case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F:
+            case 0x30: case 0x31: case 0x32: case 0x33: case 0x34: case 0x35: case 0x36: case 0x37:
+            case 0x38: case 0x39: case 0x3A: case 0x3B: case 0x3C: case 0x3D: case 0x3E: case 0x3F:
+                this.push(this.method.methodGetLiteral(b&0x1F)); return;
+
+            // load temporary variable
+            case 0x40: case 0x41: case 0x42: case 0x43: case 0x44: case 0x45: case 0x46: case 0x47:
+                this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&0x7)]); return;
+            case 0x48: case 0x49: case 0x4A: case 0x4B:
+                this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&0x3)+8]); return;
+
+            case 0x4C: this.push(this.receiver); return;
+            case 0x4D: this.push(this.trueObj); return;
+            case 0x4E: this.push(this.falseObj); return;
+            case 0x4F: this.push(this.nilObj); return;
+            case 0x50: this.push(0); return;
+            case 0x51: this.push(1); return;
+            case 0x52:
+                if (extB == 0) {
+                    this.push(this.exportThisContext()); return;
+                } else {
+                    this.nono(); return;
+                }
+            case 0x53: this.push(this.top()); return;
+            case 0x54: case 0x55: case 0x56: case 0x57: this.nono(); return; // unused
+            case 0x58: this.doReturn(this.receiver); return;
+            case 0x59: this.doReturn(this.trueObj); return;
+            case 0x5A: this.doReturn(this.falseObj); return;
+            case 0x5B: this.doReturn(this.nilObj); return;
+            case 0x5C: this.doReturn(this.pop()); return;
+            case 0x5D: this.doReturn(this.nilObj, this.activeContext.pointers[Squeak.BlockContext_caller]); return; // blockReturn nil
+            case 0x5E:
+                if (extA == 0) {
+                    this.doReturn(this.pop(), this.activeContext.pointers[Squeak.BlockContext_caller]); return; // blockReturn
+                } else {
+                    this.nono(); return;
+                }
+            case 0x5F:
+                return; // nop
+
+             // Arithmetic Ops... + - < > <= >= = ~=    * /  @ lshift: lxor: land: lor:
+             case 0x60: this.success = true; this.resultIsFloat = false;
+                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) + this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // PLUS +
+            case 0x61: this.success = true; this.resultIsFloat = false;
+                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) - this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // MINUS -
+            case 0x62: this.success = true;
+                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) < this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LESS <
+            case 0x63: this.success = true;
+                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) > this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GRTR >
+            case 0x64: this.success = true;
+                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) <= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LEQ <=
+            case 0x65: this.success = true;
+                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) >= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GEQ >=
+            case 0x66: this.success = true;
+                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) === this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // EQU =
+            case 0x67: this.success = true;
+                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) !== this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // NEQ ~=
+            case 0x68: this.success = true; this.resultIsFloat = false;
+                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) * this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // TIMES *
+            case 0x69: this.success = true;
+                if(!this.pop2AndPushIntResult(this.quickDivide(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide /
+            case 0x6A: this.success = true;
+                if(!this.pop2AndPushIntResult(this.mod(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // MOD \
+            case 0x6B: this.success = true;
+                if(!this.primHandler.primitiveMakePoint(1, true)) this.sendSpecial(b&0xF); return;  // MakePt int@int
+            case 0x6C: this.success = true;
+                if(!this.pop2AndPushIntResult(this.safeShift(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return; // bitShift:
+            case 0x6D: this.success = true;
+                if(!this.pop2AndPushIntResult(this.div(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide //
+            case 0x6E: this.success = true;
+                if(!this.pop2AndPushIntResult(this.stackInteger(1) & this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitAnd:
+            case 0x6F: this.success = true;
+                if(!this.pop2AndPushIntResult(this.stackInteger(1) | this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitOr:
+
+            // at:, at:put:, size, next, nextPut:, ...
+            case 0x70: case 0x71: case 0x72: case 0x73: case 0x74: case 0x75: case 0x76: case 0x77:
+            case 0x78: case 0x79: case 0x7A: case 0x7B: case 0x7C: case 0x7D: case 0x7E: case 0x7F:
+                if (!this.primHandler.quickSendOther(this.receiver, b&0xF))
+                    this.sendSpecial((b&0xF)+16); return;
+
+            // Send Literal Selector with 0, 1, and 2 args
+            case 0x80: case 0x81: case 0x82: case 0x83: case 0x84: case 0x85: case 0x86: case 0x87:
+            case 0x88: case 0x89: case 0x8A: case 0x8B: case 0x8C: case 0x8D: case 0x8E: case 0x8F:
+                this.send(this.method.methodGetSelector(b&0xF), 0, false); return;
+            case 0x90: case 0x91: case 0x92: case 0x93: case 0x94: case 0x95: case 0x96: case 0x97:
+            case 0x98: case 0x99: case 0x9A: case 0x9B: case 0x9C: case 0x9D: case 0x9E: case 0x9F:
+                this.send(this.method.methodGetSelector(b&0xF), 1, false); return;
+            case 0xA0: case 0xA1: case 0xA2: case 0xA3: case 0xA4: case 0xA5: case 0xA6: case 0xA7:
+            case 0xA8: case 0xA9: case 0xAA: case 0xAB: case 0xAC: case 0xAD: case 0xAE: case 0xAF:
+                this.send(this.method.methodGetSelector(b&0xF), 2, false); return;
+
+            // Short jmp
+            case 0xB0: case 0xB1: case 0xB2: case 0xB3: case 0xB4: case 0xB5: case 0xB6: case 0xB7:
+                this.pc += (b&7)+1; return;
+            // Short conditional jump on true
+            case 0xB8: case 0xB9: case 0xBA: case 0xBB: case 0xBC: case 0xBD: case 0xBE: case 0xBF:
+                this.jumpIfTrue((b&7)+1); return;
+            // Short conditional jump on false
+            case 0xC0: case 0xC1: case 0xC2: case 0xC3: case 0xC4: case 0xC5: case 0xC6: case 0xC7:
+                this.jumpIfFalse((b&7)+1); return;
+
+            // storeAndPop rcvr, temp
+            case 0xC8: case 0xC9: case 0xCA: case 0xCB: case 0xCC: case 0xCD: case 0xCE: case 0xCF:
+                this.receiver.dirty = true;
+                this.receiver.pointers[b&7] = this.pop(); return;
+            case 0xD0: case 0xD1: case 0xD2: case 0xD3: case 0xD4: case 0xD5: case 0xD6: case 0xD7:
+                this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&7)] = this.pop(); return;
+            
+            case 0xD8: this.pop(); return;  // pop
+            case 0xD9: this.nono(); return; // FIXME: Unconditional trap
+            case 0xDA: case 0xDB: case 0xDC: case 0xDD: case 0xDE: case 0xDF:
+                this.nono(); return; // unused
+
+            // 2 Byte Bytecodes
+
+            case 0xE0:
+                b2 = this.nextByte(); this.interpretOneSistaWithExtensions(singleStep, (extA << 8) + b2, extB);
+            case 0xE1:
+                b2 = this.nextByte(); this.interpretOneSistaWithExtensions(singleStep, extA, (extB << 8) + (b2 < 128 ? b2 : b2-256));
+            case 0xE2:
+                b2 = this.nextByte(); this.push(this.receiver.pointers[b2 + (extA << 8)]); return;
+            case 0xE3:
+                b2 = this.nextByte(); this.push((this.method.methodGetLiteral(b2 + (extA << 8))).pointers[Squeak.Assn_value]); return;
+            case 0xE4:
+                b2 = this.nextByte(); this.push(this.method.methodGetLiteral(b2 + (extA << 8))); return;
+            case 0xE5:
+                b2 = this.nextByte(); this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+b2]); return;
+            case 0xE6: this.nono(); return; // unused
+            case 0xE7: this.pushNewArray(this.nextByte()); return; // create new temp vector
+            case 0xE8: b2 = this.nextByte(); this.push(b2 + (extB << 8)); return; // push SmallInteger
+            case 0xE9: b2 = this.nextByte(); this.push(this.image.getCharacter(b2 + (extB << 8))); return; // push Character
+            case 0xEA:
+                b2 = this.nextByte();
+                this.send(this.method.methodGetSelector((b2 >> 3) + (extA << 5)), (b2 & 7) + (extB << 3), false); return;
+            case 0xEB:
+                b2 = this.nextByte();
+                var literal = this.method.methodGetSelector((b2 >> 3) + (extA << 5));
+                if (extB >= 64) {
+                    this.sendSuperDirected(literal, (b2 & 7) + ((extB & 63) << 3)); return;
+                } else {
+                    this.send(literal, (b2 & 7) + (extB << 3), true); return;
+                }
+            case 0xEC: this.nono(); return; // unused
+            case 0xED: // Long jump, forward and back
+                var offset = this.nextByte() + (extB << 8);
+                this.pc += offset;
+                if (offset < 0)        // check for process switch on backward jumps (loops)
+                    if (this.interruptCheckCounter-- <= 0) this.checkForInterrupts();
+                return;
+            case 0xEE: // Long conditional jump on true
+                this.jumpIfTrue(this.nextByte() + (extB << 8)); return;
+            case 0xEF: // Long conditional jump on false
+                this.jumpIfFalse(this.nextByte() + (extB << 8)); return;
+            case 0xF0: // Pop into receiver
+                this.receiver.dirty = true;
+                this.receiver.pointers[this.nextByte() + (extA << 8)] = this.pop();
+                return;
+            case 0xF1: // Pop into literal
+                var assoc = this.method.methodGetLiteral(this.nextByte() + (extA << 8));
+                assoc.dirty = true;
+                assoc.pointers[Squeak.Assn_value] = this.pop();
+                return;
+            case 0xF2: // Pop into temp
+                this.homeContext.pointers[Squeak.Context_tempFrameStart + this.nextByte()] = this.pop();
+                return;
+            case 0xF3: // Store into receiver
+                this.receiver.dirty = true;
+                this.receiver.pointers[this.nextByte() + (extA << 8)] = this.top();
+                return;
+            case 0xF4: // Store into literal
+                var assoc = this.method.methodGetLiteral(this.nextByte() + (extA << 8));
+                assoc.dirty = true;
+                assoc.pointers[Squeak.Assn_value] = this.top();
+                return;
+            case 0xF5: // Store into temp
+                this.homeContext.pointers[Squeak.Context_tempFrameStart + this.nextByte()] = this.top();
+                return;
+            case 0xF6: case 0xF7: this.nono(); return; // unused
+
+            // 3 Byte Bytecodes
+
+            case 0xF8: this.callPrimBytecodeSista(); return;
+            case 0xF9: this.pushFullClosureCopy(extA, extB); return;
+            case 0xFA: this.pushClosureCopyExtended(extA, extB); return;
+            case 0xFB: b2 = this.nextByte(); // remote push from temp vector
+                this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2]);
+                return;
+            case 0xFC: b2 = this.nextByte(); // remote store into temp vector
+                this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2] = this.top();
+                return;
+            case 0xFD: b2 = this.nextByte(); // remote store and pop into temp vector
+                this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2] = this.pop();
+                return;
+            case 0xFE: case 0xFF: this.nono(); return; // unused
         }
         throw Error("not a bytecode: " + b);
     },
@@ -559,6 +794,14 @@ Object.subclass('Squeak.Interpreter',
             this.primFailCode = 0;
         }
     },
+    callPrimBytecodeSista: function() {
+        this.pc += 2; // skip over primitive number
+        if (this.primFailCode) {
+            if (this.method.bytes[this.pc] === 0xF5) // extended store
+                this.stackTopPut(this.getErrorObjectFromPrimFailCode());
+            this.primFailCode = 0;
+        }
+    },
     getErrorObjectFromPrimFailCode: function() {
         var primErrTable = this.specialObjects[Squeak.splOb_PrimErrTableIndex];
         if (primErrTable && primErrTable.pointers) {
@@ -601,21 +844,84 @@ Object.subclass('Squeak.Interpreter',
         this.pc += blockSize;
         this.push(closure);
     },
+    pushClosureCopyExtended: function(extA, extB) {
+        var byteA = this.nextByte();
+        var byteB = this.nextByte();
+        debugger;
+        var numArgs = (byteA & 7) + Math.floorMod(extA, 16) * 8,
+            numCopied = (byteA >> 3 & 0x7) + Math.floorDiv(extA, 16) * 8,
+            blockSize = byteB + (extB << 8),
+            initialPC = this.encodeSqueakPC(this.pc, this.method),
+            closure = this.newClosure(numArgs, initialPC, numCopied);
+        closure.pointers[Squeak.Closure_outerContext] = this.activeContext;
+        this.reclaimableContextCount = 0; // The closure refers to thisContext so it can't be reclaimed
+        if (numCopied > 0) {
+            for (var i = 0; i < numCopied; i++)
+                closure.pointers[Squeak.Closure_firstCopiedValue + i] = this.stackValue(numCopied - i - 1);
+            this.popN(numCopied);
+        }
+        this.pc += blockSize;
+        this.push(closure);
+    },
+    pushFullClosureCopy: function(extA, extB) {
+        var literalIndex = this.nextByte() + (extA << 8);
+        var numCopied = this.nextByte() & 63;
+        if ((byteB >> 6 & 1) == 1) {
+            throw Error("ignore context not yet supported");
+        }
+        if ((byteB >> 7 & 1) == 1) {
+            throw Error("on-stack receiver not yet supported");
+        }
+        var method = this.method.methodGetLiteral(literalIndex);
+        debugger;
+        var closure = this.newFullClosure(method, numCopied, this.receiver);
+        closure.pointers[Squeak.Closure_outerContext] = this.activeContext;
+        this.reclaimableContextCount = 0; // The closure refers to thisContext so it can't be reclaimed
+        if (numCopied > 0) {
+            for (var i = 0; i < numCopied; i++)
+                closure.pointers[Squeak.ClosureFull_firstCopiedValue + i] = this.stackValue(numCopied - i - 1);
+            this.popN(numCopied);
+        }
+        this.pc += 3;
+        this.push(closure);
+    },
     newClosure: function(numArgs, initialPC, numCopied) {
         var closure = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassBlockClosure], numCopied);
         closure.pointers[Squeak.Closure_startpc] = initialPC;
         closure.pointers[Squeak.Closure_numArgs] = numArgs;
         return closure;
     },
+    newFullClosure: function(method, numCopied, receiver) {
+        var closure = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassFullBlockClosure], numCopied);
+        closure.pointers[Squeak.ClosureFull_method] = method;
+        closure.pointers[Squeak.Closure_numArgs] = method.methodNumArgs();
+        closure.pointers[Squeak.ClosureFull_receiver] = receiver;
+        return closure;
+    },
 },
 'sending', {
     send: function(selector, argCount, doSuper) {
         var newRcvr = this.stackValue(argCount);
-        var lookupClass = this.getClass(newRcvr);
+        var lookupClass;
         if (doSuper) {
             lookupClass = this.method.methodClassForSuper();
             lookupClass = lookupClass.pointers[Squeak.Class_superclass];
+        } else {
+            lookupClass = this.getClass(newRcvr);
         }
+        var entry = this.findSelectorInClass(selector, argCount, lookupClass);
+        if (entry.primIndex) {
+            //note details for verification of at/atput primitives
+            this.verifyAtSelector = selector;
+            this.verifyAtClass = lookupClass;
+        }
+        this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
+    },
+    sendSuperDirected: function(selector, argCount) {
+        var newRcvr = this.stackValue(argCount);
+        lookupClass = this.top();
+        debugger;
+        lookupClass = lookupClass.pointers[Squeak.Class_superclass];
         var entry = this.findSelectorInClass(selector, argCount, lookupClass);
         if (entry.primIndex) {
             //note details for verification of at/atput primitives
@@ -1047,6 +1353,7 @@ Object.subclass('Squeak.Interpreter',
         var num = this.stackValue(depthIntoStack);
         // is it a SmallInt?
         if (typeof num === "number") return num;
+        if (num === undefined) {this.success = false; return 0;}
         // is it a Float?
         if (num.isFloat) {
             this.resultIsFloat = true;   // need to return result as Float

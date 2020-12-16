@@ -430,7 +430,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
 },
 'as method', {
     methodSignFlag: function() {
-        return this.pointers[0] < 0;
+        return typeof this.pointers[0] === "object" && this.pointers[0].sqClass.className() === "LargeNegativeInteger";
     },
     methodNumLits: function() {
         return this.pointers[0] & 0x7FFF;

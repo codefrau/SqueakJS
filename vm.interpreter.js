@@ -491,9 +491,9 @@ Object.subclass('Squeak.Interpreter',
             // 2 Byte Bytecodes
 
             case 0xE0:
-                b2 = this.nextByte(); this.interpretOneSistaWithExtensions(singleStep, (extA << 8) + b2, extB);
+                b2 = this.nextByte(); this.interpretOneSistaWithExtensions(singleStep, (extA << 8) + b2, extB); return;
             case 0xE1:
-                b2 = this.nextByte(); this.interpretOneSistaWithExtensions(singleStep, extA, (extB << 8) + (b2 < 128 ? b2 : b2-256));
+                b2 = this.nextByte(); this.interpretOneSistaWithExtensions(singleStep, extA, (extB << 8) + (b2 < 128 ? b2 : b2-256)); return;
             case 0xE2:
                 b2 = this.nextByte(); this.push(this.receiver.pointers[b2 + (extA << 8)]); return;
             case 0xE3:
@@ -829,8 +829,8 @@ Object.subclass('Squeak.Interpreter',
         var byteA = this.nextByte();
         var byteB = this.nextByte();
         debugger;
-        var numArgs = (byteA & 7) + Math.floorMod(extA, 16) * 8,
-            numCopied = (byteA >> 3 & 0x7) + Math.floorDiv(extA, 16) * 8,
+        var numArgs = (byteA & 7) + this.mod(extA, 16) * 8,
+            numCopied = (byteA >> 3 & 0x7) + this.div(extA, 16) * 8,
             blockSize = byteB + (extB << 8),
             initialPC = this.encodeSqueakPC(this.pc, this.method),
             closure = this.newClosure(numArgs, initialPC, numCopied);

@@ -261,7 +261,7 @@ Object.subclass('Squeak.Primitives',
                 break;  // fail
             case 163: if (this.oldPrims) return this.primitiveDirectoryDelete(argCount);
                 else this.vm.warnOnce("missing primitive: 163 (primitiveGetImmutability)"); return false;
-            case 164: debugger; return this.popNandPushIfOK(argCount+1, this.vm.stackValue(0)); // primitiveSetImmutability
+            case 164: return this.popNandPushIfOK(argCount+1, this.vm.trueObj); // Fake primitiveSetImmutability
             case 165:
             case 166: return this.primitiveIntegerAtAndPut(argCount);
             case 167: return false; // Processor.yield
@@ -309,7 +309,7 @@ Object.subclass('Squeak.Primitives',
             case 188: if (this.oldPrims) break; // unused
                 else return this.primitiveExecuteMethodArgsArray(argCount);
             case 189: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundInsertSamples', argCount);
-                else return this.primitiveExecuteMethod(argCount);
+                return false; // fail to fall back to primitiveExecuteMethodArgsArray (188)
             case 190: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStartRecording', argCount);
             case 191: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStopRecording', argCount);
             case 192: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundGetRecordingSampleRate', argCount);

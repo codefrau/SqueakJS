@@ -557,7 +557,7 @@ Object.subclass('Squeak.Interpreter',
             // 3 Byte Bytecodes
 
             case 0xF8: this.callPrimBytecode(0xF5); return;
-            case 0xF9: this.pushFullClosureCopy(extA, extB); return;
+            case 0xF9: this.pushFullClosureCopy(extA); return;
             case 0xFA: this.pushClosureCopyExtended(extA, extB); return;
             case 0xFB: b2 = this.nextByte(); // remote push from temp vector
                 this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2]);
@@ -828,7 +828,6 @@ Object.subclass('Squeak.Interpreter',
     pushClosureCopyExtended: function(extA, extB) {
         var byteA = this.nextByte();
         var byteB = this.nextByte();
-        debugger;
         var numArgs = (byteA & 7) + this.mod(extA, 16) * 8,
             numCopied = (byteA >> 3 & 0x7) + this.div(extA, 16) * 8,
             blockSize = byteB + (extB << 8),
@@ -844,9 +843,11 @@ Object.subclass('Squeak.Interpreter',
         this.pc += blockSize;
         this.push(closure);
     },
-    pushFullClosureCopy: function(extA, extB) {
-        var literalIndex = this.nextByte() + (extA << 8);
-        var numCopied = this.nextByte() & 63;
+    pushFullClosureCopy: function(extA) {
+        var byteA = this.nextByte();
+        var byteB = this.nextByte();
+        var literalIndex = byteA + (extA << 8);
+        var numCopied = byteB & 63;
         if ((byteB >> 6 & 1) == 1) {
             throw Error("ignore context not yet supported");
         }
@@ -854,7 +855,6 @@ Object.subclass('Squeak.Interpreter',
             throw Error("on-stack receiver not yet supported");
         }
         var method = this.method.methodGetLiteral(literalIndex);
-        debugger;
         var closure = this.newFullClosure(method, numCopied, this.receiver);
         closure.pointers[Squeak.Closure_outerContext] = this.activeContext;
         this.reclaimableContextCount = 0; // The closure refers to thisContext so it can't be reclaimed
@@ -863,7 +863,6 @@ Object.subclass('Squeak.Interpreter',
                 closure.pointers[Squeak.ClosureFull_firstCopiedValue + i] = this.stackValue(numCopied - i - 1);
             this.popN(numCopied);
         }
-        this.pc += 3;
         this.push(closure);
     },
     newClosure: function(numArgs, initialPC, numCopied) {
@@ -900,9 +899,7 @@ Object.subclass('Squeak.Interpreter',
     },
     sendSuperDirected: function(selector, argCount) {
         var newRcvr = this.stackValue(argCount);
-        lookupClass = this.top();
-        debugger;
-        lookupClass = lookupClass.pointers[Squeak.Class_superclass];
+        var lookupClass = this.top().pointers[Squeak.Class_superclass];
         var entry = this.findSelectorInClass(selector, argCount, lookupClass);
         if (entry.primIndex) {
             //note details for verification of at/atput primitives

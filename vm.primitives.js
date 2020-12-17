@@ -79,7 +79,6 @@ Object.subclass('Squeak.Primitives',
     },
     doPrimitive: function(index, argCount, primMethod) {
         this.success = true;
-        if (index < 128) // Chrome only optimized up to 128 cases
         switch (index) {
             // Integer Primitives (0-19)
             case 1: return this.popNandPushIntIfOK(2,this.stackInteger(1) + this.stackInteger(0));  // Integer.add
@@ -218,7 +217,6 @@ Object.subclass('Squeak.Primitives',
             case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
             case 126: return this.primitiveDeferDisplayUpdates(argCount);
             case 127: return this.primitiveShowDisplayRect(argCount);
-        } else if (index < 256) switch (index) { // Chrome only optimized up to 128 cases
             case 128: return this.primitiveArrayBecome(argCount, true); // both ways
             case 129: return this.popNandPushIfOK(1, this.vm.image.specialObjectsArray); //specialObjectsOop
             case 130: return this.primitiveFullGC(argCount);
@@ -250,8 +248,9 @@ Object.subclass('Squeak.Primitives',
             case 155: if (this.oldPrims) return this.primitiveFileSetPosition(argCount);
             case 156: if (this.oldPrims) return this.primitiveFileDelete(argCount);
             case 157: if (this.oldPrims) return this.primitiveFileSize(argCount);
+                break;  // fail 150-157 if fell through
             case 158: if (this.oldPrims) return this.primitiveFileWrite(argCount);
-                break;  // fail 150-158 if fell through
+                else this.vm.warnOnce("missing primitive: 158 (primitiveCompareWith)"); return false;
             case 159: if (this.oldPrims) return this.primitiveFileRename(argCount);
                 this.vm.warnOnce("missing primitive: 159 (primitiveHashMultiply)"); return false;
             case 160: if (this.oldPrims) return this.primitiveDirectoryCreate(argCount);
@@ -261,8 +260,8 @@ Object.subclass('Squeak.Primitives',
             case 162: if (this.oldPrims) return this.primitiveDirectoryLookup(argCount);
                 break;  // fail
             case 163: if (this.oldPrims) return this.primitiveDirectoryDelete(argCount);
-                break;  // fail
-            // 164: unused
+                else this.vm.warnOnce("missing primitive: 163 (primitiveGetImmutability)"); return false;
+            case 164: debugger; return this.popNandPushIfOK(argCount+1, this.vm.stackValue(0)); // primitiveSetImmutability
             case 165:
             case 166: return this.primitiveIntegerAtAndPut(argCount);
             case 167: return false; // Processor.yield
@@ -338,9 +337,11 @@ Object.subclass('Squeak.Primitives',
             case 206: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverLocalAddress', argCount);
                 else return  this.primitiveClosureValueWithArgs(argCount);
             case 207: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverStatus', argCount);
+                else return this.primitiveFullClosureValue(argCount);
             case 208: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveResolverError', argCount);
+                else return this.primitiveFullClosureValueWithArgs(argCount);
             case 209: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketCreate', argCount);
-                break;  // fail 207-209 if fell through
+                else return this.primitiveFullClosureValueNoContextSwitch(argCount);
             case 210: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketDestroy', argCount);
                 else return this.popNandPushIfOK(2, this.objectAt(false,false,false)); // contextAt:
             case 211: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectionStatus', argCount);
@@ -383,6 +384,7 @@ Object.subclass('Squeak.Primitives',
             case 242: if (this.oldPrims) break; // unused
                 else return this.primitiveSignalAtUTCMicroseconds(argCount);
             case 243: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveTranslateStringWithTable', argCount);
+                else this.vm.warnOnce("missing primitive: 243 (primitiveUpdateTimeZone)"); return false;
             case 244: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindFirstInString' , argCount);
             case 245: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveIndexOfAsciiInString', argCount);
             case 246: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount);
@@ -391,7 +393,6 @@ Object.subclass('Squeak.Primitives',
             case 248: return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod); // see findSelectorInClass()
             case 249: return this.primitiveArrayBecome(argCount, false); // one way, opt. copy hash
             case 254: return this.primitiveVMParameter(argCount);
-        } else switch (index) { // Chrome only optimized up to 128 cases
             //MIDI Primitives (520-539)
             case 521: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIClosePort', argCount);
             case 522: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIGetClock', argCount);
@@ -413,6 +414,7 @@ Object.subclass('Squeak.Primitives',
             case 571: return this.primitiveUnloadModule(argCount);
             case 572: return this.primitiveListBuiltinModule(argCount);
             case 573: return this.primitiveListLoadedModule(argCount);
+            case 575: this.vm.warnOnce("missing primitive: 575 (primitiveHighBit)"); return false;
         }
         console.error("primitive " + index + " not implemented yet");
         return false;
@@ -1508,6 +1510,26 @@ Object.subclass('Squeak.Primitives',
     primitiveClosureValueNoContextSwitch: function(argCount) {
         return this.primitiveClosureValue(argCount);
     },
+    primitiveFullClosureValue: function(argCount) {
+        var blockClosure = this.vm.stackValue(argCount),
+            blockArgCount = blockClosure.pointers[Squeak.Closure_numArgs];
+        if (argCount !== blockArgCount) return false;
+        return this.activateNewFullBlockClosure(blockClosure, argCount);
+    },
+    primitiveFullClosureValueWithArgs: function(argCount) {
+        var array = this.vm.top(),
+            arraySize = array.pointersSize(),
+            blockClosure = this.vm.stackValue(argCount),
+            blockArgCount = blockClosure.pointers[Squeak.Closure_numArgs];
+        if (arraySize !== blockArgCount) return false;
+        this.vm.pop();
+        for (var i = 0; i < arraySize; i++)
+            this.vm.push(array.pointers[i]);
+        return this.activateNewFullBlockClosure(blockClosure, arraySize);
+    },
+    primitiveFullClosureValueNoContextSwitch: function(argCount) {
+        return this.primitiveFullClosureValue(argCount);
+    },
     activateNewClosureMethod: function(blockClosure, argCount) {
         var outerContext = blockClosure.pointers[Squeak.Closure_outerContext],
             method = outerContext.pointers[Squeak.Context_method],
@@ -1525,6 +1547,27 @@ Object.subclass('Squeak.Primitives',
             newContext.pointers[where++] = this.vm.stackValue(argCount - i - 1);
         for (var i = 0; i < numCopied; i++)
             newContext.pointers[where++] = blockClosure.pointers[Squeak.Closure_firstCopiedValue + i];
+        // The initial instructions in the block nil-out remaining temps.
+        this.vm.popN(argCount + 1);
+        this.vm.newActiveContext(newContext);
+        return true;
+    },
+    activateNewFullBlockClosure: function(fullBlockClosure, argCount) {
+        var block = fullBlockClosure.pointers[Squeak.ClosureFull_method],
+            newContext = this.vm.allocateOrRecycleContext(block.methodNeedsLargeFrame()),
+            numCopied = fullBlockClosure.pointers.length - Squeak.ClosureFull_firstCopiedValue;
+        newContext.pointers[Squeak.Context_sender] = this.vm.activeContext;
+        newContext.pointers[Squeak.Context_instructionPointer] = this.vm.encodeSqueakPC(0, block);
+        newContext.pointers[Squeak.Context_stackPointer] = block.methodTempCount();
+        newContext.pointers[Squeak.Context_method] = block;
+        newContext.pointers[Squeak.Context_closure] = fullBlockClosure;
+        newContext.pointers[Squeak.Context_receiver] = fullBlockClosure.pointers[Squeak.ClosureFull_receiver];
+        // Copy the arguments and copied values ...
+        var where = Squeak.Context_tempFrameStart;
+        for (var i = 0; i < argCount; i++)
+            newContext.pointers[where++] = this.vm.stackValue(argCount - i - 1);
+        for (var i = 0; i < numCopied; i++)
+            newContext.pointers[where++] = fullBlockClosure.pointers[Squeak.ClosureFull_firstCopiedValue + i];
         // The initial instructions in the block nil-out remaining temps.
         this.vm.popN(argCount + 1);
         this.vm.newActiveContext(newContext);

@@ -429,6 +429,11 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         return nWords * 4;
     },
 },
+'as compiled block', {
+    blockOuterCode: function() {
+        return this.pointers[this.pointers.length - 1];
+    },
+},
 'as method', {
     methodSignFlag: function() {
         return this.pointers[0] < 0;
@@ -439,5 +444,16 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
     methodPrimitiveIndex: function() {
         if ((this.pointers[0] & 0x10000) === 0) return 0;
         return this.bytes[1] + 256 * this.bytes[2];
+    },
+    methodClass: function() {
+        return this.pointers[this.pointers.length - 1].pointers[Squeak.ClassBinding_value];
+    },
+    methodSelector: function() {
+        var penultimateLiteral = this.pointers[this.pointers.length - 2];
+        if (penultimateLiteral.isBytes()) {
+            return penultimateLiteral;
+        } else {
+            return penultimateLiteral.pointers[Squeak.AdditionalMethodState_selector];
+        }
     },
 });

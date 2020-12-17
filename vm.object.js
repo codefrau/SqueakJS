@@ -303,6 +303,8 @@ Object.subclass('Squeak.Object',
             case 'LargeNegativeInteger': return this.bytesAsNumberString(true);
             case 'Character': var unicode = this.pointers ? this.pointers[0] : this.hash; // Spur
                 return "$" + String.fromCharCode(unicode) + " (" + unicode.toString() + ")";
+            case 'CompiledMethod': return this.methodClass().className() + ">>" + this.methodSelector();
+            case 'CompiledBlock': return "[] in " + this.blockOuterCode().sqInstName();
         }
         return  /^[aeiou]/i.test(className) ? 'an' + className : 'a' + className;
     },

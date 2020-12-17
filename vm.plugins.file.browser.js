@@ -184,7 +184,7 @@ Object.extend(Squeak.Primitives.prototype,
                 for (var i = 0; i < count; i++)
                     dstArray[startIndex + i] = srcArray[handle.filePos++];
             }
-            this.popNandPushIfOK(argCount+1, count);
+            this.popNandPushIfOK(argCount+1, Math.max(0, count));
         }.bind(this));
     },
     primitiveFileRename: function(argCount) {

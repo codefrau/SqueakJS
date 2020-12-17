@@ -63,6 +63,7 @@ module('users.SqueakJS.squeak_lively').requires().toRun(function() {
                 "plugins/ADPCMCodecPlugin.js",
                 "plugins/B2DPlugin.js",
                 "plugins/BitBltPlugin.js",
+                "plugins/CroquetPlugin.js",
                 "plugins/FFTPlugin.js",
                 "plugins/FloatArrayPlugin.js",
                 "plugins/GeniePlugin.js",

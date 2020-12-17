@@ -55,6 +55,7 @@ import "./vm.plugins.sound.browser.js";
 import "./plugins/ADPCMCodecPlugin.js";
 import "./plugins/B2DPlugin.js";
 import "./plugins/BitBltPlugin.js";
+import "./plugins/CroquetPlugin.js";
 import "./plugins/FFTPlugin.js";
 import "./plugins/FloatArrayPlugin.js";
 import "./plugins/GeniePlugin.js";

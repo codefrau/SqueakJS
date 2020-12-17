@@ -329,6 +329,7 @@ Object.subclass('Squeak.Image',
                 if (this.isSpur) {
                     this.fixSkippedOops(oopAdjust);
                     if (is64Bit) this.fixPCs();
+                    this.ensureFullBlockClosureClass(this.specialObjectsArray, compactClasses);
                 } else {
                     this.fixCompiledMethods();
                     this.fixCompactOops();
@@ -431,6 +432,12 @@ Object.subclass('Squeak.Image',
                 obj.pointers[startpc] -= obj.pointers[outerContext].pointers[method].pointers.length * 4;
             }
             obj = obj.nextObject;
+        }
+    },
+    ensureFullBlockClosureClass: function(splObs, compactClasses) {
+        // Read FullBlockClosure class from compactClasses if not yet present in specialObjectsArray.
+        if (splObs.pointers[Squeak.splOb_ClassFullBlockClosure].isNil) {
+            splObs.pointers[Squeak.splOb_ClassFullBlockClosure] = compactClasses[38];
         }
     },
 },

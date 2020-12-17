@@ -1205,16 +1205,31 @@ Object.subclass('Squeak.Primitives',
         if (argCount > 2) return false;
         var rcvr = this.stackNonInteger(1),
             arg = this.stackNonInteger(0);
-        if (!this.success) return false;
-        if (rcvr.sqClass.isCompact !== arg.sqClass.isCompact) return false;
+        if (!this.changeClassTo(rcvr, arg.sqClass)) {
+            return false;
+        }
+        return this.popNIfOK(argCount);
+    },
+    primitiveAdoptInstance: function(argCount) {
+        if (argCount > 2) return false;
+        var cls = this.stackNonInteger(1),
+            obj = this.stackNonInteger(0);
+        if (!this.changeClassTo(obj, cls)) {
+            return false;
+        }
+        return this.popNIfOK(argCount);
+    },
+    changeClassTo: function(rcvr, cls) {
+        if (rcvr.sqClass.isCompact !== cls.isCompact) return false;
+        var classInstIsPointers = cls.classInstIsPointers();
         if (rcvr.isPointers()) {
-            if (!arg.isPointers()) return false;
-            if (rcvr.sqClass.classInstSize() !== arg.sqClass.classInstSize())
+            if (!classInstIsPointers) return false;
+            if (rcvr.sqClass.classInstSize() !== cls.classInstSize())
                 return false;
         } else {
-            if (arg.isPointers()) return false;
+            if (classInstIsPointers) return false;
             var hasBytes = rcvr.isBytes(),
-                needBytes = arg.isBytes();
+                needBytes = cls.classInstIsBytes();
             if (hasBytes && !needBytes) {
                 if (rcvr.bytes) {
                     if (rcvr.bytes.length & 3) return false;
@@ -1228,23 +1243,9 @@ Object.subclass('Squeak.Primitives',
                 }
             }
         }
-        rcvr._format = arg._format;
-        rcvr.sqClass = arg.sqClass;
-        return this.popNIfOK(argCount);
-    },
-    primitiveAdoptInstance: function(argCount) {
-        if (argCount > 2) return false;
-        var cls = this.stackNonInteger(1),
-            obj = this.stackNonInteger(0);
-        if (!this.success) return false;
-        // we don't handle differing formats here, image will
-        // try the more general primitiveChangeClass
-        if (cls.classInstFormat() !== obj.sqClass.classInstFormat() ||
-            cls.isCompact !== obj.sqClass.isCompact ||
-            cls.classInstSize() !== obj.sqClass.classInstSize())
-                return false;
-        obj.sqClass = cls;
-        return this.popNIfOK(argCount);
+        rcvr._format = cls.classInstFormat();
+        rcvr.sqClass = cls;
+        return true;
     },
     primitiveDoPrimitiveWithArgs: function(argCount) {
         var argumentArray = this.stackNonInteger(0),

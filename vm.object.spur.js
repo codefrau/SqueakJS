@@ -415,6 +415,13 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         // this is a class, answer number of named inst vars
         return this.pointers[Squeak.Class_format] & 0xFFFF;
     },
+    classInstIsBytes: function() {
+        var fmt = this.classInstFormat();
+        return fmt >= 16 && fmt <= 23;
+    },
+    classInstIsPointers: function() {
+        return this.classInstFormat() <= 6;
+    },
     classByteSizeOfInstance: function(nElements) {
         var format = this.classInstFormat(),
             nWords = this.classInstSize();

@@ -135,7 +135,7 @@ Object.subclass('Squeak.Primitives',
             case 49: return this.popNandPushFloatIfOK(argCount+1,this.stackFloat(1)*this.stackFloat(0));  // Float.mul
             case 50: return this.popNandPushFloatIfOK(argCount+1,this.safeFDiv(this.stackFloat(1),this.stackFloat(0)));  // Float.div
             case 51: return this.popNandPushIfOK(argCount+1,this.floatAsSmallInt(this.stackFloat(0)));  // Float.asInteger
-            case 52: this.vm.warnOnce("missing primitive: 52 (Float.fractionPart (modf))"); return false;
+            case 52: return this.popNandPushIfOK(argCount+1,this.floatFractionPart(this.stackFloat(0)));
             case 53: return this.popNandPushIntIfOK(argCount+1, this.frexp_exponent(this.stackFloat(0)) - 1); // Float.exponent
             case 54: return this.popNandPushFloatIfOK(2, this.ldexp(this.stackFloat(1), this.stackFloat(0))); // Float.timesTwoPower
             case 55: return this.popNandPushFloatIfOK(argCount+1, Math.sqrt(this.stackFloat(0))); // SquareRoot
@@ -252,7 +252,7 @@ Object.subclass('Squeak.Primitives',
             case 158: if (this.oldPrims) return this.primitiveFileWrite(argCount);
                 else this.vm.warnOnce("missing primitive: 158 (primitiveCompareWith)"); return false;
             case 159: if (this.oldPrims) return this.primitiveFileRename(argCount);
-                this.vm.warnOnce("missing primitive: 159 (primitiveHashMultiply)"); return false;
+                return this.popNandPushIntIfOK(argCount+1, this.stackSigned53BitInt(0) * 1664525 & 0xFFFFFFF); // primitiveHashMultiply
             case 160: if (this.oldPrims) return this.primitiveDirectoryCreate(argCount);
                 else return this.primitiveAdoptInstance(argCount);
             case 161: if (this.oldPrims) return this.primitiveDirectoryDelimitor(argCount);
@@ -716,6 +716,14 @@ Object.subclass('Squeak.Primitives',
     floatAsSmallInt: function(float) {
         var truncated = float >= 0 ? Math.floor(float) : Math.ceil(float);
         return this.ensureSmallInt(truncated);
+    },
+    floatFractionPart: function(float) {
+        if (-9007199254740991 /* -((1 << 53) - 1) */ <= float && float <= 9007199254740991 /* (1 << 53) - 1 */) {
+            return float - Math.floor(float);
+        } else {
+            this.success = false;
+            return 0;
+        }
     },
     frexp_exponent: function(value) {
         // frexp separates a float into its mantissa and exponent

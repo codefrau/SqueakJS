@@ -1523,7 +1523,7 @@ Object.subclass('Squeak.Primitives',
         var blockClosure = this.vm.stackValue(argCount),
             blockArgCount = blockClosure.pointers[Squeak.Closure_numArgs];
         if (argCount !== blockArgCount) return false;
-        return this.activateNewFullBlockClosure(blockClosure, argCount);
+        return this.activateNewFullClosure(blockClosure, argCount);
     },
     primitiveFullClosureValueWithArgs: function(argCount) {
         var array = this.vm.top(),
@@ -1534,7 +1534,7 @@ Object.subclass('Squeak.Primitives',
         this.vm.pop();
         for (var i = 0; i < arraySize; i++)
             this.vm.push(array.pointers[i]);
-        return this.activateNewFullBlockClosure(blockClosure, arraySize);
+        return this.activateNewFullClosure(blockClosure, arraySize);
     },
     primitiveFullClosureValueNoContextSwitch: function(argCount) {
         return this.primitiveFullClosureValue(argCount);
@@ -1561,23 +1561,23 @@ Object.subclass('Squeak.Primitives',
         this.vm.newActiveContext(newContext);
         return true;
     },
-    activateNewFullBlockClosure: function(fullBlockClosure, argCount) {
-        var block = fullBlockClosure.pointers[Squeak.ClosureFull_method],
-            newContext = this.vm.allocateOrRecycleContext(block.methodNeedsLargeFrame()),
-            numCopied = fullBlockClosure.pointers.length - Squeak.ClosureFull_firstCopiedValue;
+    activateNewFullClosure: function(blockClosure, argCount) {
+        var closureMethod = blockClosure.pointers[Squeak.ClosureFull_method],
+            newContext = this.vm.allocateOrRecycleContext(closureMethod.methodNeedsLargeFrame()),
+            numCopied = blockClosure.pointers.length - Squeak.ClosureFull_firstCopiedValue;
         newContext.pointers[Squeak.Context_sender] = this.vm.activeContext;
-        newContext.pointers[Squeak.Context_instructionPointer] = this.vm.encodeSqueakPC(0, block);
-        newContext.pointers[Squeak.Context_stackPointer] = block.methodTempCount();
-        newContext.pointers[Squeak.Context_method] = block;
-        newContext.pointers[Squeak.Context_closure] = fullBlockClosure;
-        newContext.pointers[Squeak.Context_receiver] = fullBlockClosure.pointers[Squeak.ClosureFull_receiver];
+        newContext.pointers[Squeak.Context_instructionPointer] = this.vm.encodeSqueakPC(0, closureMethod);
+        newContext.pointers[Squeak.Context_stackPointer] = closureMethod.methodTempCount(); // argCount + numCopied + numActualTemps
+        newContext.pointers[Squeak.Context_method] = closureMethod;
+        newContext.pointers[Squeak.Context_closure] = blockClosure;
+        newContext.pointers[Squeak.Context_receiver] = blockClosure.pointers[Squeak.ClosureFull_receiver];
         // Copy the arguments and copied values ...
         var where = Squeak.Context_tempFrameStart;
         for (var i = 0; i < argCount; i++)
             newContext.pointers[where++] = this.vm.stackValue(argCount - i - 1);
         for (var i = 0; i < numCopied; i++)
-            newContext.pointers[where++] = fullBlockClosure.pointers[Squeak.ClosureFull_firstCopiedValue + i];
-        // The initial instructions in the block nil-out remaining temps.
+            newContext.pointers[where++] = blockClosure.pointers[Squeak.ClosureFull_firstCopiedValue + i];
+        // No need to nil-out remaining temps as context pointers are nil-initialized.
         this.vm.popN(argCount + 1);
         this.vm.newActiveContext(newContext);
         return true;

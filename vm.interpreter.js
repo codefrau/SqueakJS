@@ -557,7 +557,7 @@ Object.subclass('Squeak.Interpreter',
             // 3 Byte Bytecodes
 
             case 0xF8: this.callPrimBytecode(0xF5); return;
-            case 0xF9: this.pushFullClosureCopy(extA); return;
+            case 0xF9: this.pushFullClosure(extA); return;
             case 0xFA: this.pushClosureCopyExtended(extA, extB); return;
             case 0xFB: b2 = this.nextByte(); // remote push from temp vector
                 this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2]);
@@ -843,20 +843,24 @@ Object.subclass('Squeak.Interpreter',
         this.pc += blockSize;
         this.push(closure);
     },
-    pushFullClosureCopy: function(extA) {
+    pushFullClosure: function(extA) {
         var byteA = this.nextByte();
         var byteB = this.nextByte();
         var literalIndex = byteA + (extA << 8);
         var numCopied = byteB & 63;
+        var context;
         if ((byteB >> 6 & 1) == 1) {
-            throw Error("ignore context not yet supported");
+            context = this.vm.nilObj;
+        } else {
+            context = this.activeContext;
         }
+        var compiledBlock = this.method.methodGetLiteral(literalIndex);
+        var closure = this.newFullClosure(context, numCopied, compiledBlock);
         if ((byteB >> 7 & 1) == 1) {
             throw Error("on-stack receiver not yet supported");
+        } else {
+            closure.pointers[Squeak.ClosureFull_receiver] = this.receiver;
         }
-        var method = this.method.methodGetLiteral(literalIndex);
-        var closure = this.newFullClosure(method, numCopied, this.receiver);
-        closure.pointers[Squeak.Closure_outerContext] = this.activeContext;
         this.reclaimableContextCount = 0; // The closure refers to thisContext so it can't be reclaimed
         if (numCopied > 0) {
             for (var i = 0; i < numCopied; i++)
@@ -871,11 +875,11 @@ Object.subclass('Squeak.Interpreter',
         closure.pointers[Squeak.Closure_numArgs] = numArgs;
         return closure;
     },
-    newFullClosure: function(method, numCopied, receiver) {
+    newFullClosure: function(context, numCopied, compiledBlock) {
         var closure = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassFullBlockClosure], numCopied);
-        closure.pointers[Squeak.ClosureFull_method] = method;
-        closure.pointers[Squeak.Closure_numArgs] = method.methodNumArgs();
-        closure.pointers[Squeak.ClosureFull_receiver] = receiver;
+        closure.pointers[Squeak.Closure_outerContext] = context;
+        closure.pointers[Squeak.ClosureFull_method] = compiledBlock;
+        closure.pointers[Squeak.Closure_numArgs] = compiledBlock.methodNumArgs();
         return closure;
     },
 },

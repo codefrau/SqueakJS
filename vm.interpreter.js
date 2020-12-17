@@ -355,17 +355,6 @@ Object.subclass('Squeak.Interpreter',
         this.interpretOneSistaWithExtensions(singleStep, 0, 0);
     },
     interpretOneSistaWithExtensions: function(singleStep, extA, extB) {
-        if (this.method.compiled) {
-            if (singleStep) {
-                if (!this.compiler.enableSingleStepping(this.method)) {
-                    this.method.compiled = null;
-                    return this.interpretOneSista(singleStep);
-                }
-                this.breakNow();
-            }
-            this.method.compiled(this);
-            return;
-        }
         var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively
         var b, b2;
         this.byteCodeCount++;

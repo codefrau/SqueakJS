@@ -141,7 +141,9 @@ to single-step.
 },
 'accessing', {
     compile: function(method, optClass, optSel) {
-        if (method.compiled === undefined) {
+        if (method.methodSignFlag()) {
+            return; // Sista bytecode set not (yet) supported by JIT
+        } else if (method.compiled === undefined) {
             // 1st time
             method.compiled = false;
         } else {

@@ -36,7 +36,9 @@ Object.subclass('Squeak.InstructionPrinter',
         this.highlightPC = highlightPC; // PC of highlighted line
         this.innerIndents = {};
         this.result = '';
-        this.scanner = new Squeak.InstructionStream(this.method, this.vm);
+        this.scanner = this.method.methodSignFlag()
+            ? new Squeak.InstructionStreamSista(this.method, this.vm)
+            : new Squeak.InstructionStream(this.method, this.vm);
         this.oldPC = this.scanner.pc;
         this.endPC = 0;                 // adjusted while scanning
         this.done = false;
@@ -67,6 +69,9 @@ Object.subclass('Squeak.InstructionPrinter',
     }
 },
 'decoding', {
+    blockReturnConstant: function(obj) {
+        this.print('blockReturn: ' + obj.toString());
+    },
     blockReturnTop: function() {
         this.print('blockReturn');
     },

@@ -34,6 +34,7 @@ import "./vm.image.js";
 import "./vm.interpreter.js";
 import "./vm.interpreter.proxy.js";
 import "./vm.instruction.stream.js";
+import "./vm.instruction.stream.sista.js";
 import "./vm.instruction.printer.js";
 import "./vm.primitives.js";
 import "./jit.js";

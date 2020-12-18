@@ -42,6 +42,7 @@ module('users.SqueakJS.squeak_lively').requires().toRun(function() {
                 "vm.interpreter.js",
                 "vm.interpreter.proxy.js",
                 "vm.instruction.stream.js",
+                "vm.instruction.stream.sista.js",
                 "vm.instruction.printer.js",
                 "vm.primitives.js",
                 "jit.js",

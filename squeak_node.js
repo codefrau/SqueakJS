@@ -86,6 +86,7 @@ require("./vm.image.js");
 require("./vm.interpreter.js");
 require("./vm.interpreter.proxy.js");
 require("./vm.instruction.stream.js");
+require("./vm.instruction.stream.sista.js");
 require("./vm.instruction.printer.js");
 require("./vm.primitives.js");
 require("./jit.js");

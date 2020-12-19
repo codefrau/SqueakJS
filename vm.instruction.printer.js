@@ -101,6 +101,9 @@ Object.subclass('Squeak.InstructionPrinter',
         this.print('returnConst: ' + obj.toString());
         this.done = this.scanner.pc > this.endPC;
     },
+    nop: function() {
+        this.print('nop');
+    },
     popIntoLiteralVariable: function(anAssociation) {
         this.print('popIntoBinding: ' + anAssociation.assnKeyAsString());
     },
@@ -131,6 +134,9 @@ Object.subclass('Squeak.InstructionPrinter',
     },
     send: function(selector, numberArguments, supered) {
         this.print( (supered ? 'superSend: #' : 'send: #') + (selector.bytesAsString ? selector.bytesAsString() : selector));
+    },
+    sendSuperDirected: function(selector) {
+        this.print('directedSuperSend: #' + (selector.bytesAsString ? selector.bytesAsString() : selector));
     },
     storeIntoLiteralVariable: function(anAssociation) {
         this.print('storeIntoBinding: ' + anAssociation.assnKeyAsString());
@@ -163,6 +169,9 @@ Object.subclass('Squeak.InstructionPrinter',
         for (var i = from; i < to; i++)
             this.innerIndents[i] = (this.innerIndents[i] || 0) + 1;
         if (to > this.endPC) this.endPC = to;
+    },
+    pushFullClosure: function(literalIndex, numCopied, numArgs) {
+        this.print('pushFullClosure: (self literalAt: ' + literalIndex + ') numCopied: ' + numCopied + ' numArgs: ' + numArgs);
     },
     callPrimitive: function(primitiveIndex) {
         this.print('primitive: ' + primitiveIndex);

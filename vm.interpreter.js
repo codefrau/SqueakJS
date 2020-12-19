@@ -1478,6 +1478,9 @@ Object.subclass('Squeak.Interpreter',
     },
     printMethod: function(aMethod, optContext, optSel) {
         // return a 'class>>selector' description for the method
+        if (aMethod.sqClass != this.specialObjects[Squeak.splOb_ClassCompiledMethod]) {
+          return this.printMethod(aMethod.blockOuterCode(), optContext, optSel)
+        }
         if (optSel) return optContext.className() + '>>' + optSel.bytesAsString();
         // this is expensive, we have to search all classes
         if (!aMethod) aMethod = this.activeContext.contextMethod();
@@ -1696,19 +1699,31 @@ Object.subclass('Squeak.Interpreter',
         // Answer whether the next bytecode corresponds to a Smalltalk
         // message send or return
         var byte = this.method.bytes[this.pc];
-        if (byte >= 120 && byte <= 125) return true; // return
-        if (byte < 131 || byte == 200) return false;
-        if (byte >= 176) return true; // special send or short send
-        if (byte <= 134) {         // long sends
+        if (this.method.methodSignFlag()) {
+          if (0x60 <= byte && byte <= 0x7F) {
+            selectorObj = this.specialSelectors[2 * (byte - 0x60)];
+          } else if (0x80 <= byte && byte <= 0xAF) {
+            selectorObj = this.method.methodGetSelector(byte&0xF);
+          } else if (byte == 0xEA || byte == 0xEB) {
+            this.method.methodGetSelector((this.method.bytes[this.pc+1] >> 3)); // (extA << 5)
+          } else if (0x58 <= byte && byte <= 0x5E) {
+            return true; // return
+          }
+        } else {
+          if (byte >= 120 && byte <= 125) return true; // return
+          if (byte < 131 || byte == 200) return false;
+          if (byte >= 176) return true; // special send or short send
+          if (byte <= 134) {         // long sends
             // long form support demands we check the selector
             var litIndex;
             if (byte === 132) {
-                if ((this.method.bytes[this.pc + 1] >> 5) > 1) return false;
-                litIndex = this.method.bytes[this.pc + 2];
+              if ((this.method.bytes[this.pc + 1] >> 5) > 1) return false;
+              litIndex = this.method.bytes[this.pc + 2];
             } else
-                litIndex = this.method.bytes[this.pc + 1] & (byte === 134 ? 63 : 31);
+              litIndex = this.method.bytes[this.pc + 1] & (byte === 134 ? 63 : 31);
             var selectorObj = this.method.methodGetLiteral(litIndex);
             if (selectorObj.bytesAsString() !== 'blockCopy:') return true;
+          }
         }
         return false;
     },
@@ -1716,13 +1731,24 @@ Object.subclass('Squeak.Interpreter',
         // if the next bytecode corresponds to a Smalltalk
         // message send, answer the selector
         var byte = this.method.bytes[this.pc];
-        if (byte < 131 || byte == 200) return null;
         var selectorObj;
-        if (byte >= 0xD0 ) {
+        if (this.method.methodSignFlag()) {
+          if (0x60 <= byte && byte <= 0x7F) {
+            selectorObj = this.specialSelectors[2 * (byte - 0x60)];
+          } else if (0x80 <= byte && byte <= 0xAF) {
+            selectorObj = this.method.methodGetSelector(byte&0xF);
+          } else if (byte == 0xEA || byte == 0xEB) {
+            this.method.methodGetSelector((this.method.bytes[this.pc+1] >> 3)); // (extA << 5)
+          } else {
+            return null;
+          }
+        } else {
+          if (byte < 131 || byte == 200) return null;
+          if (byte >= 0xD0 ) {
             selectorObj = this.method.methodGetLiteral(byte & 0x0F);
-        } else if (byte >= 0xB0 ) {
+          } else if (byte >= 0xB0 ) {
             selectorObj = this.specialSelectors[2 * (byte - 0xB0)];
-        } else if (byte <= 134) {
+          } else if (byte <= 134) {
             // long form support demands we check the selector
             var litIndex;
             if (byte === 132) {
@@ -1731,10 +1757,11 @@ Object.subclass('Squeak.Interpreter',
             } else
                 litIndex = this.method.bytes[this.pc + 1] & (byte === 134 ? 63 : 31);
             selectorObj = this.method.methodGetLiteral(litIndex);
+          }
         }
         if (selectorObj) {
-            var selector = selectorObj.bytesAsString();
-            if (selector !== 'blockCopy:') return selector;
+          var selector = selectorObj.bytesAsString();
+          if (selector !== 'blockCopy:') return selector;
         }
     },
 });

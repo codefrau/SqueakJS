@@ -902,8 +902,8 @@ Object.subclass('Squeak.Interpreter',
         this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
     },
     sendSuperDirected: function(selector, argCount) {
+        var lookupClass = this.pop().pointers[Squeak.Class_superclass];
         var newRcvr = this.stackValue(argCount);
-        var lookupClass = this.top().pointers[Squeak.Class_superclass];
         var entry = this.findSelectorInClass(selector, argCount, lookupClass);
         if (entry.primIndex) {
             //note details for verification of at/atput primitives

@@ -106,6 +106,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2020-12-20: 1.0 supports 64 bits and Sista
     2020-06-20: renamed "master" branch to "main"
     2020-06-20: 0.9.9 JSBridge additions (Bill Burdick), fixes
     2020-04-08: renamed github account to "codefrau"
@@ -181,6 +182,7 @@ Changelog
     2014-05-27: WarpBlt
     2014-05-07: image saving
     2014-04-23: file support
+    2013-12-20: public release
     2013-12-14: colored bitblt
     2013-12-03: first pixels on screen
     2013-11-29: GC

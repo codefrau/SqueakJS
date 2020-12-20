@@ -23,7 +23,10 @@
 
 Squeak.InstructionStream.subclass('Squeak.InstructionStreamSista',
 'decoding', {
-    interpretNextInstructionFor: function(client, extA=0, extB=0) {
+    interpretNextInstructionFor: function(client) {
+        return this.interpretNextInstructionExtFor(client, 0, 0);
+    },
+    interpretNextInstructionExtFor: function(client, extA, extB) {
         var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively
         // Send to the argument, client, a message that specifies the type of the next instruction.
         var b = this.method.bytes[this.pc++];
@@ -93,8 +96,8 @@ Squeak.InstructionStream.subclass('Squeak.InstructionStreamSista',
         }
         var b2 = this.method.bytes[this.pc++];    
         switch (b) {
-            case 0xE0: return this.interpretNextInstructionFor(client, (extA << 8) + b2, extB); 
-            case 0xE1: return this.interpretNextInstructionFor(client, extA, (extB << 8) + (b2 < 128 ? b2 : b2-256));
+            case 0xE0: return this.interpretNextInstructionExtFor(client, (extA << 8) + b2, extB); 
+            case 0xE1: return this.interpretNextInstructionExtFor(client, extA, (extB << 8) + (b2 < 128 ? b2 : b2-256));
             case 0xE2:
                 return client.pushReceiverVariable(b2 + (extA << 8));
             case 0xE3:
@@ -157,6 +160,6 @@ Squeak.InstructionStream.subclass('Squeak.InstructionStreamSista',
             case 0xFD:
                 return client.popIntoRemoteTemp(b2, b3);
         }
-        throw Error(`Unknown bytecode ${b}`);
+        throw Error("Unknown bytecode: " + b);
     }
 });

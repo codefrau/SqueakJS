@@ -360,7 +360,15 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                 data.setUint32(pos, this.words[i], littleEndian); pos += 4;
             }
         } else if (this.pointers) {
-            for (var i = 0; i < this.pointers.length; i++) {
+            var startIndex = 0;
+            if (this._format >= 24) {
+                // preserve signFlag in method header
+                var mask = this.methodSignFlag() ? 0x80000000 : 0;
+                var taggedHeader = this.pointers[0] << 1 | 1 | mask;
+                data.setUint32(pos, taggedHeader, littleEndian); pos += 4;
+                startIndex = 1;
+            }
+            for (var i = startIndex; i < this.pointers.length; i++) {
                 data.setUint32(pos, objToOop(this.pointers[i]), littleEndian); pos += 4;
             }
         }

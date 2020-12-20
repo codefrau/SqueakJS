@@ -351,10 +351,7 @@ Object.subclass('Squeak.Interpreter',
         }
         throw Error("not a bytecode: " + b);
     },
-    interpretOneSista: function(singleStep) {
-        this.interpretOneSistaWithExtensions(singleStep, 0, 0);
-    },
-    interpretOneSistaWithExtensions: function(singleStep, extA, extB) {
+    interpretOneSista: function(singleStep, extA=0, extB=0) {
         var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively
         var b, b2;
         this.byteCodeCount++;
@@ -491,9 +488,9 @@ Object.subclass('Squeak.Interpreter',
             // 2 Byte Bytecodes
 
             case 0xE0:
-                b2 = this.nextByte(); this.interpretOneSistaWithExtensions(singleStep, (extA << 8) + b2, extB); return;
+                b2 = this.nextByte(); this.interpretOneSista(singleStep, (extA << 8) + b2, extB); return;
             case 0xE1:
-                b2 = this.nextByte(); this.interpretOneSistaWithExtensions(singleStep, extA, (extB << 8) + (b2 < 128 ? b2 : b2-256)); return;
+                b2 = this.nextByte(); this.interpretOneSista(singleStep, extA, (extB << 8) + (b2 < 128 ? b2 : b2-256)); return;
             case 0xE2:
                 b2 = this.nextByte(); this.push(this.receiver.pointers[b2 + (extA << 8)]); return;
             case 0xE3:

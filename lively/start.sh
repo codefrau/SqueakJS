@@ -30,7 +30,7 @@ shutdown() {
 trap shutdown SIGTERM SIGKILL SIGINT
 
 echo "Starting docker"
-docker run --rm \
+docker run --rm -ti \
     -v $lively_dir:/home/lively/LivelyKernel \
     -v $squeakjs_dir:/home/lively/LivelyKernel/users/SqueakJS \
     -p 9001-9004:9001-9004 \

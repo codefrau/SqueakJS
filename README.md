@@ -77,7 +77,7 @@ Contributions are very welcome!
 
 Things to work on
 -----------------
-SqueakJS is intended to run any Squeak image. It can already load any 32-bit image from the original 1996 Squeak release to the latest Cog-Spur release. But various pieces (primitives in various plugins) are still missing, in particular media support (MIDI, 3D graphics). Also, we should add support for loading 64-bit Spur images (converting to 32 bits on load), and execute SISTA byecode. And, it would be nice to make it work on as many browsers as possible, especially on mobile touch devices.
+SqueakJS is intended to run any Squeak image. It can already load any 32-bit image from the original 1996 Squeak release to the latest Cog-Spur release. But various pieces (primitives in various plugins) are still missing, in particular media support (MIDI, 3D graphics). Also, we should make pre-Spur 64 bit images load, and add a JIT for SISTA bytecodes. And, it would be nice to make it work on as many browsers as possible, especially on mobile touch devices.
 
 As for optimizing I think the way to go is an optimizing JIT compiler. The current JIT is very simple and does not optimize at all. Since we can't access or manipulate the JavaScript stack, we might want that compiler to inline as much as possible, but keep the call sequence flat so we can return to the browser at any time. Even better (but potentially more complicated) is actually using the JavaScript stack, just like Eliot's Stack VM uses the C stack. To make BitBlt fast, we could probably use WebGL.
 

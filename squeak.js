@@ -2731,16 +2731,14 @@
                 // Etoys fallback for missing translation files is hugely inefficient.
                 // This speeds up opening a viewer by 10x (!)
                 // Remove when we added translation files.
-                //{method: "String>>translated", primitive: returnSelf},
-                //{method: "String>>translatedInAllDomains", primitive: returnSelf},
-                // Squeak: disable syntax highlighting for speed
-                //{method: "PluggableTextMorphPlus>>useDefaultStyler", primitive: returnSelf},
+                //{method: "String>>translated", primitive: returnSelf, enabled: true},
+                //{method: "String>>translatedInAllDomains", primitive: returnSelf, enabled: true},
                 // 64 bit Squeak does not flush word size on snapshot
-                {method: "SmalltalkImage>>wordSize", literal: {index: 1, old: 8, hack: 4}},
+                {method: "SmalltalkImage>>wordSize", literal: {index: 1, old: 8, hack: 4}, enabled: true},
                 // Squeak 5.3 disable wizard by replacing #open send with pop
-                // {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}},
+                {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: location.hash.includes("wizard=false")},
             ].forEach(function(each) {
-                var m = this.findMethod(each.method);
+                var m = each.enabled && this.findMethod(each.method);
                 if (m) {
                     var prim = each.primitive,
                         byte = each.bytecode,
@@ -2755,10 +2753,6 @@
                     if (hacked) console.warn("Hacking " + each.method);
                 }
             }, this);
-            // Pharo
-            if (this.findMethod("PharoClassInstaller>>initialize")) {
-                Squeak.platformName = "unix";
-            }
         },
     },
     'interpreting', {
@@ -3069,7 +3063,7 @@
                     this.receiver.pointers[b&7] = this.pop(); return;
                 case 0xD0: case 0xD1: case 0xD2: case 0xD3: case 0xD4: case 0xD5: case 0xD6: case 0xD7:
                     this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&7)] = this.pop(); return;
-                
+
                 case 0xD8: this.pop(); return;  // pop
                 case 0xD9: this.nono(); return; // FIXME: Unconditional trap
                 case 0xDA: case 0xDB: case 0xDC: case 0xDD: case 0xDE: case 0xDF:

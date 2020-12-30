@@ -151,20 +151,25 @@ Object.subclass('Squeak.Interpreter',
             // Squeak 5.3 disable wizard by replacing #open send with pop
             {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: location.hash.includes("wizard=false")},
         ].forEach(function(each) {
-            var m = each.enabled && this.findMethod(each.method);
-            if (m) {
-                var prim = each.primitive,
-                    byte = each.bytecode,
-                    lit = each.literal,
-                    hacked = true;
-                if (prim) m.pointers[0] |= prim;
-                else if (byte && m.bytes[byte.pc] === byte.old) m.bytes[byte.pc] = byte.hack;
-                else if (byte && m.bytes[byte.pc] === byte.hack) hacked = false; // already there
-                else if (lit && m.pointers[lit.index].pointers[1] === lit.old) m.pointers[lit.index].pointers[1] = lit.hack;
-                else if (lit && m.pointers[lit.index].pointers[1] === lit.hack) hacked = false; // already there
-                else { hacked = false; console.error("Failed to hack " + each.method); }
-                if (hacked) console.warn("Hacking " + each.method);
+            try {
+                var m = each.enabled && this.findMethod(each.method);
+                if (m) {
+                    var prim = each.primitive,
+                        byte = each.bytecode,
+                        lit = each.literal,
+                        hacked = true;
+                    if (prim) m.pointers[0] |= prim;
+                    else if (byte && m.bytes[byte.pc] === byte.old) m.bytes[byte.pc] = byte.hack;
+                    else if (byte && m.bytes[byte.pc] === byte.hack) hacked = false; // already there
+                    else if (lit && m.pointers[lit.index].pointers[1] === lit.old) m.pointers[lit.index].pointers[1] = lit.hack;
+                    else if (lit && m.pointers[lit.index].pointers[1] === lit.hack) hacked = false; // already there
+                    else { hacked = false; console.error("Failed to hack " + each.method); }
+                    if (hacked) console.warn("Hacking " + each.method);
+                }
+            } catch (error) {
+                console.error("Failed to hack " + each.method + " with error " + error);
             }
+
         }, this);
     },
 },

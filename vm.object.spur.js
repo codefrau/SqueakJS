@@ -460,15 +460,10 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         if ((this.pointers[0] & 0x10000) === 0) return 0;
         return this.bytes[1] + 256 * this.bytes[2];
     },
-    methodClass: function() {
-        return this.pointers[this.pointers.length - 1].pointers[Squeak.ClassBinding_value];
-    },
-    methodSelector: function() {
-        var penultimateLiteral = this.pointers[this.pointers.length - 2];
-        if (penultimateLiteral.isBytes()) {
-            return penultimateLiteral;
-        } else {
-            return penultimateLiteral.pointers[Squeak.AdditionalMethodState_selector];
-        }
+    methodAsString: function() {
+        var cls = this.pointers[this.pointers.length - 1].pointers[Squeak.ClassBinding_value];
+        var selector = this.pointers[this.pointers.length - 2];
+        if (selector.pointers) selector = selector.pointers[Squeak.AdditionalMethodState_selector];
+        return cls.className() + ">>" + selector.bytesAsString();
     },
 });

@@ -427,6 +427,7 @@ Object.subclass('Squeak.Primitives',
             this.loadedModules[modName] = mod;
         }
         var result = false;
+        var sp = this.vm.sp;
         if (mod) {
             this.interpreterProxy.argCount = argCount;
             var primitive = mod[functionName];
@@ -440,6 +441,9 @@ Object.subclass('Squeak.Primitives',
             }
         } else {
             this.vm.warnOnce("missing module: " + modName + " (" + functionName + ")");
+        }
+        if ((result === true || (result !== false && this.success)) && this.vm.sp !== sp - argCount && !this.vm.frozen) {
+            this.vm.warnOnce("stack unbalanced after primitive " + modName + "." + functionName, "error");
         }
         if (result === true || result === false) return result;
         return this.success;

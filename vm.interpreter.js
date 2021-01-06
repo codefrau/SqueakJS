@@ -1094,7 +1094,16 @@ Object.subclass('Squeak.Interpreter',
             this.popNandPush(1, primIndex - 261); //return -1...2
             return true;
         }
+        var sp = this.sp;
+        var context = this.activeContext;
         var success = this.primHandler.doPrimitive(primIndex, argCount, newMethod);
+        if (success 
+            && this.sp !== sp - argCount
+            && context === this.activeContext
+            && primIndex !== 117    // named prims are checked separately 
+            && !this.frozen) {
+                this.warnOnce("stack unbalanced after primitive " + primIndex, "error");
+            }
         return success;
     },
     createActualMessage: function(selector, argCount, cls) {
@@ -1471,9 +1480,9 @@ Object.subclass('Squeak.Interpreter',
     addMessage: function(message) {
         return this.messages[message] ? ++this.messages[message] : this.messages[message] = 1;
     },
-    warnOnce: function(message) {
+    warnOnce: function(message, what) {
         if (this.addMessage(message) == 1)
-            console.warn(message);
+            console[what || "warn"](message);
     },
     printMethod: function(aMethod, optContext, optSel) {
         // return a 'class>>selector' description for the method

@@ -113,8 +113,8 @@
     Object.extend(Squeak,
     "version", {
         // system attributes
-        vmVersion: "SqueakJS 1.0",
-        vmDate: "2020-12-20",               // Maybe replace at build time?
+        vmVersion: "SqueakJS 1.0.1",
+        vmDate: "2021-01-05",               // Maybe replace at build time?
         vmBuild: "unknown",                 // or replace at runtime by last-modified?
         vmPath: "unknown",                  // Replace at runtime
         vmFile: "vm.js",
@@ -625,7 +625,7 @@
                 case 'LargeNegativeInteger': return this.bytesAsNumberString(true);
                 case 'Character': var unicode = this.pointers ? this.pointers[0] : this.hash; // Spur
                     return "$" + String.fromCharCode(unicode) + " (" + unicode.toString() + ")";
-                case 'CompiledMethod': return this.methodClass().className() + ">>" + this.methodSelector();
+                case 'CompiledMethod': return this.methodAsString();
                 case 'CompiledBlock': return "[] in " + this.blockOuterCode().sqInstName();
             }
             return  /^[aeiou]/i.test(className) ? 'an' + className : 'a' + className;
@@ -881,6 +881,9 @@
         },
         methodGetSelector: function(zeroBasedIndex) {
             return this.pointers[1+zeroBasedIndex]; // step over header
+        },
+        methodAsString: function() {
+          return 'aCompiledMethod';
         },
     },
     'as context', {
@@ -1366,16 +1369,11 @@
             if ((this.pointers[0] & 0x10000) === 0) return 0;
             return this.bytes[1] + 256 * this.bytes[2];
         },
-        methodClass: function() {
-            return this.pointers[this.pointers.length - 1].pointers[Squeak.ClassBinding_value];
-        },
-        methodSelector: function() {
-            var penultimateLiteral = this.pointers[this.pointers.length - 2];
-            if (penultimateLiteral.isBytes()) {
-                return penultimateLiteral;
-            } else {
-                return penultimateLiteral.pointers[Squeak.AdditionalMethodState_selector];
-            }
+        methodAsString: function() {
+            var cls = this.pointers[this.pointers.length - 1].pointers[Squeak.ClassBinding_value];
+            var selector = this.pointers[this.pointers.length - 2];
+            if (selector.pointers) selector = selector.pointers[Squeak.AdditionalMethodState_selector];
+            return cls.className() + ">>" + selector.bytesAsString();
         },
     });
 
@@ -2738,20 +2736,25 @@
                 // Squeak 5.3 disable wizard by replacing #open send with pop
                 {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: location.hash.includes("wizard=false")},
             ].forEach(function(each) {
-                var m = each.enabled && this.findMethod(each.method);
-                if (m) {
-                    var prim = each.primitive,
-                        byte = each.bytecode,
-                        lit = each.literal,
-                        hacked = true;
-                    if (prim) m.pointers[0] |= prim;
-                    else if (byte && m.bytes[byte.pc] === byte.old) m.bytes[byte.pc] = byte.hack;
-                    else if (byte && m.bytes[byte.pc] === byte.hack) hacked = false; // already there
-                    else if (lit && m.pointers[lit.index].pointers[1] === lit.old) m.pointers[lit.index].pointers[1] = lit.hack;
-                    else if (lit && m.pointers[lit.index].pointers[1] === lit.hack) hacked = false; // already there
-                    else { hacked = false; console.error("Failed to hack " + each.method); }
-                    if (hacked) console.warn("Hacking " + each.method);
+                try {
+                    var m = each.enabled && this.findMethod(each.method);
+                    if (m) {
+                        var prim = each.primitive,
+                            byte = each.bytecode,
+                            lit = each.literal,
+                            hacked = true;
+                        if (prim) m.pointers[0] |= prim;
+                        else if (byte && m.bytes[byte.pc] === byte.old) m.bytes[byte.pc] = byte.hack;
+                        else if (byte && m.bytes[byte.pc] === byte.hack) hacked = false; // already there
+                        else if (lit && m.pointers[lit.index].pointers[1] === lit.old) m.pointers[lit.index].pointers[1] = lit.hack;
+                        else if (lit && m.pointers[lit.index].pointers[1] === lit.hack) hacked = false; // already there
+                        else { hacked = false; console.error("Failed to hack " + each.method); }
+                        if (hacked) console.warn("Hacking " + each.method);
+                    }
+                } catch (error) {
+                    console.error("Failed to hack " + each.method + " with error " + error);
                 }
+
             }, this);
         },
     },
@@ -3676,7 +3679,16 @@
                 this.popNandPush(1, primIndex - 261); //return -1...2
                 return true;
             }
+            var sp = this.sp;
+            var context = this.activeContext;
             var success = this.primHandler.doPrimitive(primIndex, argCount, newMethod);
+            if (success 
+                && this.sp !== sp - argCount
+                && context === this.activeContext
+                && primIndex !== 117    // named prims are checked separately 
+                && !this.frozen) {
+                    this.warnOnce("stack unbalanced after primitive " + primIndex, "error");
+                }
             return success;
         },
         createActualMessage: function(selector, argCount, cls) {
@@ -4053,9 +4065,9 @@
         addMessage: function(message) {
             return this.messages[message] ? ++this.messages[message] : this.messages[message] = 1;
         },
-        warnOnce: function(message) {
+        warnOnce: function(message, what) {
             if (this.addMessage(message) == 1)
-                console.warn(message);
+                console[what || "warn"](message);
         },
         printMethod: function(aMethod, optContext, optSel) {
             // return a 'class>>selector' description for the method
@@ -5359,7 +5371,7 @@
                 case 130: return this.primitiveFullGC(argCount);
                 case 131: return this.primitivePartialGC(argCount);
                 case 132: return this.pop2andPushBoolIfOK(this.pointsTo(this.stackNonInteger(1), this.vm.top())); //Object.pointsTo
-                case 133: return true; //TODO primitiveSetInterruptKey
+                case 133: return this.popNIfOK(argCount); //TODO primitiveSetInterruptKey
                 case 134: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheInterruptSemaphore));
                 case 135: return this.popNandPushIfOK(1, this.millisecondClockValue());
                 case 136: return this.primitiveSignalAtMilliseconds(argCount); //Delay signal:atMs:();
@@ -5564,6 +5576,7 @@
                 this.loadedModules[modName] = mod;
             }
             var result = false;
+            var sp = this.vm.sp;
             if (mod) {
                 this.interpreterProxy.argCount = argCount;
                 var primitive = mod[functionName];
@@ -5577,6 +5590,9 @@
                 }
             } else {
                 this.vm.warnOnce("missing module: " + modName + " (" + functionName + ")");
+            }
+            if ((result === true || (result !== false && this.success)) && this.vm.sp !== sp - argCount && !this.vm.frozen) {
+                this.vm.warnOnce("stack unbalanced after primitive " + modName + "." + functionName, "error");
             }
             if (result === true || result === false) return result;
             return this.success;
@@ -9211,7 +9227,7 @@
                 this.signalSemaphoreWithIndex(this.inputEventSemaIndex);
             }.bind(this);
             this.display.signalInputEvent();
-            return true;
+            return this.popNIfOK(argCount);
         },
         primitiveInputWord: function(argCount) {
             // Return an integer indicating the reason for the most recent input interrupt
@@ -9222,7 +9238,7 @@
             var evtBuf = this.stackNonInteger(0);
             if (!this.display.getNextEvent) return false;
             this.display.getNextEvent(evtBuf.pointers, this.vm.startupTime);
-            return true;
+            return this.popNIfOK(argCount);
         },
     });
 
@@ -23708,7 +23724,7 @@
             return this.interpreterProxy.primitiveFail();
           }
           window.crypto.getRandomValues(rcvr.bytes);
-          this.interpreterProxy.popthenPush(argCount, this.interpreterProxy.trueObject());
+          this.interpreterProxy.popthenPush(argCount + 1, this.interpreterProxy.trueObject());
           return true;
         },
       };
@@ -35716,7 +35732,7 @@
     	return (value >= -1073741824) && (m23ResultX <= 1073741823);
     }
 
-    function primitiveComposeMatrix() {
+    function primitiveComposeMatrix(argCount) {
     	var m1;
     	var m2;
     	var m3;
@@ -35728,10 +35744,10 @@
     		return null;
     	}
     	matrix2x3ComposeMatrixwithinto(m1, m2, m3);
-    	interpreterProxy.popthenPush(3, result);
+    	interpreterProxy.popthenPush(argCount + 1, result);
     }
 
-    function primitiveInvertPoint() {
+    function primitiveInvertPoint(argCount) {
     	var matrix;
 
     	loadArgumentPoint(interpreterProxy.stackObjectValue(0));
@@ -35741,11 +35757,11 @@
     	}
     	matrix2x3InvertPoint(matrix);
     	if (!interpreterProxy.failed()) {
-    		roundAndStoreResultPoint(2);
+    		roundAndStoreResultPoint(argCount);
     	}
     }
 
-    function primitiveInvertRectInto() {
+    function primitiveInvertRectInto(argCount) {
     	var cornerX;
     	var cornerY;
     	var dstOop;
@@ -35820,11 +35836,11 @@
     		dstOop = roundAndStoreResultRectx0y0x1y1(dstOop, minX, minY, maxX, maxY);
     	}
     	if (!interpreterProxy.failed()) {
-    		interpreterProxy.popthenPush(3, dstOop);
+    		interpreterProxy.popthenPush(argCount + 1, dstOop);
     	}
     }
 
-    function primitiveIsIdentity() {
+    function primitiveIsIdentity(argCount) {
     	var matrix;
 
     	matrix = loadArgumentMatrix(interpreterProxy.stackObjectValue(0));
@@ -35835,7 +35851,7 @@
     	interpreterProxy.pushBool((((((matrix[0] === 1.0) && (matrix[1] === 0.0)) && (matrix[2] === 0.0)) && (matrix[3] === 0.0)) && (matrix[4] === 1.0)) && (matrix[5] === 0.0));
     }
 
-    function primitiveIsPureTranslation() {
+    function primitiveIsPureTranslation(argCount) {
     	var matrix;
 
     	matrix = loadArgumentMatrix(interpreterProxy.stackObjectValue(0));
@@ -35846,7 +35862,7 @@
     	interpreterProxy.pushBool((((matrix[0] === 1.0) && (matrix[1] === 0.0)) && (matrix[3] === 0.0)) && (matrix[4] === 1.0));
     }
 
-    function primitiveTransformPoint() {
+    function primitiveTransformPoint(argCount) {
     	var matrix;
 
     	loadArgumentPoint(interpreterProxy.stackObjectValue(0));
@@ -35855,10 +35871,10 @@
     		return null;
     	}
     	matrix2x3TransformPoint(matrix);
-    	roundAndStoreResultPoint(2);
+    	roundAndStoreResultPoint(argCount);
     }
 
-    function primitiveTransformRectInto() {
+    function primitiveTransformRectInto(argCount) {
     	var cornerX;
     	var cornerY;
     	var dstOop;
@@ -35931,7 +35947,7 @@
     	maxY = Math.max(maxY, m23ResultY);
     	dstOop = roundAndStoreResultRectx0y0x1y1(dstOop, minX, minY, maxX, maxY);
     	if (!interpreterProxy.failed()) {
-    		interpreterProxy.popthenPush(3, dstOop);
+    		interpreterProxy.popthenPush(argCount + 1, dstOop);
     	}
     }
 
@@ -35939,7 +35955,7 @@
     /*	Store the result of a previous operation.
     	Fail if we cannot represent the result as SmallInteger */
 
-    function roundAndStoreResultPoint(nItemsToPop) {
+    function roundAndStoreResultPoint(argCount) {
     	m23ResultX += 0.5;
     	m23ResultY += 0.5;
     	if (!okayIntValue(m23ResultX)) {
@@ -35948,7 +35964,7 @@
     	if (!okayIntValue(m23ResultY)) {
     		return interpreterProxy.primitiveFail();
     	}
-    	interpreterProxy.popthenPush(nItemsToPop, interpreterProxy.makePointwithxValueyValue((m23ResultX|0), (m23ResultY|0)));
+    	interpreterProxy.popthenPush(argCount + 1, interpreterProxy.makePointwithxValueyValue((m23ResultX|0), (m23ResultY|0)));
     }
 
 
@@ -36092,7 +36108,7 @@
 
     /*	Return 1, 2 or 3, if string1 is <, =, or > string2, with the collating order of characters given by the order array. */
 
-    function primitiveCompareString() {
+    function primitiveCompareString(argCount) {
     	var rcvr;
     	var string1;
     	var string2;
@@ -36120,13 +36136,13 @@
     				if (interpreterProxy.failed()) {
     					return null;
     				}
-    				interpreterProxy.popthenPush(4, 1);
+    				interpreterProxy.popthenPush(argCount + 1, 1);
     				return null;
     			} else {
     				if (interpreterProxy.failed()) {
     					return null;
     				}
-    				interpreterProxy.popthenPush(4, 3);
+    				interpreterProxy.popthenPush(argCount + 1, 3);
     				return null;
     			}
     		}
@@ -36135,20 +36151,20 @@
     		if (interpreterProxy.failed()) {
     			return null;
     		}
-    		interpreterProxy.popthenPush(4, 2);
+    		interpreterProxy.popthenPush(argCount + 1, 2);
     		return null;
     	}
     	if (len1 < len2) {
     		if (interpreterProxy.failed()) {
     			return null;
     		}
-    		interpreterProxy.popthenPush(4, 1);
+    		interpreterProxy.popthenPush(argCount + 1, 1);
     		return null;
     	} else {
     		if (interpreterProxy.failed()) {
     			return null;
     		}
-    		interpreterProxy.popthenPush(4, 3);
+    		interpreterProxy.popthenPush(argCount + 1, 3);
     		return null;
     	}
     }
@@ -36170,7 +36186,7 @@
     			224-254	(0-30)*256 + next byte (0-7935)
     			255		next 4 bytes */
 
-    function primitiveCompressToByteArray() {
+    function primitiveCompressToByteArray(argCount) {
     	var rcvr;
     	var bm;
     	var ba;
@@ -36249,14 +36265,14 @@
     	if (interpreterProxy.failed()) {
     		return null;
     	}
-    	interpreterProxy.popthenPush(3, i - 1);
+    	interpreterProxy.popthenPush(argCount + 1, i - 1);
     	return null;
     }
 
 
     /*	Copy the contents of the given array of signed 8-bit samples into the given array of 16-bit signed samples. */
 
-    function primitiveConvert8BitSigned() {
+    function primitiveConvert8BitSigned(argCount) {
     	var rcvr;
     	var aByteArray;
     	var aSoundBuffer;
@@ -36282,7 +36298,7 @@
     	if (interpreterProxy.failed()) {
     		return null;
     	}
-    	interpreterProxy.pop(2);
+    	interpreterProxy.pop(argCount);
     }
 
 
@@ -36301,7 +36317,7 @@
     			255		next 4 bytes */
     /*	NOTE:  If fed with garbage, this routine could read past the end of ba, but it should fail before writing past the ned of bm. */
 
-    function primitiveDecompressFromByteArray() {
+    function primitiveDecompressFromByteArray(argCount) {
     	var rcvr;
     	var bm;
     	var ba;
@@ -36403,10 +36419,10 @@
     	if (interpreterProxy.failed()) {
     		return null;
     	}
-    	interpreterProxy.pop(3);
+    	interpreterProxy.pop(argCount);
     }
 
-    function primitiveFindFirstInString() {
+    function primitiveFindFirstInString(argCount) {
     	var rcvr;
     	var aString;
     	var inclusionMap;
@@ -36425,7 +36441,7 @@
     		if (interpreterProxy.failed()) {
     			return null;
     		}
-    		interpreterProxy.popthenPush(4, 0);
+    		interpreterProxy.popthenPush(argCount + 1, 0);
     		return null;
     	}
     	i = start;
@@ -36437,13 +36453,13 @@
     		if (interpreterProxy.failed()) {
     			return null;
     		}
-    		interpreterProxy.popthenPush(4, 0);
+    		interpreterProxy.popthenPush(argCount + 1, 0);
     		return null;
     	}
     	if (interpreterProxy.failed()) {
     		return null;
     	}
-    	interpreterProxy.popthenPush(4, i);
+    	interpreterProxy.popthenPush(argCount + 1, i);
     	return null;
     }
 
@@ -36452,7 +36468,7 @@
 
     	The algorithm below is not optimum -- it is intended to be translated to C which will go so fast that it wont matter. */
 
-    function primitiveFindSubstring() {
+    function primitiveFindSubstring(argCount) {
     	var rcvr;
     	var key;
     	var body;
@@ -36473,7 +36489,7 @@
     		if (interpreterProxy.failed()) {
     			return null;
     		}
-    		interpreterProxy.popthenPush(5, 0);
+    		interpreterProxy.popthenPush(argCount + 1, 0);
     		return null;
     	}
     	for (startIndex = start; startIndex <= ((body.length - key.length) + 1); startIndex++) {
@@ -36483,7 +36499,7 @@
     				if (interpreterProxy.failed()) {
     					return null;
     				}
-    				interpreterProxy.popthenPush(5, startIndex);
+    				interpreterProxy.popthenPush(argCount + 1, startIndex);
     				return null;
     			}
     			++index;
@@ -36492,11 +36508,11 @@
     	if (interpreterProxy.failed()) {
     		return null;
     	}
-    	interpreterProxy.popthenPush(5, 0);
+    	interpreterProxy.popthenPush(argCount + 1, 0);
     	return null;
     }
 
-    function primitiveIndexOfAsciiInString() {
+    function primitiveIndexOfAsciiInString(argCount) {
     	var rcvr;
     	var anInteger;
     	var aString;
@@ -36517,14 +36533,14 @@
     			if (interpreterProxy.failed()) {
     				return null;
     			}
-    			interpreterProxy.popthenPush(4, pos);
+    			interpreterProxy.popthenPush(argCount + 1, pos);
     			return null;
     		}
     	}
     	if (interpreterProxy.failed()) {
     		return null;
     	}
-    	interpreterProxy.popthenPush(4, 0);
+    	interpreterProxy.popthenPush(argCount + 1, 0);
     	return null;
     }
 
@@ -36536,7 +36552,7 @@
     	The primitive should be renamed at a
     	suitable point in the future */
 
-    function primitiveStringHash() {
+    function primitiveStringHash(argCount) {
     	var rcvr;
     	var aByteArray;
     	var speciesHash;
@@ -36564,14 +36580,14 @@
     	if (interpreterProxy.failed()) {
     		return null;
     	}
-    	interpreterProxy.popthenPush(3, hash);
+    	interpreterProxy.popthenPush(argCount + 1, hash);
     	return null;
     }
 
 
     /*	translate the characters in the string by the given table, in place */
 
-    function primitiveTranslateStringWithTable() {
+    function primitiveTranslateStringWithTable(argCount) {
     	var rcvr;
     	var aString;
     	var start;
@@ -36593,7 +36609,7 @@
     	if (interpreterProxy.failed()) {
     		return null;
     	}
-    	interpreterProxy.pop(4);
+    	interpreterProxy.pop(argCount);
     }
 
 
@@ -38939,6 +38955,7 @@
         primitiveRegisterSemaphore: function(argCount) {
           if (argCount !== 1) return false;
           this.semaphoreIndex = this.interpreterProxy.stackIntegerValue(0);
+          this.interpreterProxy.pop(argCount);
           return true;
         },
 
@@ -39061,19 +39078,19 @@
           var name = '{SqueakJS SSL #' + (++this.handleCounter) + '}';
           var sqHandle = this.primHandler.makeStString(name);
           sqHandle.handle = true;
-          this.interpreterProxy.popthenPush(argCount, sqHandle);
+          this.interpreterProxy.popthenPush(argCount + 1, sqHandle);
           return true;
         },
 
         primitiveConnect: function(argCount) {
           if (argCount !== 5) return false;
-          this.interpreterProxy.popthenPush(argCount, 0);
+          this.interpreterProxy.popthenPush(argCount + 1, 0);
           return true;
         },
 
         primitiveDestroy: function(argCount) {
           if (argCount !== 1) return false;
-          this.interpreterProxy.popthenPush(1, 1); // Non-zero if successful
+          this.interpreterProxy.popthenPush(argCount + 1, 1); // Non-zero if successful
           return true;
         },
 
@@ -39089,7 +39106,7 @@
           } else {
             res = 0;
           }
-          this.interpreterProxy.popthenPush(argCount, res);
+          this.interpreterProxy.popthenPush(argCount + 1, res);
           return true;
         },
 
@@ -39105,7 +39122,7 @@
           } else {
             res = this.interpreterProxy.nilObject();
           }
-          this.interpreterProxy.popthenPush(argCount, res);
+          this.interpreterProxy.popthenPush(argCount + 1, res);
           return true;
         },
 
@@ -39118,7 +39135,7 @@
           var length = this.interpreterProxy.stackIntegerValue(1);
           var dstBuf = this.interpreterProxy.stackObjectValue(0);
           dstBuf.bytes = srcBuf.bytes; // Just copy all there is
-          this.interpreterProxy.popthenPush(argCount, length);
+          this.interpreterProxy.popthenPush(argCount + 1, length);
           return true;
         },
 
@@ -39131,7 +39148,7 @@
           var length = this.interpreterProxy.stackIntegerValue(1);
           var dstBuf = this.interpreterProxy.stackObjectValue(0);
           dstBuf.bytes = srcBuf.bytes; // Just copy all there is
-          this.interpreterProxy.popthenPush(argCount, length);
+          this.interpreterProxy.popthenPush(argCount + 1, length);
           return true;
         }
       };

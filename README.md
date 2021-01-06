@@ -106,6 +106,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2020-01-05: 1.0.1 fixes some primitives to properly pop the stack
     2020-12-20: 1.0 supports 64 bits and Sista
     2020-06-20: renamed "master" branch to "main"
     2020-06-20: 0.9.9 JSBridge additions (Bill Burdick), fixes

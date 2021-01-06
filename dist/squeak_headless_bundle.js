@@ -110,8 +110,8 @@ if (!Function.prototype.subclass) {
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 1.0",
-    vmDate: "2020-12-20",               // Maybe replace at build time?
+    vmVersion: "SqueakJS 1.0.1",
+    vmDate: "2021-01-05",               // Maybe replace at build time?
     vmBuild: "unknown",                 // or replace at runtime by last-modified?
     vmPath: "unknown",                  // Replace at runtime
     vmFile: "vm.js",
@@ -622,7 +622,7 @@ Object.subclass('Squeak.Object',
             case 'LargeNegativeInteger': return this.bytesAsNumberString(true);
             case 'Character': var unicode = this.pointers ? this.pointers[0] : this.hash; // Spur
                 return "$" + String.fromCharCode(unicode) + " (" + unicode.toString() + ")";
-            case 'CompiledMethod': return this.methodClass().className() + ">>" + this.methodSelector();
+            case 'CompiledMethod': return this.methodAsString();
             case 'CompiledBlock': return "[] in " + this.blockOuterCode().sqInstName();
         }
         return  /^[aeiou]/i.test(className) ? 'an' + className : 'a' + className;
@@ -878,6 +878,9 @@ Object.subclass('Squeak.Object',
     },
     methodGetSelector: function(zeroBasedIndex) {
         return this.pointers[1+zeroBasedIndex]; // step over header
+    },
+    methodAsString: function() {
+      return 'aCompiledMethod';
     },
 },
 'as context', {
@@ -1363,16 +1366,11 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         if ((this.pointers[0] & 0x10000) === 0) return 0;
         return this.bytes[1] + 256 * this.bytes[2];
     },
-    methodClass: function() {
-        return this.pointers[this.pointers.length - 1].pointers[Squeak.ClassBinding_value];
-    },
-    methodSelector: function() {
-        var penultimateLiteral = this.pointers[this.pointers.length - 2];
-        if (penultimateLiteral.isBytes()) {
-            return penultimateLiteral;
-        } else {
-            return penultimateLiteral.pointers[Squeak.AdditionalMethodState_selector];
-        }
+    methodAsString: function() {
+        var cls = this.pointers[this.pointers.length - 1].pointers[Squeak.ClassBinding_value];
+        var selector = this.pointers[this.pointers.length - 2];
+        if (selector.pointers) selector = selector.pointers[Squeak.AdditionalMethodState_selector];
+        return cls.className() + ">>" + selector.bytesAsString();
     },
 });
 
@@ -2735,20 +2733,25 @@ Object.subclass('Squeak.Interpreter',
             // Squeak 5.3 disable wizard by replacing #open send with pop
             {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: location.hash.includes("wizard=false")},
         ].forEach(function(each) {
-            var m = each.enabled && this.findMethod(each.method);
-            if (m) {
-                var prim = each.primitive,
-                    byte = each.bytecode,
-                    lit = each.literal,
-                    hacked = true;
-                if (prim) m.pointers[0] |= prim;
-                else if (byte && m.bytes[byte.pc] === byte.old) m.bytes[byte.pc] = byte.hack;
-                else if (byte && m.bytes[byte.pc] === byte.hack) hacked = false; // already there
-                else if (lit && m.pointers[lit.index].pointers[1] === lit.old) m.pointers[lit.index].pointers[1] = lit.hack;
-                else if (lit && m.pointers[lit.index].pointers[1] === lit.hack) hacked = false; // already there
-                else { hacked = false; console.error("Failed to hack " + each.method); }
-                if (hacked) console.warn("Hacking " + each.method);
+            try {
+                var m = each.enabled && this.findMethod(each.method);
+                if (m) {
+                    var prim = each.primitive,
+                        byte = each.bytecode,
+                        lit = each.literal,
+                        hacked = true;
+                    if (prim) m.pointers[0] |= prim;
+                    else if (byte && m.bytes[byte.pc] === byte.old) m.bytes[byte.pc] = byte.hack;
+                    else if (byte && m.bytes[byte.pc] === byte.hack) hacked = false; // already there
+                    else if (lit && m.pointers[lit.index].pointers[1] === lit.old) m.pointers[lit.index].pointers[1] = lit.hack;
+                    else if (lit && m.pointers[lit.index].pointers[1] === lit.hack) hacked = false; // already there
+                    else { hacked = false; console.error("Failed to hack " + each.method); }
+                    if (hacked) console.warn("Hacking " + each.method);
+                }
+            } catch (error) {
+                console.error("Failed to hack " + each.method + " with error " + error);
             }
+
         }, this);
     },
 },
@@ -3673,7 +3676,16 @@ Object.subclass('Squeak.Interpreter',
             this.popNandPush(1, primIndex - 261); //return -1...2
             return true;
         }
+        var sp = this.sp;
+        var context = this.activeContext;
         var success = this.primHandler.doPrimitive(primIndex, argCount, newMethod);
+        if (success 
+            && this.sp !== sp - argCount
+            && context === this.activeContext
+            && primIndex !== 117    // named prims are checked separately 
+            && !this.frozen) {
+                this.warnOnce("stack unbalanced after primitive " + primIndex, "error");
+            }
         return success;
     },
     createActualMessage: function(selector, argCount, cls) {
@@ -4050,9 +4062,9 @@ Object.subclass('Squeak.Interpreter',
     addMessage: function(message) {
         return this.messages[message] ? ++this.messages[message] : this.messages[message] = 1;
     },
-    warnOnce: function(message) {
+    warnOnce: function(message, what) {
         if (this.addMessage(message) == 1)
-            console.warn(message);
+            console[what || "warn"](message);
     },
     printMethod: function(aMethod, optContext, optSel) {
         // return a 'class>>selector' description for the method
@@ -5356,7 +5368,7 @@ Object.subclass('Squeak.Primitives',
             case 130: return this.primitiveFullGC(argCount);
             case 131: return this.primitivePartialGC(argCount);
             case 132: return this.pop2andPushBoolIfOK(this.pointsTo(this.stackNonInteger(1), this.vm.top())); //Object.pointsTo
-            case 133: return true; //TODO primitiveSetInterruptKey
+            case 133: return this.popNIfOK(argCount); //TODO primitiveSetInterruptKey
             case 134: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheInterruptSemaphore));
             case 135: return this.popNandPushIfOK(1, this.millisecondClockValue());
             case 136: return this.primitiveSignalAtMilliseconds(argCount); //Delay signal:atMs:();
@@ -5561,6 +5573,7 @@ Object.subclass('Squeak.Primitives',
             this.loadedModules[modName] = mod;
         }
         var result = false;
+        var sp = this.vm.sp;
         if (mod) {
             this.interpreterProxy.argCount = argCount;
             var primitive = mod[functionName];
@@ -5574,6 +5587,9 @@ Object.subclass('Squeak.Primitives',
             }
         } else {
             this.vm.warnOnce("missing module: " + modName + " (" + functionName + ")");
+        }
+        if ((result === true || (result !== false && this.success)) && this.vm.sp !== sp - argCount && !this.vm.frozen) {
+            this.vm.warnOnce("stack unbalanced after primitive " + modName + "." + functionName, "error");
         }
         if (result === true || result === false) return result;
         return this.success;

@@ -41,19 +41,19 @@ function SqueakSSL() {
       var name = '{SqueakJS SSL #' + (++this.handleCounter) + '}';
       var sqHandle = this.primHandler.makeStString(name);
       sqHandle.handle = true;
-      this.interpreterProxy.popthenPush(argCount, sqHandle);
+      this.interpreterProxy.popthenPush(argCount + 1, sqHandle);
       return true;
     },
 
     primitiveConnect: function(argCount) {
       if (argCount !== 5) return false;
-      this.interpreterProxy.popthenPush(argCount, 0);
+      this.interpreterProxy.popthenPush(argCount + 1, 0);
       return true;
     },
 
     primitiveDestroy: function(argCount) {
       if (argCount !== 1) return false;
-      this.interpreterProxy.popthenPush(1, 1); // Non-zero if successful
+      this.interpreterProxy.popthenPush(argCount + 1, 1); // Non-zero if successful
       return true;
     },
 
@@ -69,7 +69,7 @@ function SqueakSSL() {
       } else {
         res = 0;
       }
-      this.interpreterProxy.popthenPush(argCount, res);
+      this.interpreterProxy.popthenPush(argCount + 1, res);
       return true;
     },
 
@@ -85,7 +85,7 @@ function SqueakSSL() {
       } else {
         res = this.interpreterProxy.nilObject();
       }
-      this.interpreterProxy.popthenPush(argCount, res);
+      this.interpreterProxy.popthenPush(argCount + 1, res);
       return true;
     },
 
@@ -98,7 +98,7 @@ function SqueakSSL() {
       var length = this.interpreterProxy.stackIntegerValue(1);
       var dstBuf = this.interpreterProxy.stackObjectValue(0);
       dstBuf.bytes = srcBuf.bytes; // Just copy all there is
-      this.interpreterProxy.popthenPush(argCount, length);
+      this.interpreterProxy.popthenPush(argCount + 1, length);
       return true;
     },
 
@@ -111,7 +111,7 @@ function SqueakSSL() {
       var length = this.interpreterProxy.stackIntegerValue(1);
       var dstBuf = this.interpreterProxy.stackObjectValue(0);
       dstBuf.bytes = srcBuf.bytes; // Just copy all there is
-      this.interpreterProxy.popthenPush(argCount, length);
+      this.interpreterProxy.popthenPush(argCount + 1, length);
       return true;
     }
   };

@@ -49,6 +49,7 @@ function SpeechPlugin() {
     primitiveRegisterSemaphore: function(argCount) {
       if (argCount !== 1) return false;
       this.semaphoreIndex = this.interpreterProxy.stackIntegerValue(0);
+      this.interpreterProxy.pop(argCount);
       return true;
     },
 

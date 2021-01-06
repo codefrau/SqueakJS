@@ -69,7 +69,7 @@ Object.extend(Squeak.Primitives.prototype,
             this.signalSemaphoreWithIndex(this.inputEventSemaIndex);
         }.bind(this);
         this.display.signalInputEvent();
-        return true;
+        return this.popNIfOK(argCount);
     },
     primitiveInputWord: function(argCount) {
         // Return an integer indicating the reason for the most recent input interrupt
@@ -80,6 +80,6 @@ Object.extend(Squeak.Primitives.prototype,
         var evtBuf = this.stackNonInteger(0);
         if (!this.display.getNextEvent) return false;
         this.display.getNextEvent(evtBuf.pointers, this.vm.startupTime);
-        return true;
+        return this.popNIfOK(argCount);
     },
 });

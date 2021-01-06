@@ -19,7 +19,7 @@ function CroquetPlugin() {
         return this.interpreterProxy.primitiveFail();
       }
       window.crypto.getRandomValues(rcvr.bytes);
-      this.interpreterProxy.popthenPush(argCount, this.interpreterProxy.trueObject());
+      this.interpreterProxy.popthenPush(argCount + 1, this.interpreterProxy.trueObject());
       return true;
     },
   };

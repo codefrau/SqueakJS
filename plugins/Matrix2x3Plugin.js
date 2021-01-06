@@ -153,7 +153,7 @@ function okayIntValue(value) {
 	return (value >= -1073741824) && (m23ResultX <= 1073741823);
 }
 
-function primitiveComposeMatrix() {
+function primitiveComposeMatrix(argCount) {
 	var m1;
 	var m2;
 	var m3;
@@ -167,10 +167,10 @@ function primitiveComposeMatrix() {
 		return null;
 	}
 	matrix2x3ComposeMatrixwithinto(m1, m2, m3);
-	interpreterProxy.popthenPush(3, result);
+	interpreterProxy.popthenPush(argCount + 1, result);
 }
 
-function primitiveInvertPoint() {
+function primitiveInvertPoint(argCount) {
 	var matrix;
 
 	loadArgumentPoint(interpreterProxy.stackObjectValue(0));
@@ -180,11 +180,11 @@ function primitiveInvertPoint() {
 	}
 	matrix2x3InvertPoint(matrix);
 	if (!interpreterProxy.failed()) {
-		roundAndStoreResultPoint(2);
+		roundAndStoreResultPoint(argCount);
 	}
 }
 
-function primitiveInvertRectInto() {
+function primitiveInvertRectInto(argCount) {
 	var cornerX;
 	var cornerY;
 	var dstOop;
@@ -259,11 +259,11 @@ function primitiveInvertRectInto() {
 		dstOop = roundAndStoreResultRectx0y0x1y1(dstOop, minX, minY, maxX, maxY);
 	}
 	if (!interpreterProxy.failed()) {
-		interpreterProxy.popthenPush(3, dstOop);
+		interpreterProxy.popthenPush(argCount + 1, dstOop);
 	}
 }
 
-function primitiveIsIdentity() {
+function primitiveIsIdentity(argCount) {
 	var matrix;
 
 	matrix = loadArgumentMatrix(interpreterProxy.stackObjectValue(0));
@@ -274,7 +274,7 @@ function primitiveIsIdentity() {
 	interpreterProxy.pushBool((((((matrix[0] === 1.0) && (matrix[1] === 0.0)) && (matrix[2] === 0.0)) && (matrix[3] === 0.0)) && (matrix[4] === 1.0)) && (matrix[5] === 0.0));
 }
 
-function primitiveIsPureTranslation() {
+function primitiveIsPureTranslation(argCount) {
 	var matrix;
 
 	matrix = loadArgumentMatrix(interpreterProxy.stackObjectValue(0));
@@ -285,7 +285,7 @@ function primitiveIsPureTranslation() {
 	interpreterProxy.pushBool((((matrix[0] === 1.0) && (matrix[1] === 0.0)) && (matrix[3] === 0.0)) && (matrix[4] === 1.0));
 }
 
-function primitiveTransformPoint() {
+function primitiveTransformPoint(argCount) {
 	var matrix;
 
 	loadArgumentPoint(interpreterProxy.stackObjectValue(0));
@@ -294,10 +294,10 @@ function primitiveTransformPoint() {
 		return null;
 	}
 	matrix2x3TransformPoint(matrix);
-	roundAndStoreResultPoint(2);
+	roundAndStoreResultPoint(argCount);
 }
 
-function primitiveTransformRectInto() {
+function primitiveTransformRectInto(argCount) {
 	var cornerX;
 	var cornerY;
 	var dstOop;
@@ -370,7 +370,7 @@ function primitiveTransformRectInto() {
 	maxY = Math.max(maxY, m23ResultY);
 	dstOop = roundAndStoreResultRectx0y0x1y1(dstOop, minX, minY, maxX, maxY);
 	if (!interpreterProxy.failed()) {
-		interpreterProxy.popthenPush(3, dstOop);
+		interpreterProxy.popthenPush(argCount + 1, dstOop);
 	}
 }
 
@@ -378,7 +378,7 @@ function primitiveTransformRectInto() {
 /*	Store the result of a previous operation.
 	Fail if we cannot represent the result as SmallInteger */
 
-function roundAndStoreResultPoint(nItemsToPop) {
+function roundAndStoreResultPoint(argCount) {
 	m23ResultX += 0.5;
 	m23ResultY += 0.5;
 	if (!okayIntValue(m23ResultX)) {
@@ -387,7 +387,7 @@ function roundAndStoreResultPoint(nItemsToPop) {
 	if (!okayIntValue(m23ResultY)) {
 		return interpreterProxy.primitiveFail();
 	}
-	interpreterProxy.popthenPush(nItemsToPop, interpreterProxy.makePointwithxValueyValue((m23ResultX|0), (m23ResultY|0)));
+	interpreterProxy.popthenPush(argCount + 1, interpreterProxy.makePointwithxValueyValue((m23ResultX|0), (m23ResultY|0)));
 }
 
 

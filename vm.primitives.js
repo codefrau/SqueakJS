@@ -222,7 +222,7 @@ Object.subclass('Squeak.Primitives',
             case 130: return this.primitiveFullGC(argCount);
             case 131: return this.primitivePartialGC(argCount);
             case 132: return this.pop2andPushBoolIfOK(this.pointsTo(this.stackNonInteger(1), this.vm.top())); //Object.pointsTo
-            case 133: return true; //TODO primitiveSetInterruptKey
+            case 133: return this.popNIfOK(argCount); //TODO primitiveSetInterruptKey
             case 134: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheInterruptSemaphore));
             case 135: return this.popNandPushIfOK(1, this.millisecondClockValue());
             case 136: return this.primitiveSignalAtMilliseconds(argCount); //Delay signal:atMs:();

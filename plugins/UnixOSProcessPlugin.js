@@ -17,7 +17,7 @@ function UnixOSProcessPlugin() {
     },
 
     primitiveGetCurrentWorkingDirectory: function(argCount) {
-      this.interpreterProxy.popthenPush(argCount, this.primHandler.makeStString(require("process").cwd()));
+      this.interpreterProxy.popthenPush(argCount + 1, this.primHandler.makeStString(require("process").cwd()));
       return true;
     },
   };

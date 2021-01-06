@@ -87,7 +87,7 @@ function msg(s) {
 
 /*	Return 1, 2 or 3, if string1 is <, =, or > string2, with the collating order of characters given by the order array. */
 
-function primitiveCompareString() {
+function primitiveCompareString(argCount) {
 	var rcvr;
 	var string1;
 	var string2;
@@ -115,13 +115,13 @@ function primitiveCompareString() {
 				if (interpreterProxy.failed()) {
 					return null;
 				}
-				interpreterProxy.popthenPush(4, 1);
+				interpreterProxy.popthenPush(argCount + 1, 1);
 				return null;
 			} else {
 				if (interpreterProxy.failed()) {
 					return null;
 				}
-				interpreterProxy.popthenPush(4, 3);
+				interpreterProxy.popthenPush(argCount + 1, 3);
 				return null;
 			}
 		}
@@ -130,26 +130,26 @@ function primitiveCompareString() {
 		if (interpreterProxy.failed()) {
 			return null;
 		}
-		interpreterProxy.popthenPush(4, 2);
+		interpreterProxy.popthenPush(argCount + 1, 2);
 		return null;
 	}
 	if (len1 < len2) {
 		if (interpreterProxy.failed()) {
 			return null;
 		}
-		interpreterProxy.popthenPush(4, 1);
+		interpreterProxy.popthenPush(argCount + 1, 1);
 		return null;
 	} else {
 		if (interpreterProxy.failed()) {
 			return null;
 		}
-		interpreterProxy.popthenPush(4, 3);
+		interpreterProxy.popthenPush(argCount + 1, 3);
 		return null;
 	}
 	if (interpreterProxy.failed()) {
 		return null;
 	}
-	interpreterProxy.pop(3);
+	interpreterProxy.pop(argCount);
 }
 
 
@@ -169,7 +169,7 @@ function primitiveCompareString() {
 			224-254	(0-30)*256 + next byte (0-7935)
 			255		next 4 bytes */
 
-function primitiveCompressToByteArray() {
+function primitiveCompressToByteArray(argCount) {
 	var rcvr;
 	var bm;
 	var ba;
@@ -248,14 +248,14 @@ function primitiveCompressToByteArray() {
 	if (interpreterProxy.failed()) {
 		return null;
 	}
-	interpreterProxy.popthenPush(3, i - 1);
+	interpreterProxy.popthenPush(argCount + 1, i - 1);
 	return null;
 }
 
 
 /*	Copy the contents of the given array of signed 8-bit samples into the given array of 16-bit signed samples. */
 
-function primitiveConvert8BitSigned() {
+function primitiveConvert8BitSigned(argCount) {
 	var rcvr;
 	var aByteArray;
 	var aSoundBuffer;
@@ -281,7 +281,7 @@ function primitiveConvert8BitSigned() {
 	if (interpreterProxy.failed()) {
 		return null;
 	}
-	interpreterProxy.pop(2);
+	interpreterProxy.pop(argCount);
 }
 
 
@@ -300,7 +300,7 @@ function primitiveConvert8BitSigned() {
 			255		next 4 bytes */
 /*	NOTE:  If fed with garbage, this routine could read past the end of ba, but it should fail before writing past the ned of bm. */
 
-function primitiveDecompressFromByteArray() {
+function primitiveDecompressFromByteArray(argCount) {
 	var rcvr;
 	var bm;
 	var ba;
@@ -408,10 +408,10 @@ function primitiveDecompressFromByteArray() {
 	if (interpreterProxy.failed()) {
 		return null;
 	}
-	interpreterProxy.pop(3);
+	interpreterProxy.pop(argCount);
 }
 
-function primitiveFindFirstInString() {
+function primitiveFindFirstInString(argCount) {
 	var rcvr;
 	var aString;
 	var inclusionMap;
@@ -430,7 +430,7 @@ function primitiveFindFirstInString() {
 		if (interpreterProxy.failed()) {
 			return null;
 		}
-		interpreterProxy.popthenPush(4, 0);
+		interpreterProxy.popthenPush(argCount + 1, 0);
 		return null;
 	}
 	i = start;
@@ -442,13 +442,13 @@ function primitiveFindFirstInString() {
 		if (interpreterProxy.failed()) {
 			return null;
 		}
-		interpreterProxy.popthenPush(4, 0);
+		interpreterProxy.popthenPush(argCount + 1, 0);
 		return null;
 	}
 	if (interpreterProxy.failed()) {
 		return null;
 	}
-	interpreterProxy.popthenPush(4, i);
+	interpreterProxy.popthenPush(argCount + 1, i);
 	return null;
 }
 
@@ -457,7 +457,7 @@ function primitiveFindFirstInString() {
 
 	The algorithm below is not optimum -- it is intended to be translated to C which will go so fast that it wont matter. */
 
-function primitiveFindSubstring() {
+function primitiveFindSubstring(argCount) {
 	var rcvr;
 	var key;
 	var body;
@@ -478,7 +478,7 @@ function primitiveFindSubstring() {
 		if (interpreterProxy.failed()) {
 			return null;
 		}
-		interpreterProxy.popthenPush(5, 0);
+		interpreterProxy.popthenPush(argCount + 1, 0);
 		return null;
 	}
 	for (startIndex = start; startIndex <= ((body.length - key.length) + 1); startIndex++) {
@@ -488,7 +488,7 @@ function primitiveFindSubstring() {
 				if (interpreterProxy.failed()) {
 					return null;
 				}
-				interpreterProxy.popthenPush(5, startIndex);
+				interpreterProxy.popthenPush(argCount + 1, startIndex);
 				return null;
 			}
 			++index;
@@ -497,11 +497,11 @@ function primitiveFindSubstring() {
 	if (interpreterProxy.failed()) {
 		return null;
 	}
-	interpreterProxy.popthenPush(5, 0);
+	interpreterProxy.popthenPush(argCount + 1, 0);
 	return null;
 }
 
-function primitiveIndexOfAsciiInString() {
+function primitiveIndexOfAsciiInString(argCount) {
 	var rcvr;
 	var anInteger;
 	var aString;
@@ -522,14 +522,14 @@ function primitiveIndexOfAsciiInString() {
 			if (interpreterProxy.failed()) {
 				return null;
 			}
-			interpreterProxy.popthenPush(4, pos);
+			interpreterProxy.popthenPush(argCount + 1, pos);
 			return null;
 		}
 	}
 	if (interpreterProxy.failed()) {
 		return null;
 	}
-	interpreterProxy.popthenPush(4, 0);
+	interpreterProxy.popthenPush(argCount + 1, 0);
 	return null;
 }
 
@@ -541,7 +541,7 @@ function primitiveIndexOfAsciiInString() {
 	The primitive should be renamed at a
 	suitable point in the future */
 
-function primitiveStringHash() {
+function primitiveStringHash(argCount) {
 	var rcvr;
 	var aByteArray;
 	var speciesHash;
@@ -569,14 +569,14 @@ function primitiveStringHash() {
 	if (interpreterProxy.failed()) {
 		return null;
 	}
-	interpreterProxy.popthenPush(3, hash);
+	interpreterProxy.popthenPush(argCount + 1, hash);
 	return null;
 }
 
 
 /*	translate the characters in the string by the given table, in place */
 
-function primitiveTranslateStringWithTable() {
+function primitiveTranslateStringWithTable(argCount) {
 	var rcvr;
 	var aString;
 	var start;
@@ -598,7 +598,7 @@ function primitiveTranslateStringWithTable() {
 	if (interpreterProxy.failed()) {
 		return null;
 	}
-	interpreterProxy.pop(4);
+	interpreterProxy.pop(argCount);
 }
 
 

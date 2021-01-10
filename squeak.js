@@ -1023,7 +1023,7 @@
                     throw Error("16 bit arrays not supported yet");
                 case 20: // 8 bit array, length-4 (64 bit image)
                 case 21: // ... length-5
-                case 22: // ... length-6 
+                case 22: // ... length-6
                 case 23: // ... length-7
                     nWords--;
                     this._format -= 4;
@@ -1067,7 +1067,7 @@
             // we assume littleEndian for now
             var words = new Array(nWords);
             for (var i = 0; i < nWords; i++) {
-                var lo = theBits[i*2], 
+                var lo = theBits[i*2],
                     hi = theBits[i*2+1];
                 words[i] = Squeak.word64FromUint32(hi, lo);
             }
@@ -1081,7 +1081,7 @@
                 // in 64 bits, oops > 53 bits are read as [hi, lo]
                 if (typeof oop !== "number") {
                     if ((oop[1] & 7) === 4) {
-                        ptrs[i] = this.decodeSmallFloat(oop[0], oop[1], is64Bit); 
+                        ptrs[i] = this.decodeSmallFloat(oop[0], oop[1], is64Bit);
                     } else if ((oop[1] & 7) === 1) {
                         ptrs[i] = is64Bit.makeLargeFromSmall(oop[0], oop[1]);
                     } else if ((oop[1] & 7) === 2) {
@@ -1107,7 +1107,7 @@
                     // garbage beyond its stack pointer, resulting in the oop
                     // not being found in oopMap. We just fill in an arbitrary
                     // SmallInteger - it's never accessed anyway
-                    
+
                     // until 64 bit is working correctly, leave this here as a check ...
                     if (ptrs[i] === 42424242) debugger;
                 }
@@ -1115,7 +1115,7 @@
             return ptrs;
         },
         decodeSmallFloat: function(hi, lo, is64Bit) {
-            // SmallFloats are stored with full 52 bit mantissa, but shortened exponent. 
+            // SmallFloats are stored with full 52 bit mantissa, but shortened exponent.
             // The lowest 3 bits are tags, the next is the sign bit
             var newHi = 0,
                 newLo = 0,
@@ -1161,8 +1161,8 @@
                 words64 = words32 / 2;
             }
             // we need an extra header in 32 bits if we now use more words than before
-            return { 
-                bytes: overhead * 4, 
+            return {
+                bytes: overhead * 4,
                 sizeHeader: words32 >= 255 && words64 < 255,
             }
         },
@@ -1613,7 +1613,7 @@
                             rawBits[oop] = bits;
                             oopAdjust[oop] = skippedBytes;
                             // account for size difference of 32 vs 64 bit oops
-                            if (is64Bit) { 
+                            if (is64Bit) {
                                 var overhead = object.overhead64(bits);
                                 skippedBytes += overhead.bytes;
                                 // OTOH, in 32 bits we need the extra size header sooner
@@ -2760,9 +2760,6 @@
     },
     'interpreting', {
         interpretOne: function(singleStep) {
-            if (this.method.methodSignFlag()) {
-                return this.interpretOneSista(singleStep);
-            }
             if (this.method.compiled) {
                 if (singleStep) {
                     if (!this.compiler.enableSingleStepping(this.method)) {
@@ -2773,6 +2770,9 @@
                 }
                 this.method.compiled(this);
                 return;
+            }
+            if (this.method.methodSignFlag()) {
+                return this.interpretOneSista(singleStep);
             }
             var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively
             var b, b2;
@@ -3682,10 +3682,10 @@
             var sp = this.sp;
             var context = this.activeContext;
             var success = this.primHandler.doPrimitive(primIndex, argCount, newMethod);
-            if (success 
+            if (success
                 && this.sp !== sp - argCount
                 && context === this.activeContext
-                && primIndex !== 117    // named prims are checked separately 
+                && primIndex !== 117    // named prims are checked separately
                 && !this.frozen) {
                     this.warnOnce("stack unbalanced after primitive " + primIndex, "error");
                 }
@@ -4899,9 +4899,9 @@
                     return client.popIntoTemporaryVariable(b - 0xD0);
                 case 0xD8: return client.doPop();
             }
-            var b2 = this.method.bytes[this.pc++];    
+            var b2 = this.method.bytes[this.pc++];
             switch (b) {
-                case 0xE0: return this.interpretNextInstructionExtFor(client, (extA << 8) + b2, extB); 
+                case 0xE0: return this.interpretNextInstructionExtFor(client, (extA << 8) + b2, extB);
                 case 0xE1: return this.interpretNextInstructionExtFor(client, extA, (extB << 8) + (b2 < 128 ? b2 : b2-256));
                 case 0xE2:
                     return client.pushReceiverVariable(b2 + (extA << 8));
@@ -4943,7 +4943,7 @@
                 case 0xF5:
                     return client.storeIntoTemporaryVariable(b2);
             }
-            var b3 = this.method.bytes[this.pc++];    
+            var b3 = this.method.bytes[this.pc++];
             switch (b) {
                 case 0xF8: return client.callPrimitive(b2 + (b3 << 8));
                 case 0xF9: {

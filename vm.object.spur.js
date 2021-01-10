@@ -114,7 +114,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                 throw Error("16 bit arrays not supported yet");
             case 20: // 8 bit array, length-4 (64 bit image)
             case 21: // ... length-5
-            case 22: // ... length-6 
+            case 22: // ... length-6
             case 23: // ... length-7
                 nWords--;
                 this._format -= 4;
@@ -158,7 +158,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         // we assume littleEndian for now
         var words = new Array(nWords);
         for (var i = 0; i < nWords; i++) {
-            var lo = theBits[i*2], 
+            var lo = theBits[i*2],
                 hi = theBits[i*2+1];
             words[i] = Squeak.word64FromUint32(hi, lo);
         }
@@ -172,7 +172,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             // in 64 bits, oops > 53 bits are read as [hi, lo]
             if (typeof oop !== "number") {
                 if ((oop[1] & 7) === 4) {
-                    ptrs[i] = this.decodeSmallFloat(oop[0], oop[1], is64Bit); 
+                    ptrs[i] = this.decodeSmallFloat(oop[0], oop[1], is64Bit);
                 } else if ((oop[1] & 7) === 1) {
                     ptrs[i] = is64Bit.makeLargeFromSmall(oop[0], oop[1]);
                 } else if ((oop[1] & 7) === 2) {
@@ -198,7 +198,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                 // garbage beyond its stack pointer, resulting in the oop
                 // not being found in oopMap. We just fill in an arbitrary
                 // SmallInteger - it's never accessed anyway
-                
+
                 // until 64 bit is working correctly, leave this here as a check ...
                 if (ptrs[i] === 42424242) debugger;
             }
@@ -206,7 +206,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         return ptrs;
     },
     decodeSmallFloat: function(hi, lo, is64Bit) {
-        // SmallFloats are stored with full 52 bit mantissa, but shortened exponent. 
+        // SmallFloats are stored with full 52 bit mantissa, but shortened exponent.
         // The lowest 3 bits are tags, the next is the sign bit
         var newHi = 0,
             newLo = 0,
@@ -252,8 +252,8 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             words64 = words32 / 2;
         }
         // we need an extra header in 32 bits if we now use more words than before
-        return { 
-            bytes: overhead * 4, 
+        return {
+            bytes: overhead * 4,
             sizeHeader: words32 >= 255 && words64 < 255,
         }
     },

@@ -236,7 +236,7 @@ Object.subclass('Squeak.Image',
                         rawBits[oop] = bits;
                         oopAdjust[oop] = skippedBytes;
                         // account for size difference of 32 vs 64 bit oops
-                        if (is64Bit) { 
+                        if (is64Bit) {
                             var overhead = object.overhead64(bits);
                             skippedBytes += overhead.bytes;
                             // OTOH, in 32 bits we need the extra size header sooner

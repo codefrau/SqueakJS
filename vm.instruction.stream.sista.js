@@ -94,9 +94,9 @@ Squeak.InstructionStream.subclass('Squeak.InstructionStreamSista',
                 return client.popIntoTemporaryVariable(b - 0xD0);
             case 0xD8: return client.doPop();
         }
-        var b2 = this.method.bytes[this.pc++];    
+        var b2 = this.method.bytes[this.pc++];
         switch (b) {
-            case 0xE0: return this.interpretNextInstructionExtFor(client, (extA << 8) + b2, extB); 
+            case 0xE0: return this.interpretNextInstructionExtFor(client, (extA << 8) + b2, extB);
             case 0xE1: return this.interpretNextInstructionExtFor(client, extA, (extB << 8) + (b2 < 128 ? b2 : b2-256));
             case 0xE2:
                 return client.pushReceiverVariable(b2 + (extA << 8));
@@ -138,7 +138,7 @@ Squeak.InstructionStream.subclass('Squeak.InstructionStreamSista',
             case 0xF5:
                 return client.storeIntoTemporaryVariable(b2);
         }
-        var b3 = this.method.bytes[this.pc++];    
+        var b3 = this.method.bytes[this.pc++];
         switch (b) {
             case 0xF8: return client.callPrimitive(b2 + (b3 << 8));
             case 0xF9: {

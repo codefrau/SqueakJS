@@ -1048,7 +1048,7 @@ Object.subclass('Squeak.Primitives',
         }
         if (intToPut<0 || intToPut>255) {this.success = false; return objToPut;}
         if (array.isBytes())  // bytes...
-            return array.bytes[index-1] = intToPut;
+            {array.bytes[index-1] = intToPut; return objToPut;}
         // methods must simulate Squeak's method indexing
         var offset = array.pointersSize() * 4;
         if (index-1-offset < 0) {this.success = false; return array;} //writing lits as bytes

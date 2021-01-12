@@ -175,6 +175,9 @@ Object.subclass('Squeak.Interpreter',
 },
 'interpreting', {
     interpretOne: function(singleStep) {
+        if (this.method.methodSignFlag()) {
+            return this.interpretOneSistaWithExtensions(singleStep, 0, 0);
+        }
         if (this.method.compiled) {
             if (singleStep) {
                 if (!this.compiler.enableSingleStepping(this.method)) {
@@ -185,9 +188,6 @@ Object.subclass('Squeak.Interpreter',
             }
             this.method.compiled(this);
             return;
-        }
-        if (this.method.methodSignFlag()) {
-            return this.interpretOneSista(singleStep);
         }
         var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively
         var b, b2;
@@ -349,9 +349,6 @@ Object.subclass('Squeak.Interpreter',
                 this.send(this.method.methodGetSelector(b&0xF), 2, false); return;
         }
         throw Error("not a bytecode: " + b);
-    },
-    interpretOneSista: function(singleStep) {
-        this.interpretOneSistaWithExtensions(singleStep, 0, 0);
     },
     interpretOneSistaWithExtensions: function(singleStep, extA, extB) {
         var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively

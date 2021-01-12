@@ -1478,6 +1478,7 @@ Object.subclass('Squeak.Primitives',
         block.pointers[Squeak.BlockContext_caller] = this.vm.activeContext;
         this.vm.popN(argCount+1);
         this.vm.newActiveContext(block);
+        if (this.vm.interruptCheckCounter-- <= 0) this.vm.checkForInterrupts(); // jit compile block method
         return true;
     },
     primitiveBlockValueWithArgs: function(argCount) {
@@ -1496,6 +1497,7 @@ Object.subclass('Squeak.Primitives',
         block.pointers[Squeak.BlockContext_caller] = this.vm.activeContext;
         this.vm.popN(argCount+1);
         this.vm.newActiveContext(block);
+        if (this.vm.interruptCheckCounter-- <= 0) this.vm.checkForInterrupts(); // jit compile block method
         return true;
     },
     primitiveClosureCopyWithCopiedValues: function(argCount) {

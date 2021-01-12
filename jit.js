@@ -533,16 +533,32 @@ to single-step.
         if (destination > this.endPC) this.endPC = destination;
     },
     generateQuickPrim: function(byte) {
-        if (this.debug) this.generateDebugCode("quick prim " + this.specialSelectors[(byte & 0x0F) + 16]);
+        if (this.debug) this.generateDebugCode("quick send #" + this.specialSelectors[(byte & 0x0F) + 16]);
         this.generateLabel();
         switch (byte) {
-            //case 0xC0: return this.popNandPushIfOK(2, this.objectAt(true,true,false)); // at:
-            //case 0xC1: return this.popNandPushIfOK(3, this.objectAtPut(true,true,false)); // at:put:
+            case 0xC0: // at:
+                this.needsVar['stack'] = true;
+                this.source.push(
+                    "var a, b; if ((a=stack[vm.sp-1]).sqClass === vm.specialObjects[7] && typeof (b=stack[vm.sp]) === 'number' && b>0 && b<=a.pointers.length) {\n",
+                    "  stack[--vm.sp] = a.pointers[b-1];",
+                    "} else { var c = vm.primHandler.objectAt(true,true,false); if (vm.primHandler.success) stack[--vm.sp] = c; else {\n",
+                    "  vm.pc = ", this.pc, "; vm.sendSpecial(16); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return; }}\n");
+                this.needsLabel[this.pc] = true;
+                return;
+            case 0xC1: // at:put:
+                this.needsVar['stack'] = true;
+                this.source.push(
+                    "var a, b; if ((a=stack[vm.sp-2]).sqClass === vm.specialObjects[7] && typeof (b=stack[vm.sp-1]) === 'number' && b>0 && b<=a.pointers.length) {\n",
+                    "  var c = stack[vm.sp]; stack[vm.sp-=2] = a.pointers[b-1] = c; a.dirty = true;",
+                    "} else { vm.primHandler.objectAtPut(true,true,false); if (vm.primHandler.success) stack[vm.sp-=2] = c; else {\n",
+                    "  vm.pc = ", this.pc, "; vm.sendSpecial(17); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return; }}\n");
+                this.needsLabel[this.pc] = true;
+                return;
             case 0xC2: // size
                 this.needsVar['stack'] = true;
                 this.source.push(
-                    "if (stack[vm.sp].sqClass === vm.specialObjects[7]) stack[vm.sp] = stack[vm.sp].pointersSize();\n",
-                    "else if (stack[vm.sp].sqClass === vm.specialObjects[6]) stack[vm.sp] = stack[vm.sp].bytesSize();\n",
+                    "if (stack[vm.sp].sqClass === vm.specialObjects[7]) stack[vm.sp] = stack[vm.sp].pointersSize();\n",     // Array
+                    "else if (stack[vm.sp].sqClass === vm.specialObjects[6]) stack[vm.sp] = stack[vm.sp].bytesSize();\n",   // ByteString
                     "else { vm.pc = ", this.pc, "; vm.sendSpecial(18); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return; }\n");
                 this.needsLabel[this.pc] = true;
                 return;
@@ -590,7 +606,7 @@ to single-step.
         this.needsLabel[this.pc] = true;
     },
     generateNumericOp: function(byte) {
-        if (this.debug) this.generateDebugCode("numeric op " + this.specialSelectors[byte & 0x0F]);
+        if (this.debug) this.generateDebugCode("quick send #" + this.specialSelectors[byte & 0x0F]);
         this.generateLabel();
         // if the op cannot be executed here, do a full send and return to main loop
         // we need a label for coming back

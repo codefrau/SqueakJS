@@ -1235,6 +1235,10 @@ Object.subclass('Squeak.Interpreter',
         this.activeContext = newContext; //We're off and running...
         this.activeContext.dirty = true;
         this.fetchContextRegisters(newContext);
+        if (this.breakOnContextChanged) {
+            this.breakOnContextChanged = false;
+            this.breakNow();
+        }
     },
     exportThisContext: function() {
         this.storeContextRegisters();

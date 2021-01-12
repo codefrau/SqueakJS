@@ -137,6 +137,7 @@ to single-step.
         this.specialSelectors = ['+', '-', '<', '>', '<=', '>=', '=', '~=', '*', '/', '\\', '@',
             'bitShift:', '//', 'bitAnd:', 'bitOr:', 'at:', 'at:put:', 'size', 'next', 'nextPut:',
             'atEnd', '==', 'class', 'blockCopy:', 'value', 'value:', 'do:', 'new', 'new:', 'x', 'y'];
+        this.doitCounter = 0;
     },
 },
 'accessing', {
@@ -179,7 +180,7 @@ to single-step.
         return true;
     },
     functionNameFor: function(cls, sel) {
-        if (cls === undefined || cls === '?') return "Squeak_DOIT";
+        if (cls === undefined || cls === '?') return "DOIT_" + ++this.doitCounter;
         if (!/[^a-zA-Z0-9:_]/.test(sel))
             return (cls + "_" + sel).replace(/[: ]/g, "_");
         var op = sel.replace(/./g, function(char) {

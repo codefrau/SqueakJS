@@ -390,7 +390,8 @@ Object.subclass('Squeak.Primitives',
             case 246: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount);
                 break;  // fail 243-246 if fell through
             // 247: unused
-            case 248: return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod); // see findSelectorInClass()
+            case 248: if (this.oldPrims) return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod) // see findSelectorInClass()
+                else return this.primitiveArrayBecome(argCount, false); // one way, opt. copy hash
             case 249: return this.primitiveArrayBecome(argCount, false); // one way, opt. copy hash
             case 254: return this.primitiveVMParameter(argCount);
             //MIDI Primitives (520-539)

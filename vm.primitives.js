@@ -157,7 +157,7 @@ Object.subclass('Squeak.Primitives',
             case 69: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,true)); // Method.objectAt:put:
             case 70: return this.popNandPushIfOK(argCount+1, this.instantiateClass(this.stackNonInteger(0), 0)); // Class.new
             case 71: return this.popNandPushIfOK(argCount+1, this.instantiateClass(this.stackNonInteger(1), this.stackPos32BitInt(0))); // Class.new:
-            case 72: return this.primitiveArrayBecome(argCount, false); // one way
+            case 72: return this.primitiveArrayBecome(argCount, false, true); // one way
             case 73: return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,true)); // instVarAt:
             case 74: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,true)); // instVarAt:put:
             case 75: return this.popNandPushIfOK(argCount+1, this.identityHash(this.stackNonInteger(0))); // Object.identityHash
@@ -217,7 +217,7 @@ Object.subclass('Squeak.Primitives',
             case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
             case 126: return this.primitiveDeferDisplayUpdates(argCount);
             case 127: return this.primitiveShowDisplayRect(argCount);
-            case 128: return this.primitiveArrayBecome(argCount, true); // both ways
+            case 128: return this.primitiveArrayBecome(argCount, true, true); // both ways
             case 129: return this.popNandPushIfOK(1, this.vm.image.specialObjectsArray); //specialObjectsOop
             case 130: return this.primitiveFullGC(argCount);
             case 131: return this.primitivePartialGC(argCount);
@@ -391,8 +391,8 @@ Object.subclass('Squeak.Primitives',
                 break;  // fail 243-246 if fell through
             // 247: unused
             case 248: if (this.oldPrims) return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod) // see findSelectorInClass()
-                else return this.primitiveArrayBecome(argCount, false); // one way, opt. copy hash
-            case 249: return this.primitiveArrayBecome(argCount, false); // one way, opt. copy hash
+                else return this.primitiveArrayBecome(argCount, false, false); // one way
+            case 249: return this.primitiveArrayBecome(argCount, false, true); // one way, opt. copy hash
             case 254: return this.primitiveVMParameter(argCount);
             //MIDI Primitives (520-539)
             case 521: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIClosePort', argCount);
@@ -1362,10 +1362,10 @@ Object.subclass('Squeak.Primitives',
         this.vm.executeNewMethod(receiver, methodObj, numArgs, methodObj.methodPrimitiveIndex(), null, null);
         return true;
     },
-    primitiveArrayBecome: function(argCount, doBothWays) {
+    primitiveArrayBecome: function(argCount, doBothWays, copyHash) {
         var rcvr = this.stackNonInteger(argCount),
-            arg = this.stackNonInteger(argCount-1),
-            copyHash = argCount > 1 ? this.stackBoolean(argCount-2) : true;
+            arg = this.stackNonInteger(argCount-1);
+        copyHash &&= argCount > 1 ? this.stackBoolean(argCount-2) : true;
         if (!this.success) return false;
         this.success = this.vm.image.bulkBecome(rcvr.pointers, arg.pointers, doBothWays, copyHash);
         return this.popNIfOK(argCount);

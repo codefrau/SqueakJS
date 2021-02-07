@@ -139,7 +139,8 @@ Object.subclass('Squeak.Interpreter',
         var returnSelf  = 256,
             returnTrue  = 257,
             returnFalse = 258,
-            returnNil   = 259;
+            returnNil   = 259,
+            opts = typeof location === 'object' ? location.hash : "";
         [
             // Etoys fallback for missing translation files is hugely inefficient.
             // This speeds up opening a viewer by 10x (!)
@@ -149,7 +150,7 @@ Object.subclass('Squeak.Interpreter',
             // 64 bit Squeak does not flush word size on snapshot
             {method: "SmalltalkImage>>wordSize", literal: {index: 1, old: 8, hack: 4}, enabled: true},
             // Squeak 5.3 disable wizard by replacing #open send with pop
-            {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: location.hash.includes("wizard=false")},
+            {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: opts.includes("wizard=false")},
         ].forEach(function(each) {
             try {
                 var m = each.enabled && this.findMethod(each.method);

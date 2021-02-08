@@ -1,12 +1,28 @@
 {
   "name": "SqueakJS",
+  "version": "1.0.2",
+  "description": "Virtual Machine for Squeak Smalltalk and derivatives",
+  "author": "Vanessa Freudenberg <vanessa@codefrau.net> (https://twitter.com/codefrau)",
   "repository": "https://github.com/codefrau/SqueakJS",
   "license": "MIT",
+  "browser": "squeak.js",
+  "main": "squeak_node.js",
+  "unpkg": "dist/squeak_bundle.js",
+  "jsdelivr": "dist/squeak_bundle.js",
+  "files": [
+    "*.js",
+    "plugins/",
+    "lib/",
+    "lib_node/",
+    "dist/squeak_bundle.js",
+    "dist/squeak_headless_bundle.js"
+  ],
   "scripts": {
     "build:cleanup": "rimraf dist",
     "build:bundle": "rollup squeak.js --file dist/squeak_bundle.js --format iife && rollup squeak_headless.js --file dist/squeak_headless_bundle.js",
     "build:minify": "uglifyjs dist/squeak_bundle.js -o dist/squeak_bundle.min.js -c -m --source-map && uglifyjs dist/squeak_headless_bundle.js -o dist/squeak_headless_bundle.min.js -c -m --source-map",
-    "build": "npm run build:cleanup && npm run build:bundle && npm run build:minify"
+    "build": "npm run build:cleanup && npm run build:bundle && npm run build:minify",
+    "prepublishOnly": "npm run build:cleanup && npm run build:bundle"
   },
   "devDependencies": {
     "rimraf": "^3",

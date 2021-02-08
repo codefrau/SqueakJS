@@ -1023,7 +1023,7 @@
                     throw Error("16 bit arrays not supported yet");
                 case 20: // 8 bit array, length-4 (64 bit image)
                 case 21: // ... length-5
-                case 22: // ... length-6 
+                case 22: // ... length-6
                 case 23: // ... length-7
                     nWords--;
                     this._format -= 4;
@@ -1067,7 +1067,7 @@
             // we assume littleEndian for now
             var words = new Array(nWords);
             for (var i = 0; i < nWords; i++) {
-                var lo = theBits[i*2], 
+                var lo = theBits[i*2],
                     hi = theBits[i*2+1];
                 words[i] = Squeak.word64FromUint32(hi, lo);
             }
@@ -1081,7 +1081,7 @@
                 // in 64 bits, oops > 53 bits are read as [hi, lo]
                 if (typeof oop !== "number") {
                     if ((oop[1] & 7) === 4) {
-                        ptrs[i] = this.decodeSmallFloat(oop[0], oop[1], is64Bit); 
+                        ptrs[i] = this.decodeSmallFloat(oop[0], oop[1], is64Bit);
                     } else if ((oop[1] & 7) === 1) {
                         ptrs[i] = is64Bit.makeLargeFromSmall(oop[0], oop[1]);
                     } else if ((oop[1] & 7) === 2) {
@@ -1107,7 +1107,7 @@
                     // garbage beyond its stack pointer, resulting in the oop
                     // not being found in oopMap. We just fill in an arbitrary
                     // SmallInteger - it's never accessed anyway
-                    
+
                     // until 64 bit is working correctly, leave this here as a check ...
                     if (ptrs[i] === 42424242) debugger;
                 }
@@ -1115,7 +1115,7 @@
             return ptrs;
         },
         decodeSmallFloat: function(hi, lo, is64Bit) {
-            // SmallFloats are stored with full 52 bit mantissa, but shortened exponent. 
+            // SmallFloats are stored with full 52 bit mantissa, but shortened exponent.
             // The lowest 3 bits are tags, the next is the sign bit
             var newHi = 0,
                 newLo = 0,
@@ -1161,8 +1161,8 @@
                 words64 = words32 / 2;
             }
             // we need an extra header in 32 bits if we now use more words than before
-            return { 
-                bytes: overhead * 4, 
+            return {
+                bytes: overhead * 4,
                 sizeHeader: words32 >= 255 && words64 < 255,
             }
         },
@@ -1613,7 +1613,7 @@
                             rawBits[oop] = bits;
                             oopAdjust[oop] = skippedBytes;
                             // account for size difference of 32 vs 64 bit oops
-                            if (is64Bit) { 
+                            if (is64Bit) {
                                 var overhead = object.overhead64(bits);
                                 skippedBytes += overhead.bytes;
                                 // OTOH, in 32 bits we need the extra size header sooner
@@ -2725,6 +2725,8 @@
             }
         },
         hackImage: function() {
+            // hack methods to make work / speed up
+            var opts = typeof location === 'object' ? location.hash : "";
             [
                 // Etoys fallback for missing translation files is hugely inefficient.
                 // This speeds up opening a viewer by 10x (!)
@@ -2734,7 +2736,7 @@
                 // 64 bit Squeak does not flush word size on snapshot
                 {method: "SmalltalkImage>>wordSize", literal: {index: 1, old: 8, hack: 4}, enabled: true},
                 // Squeak 5.3 disable wizard by replacing #open send with pop
-                {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: location.hash.includes("wizard=false")},
+                {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: opts.includes("wizard=false")},
             ].forEach(function(each) {
                 try {
                     var m = each.enabled && this.findMethod(each.method);
@@ -2761,7 +2763,7 @@
     'interpreting', {
         interpretOne: function(singleStep) {
             if (this.method.methodSignFlag()) {
-                return this.interpretOneSista(singleStep);
+                return this.interpretOneSistaWithExtensions(singleStep, 0, 0);
             }
             if (this.method.compiled) {
                 if (singleStep) {
@@ -2934,9 +2936,6 @@
                     this.send(this.method.methodGetSelector(b&0xF), 2, false); return;
             }
             throw Error("not a bytecode: " + b);
-        },
-        interpretOneSista: function(singleStep) {
-            this.interpretOneSistaWithExtensions(singleStep, 0, 0);
         },
         interpretOneSistaWithExtensions: function(singleStep, extA, extB) {
             var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively
@@ -3682,10 +3681,10 @@
             var sp = this.sp;
             var context = this.activeContext;
             var success = this.primHandler.doPrimitive(primIndex, argCount, newMethod);
-            if (success 
+            if (success
                 && this.sp !== sp - argCount
                 && context === this.activeContext
-                && primIndex !== 117    // named prims are checked separately 
+                && primIndex !== 117    // named prims are checked separately
                 && !this.frozen) {
                     this.warnOnce("stack unbalanced after primitive " + primIndex, "error");
                 }
@@ -3820,6 +3819,10 @@
             this.activeContext = newContext; //We're off and running...
             this.activeContext.dirty = true;
             this.fetchContextRegisters(newContext);
+            if (this.breakOnContextChanged) {
+                this.breakOnContextChanged = false;
+                this.breakNow();
+            }
         },
         exportThisContext: function() {
             this.storeContextRegisters();
@@ -4899,9 +4902,9 @@
                     return client.popIntoTemporaryVariable(b - 0xD0);
                 case 0xD8: return client.doPop();
             }
-            var b2 = this.method.bytes[this.pc++];    
+            var b2 = this.method.bytes[this.pc++];
             switch (b) {
-                case 0xE0: return this.interpretNextInstructionExtFor(client, (extA << 8) + b2, extB); 
+                case 0xE0: return this.interpretNextInstructionExtFor(client, (extA << 8) + b2, extB);
                 case 0xE1: return this.interpretNextInstructionExtFor(client, extA, (extB << 8) + (b2 < 128 ? b2 : b2-256));
                 case 0xE2:
                     return client.pushReceiverVariable(b2 + (extA << 8));
@@ -4943,7 +4946,7 @@
                 case 0xF5:
                     return client.storeIntoTemporaryVariable(b2);
             }
-            var b3 = this.method.bytes[this.pc++];    
+            var b3 = this.method.bytes[this.pc++];
             switch (b) {
                 case 0xF8: return client.callPrimitive(b2 + (b3 << 8));
                 case 0xF9: {
@@ -5306,7 +5309,7 @@
                 case 69: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,true)); // Method.objectAt:put:
                 case 70: return this.popNandPushIfOK(argCount+1, this.instantiateClass(this.stackNonInteger(0), 0)); // Class.new
                 case 71: return this.popNandPushIfOK(argCount+1, this.instantiateClass(this.stackNonInteger(1), this.stackPos32BitInt(0))); // Class.new:
-                case 72: return this.primitiveArrayBecome(argCount, false); // one way
+                case 72: return this.primitiveArrayBecome(argCount, false, true); // one way, do copy hash
                 case 73: return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,true)); // instVarAt:
                 case 74: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,true)); // instVarAt:put:
                 case 75: return this.popNandPushIfOK(argCount+1, this.identityHash(this.stackNonInteger(0))); // Object.identityHash
@@ -5366,7 +5369,7 @@
                 case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
                 case 126: return this.primitiveDeferDisplayUpdates(argCount);
                 case 127: return this.primitiveShowDisplayRect(argCount);
-                case 128: return this.primitiveArrayBecome(argCount, true); // both ways
+                case 128: return this.primitiveArrayBecome(argCount, true, true); // both ways, do copy hash
                 case 129: return this.popNandPushIfOK(1, this.vm.image.specialObjectsArray); //specialObjectsOop
                 case 130: return this.primitiveFullGC(argCount);
                 case 131: return this.primitivePartialGC(argCount);
@@ -5539,8 +5542,9 @@
                 case 246: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount);
                     break;  // fail 243-246 if fell through
                 // 247: unused
-                case 248: return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod); // see findSelectorInClass()
-                case 249: return this.primitiveArrayBecome(argCount, false); // one way, opt. copy hash
+                case 248: if (this.oldPrims) return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod) // see findSelectorInClass()
+                    else return this.primitiveArrayBecome(argCount, false, false); // one way, do not copy hash
+                case 249: return this.primitiveArrayBecome(argCount, false, true); // one way, opt. copy hash
                 case 254: return this.primitiveVMParameter(argCount);
                 //MIDI Primitives (520-539)
                 case 521: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIClosePort', argCount);
@@ -6196,7 +6200,7 @@
             }
             if (intToPut<0 || intToPut>255) {this.success = false; return objToPut;}
             if (array.isBytes())  // bytes...
-                return array.bytes[index-1] = intToPut;
+                {array.bytes[index-1] = intToPut; return objToPut;}
             // methods must simulate Squeak's method indexing
             var offset = array.pointersSize() * 4;
             if (index-1-offset < 0) {this.success = false; return array;} //writing lits as bytes
@@ -6508,10 +6512,10 @@
             this.vm.executeNewMethod(receiver, methodObj, numArgs, methodObj.methodPrimitiveIndex(), null, null);
             return true;
         },
-        primitiveArrayBecome: function(argCount, doBothWays) {
+        primitiveArrayBecome: function(argCount, doBothWays, copyHash) {
             var rcvr = this.stackNonInteger(argCount),
-                arg = this.stackNonInteger(argCount-1),
-                copyHash = argCount > 1 ? this.stackBoolean(argCount-2) : true;
+                arg = this.stackNonInteger(argCount-1);
+            if (argCount > 1) copyHash = this.stackBoolean(argCount-2);
             if (!this.success) return false;
             this.success = this.vm.image.bulkBecome(rcvr.pointers, arg.pointers, doBothWays, copyHash);
             return this.popNIfOK(argCount);
@@ -6625,6 +6629,7 @@
             block.pointers[Squeak.BlockContext_caller] = this.vm.activeContext;
             this.vm.popN(argCount+1);
             this.vm.newActiveContext(block);
+            if (this.vm.interruptCheckCounter-- <= 0) this.vm.checkForInterrupts(); // jit compile block method
             return true;
         },
         primitiveBlockValueWithArgs: function(argCount) {
@@ -6643,6 +6648,7 @@
             block.pointers[Squeak.BlockContext_caller] = this.vm.activeContext;
             this.vm.popN(argCount+1);
             this.vm.newActiveContext(block);
+            if (this.vm.interruptCheckCounter-- <= 0) this.vm.checkForInterrupts(); // jit compile block method
             return true;
         },
         primitiveClosureCopyWithCopiedValues: function(argCount) {
@@ -7376,6 +7382,7 @@
             this.specialSelectors = ['+', '-', '<', '>', '<=', '>=', '=', '~=', '*', '/', '\\', '@',
                 'bitShift:', '//', 'bitAnd:', 'bitOr:', 'at:', 'at:put:', 'size', 'next', 'nextPut:',
                 'atEnd', '==', 'class', 'blockCopy:', 'value', 'value:', 'do:', 'new', 'new:', 'x', 'y'];
+            this.doitCounter = 0;
         },
     },
     'accessing', {
@@ -7418,7 +7425,7 @@
             return true;
         },
         functionNameFor: function(cls, sel) {
-            if (cls === undefined || cls === '?') return "Squeak_DOIT";
+            if (cls === undefined || cls === '?') return "DOIT_" + ++this.doitCounter;
             if (!/[^a-zA-Z0-9:_]/.test(sel))
                 return (cls + "_" + sel).replace(/[: ]/g, "_");
             var op = sel.replace(/./g, function(char) {
@@ -7771,16 +7778,32 @@
             if (destination > this.endPC) this.endPC = destination;
         },
         generateQuickPrim: function(byte) {
-            if (this.debug) this.generateDebugCode("quick prim " + this.specialSelectors[(byte & 0x0F) + 16]);
+            if (this.debug) this.generateDebugCode("quick send #" + this.specialSelectors[(byte & 0x0F) + 16]);
             this.generateLabel();
             switch (byte) {
-                //case 0xC0: return this.popNandPushIfOK(2, this.objectAt(true,true,false)); // at:
-                //case 0xC1: return this.popNandPushIfOK(3, this.objectAtPut(true,true,false)); // at:put:
+                case 0xC0: // at:
+                    this.needsVar['stack'] = true;
+                    this.source.push(
+                        "var a, b; if ((a=stack[vm.sp-1]).sqClass === vm.specialObjects[7] && typeof (b=stack[vm.sp]) === 'number' && b>0 && b<=a.pointers.length) {\n",
+                        "  stack[--vm.sp] = a.pointers[b-1];",
+                        "} else { var c = vm.primHandler.objectAt(true,true,false); if (vm.primHandler.success) stack[--vm.sp] = c; else {\n",
+                        "  vm.pc = ", this.pc, "; vm.sendSpecial(16); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return; }}\n");
+                    this.needsLabel[this.pc] = true;
+                    return;
+                case 0xC1: // at:put:
+                    this.needsVar['stack'] = true;
+                    this.source.push(
+                        "var a, b; if ((a=stack[vm.sp-2]).sqClass === vm.specialObjects[7] && typeof (b=stack[vm.sp-1]) === 'number' && b>0 && b<=a.pointers.length) {\n",
+                        "  var c = stack[vm.sp]; stack[vm.sp-=2] = a.pointers[b-1] = c; a.dirty = true;",
+                        "} else { vm.primHandler.objectAtPut(true,true,false); if (vm.primHandler.success) stack[vm.sp-=2] = c; else {\n",
+                        "  vm.pc = ", this.pc, "; vm.sendSpecial(17); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return; }}\n");
+                    this.needsLabel[this.pc] = true;
+                    return;
                 case 0xC2: // size
                     this.needsVar['stack'] = true;
                     this.source.push(
-                        "if (stack[vm.sp].sqClass === vm.specialObjects[7]) stack[vm.sp] = stack[vm.sp].pointersSize();\n",
-                        "else if (stack[vm.sp].sqClass === vm.specialObjects[6]) stack[vm.sp] = stack[vm.sp].bytesSize();\n",
+                        "if (stack[vm.sp].sqClass === vm.specialObjects[7]) stack[vm.sp] = stack[vm.sp].pointersSize();\n",     // Array
+                        "else if (stack[vm.sp].sqClass === vm.specialObjects[6]) stack[vm.sp] = stack[vm.sp].bytesSize();\n",   // ByteString
                         "else { vm.pc = ", this.pc, "; vm.sendSpecial(18); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return; }\n");
                     this.needsLabel[this.pc] = true;
                     return;
@@ -7828,7 +7851,7 @@
             this.needsLabel[this.pc] = true;
         },
         generateNumericOp: function(byte) {
-            if (this.debug) this.generateDebugCode("numeric op " + this.specialSelectors[byte & 0x0F]);
+            if (this.debug) this.generateDebugCode("quick send #" + this.specialSelectors[byte & 0x0F]);
             this.generateLabel();
             // if the op cannot be executed here, do a full send and return to main loop
             // we need a label for coming back

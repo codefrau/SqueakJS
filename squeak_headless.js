@@ -102,11 +102,11 @@ function fetchImageAndRun(imageName, options) {
 // Retrieve image name from URL
 var searchParams = (new URL(self.location)).searchParams;
 var imageName = searchParams.get("imageName");
-if(!imageName) {
-    console.error("Use search parameter 'imageName' to specify Smalltalk image (should be an URL)");
-} else {
+if(imageName) {
     var options = {
         ignoreQuit: searchParams.get("ignoreQuit") !== null
     };
     fetchImageAndRun(imageName, options);
 }
+
+export default fetchImageAndRun;

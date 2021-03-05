@@ -54,7 +54,7 @@ Object.extend(Squeak, {
 });
 
 // Run image by starting interpreter on it
-function runImage(imageData, imageName) {
+function runImage(imageData, imageName, options) {
 
     // Create Squeak image from raw data
     var image = new Squeak.Image(imageName.replace(/\.image$/i, ""));

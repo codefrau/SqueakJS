@@ -1431,7 +1431,7 @@ Object.subclass('Squeak.Primitives',
         for (var i = 0; i < length; i++)
             rcvr.pointers[i] = arg.pointers[i];
         rcvr.dirty = arg.dirty;
-        this.vm.pop(argCount);
+        this.vm.popN(argCount);
         return true;
     },
     primitiveLoadImageSegment: function(argCount) {
@@ -2031,7 +2031,7 @@ Object.subclass('Squeak.Primitives',
 'time', {
     primitiveRelinquishProcessorForMicroseconds: function(argCount) {
         // we ignore the optional arg
-        this.vm.pop(argCount);
+        this.vm.popN(argCount);
         this.vm.goIdle();        // might switch process, so must be after pop
         return true;
     },

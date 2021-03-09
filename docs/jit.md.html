@@ -43,7 +43,7 @@ function benchFibStack() {
     }
 }
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Fibonacci benchmark passing args via shared Stack: <span id="fibStack">?</span>ms in this browser]
+[Fibonacci benchmark passing args via stack: <span id="fibStack">?</span> million sends/s in this browser]
 
 As opposed to the hopefully more efficient
 
@@ -60,7 +60,7 @@ function benchFibArgs(n) {
     return result;
 }
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Fibonacci benchmark passing args via parameters: <span id="fibArgs">?</span>ms in this browser]
+[Fibonacci benchmark passing args directly: <span id="fibArgs">?</span> million sends/s in this browser]
 
 <script>
 const stack = [];
@@ -111,14 +111,14 @@ for (const [result, f] of [
     [null, n => cache[0](n)],
 ]) {
     let t = Date.now();
-    f(32);
+    const sends = f(32);    // ~7 million sends
     t = Date.now() - t;
-    if (result) result.innerText = t;
+    if (result) result.innerText = (sends / t / 1000).toFixed(0);
     results.push(t);
 }
 </script>
 
-The caption of these code blocks should show the time it takes to execute `benchFib(32)` in this browser (<span id="factor">?</span>x slower). Typically, the stack version is 2.5x-5x times slower than the argument-passing version.
+The caption of these code blocks should show the performance of `benchFib()` in this browser. Typically, the stack version is 2.5x-5x times slower than the argument-passing version (<span id="factor">?</span>x slower in this browser, reload the page to get more accurate results).
 
 <script>factor.innerText = (results[1] / results[0]).toFixed(1)</script>
 

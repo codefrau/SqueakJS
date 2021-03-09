@@ -392,7 +392,7 @@ function Integer_benchFib(vm, depth, sender, method, closureOrNil, rcvr) {
     var thisContext, t1, t2, t3;
     function thisProxy(op, index, value) {
         switch(op) {
-            "read":
+            case "read":
                 switch (index) {
                     case 0: return sender;
                     case 1: return pc;
@@ -410,7 +410,7 @@ function Integer_benchFib(vm, depth, sender, method, closureOrNil, rcvr) {
                         }
                         throw Error();
                 }
-            "write": switch(index) {
+            case "write": switch(index) {
                 case 0: sender = value; return;
                 case 1: pc = value; return;
                 case 2: stackp = value; return;
@@ -424,7 +424,7 @@ function Integer_benchFib(vm, depth, sender, method, closureOrNil, rcvr) {
                     if (index === -1 && !thisContext) { thisContext = value; return; }
                     throw Error();
             }
-            "invalidate":
+            case "invalidate":
                 cache.fill(null);
                 return;
         }
@@ -453,7 +453,7 @@ function Integer_benchFib(vm, depth, sender, method, closureOrNil, rcvr) {
     case 7:
         t1 = rcvr;
         t2 = 1;
-        if (typeof t1 === 'number' && typeof t2 === 'number') { t1 = vm.primHandler.signed32BitIntegerFor(t1 - t2); }
+        if (typeof t1 === 'number' && typeof t2 === 'number') { t1 -= t2 ; t1 >= -0x40000000 && t1 <= 0x3FFFFFFF ? t1 : vm.makeLarge(t1); }
         else {
             if (cache[3*2] !== t1.sqClass) vm.updateCache(cache, 3*2, t1.sqClass, vm.specialSendSelector[1], false); // #-
             pc = 10; t1 = cache[3*2+2](vm, depth, thisProxy, cache[3*2+1], null, t1, t2); if (t1 === false) return false;
@@ -465,7 +465,7 @@ function Integer_benchFib(vm, depth, sender, method, closureOrNil, rcvr) {
     case 11:
         t2 = rcvr;
         t3 = 2;
-        if (typeof t2 === 'number' && typeof t3 === 'number') { t2 = vm.primHandler.signed32BitIntegerFor(t2 - t3); }
+        if (typeof t2 === 'number' && typeof t3 === 'number') { t2 -= t3 ; t2 >= -0x40000000 && t2 <= 0x3FFFFFFF ? t2 : vm.makeLarge(t2); }
         else {
             if (cache[3*4] !== t2.sqClass) vm.updateCache(cache, 3*4, t2.sqClass, vm.specialSendSelector[2], false); // #-
             pc = 14; t2 = cache[3*4+2](vm, depth, thisProxy, cache[3*4+1], null, t2, t3); if (t2 === false) return false;}
@@ -474,14 +474,14 @@ function Integer_benchFib(vm, depth, sender, method, closureOrNil, rcvr) {
         pc = 15; t2 = cache[3*5+2](vm, depth, thisProxy, cache[3*5+1], null, t2);
         if (t2 === false) return false;
     case 15:
-        if (typeof t1 === 'number' && typeof t2 === 'number') { t1 = vm.primHandler.signed32BitIntegerFor(t1 + t2); }
+        if (typeof t1 === 'number' && typeof t2 === 'number') { t1 += t2 ; t1 >= -0x40000000 && t1 <= 0x3FFFFFFF ? t1 : vm.makeLarge(t1); }
         else {
-            if (cache[3*6] !== t1.sqClass) vm.updateCache(cache, 3*6),t1.sqClass, vm.specialSendSelector[0], false);  // #+
+            if (cache[3*6] !== t1.sqClass) vm.updateCache(cache, 3*6,t1.sqClass, vm.specialSendSelector[0], false);  // #+
             pc = 16; t1 = cache[3*6+2](vm, depth, thisProxy, cache[3*6+1], null, t1, t2); if (t1 === false) return false;
         }
     case 16:
         t2 = 1;
-        if (typeof t1 === 'number' && typeof t2 === 'number') { t1 = vm.primHandler.signed32BitIntegerFor(t1 + t2); }
+        if (typeof t1 === 'number' && typeof t2 === 'number') { t1 += t2 ; t1 >= -0x40000000 && t1 <= 0x3FFFFFFF ? t1 : vm.makeLarge(t1); }
         else {
             if (cache[3*7] !== t1.sqClass) vm.updateCache(cache, 3*7, t1.sqClass, vm.specialSendSelector[0], false); // #+
             pc = 18; t1 = cache[3*7+2](vm, depth, thisProxy, cache[3*7+1], null, t1, t2); if (t1 === false) return false;

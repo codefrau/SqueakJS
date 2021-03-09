@@ -508,6 +508,179 @@ updateCache(cache, index, cls, selector, supered) {
 }
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+### Performance estimate
+
+Running the code above in a mockup harness on this browser shows a performance of <span id="mockup">?</span> million sends/s. You may inspect the browser's console to see the context inspection working -- once every million sends, the full context call chain is logged. You could also play with the code at https://codepen.io/codefrau/pen/JjbmVGw
+
+<script>
+    const mockMethod = {
+        pointers: [0, { sqClass: "Symbol", value: "benchFib" }],
+        source: `
+var cache = new Array(3*7).fill(null);  // [class, method, function]
+function Integer_benchFib(vm, depth, sender, method, closureOrNil, rcvr) {
+    var pc = 0;
+    var thisContext, t1, t2, t3;
+    function thisProxy(op, index, value) {
+        switch(op) {
+            case "read":
+                switch (index) {
+                    case 0: return sender;
+                    case 1: return pc;
+                    case 2: /* stackp */ return [0,1,2,1,0,1,0,1,2,1,1,2,3,2,2,1,2,1][pc];
+                    case 3: return method;
+                    case 4: return closureOrNil;
+                    case 5: return rcvr;
+                    case 6: return t1;
+                    case 7: return t2;
+                    case 8: return t3;
+                    default:
+                        if (index === -1) {
+                            if (!thisContext) thisContext = vm.makeContext(thisProxy);
+                            return thisContext;
+                        }
+                        throw Error();
+                }
+            case "write": switch(index) {
+                case 0: sender = value; return;
+                case 1: pc = value; return;
+                case 2: stackp = value; return;
+                case 3: method = value; return;
+                case 4: closureOrNil = value; return;
+                case 5: rcvr = value; return;
+                case 6: t1 = value; return;
+                case 7: t2 = value; return;
+                case 8: t3 = value; return;
+                default:
+                    if (index === -1 && !thisContext) { thisContext = value; return; }
+                    throw Error();
+            }
+            case "invalidate":
+                cache.fill(null);
+                return;
+        }
+    }
+    // handleDepthAndInterrupts checks nesting depth and context switches.
+    // If necessary it uses thisProxy to reify this context (and possibly its senders)
+    depth++; if (--vm.interruptCheckCounter <= 0 && vm.handleDepthAndInterrupts(depth, thisProxy) === true) return false;
+    while (true) switch (pc) {
+    case 0:
+        t1 = rcvr;
+        t2 = 2;
+        if (typeof t1 === 'number' && typeof t2 === 'number') { t1 = t1 < t2 ? vm.trueObj : vm.falseObj; }
+        else {
+            if (cache[3*0] !== t1.sqClass) vm.updateCache(cache, 3*0, t1.sqClass, vm.specialSendSelector[2], false); // #<
+            pc = 3; t1 = cache[3*0+2](vm, depth, thisProxy, cache[3*0+1], null, t1, t2); if (t1 === false) return false;
+        }
+    case 3:
+        if (t1 === vm.falseObj) {pc = 7; continue}
+        else if (t1 !== vm.trueObj) {
+            if (cache[3*1] !== t1.sqClass) vm.updateCache(cache, 3*1, t1.sqClass, vm.specialObjects[25], false); // #mustBeBoolean
+            pc = 4; t1 = cache[3*1+2](vm, depth, thisProxy, cache[3*1+1], null, t1); if (t1 === false) return false;
+        }
+    case 4:
+        t1 = 1;
+        pc = 18; continue;
+    case 7:
+        t1 = rcvr;
+        t2 = 1;
+        if (typeof t1 === 'number' && typeof t2 === 'number') { t1 -= t2 ; t1 >= -0x40000000 && t1 <= 0x3FFFFFFF ? t1 : vm.makeLarge(t1); }
+        else {
+            if (cache[3*2] !== t1.sqClass) vm.updateCache(cache, 3*2, t1.sqClass, vm.specialSendSelector[1], false); // #-
+            pc = 10; t1 = cache[3*2+2](vm, depth, thisProxy, cache[3*2+1], null, t1, t2); if (t1 === false) return false;
+        }
+    case 10:
+        if (cache[3*3] !== t1.sqClass) vm.updateCache(cache, 3*3, t1.sqClass, method.pointers[1], false); // #benchFib
+        pc = 11; t1 = cache[3*3+2](vm, depth, thisProxy, cache[3*3+1], null, t1);
+        if (t1 === false) return false;
+    case 11:
+        t2 = rcvr;
+        t3 = 2;
+        if (typeof t2 === 'number' && typeof t3 === 'number') { t2 -= t3 ; t2 >= -0x40000000 && t2 <= 0x3FFFFFFF ? t2 : vm.makeLarge(t2); }
+        else {
+            if (cache[3*4] !== t2.sqClass) vm.updateCache(cache, 3*4, t2.sqClass, vm.specialSendSelector[2], false); // #-
+            pc = 14; t2 = cache[3*4+2](vm, depth, thisProxy, cache[3*4+1], null, t2, t3); if (t2 === false) return false;}
+    case 14:
+        if (cache[3*5] !== t2.sqClass) vm.updateCache(cache, 3*5, t2.sqClass, method.pointers[1], false); // #benchFib
+        pc = 15; t2 = cache[3*5+2](vm, depth, thisProxy, cache[3*5+1], null, t2);
+        if (t2 === false) return false;
+    case 15:
+        if (typeof t1 === 'number' && typeof t2 === 'number') { t1 += t2 ; t1 >= -0x40000000 && t1 <= 0x3FFFFFFF ? t1 : vm.makeLarge(t1); }
+        else {
+            if (cache[3*6] !== t1.sqClass) vm.updateCache(cache, 3*6,t1.sqClass, vm.specialSendSelector[0], false);  // #+
+            pc = 16; t1 = cache[3*6+2](vm, depth, thisProxy, cache[3*6+1], null, t1, t2); if (t1 === false) return false;
+        }
+    case 16:
+        t2 = 1;
+        if (typeof t1 === 'number' && typeof t2 === 'number') { t1 += t2 ; t1 >= -0x40000000 && t1 <= 0x3FFFFFFF ? t1 : vm.makeLarge(t1); }
+        else {
+            if (cache[3*7] !== t1.sqClass) vm.updateCache(cache, 3*7, t1.sqClass, vm.specialSendSelector[0], false); // #+
+            pc = 18; t1 = cache[3*7+2](vm, depth, thisProxy, cache[3*7+1], null, t1, t2); if (t1 === false) return false;
+        }
+    case 18:
+        return t1;
+    }
+}
+return Integer_benchFib;
+`};
+    const mockVM = {
+        trueObj: { sqClass: "True" },
+        falseObj: { sqClass: "False" },
+        updateCache(cache, index, cls, selector, supered) {
+            var method = this.lookup(cls, selector, supered);
+            var func = method.compiled || this.compile(method);
+            cache[index] = cls;
+            cache[index+1] = method;
+            cache[index+2] = func;
+        },
+        lookup(cls, selector, supered) {
+            if (selector.value === "benchFib") return mockMethod;
+            throw Error("method not found: ", selector.value)
+        },
+        compile(method) {
+            if (!method.compiled) {
+                const compiler = new Function(method.source);
+                method.compiled = compiler();
+            }
+            return method.compiled;
+        },
+        interruptCheckCounter: 1000,
+        handleDepthAndInterrupts(depth, ctxProxy) {
+            this.interruptCheckCounter = 1000000;
+            console.log("interrupt check, depth: ", depth);
+            while (ctxProxy) {
+                console.log(depth, this.printContext(ctxProxy));
+                ctxProxy = ctxProxy("read", 0); // sender
+                depth--;
+            }
+        },
+        printContext(proxy) {
+            const stack = [];
+            for (let i = 0; i < proxy("read", 2); i++) stack.push(proxy("read", 6+i));
+            return `pc: ${proxy("read", 1)} stack: [${stack.join(' ')}]`;
+        },
+        makeLarge(n) { return { sqClass: "LargeInt", value: n }},
+    };
+    let t = Date.now();
+    const mockFunc = mockVM.compile(mockMethod);
+    const sends = mockFunc(mockVM, 0, null, mockMethod, null, 32);    // ~7 million sends
+    t = Date.now() - t;
+    console.log("result:", sends);
+    mockup.innerText = (sends / t / 1000).toFixed(0);
+</script>
+
+On my machine:
+
+|         | Current JIT  | New JIT Mockup | Speedup
+|---------|--------------|----------------|----------
+| Chrome  | 1.6 MSends/s | 38 MSends/s    | 23x
+| Firefox | 2.2 MSends/s | 20 MSends/s    | 9x
+| Safari  | 4.1 MSends/s | 13 MSends/s    | 3x
+
+For comparison, Eliot's Cog VM does about 200 MSends/s on the same machine.
+Which is pretty much exactly what the [simple benchmark](#contextmapping/context-to-varmapping) above achieves.
+The question is how to get close to that speed.
+
+
 # What about ...
 
 ## Blocks / Closures / FullBlockClosures?
@@ -520,7 +693,8 @@ _TODO_
 
 # What next?
 
-I'll gather feedback from people, and will try to implement a mockup of this. Maybe by hand-coding a version of `benchFib`.
+I'll gather feedback from people, ~~and will try to implement a mockup of this. Maybe by hand-coding a version of `benchFib`.~~
+(Update: mockup added above)
 
 For feedback, maybe use this [issue](https://github.com/codefrau/SqueakJS/issues/121) on the bug tracker. Happy to discuss elsewhere, too ([email](http://lists.squeak.org/mailman/listinfo/vm-dev) / [twitter](https://twitter.com/codefrau)).
 

@@ -680,8 +680,13 @@ For comparison, Eliot's Cog VM does about 200 MSends/s on the same machine.
 Which is pretty much exactly what the [simple benchmark](#contextmapping/context-to-varmapping) above achieves.
 The question is how to get close to that speed.
 
-Based on C. Scott's [comments](https://twitter.com/cscottnet/status/1369012854528020488) I also implemented a different scheme (try it here https://codepen.io/codefrau/pen/mdOzYwB).
+### Exception-based scheme
+
+Based on C. Scott's [comments](https://twitter.com/cscottnet/status/1369012854528020488) I also implemented a different scheme.
 Instead of always allocating the `thisProxy` closure and passing it to inner sends, it wraps the whole method in a try/catch block and only reads the context variables on unwind.
+Any context access would trigger this unwinding and context allocation for the whole nested call sequence.
+Try it at https://codepen.io/codefrau/pen/mdOzYwB
+
 This looks to be about 2x as efficient in the best case (when no unwind happens):
 
 |         | Current JIT  | Best case    | Speedup

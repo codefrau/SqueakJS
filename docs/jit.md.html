@@ -712,6 +712,15 @@ _TODO_
 
 Non-inlined primitives expect the arguments on a stack. They will have to be rewritten to take advantage of direct argument passing.
 
+## Object representation
+
+Currently objects are "optimized" for interpreter access, by storing instance variables in an array. Using object properties instead of arrays would likely be better for the JIT.
+The JIT can pre-compute that property name, but the interpreter would have to do it for every access.
+We could use `object.inst0`...`object.instN` to at least allow the interpreter access via a computed field name like `object["inst"+index]`.
+Even more efficient for the JIT (and even less for the interpreter) would be using class-specific inst var names to allow object-shape specialization.
+Garbage collection might be an issue since it needs to follow references from every instance variable. Iterating over indexed fields is simple and efficient, iterating over object properties less so.
+Also, all primitives accessing inst vars would need to be changed.
+
 # What next?
 
 I'll gather feedback from people, ~~and will try to implement a mockup of this. Maybe by hand-coding a version of `benchFib`.~~

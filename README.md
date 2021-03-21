@@ -110,13 +110,14 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2020-03-21: 1.0.3 headless fixes (Erik Stel); fixes object-as-method
     2020-02-07: 1.0.2 new one-way become prim (Christoph Tiede); JIT-compile Array at:/at:put:
     2020-01-05: 1.0.1 fixes some primitives to properly pop the stack
     2020-12-20: 1.0 supports 64 bits and Sista
     2020-06-20: renamed "master" branch to "main"
     2020-06-20: 0.9.9 JSBridge additions (Bill Burdick), fixes
     2020-04-08: renamed github account to "codefrau"
-    2020-01-26: 0.9.8 split into modules (ErikOnBike), fixes
+    2020-01-26: 0.9.8 split into modules (Erik Stel), fixes
     2019-01-03: 0.9.7 minor fixes
     2018-03-13: 0.9.6 minor fixes
     2016-11-08: 0.9.5 more fixes

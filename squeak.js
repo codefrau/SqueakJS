@@ -113,11 +113,12 @@
     Object.extend(Squeak,
     "version", {
         // system attributes
-        vmVersion: "SqueakJS 1.0.2",
-        vmDate: "2021-02-07",               // Maybe replace at build time?
+        vmVersion: "SqueakJS 1.0.3",
+        vmDate: "2021-03-21",               // Maybe replace at build time?
         vmBuild: "unknown",                 // or replace at runtime by last-modified?
         vmPath: "unknown",                  // Replace at runtime
         vmFile: "vm.js",
+        vmMakerVersion: "[VMMakerJS-bf.17 VMMaker-bf.353]", // for Smalltalk vmVMMakerVersion
         platformName: "JS",
         platformSubtype: "unknown",         // Replace at runtime
         osVersion: "unknown",               // Replace at runtime
@@ -3499,6 +3500,7 @@
             this.executeNewMethod(rcvr, method, argCount, 0);
         },
         findSelectorInClass: function(selector, argCount, startingClass) {
+            this.currentSelector = selector; // for primitiveInvokeObjectAsMethod
             var cacheEntry = this.findMethodCacheEntry(selector, startingClass);
             if (cacheEntry.method) return cacheEntry; // Found it in the method cache
             var currentClass = startingClass;
@@ -3515,11 +3517,9 @@
                 }
                 var newMethod = this.lookupSelectorInDict(mDict, selector);
                 if (!newMethod.isNil) {
-                    this.currentSelector = selector;
-                    this.currentLookupClass = startingClass;
-                    //if method is not actually a CompiledMethod, invoke primitiveInvokeObjectAsMethod (248) instead
+                    // if method is not actually a CompiledMethod, let primitiveInvokeObjectAsMethod (576) handle it
                     cacheEntry.method = newMethod;
-                    cacheEntry.primIndex = newMethod.isMethod() ? newMethod.methodPrimitiveIndex() : 248;
+                    cacheEntry.primIndex = newMethod.isMethod() ? newMethod.methodPrimitiveIndex() : 576;
                     cacheEntry.argCount = argCount;
                     cacheEntry.mClass = currentClass;
                     return cacheEntry;
@@ -5542,8 +5542,7 @@
                 case 246: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount);
                     break;  // fail 243-246 if fell through
                 // 247: unused
-                case 248: if (this.oldPrims) return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod) // see findSelectorInClass()
-                    else return this.primitiveArrayBecome(argCount, false, false); // one way, do not copy hash
+                case 248: return this.primitiveArrayBecome(argCount, false, false); // one way, do not copy hash
                 case 249: return this.primitiveArrayBecome(argCount, false, true); // one way, opt. copy hash
                 case 254: return this.primitiveVMParameter(argCount);
                 //MIDI Primitives (520-539)
@@ -5568,6 +5567,8 @@
                 case 572: return this.primitiveListBuiltinModule(argCount);
                 case 573: return this.primitiveListLoadedModule(argCount);
                 case 575: this.vm.warnOnce("missing primitive: 575 (primitiveHighBit)"); return false;
+                // this is not really a primitive, see findSelectorInClass()
+                case 576: return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod);
             }
             console.error("primitive " + index + " not implemented yet");
             return false;
@@ -6581,7 +6582,7 @@
             for (var i = 0; i < length; i++)
                 rcvr.pointers[i] = arg.pointers[i];
             rcvr.dirty = arg.dirty;
-            this.vm.pop(argCount);
+            this.vm.popN(argCount);
             return true;
         },
         primitiveLoadImageSegment: function(argCount) {
@@ -7006,7 +7007,7 @@
                 case 1001: value = Squeak.platformName; break;
                 case 1002: value = Squeak.osVersion; break;
                 case 1003: value = Squeak.platformSubtype; break;
-                case 1004: value = Squeak.vmVersion; break;
+                case 1004: value = Squeak.vmVersion + ' ' + Squeak.vmMakerVersion; break;
                 case 1005: value = Squeak.windowSystem; break;
                 case 1006: value = Squeak.vmBuild; break;
                 case 1007: value = Squeak.vmVersion; break; // Interpreter class
@@ -7180,7 +7181,7 @@
     'time', {
         primitiveRelinquishProcessorForMicroseconds: function(argCount) {
             // we ignore the optional arg
-            this.vm.pop(argCount);
+            this.vm.popN(argCount);
             this.vm.goIdle();        // might switch process, so must be after pop
             return true;
         },

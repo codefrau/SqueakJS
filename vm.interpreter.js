@@ -913,6 +913,7 @@ Object.subclass('Squeak.Interpreter',
         this.executeNewMethod(rcvr, method, argCount, 0);
     },
     findSelectorInClass: function(selector, argCount, startingClass) {
+        this.currentSelector = selector; // for primitiveInvokeObjectAsMethod
         var cacheEntry = this.findMethodCacheEntry(selector, startingClass);
         if (cacheEntry.method) return cacheEntry; // Found it in the method cache
         var currentClass = startingClass;
@@ -929,8 +930,6 @@ Object.subclass('Squeak.Interpreter',
             }
             var newMethod = this.lookupSelectorInDict(mDict, selector);
             if (!newMethod.isNil) {
-                this.currentSelector = selector;
-                this.currentLookupClass = startingClass;
                 // if method is not actually a CompiledMethod, let primitiveInvokeObjectAsMethod (576) handle it
                 cacheEntry.method = newMethod;
                 cacheEntry.primIndex = newMethod.isMethod() ? newMethod.methodPrimitiveIndex() : 576;

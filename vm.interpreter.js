@@ -931,9 +931,9 @@ Object.subclass('Squeak.Interpreter',
             if (!newMethod.isNil) {
                 this.currentSelector = selector;
                 this.currentLookupClass = startingClass;
-                //if method is not actually a CompiledMethod, invoke primitiveInvokeObjectAsMethod (248) instead
+                // if method is not actually a CompiledMethod, let primitiveInvokeObjectAsMethod (576) handle it
                 cacheEntry.method = newMethod;
-                cacheEntry.primIndex = newMethod.isMethod() ? newMethod.methodPrimitiveIndex() : 248;
+                cacheEntry.primIndex = newMethod.isMethod() ? newMethod.methodPrimitiveIndex() : 576;
                 cacheEntry.argCount = argCount;
                 cacheEntry.mClass = currentClass;
                 return cacheEntry;

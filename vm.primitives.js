@@ -390,8 +390,7 @@ Object.subclass('Squeak.Primitives',
             case 246: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount);
                 break;  // fail 243-246 if fell through
             // 247: unused
-            case 248: if (this.oldPrims) return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod) // see findSelectorInClass()
-                else return this.primitiveArrayBecome(argCount, false, false); // one way, do not copy hash
+            case 248: return this.primitiveArrayBecome(argCount, false, false); // one way, do not copy hash
             case 249: return this.primitiveArrayBecome(argCount, false, true); // one way, opt. copy hash
             case 254: return this.primitiveVMParameter(argCount);
             //MIDI Primitives (520-539)
@@ -416,6 +415,8 @@ Object.subclass('Squeak.Primitives',
             case 572: return this.primitiveListBuiltinModule(argCount);
             case 573: return this.primitiveListLoadedModule(argCount);
             case 575: this.vm.warnOnce("missing primitive: 575 (primitiveHighBit)"); return false;
+            // this is not really a primitive, see findSelectorInClass()
+            case 576: return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod);
         }
         console.error("primitive " + index + " not implemented yet");
         return false;

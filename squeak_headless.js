@@ -45,14 +45,6 @@ import "./vm.input.headless.js";        // use headless input to prevent image c
 import "./vm.plugins.js";
 import "./plugins/ConsolePlugin.js";
 
-// Run the VM
-Object.extend(Squeak, {
-    vmPath: "/",
-    platformSubtype: "Browser",
-    osVersion: navigator.userAgent,     // might want to parse
-    windowSystem: "headless",
-});
-
 // Run image by starting interpreter on it
 function runImage(imageData, imageName, options) {
 
@@ -99,6 +91,16 @@ function fetchImageAndRun(imageName, options) {
     });
 }
 
+// Extend Squeak with settings and options to fetch and run image
+Object.extend(Squeak, {
+    vmPath: "/",
+    platformSubtype: "Browser",
+    osVersion: navigator.userAgent,     // might want to parse
+    windowSystem: "headless",
+    fetchImageAndRun: fetchImageAndRun,
+});
+
+
 // Retrieve image name from URL
 var searchParams = (new URL(self.location)).searchParams;
 var imageName = searchParams.get("imageName");
@@ -108,5 +110,3 @@ if(imageName) {
     };
     fetchImageAndRun(imageName, options);
 }
-
-export default fetchImageAndRun;

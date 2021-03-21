@@ -1857,7 +1857,7 @@ Object.subclass('Squeak.Primitives',
             case 1001: value = Squeak.platformName; break;
             case 1002: value = Squeak.osVersion; break;
             case 1003: value = Squeak.platformSubtype; break;
-            case 1004: value = Squeak.vmVersion; break;
+            case 1004: value = Squeak.vmVersion + ' ' + Squeak.vmMakerVersion; break;
             case 1005: value = Squeak.windowSystem; break;
             case 1006: value = Squeak.vmBuild; break;
             case 1007: value = Squeak.vmVersion; break; // Interpreter class

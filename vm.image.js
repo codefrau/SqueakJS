@@ -436,7 +436,7 @@ Object.subclass('Squeak.Image',
     },
     ensureFullBlockClosureClass: function(splObs, compactClasses) {
         // Read FullBlockClosure class from compactClasses if not yet present in specialObjectsArray.
-        if (splObs.pointers[Squeak.splOb_ClassFullBlockClosure].isNil) {
+        if (splObs.pointers[Squeak.splOb_ClassFullBlockClosure].isNil && compactClasses[38]) {
             splObs.pointers[Squeak.splOb_ClassFullBlockClosure] = compactClasses[38];
         }
     },

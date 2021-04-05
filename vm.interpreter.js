@@ -133,6 +133,15 @@ Object.subclass('Squeak.Interpreter',
         } catch(e) {
             console.warn("Compiler " + e);
         }
+        if (!Squeak.Compiler2)
+            return console.warn("Squeak.Compiler2 not loaded, using basic JIT only");
+        // compiler2 might decide to not handle current image
+        try {
+            console.log("squeak: initializing New JIT compiler");
+            this.compiler2 = new Squeak.Compiler2(this);
+        } catch(e) {
+            console.warn("Compiler " + e);
+        }
     },
     hackImage: function() {
         // hack methods to make work / speed up
@@ -1008,6 +1017,8 @@ Object.subclass('Squeak.Interpreter',
             throw Error("receivers don't match");
         if (!newMethod.compiled && this.compiler)
             this.compiler.compile(newMethod, optClass, optSel);
+        else if (!newMethod.run && this.compiler2)
+            this.compiler2.compile(newMethod, optClass, optSel);
         // check for process switch on full method activation
         if (this.interruptCheckCounter-- <= 0) this.checkForInterrupts();
     },

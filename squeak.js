@@ -38,6 +38,7 @@ import "./vm.instruction.stream.sista.js";
 import "./vm.instruction.printer.js";
 import "./vm.primitives.js";
 import "./jit.js";
+import "./jit2.js";
 import "./vm.audio.browser.js";
 import "./vm.display.js";
 import "./vm.display.browser.js";

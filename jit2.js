@@ -177,13 +177,17 @@ in practice. The mockups are promising though, with some browsers reaching
         this.instVarNames = optInstVarNames;
         // start generating source
         this.source.push("'use strict';\n");
-        if (this.comments && optClass && optSel)
-            this.source.push("// ", optClass, ">>", optSel, "\n");
+        this.sourcePos['closure start'] = this.source.length;
         this.sourcePos['pctosp'] = this.source.length + 1; this.source.push("const PCtoSP=[", "", "],\nnil=vm.nilObj"); // filled in below
-        this.sourcePos['lit['] = this.source.length; this.source.push(",lit=method.pointers"); // deleted later if not needed
         this.sourcePos['falseObj'] = this.source.length; this.source.push(",falseObj=vm.falseObj"); // deleted later if not needed
         this.sourcePos['trueObj'] = this.source.length; this.source.push(",trueObj=vm.trueObj"); // deleted later if not needed
+        this.sourcePos['lit['] = this.source.length; this.source.push(",lit=method.pointers"); // deleted later if not needed
+        this.sourcePos['closure end'] = this.source.length;
         this.source.push(";\nreturn function ", funcName, "(rcvr", args, "){\n");
+        if (this.comments) {
+            if (optClass && optSel) this.source.push("// ", optClass, ">>", optSel, "\n");
+            this.sourcePos['closure comment'] = this.source.length; this.source.push("");
+        }
         // generate vars
         this.sourcePos['inst[']       = this.source.length; this.source.push("const inst=rcvr.pointers;\n"); // deleted later if not needed
         this.sourcePos['thisContext'] = this.source.length; this.source.push("const thisContext={}\n"); // deleted later if not needed
@@ -205,6 +209,11 @@ in practice. The mockups are promising though, with some browsers reaching
         this.source[this.sourcePos['pctosp']] = this.PCtoSP;
         this.deleteUnneededLabels();
         this.deleteUnneededVariables();
+        if (this.comments) {
+            // put closed-over variables outside the function into comment inside the function for debugging
+            this.source[this.sourcePos['closure comment']] = this.source.slice(
+                this.sourcePos['closure start'], this.sourcePos['closure end']).join("").replace(/^(const )?/gm, "// ") + ";\n";
+        }
         let src = this.source.join("");
         console.log(src);
         debugger
@@ -625,7 +634,7 @@ in practice. The mockups are promising though, with some browsers reaching
         var bytecodes = [];
         for (var i = this.prevPC; i < this.pc; i++)
             bytecodes.push((this.method.bytes[i] + 0x100).toString(16).slice(-2).toUpperCase());
-        this.source.push("// ", this.prevPC, " <", bytecodes.join(" "), "> ", command);
+        this.source.push("\n// ", this.prevPC, " <", bytecodes.join(" "), "> ", command);
         // append argument to comment
         if (what) {
             this.source.push(" ");

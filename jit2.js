@@ -173,14 +173,14 @@ in practice. The mockups are promising though, with some browsers reaching
         this.needsLabel = {};       // jump targets
         this.sourcePos = {};        // source pos of optional vars / statements
         this.needsVar = {};         // true if var was used
-        this.optionalVars = ['lit[', 'falseObj', 'trueObj', 'inst[', 'thisContext']; // vars to remove if unused
+        this.optionalVars = ['lit[', 'F', 'T', 'inst[', 'thisContext']; // vars to remove if unused
         this.instVarNames = optInstVarNames;
         // start generating source
         this.source.push("'use strict';\n");
         this.sourcePos['closure start'] = this.source.length;
-        this.sourcePos['pctosp'] = this.source.length + 1; this.source.push("const PCtoSP=[", "", "],\nnil=vm.nilObj"); // filled in below
-        this.sourcePos['falseObj'] = this.source.length; this.source.push(",falseObj=vm.falseObj"); // deleted later if not needed
-        this.sourcePos['trueObj'] = this.source.length; this.source.push(",trueObj=vm.trueObj"); // deleted later if not needed
+        this.sourcePos['pctosp'] = this.source.length + 1; this.source.push("const PCtoSP=[", "", "],\nN=vm.nilObj"); // filled in below
+        this.sourcePos['F'] = this.source.length; this.source.push(",F=vm.falseObj"); // deleted later if not needed
+        this.sourcePos['T'] = this.source.length; this.source.push(",T=vm.trueObj"); // deleted later if not needed
         this.sourcePos['lit['] = this.source.length; this.source.push(",lit=method.pointers"); // deleted later if not needed
         this.sourcePos['closure end'] = this.source.length;
         this.source.push(";\nreturn function ", funcName, "(rcvr", args, "){\n");
@@ -193,8 +193,8 @@ in practice. The mockups are promising though, with some browsers reaching
         this.sourcePos['thisContext'] = this.source.length; this.source.push("const thisContext={}\n"); // deleted later if not needed
         this.source.push("let pc=0");
         if (numTemps > numArgs) {
-            this.needsVar['nil'] = true;
-            for (let i = numArgs ; i < numTemps; i++) this.source.push(`,t${i}=nil`);
+            this.needsVar['N'] = true;
+            for (let i = numArgs ; i < numTemps; i++) this.source.push(`,t${i}=N`);
         }
         this.sourcePos['stack'] = this.source.length; this.source.push(''); // filled in below
         this.source.push(`;\ntry{if(--vm.depth<=0||--vm.interruptCheckCounter<=0)vm.jitInterruptCheck();\n`);
@@ -204,7 +204,7 @@ in practice. The mockups are promising though, with some browsers reaching
         this.sourcePos['loop-end'] = this.source.length; this.source.push(`default: throw Error("unexpected PC: " + pc);\n}`);
         this.source.push(`}catch(frame){\n`);
         this.source.push(`if("nonLocalReturnValue" in frame){vm.depth++;throw frame}\n`);
-        this.source.push(`frame.ctx={class:"MethodContext",pointers:[frame.ctx,pc,PCtoSP[pc],method,nil,rcvr${temps}${stack}]};throw frame}\n}`);
+        this.source.push(`frame.ctx={class:"MethodContext",pointers:[frame.ctx,pc,PCtoSP[pc],method,N,rcvr${temps}${stack}]};throw frame}\n}`);
         this.source[this.sourcePos['stack']] = stack;
         this.source[this.sourcePos['pctosp']] = this.PCtoSP;
         this.deleteUnneededLabels();
@@ -255,9 +255,9 @@ in practice. The mockups are promising though, with some browsers reaching
                 case 0x70:
                     switch (byte) {
                         case 0x70: this.generatePush("rcvr"); break;
-                        case 0x71: this.generatePush("trueObj"); break;
-                        case 0x72: this.generatePush("falseObj"); break;
-                        case 0x73: this.generatePush("nil"); break;
+                        case 0x71: this.generatePush("T"); break;
+                        case 0x72: this.generatePush("F"); break;
+                        case 0x73: this.generatePush("N"); break;
                         case 0x74: this.generatePush("-1"); break;
                         case 0x75: this.generatePush("0"); break;
                         case 0x76: this.generatePush("1"); break;
@@ -268,9 +268,9 @@ in practice. The mockups are promising though, with some browsers reaching
                 case 0x78:
                     switch (byte) {
                         case 0x78: this.generateReturn("rcvr"); break;
-                        case 0x79: this.generateReturn("trueObj"); break;
-                        case 0x7A: this.generateReturn("falseObj"); break;
-                        case 0x7B: this.generateReturn("nil"); break;
+                        case 0x79: this.generateReturn("T"); break;
+                        case 0x7A: this.generateReturn("F"); break;
+                        case 0x7B: this.generateReturn("N"); break;
                         case 0x7C: this.generateReturn(this.top()); break;
                         case 0x7D: this.generateBlockReturn(); break;
                         default: throw Error("unusedBytecode");
@@ -523,11 +523,11 @@ in practice. The mockups are promising though, with some browsers reaching
         var prevPC = this.prevPC;
         this.generateLabel();
         const v = this.pop();
-        this.source.push(`if(${v}===${bool}Obj){pc=${destination};continue}`);
-        this.source.push(`else if(${v}!==${!bool}Obj){pc=${prevPC};throw Error("todo: send #mustBeBoolean");}`);
+        this.source.push(`if(${v}===${bool?"T":"F"}){pc=${destination};continue}`);
+        this.source.push(`else if(${v}!==${bool?"F":"T"}){pc=${prevPC};throw Error("todo: send #mustBeBoolean");}`);
         this.needsLabel[destination] = true;
-        this.needsVar["falseObj"] = true;
-        this.needsVar["trueObj"] = true;
+        this.needsVar["F"] = true;
+        this.needsVar["T"] = true;
         if (this.PCtoSP[destination] === undefined) this.PCtoSP[destination] = this.sp;
         if (destination > this.endPC) this.endPC = destination;
     },
@@ -543,7 +543,10 @@ in practice. The mockups are promising though, with some browsers reaching
         //     case 0xC3: // next
         //     case 0xC4: // nextPut:
         //     case 0xC5: // atEnd
-        //     case 0xC6: // ==
+        case 0xC6: // ==
+            this.needsVar["F"] = true; this.needsVar["T"] = true;
+            const b = this.pop(), a = this.top(); this.source.push(`${a}=${a}===${b}?T:F;`);
+            return;
         //     case 0xC7: // class
         //     case 0xC8: // blockCopy:
         //     case 0xC9: // value
@@ -640,9 +643,9 @@ in practice. The mockups are promising though, with some browsers reaching
         if (what) {
             this.source.push(" ");
             switch (what) {
-                case 'nil':    this.source.push('nil'); break;
-                case 'trueObj':   this.source.push('true'); break;
-                case 'falseObj':  this.source.push('false'); break;
+                case 'N':    this.source.push('nil'); break;
+                case 'T':   this.source.push('true'); break;
+                case 'F':  this.source.push('false'); break;
                 case 'rcvr':         this.source.push('self'); break;
                 case 'inst[':
                     if (!this.instVarNames) this.source.push('inst var ', arg1);
@@ -672,9 +675,9 @@ in practice. The mockups are promising though, with some browsers reaching
         if (what) {
             this.source.push(" ");
             switch (what) {
-                case 'nil':    this.source.push('nil'); break;
-                case 'trueObj':   this.source.push('true'); break;
-                case 'falseObj':  this.source.push('false'); break;
+                case 'N':    this.source.push('nil'); break;
+                case 'T':   this.source.push('true'); break;
+                case 'F':  this.source.push('false'); break;
                 case 'rcvr':         this.source.push('self'); break;
                 case 'inst[':        this.source.push('inst var ', arg1); break;
                 case 't':

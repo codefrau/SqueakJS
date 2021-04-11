@@ -524,7 +524,7 @@ in practice. The mockups are promising though, with some browsers reaching
         this.generateLabel();
         const v = this.pop();
         this.source.push(`if(${v}===${bool}Obj){pc=${destination};continue}`);
-        this.source.push(`else if(${v}!==${!bool}Obj){pc=${prevPC};throw Error("todo: send #mustBeBoolean");}\n`);
+        this.source.push(`else if(${v}!==${!bool}Obj){pc=${prevPC};throw Error("todo: send #mustBeBoolean");}`);
         this.needsLabel[destination] = true;
         this.needsVar["falseObj"] = true;
         this.needsVar["trueObj"] = true;
@@ -534,8 +534,9 @@ in practice. The mockups are promising though, with some browsers reaching
     generateQuickPrim: function(byte) {
         const lobits = (byte & 0x0F) + 16;
         if (this.debug) this.generateDebugCode("quick send #" + this.specialSelectors[lobits]);
-        // this.generateLabel();
-        // switch (byte) {
+        const pc = this.prevPC;
+        this.generateLabel();
+        switch (byte) {
         //     case 0xC0: // at:
         //     case 0xC1: // at:put:
         //     case 0xC2: // size
@@ -552,11 +553,11 @@ in practice. The mockups are promising though, with some browsers reaching
         //     case 0xCD: // new:
         //     case 0xCE: // x
         //     case 0xCF: // y
-        // }
+        }
         // generic version for the bytecodes not yet handled above
         let numArgs = this.vm.specialSelectors[(lobits*2)+1];
         this.sp -= numArgs;
-        this.generateUnimplemented("quick send #" + this.specialSelectors[lobits]);
+        this.source.push(`pc=${pc};throw Error("quick send #${this.specialSelectors[lobits]} not implemented yet");`);
     },
     generateNumericOp: function(byte) {
         const lobits = byte & 0x0F;
@@ -634,7 +635,7 @@ in practice. The mockups are promising though, with some browsers reaching
         var bytecodes = [];
         for (var i = this.prevPC; i < this.pc; i++)
             bytecodes.push((this.method.bytes[i] + 0x100).toString(16).slice(-2).toUpperCase());
-        this.source.push("\n// ", this.prevPC, " <", bytecodes.join(" "), "> ", command);
+        this.source.push("\n\n// ", this.prevPC, " <", bytecodes.join(" "), "> ", command);
         // append argument to comment
         if (what) {
             this.source.push(" ");
@@ -666,7 +667,7 @@ in practice. The mockups are promising though, with some browsers reaching
     generateUnimplemented: function(command, what, arg1, suffix1, arg2, suffix2) {
         const pc = this.prevPC;
         this.generateLabel();
-        this.source.push(`\npc = ${pc}; throw Error("Not yet implemented: ${command}`);
+        this.source.push(`pc=${pc};throw Error("Not yet implemented: ${command}`);
         // append argument
         if (what) {
             this.source.push(" ");
@@ -689,7 +690,7 @@ in practice. The mockups are promising though, with some browsers reaching
                     this.source.push(what);
             }
         }
-        this.source.push(`");\n`);
+        this.source.push(`");`);
     },
     generateInstruction: function(comment, instr) {
         if (this.debug) this.generateDebugCode(comment);

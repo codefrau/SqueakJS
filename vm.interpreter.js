@@ -988,6 +988,10 @@ Object.subclass('Squeak.Interpreter',
         if (primitiveIndex > 0)
             if (this.tryPrimitive(primitiveIndex, argumentCount, newMethod))
                 return;  //Primitive succeeded -- end of story
+        if (typeof newMethod.run === "function") {
+            console.log(this.sendCount + ' JIT ' + this.printMethod(newMethod, optClass, optSel));
+            return this.executeJITMethod(newRcvr, newMethod, argumentCount);
+        }
         var newContext = this.allocateOrRecycleContext(newMethod.methodNeedsLargeFrame());
         var tempCount = newMethod.methodTempCount();
         var newPC = 0; // direct zero-based index into byte codes
@@ -1229,6 +1233,83 @@ Object.subclass('Squeak.Interpreter',
         // could be selective by checking lkupClass, selector,
         // and method against mutations dict
         this.flushMethodCache();
+    },
+},
+'jit', {
+    executeJITMethod: function(rcvr, method, argCount) {
+        const MAX_DEPTH = 50;
+        let interpreterContext = this.activeContext;
+        this.storeContextRegisters();
+        try {
+            // invoke and hope it comes back without unwinding
+            this.depth = MAX_DEPTH;
+            const args = interpreterContext.pointers.slice(this.sp - argCount + 1, this.sp + 1);
+            const result = method.run(rcvr, ...args);
+            if (this.depth !== MAX_DEPTH) throw Error(`JIT depth count missmatch: ${this.depth - MAX_DEPTH}`);
+            // it worked! just push result
+            this.popNandPush(argCount+1, result);
+            console.log(`JIT success: ${result}`);
+            // this.nounwindCount++;
+        } catch (frame) {
+            // a non-local return to interpreter context
+            if ("nonLocalReturnValue" in frame) {
+                if (this.depth !== MAX_DEPTH) throw Error(`JIT depth count missmatch (NLR): ${this.depth - MAX_DEPTH}`);
+                debugger
+                this.doReturn(frame.nonLocalReturnValue, frame.ctx);
+                return true;
+            }
+            // it stopped somewhere :(
+            if (frame instanceof Error) throw frame;
+            // walk all contexts by following child pointer [0]
+            let ctx = frame.ctx;
+            while (ctx) {
+                const child = ctx.pointers[0];
+                // set sender
+                ctx.pointers[0] = interpreterContext;
+                interpreterContext = ctx;
+                ctx = child;
+            }
+            // >>> WHOOSH >>>
+            this.activeContext = interpreterContext;
+            // re-initialize interpreter state
+            this.fetchContextRegisters(this.activeContext);
+            // this.unwindCount++;
+        }
+        if (--this.interruptCheckCounter <= 0) this.checkForInterrupts();
+    },
+    jitAllocContext() {
+        // TODO: optimize
+        // alloc with 0 size so jitted code can push to append
+        var context = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassMethodContext], 0);
+        context.pointers.length = 0; // remove inst vars too
+        context.dirty = true;
+        return context;
+    },
+    jitInterruptCheck() {
+        // called from JIT when this.interruptCheckCounter < 0
+
+        // unwind to handle context switches
+        var now = this.primHandler.millisecondClockValue();
+        if (this.interruptPending
+            || ((this.nextWakeupTick !== 0) && (now >= this.nextWakeupTick))
+            || (this.pendingFinalizationSignals > 0)
+            || (this.primHandler.semaphoresToSignal.length > 0)
+            || (now < this.lastTick || now >= this.breakOutTick)
+            || this.interruptCheckCounter < -100)
+                throw { message: "handleInterrupts" };
+
+        // Feedback logic attempts to keep interrupt response around 3ms...
+        if ((now - this.lastTick) < this.interruptChecksEveryNms) { //wrapping is not a concern
+            this.interruptCheckCounterFeedBackReset += 10;
+        } else { // do a thousand sends even if we are too slow for 3ms
+            if (this.interruptCheckCounterFeedBackReset <= 1000)
+                this.interruptCheckCounterFeedBackReset = 1000;
+            else
+                this.interruptCheckCounterFeedBackReset -= 12;
+        }
+
+        this.interruptCheckCounter = this.interruptCheckCounterFeedBackReset; //reset the interrupt check counter
+        this.lastTick = now; //used to detect wraparound of millisecond clock
     },
 },
 'contexts', {

@@ -118,7 +118,7 @@ in practice. The mockups are promising though, with some browsers reaching
 'initialization', {
     initialize: function(vm) {
         this.vm = vm;
-        this.comments = false, // generate comments
+        this.comments = true, // generate comments
         // for debug-printing only
         this.specialSelectors = ['+', '-', '<', '>', '<=', '>=', '=', '~=', '*', '/', '\\\\', '@',
             'bitShift:', '//', 'bitAnd:', 'bitOr:', 'at:', 'at:put:', 'size', 'next', 'nextPut:',
@@ -165,7 +165,7 @@ in practice. The mockups are promising though, with some browsers reaching
         this.pc = 0;                // next bytecode
         this.endPC = 0;             // pc of furthest jump target
         this.prevPC = 0;            // pc at start of current instruction
-        this.sp = numTemps - 1;     // generator SP
+        this.sp = 0;                // generator SP
         this.maxSP = this.sp;       // num of stack vars needed
         this.PCtoSP = [];           // mapping from pc to sp
         this.source = [];           // snippets will be joined in the end
@@ -177,46 +177,39 @@ in practice. The mockups are promising though, with some browsers reaching
         this.instVarNames = optInstVarNames;
         // start generating source
         this.source.push("'use strict';\n");
-        this.sourcePos['closure start'] = this.source.length;
-        this.sourcePos['pctosp'] = this.source.length + 1; this.source.push("const PCtoSP=[", "", "],\nN=vm.nilObj"); // filled in below
+        this.sourcePos['pctosp'] = this.source.length + 1; this.source.push("let PCtoSP=[", "", "],\nN=vm.nilObj"); // filled in below
         this.sourcePos['F'] = this.source.length; this.source.push(",F=vm.falseObj"); // deleted later if not needed
         this.sourcePos['T'] = this.source.length; this.source.push(",T=vm.trueObj"); // deleted later if not needed
         this.sourcePos['lit['] = this.source.length; this.source.push(",lit=method.pointers"); // deleted later if not needed
-        this.sourcePos['closure end'] = this.source.length;
         this.source.push(";\nreturn function ", funcName, "(rcvr", args, "){\n");
-        if (this.comments) {
-            if (optClass && optSel) this.source.push("// ", optClass, ">>", optSel, "\n");
-            this.sourcePos['closure comment'] = this.source.length; this.source.push("");
-        }
+        if (this.comments && optClass && optSel) this.source.push("// ", optClass, ">>", optSel, "\n");
         // generate vars
-        this.sourcePos['inst[']       = this.source.length; this.source.push("const inst=rcvr.pointers;\n"); // deleted later if not needed
-        this.sourcePos['thisContext'] = this.source.length; this.source.push("const thisContext={}\n"); // deleted later if not needed
+        this.sourcePos['inst[']       = this.source.length; this.source.push("let inst=rcvr.pointers;\n"); // deleted later if not needed
+        this.sourcePos['thisContext'] = this.source.length; this.source.push("let thisContext;\n"); // deleted later if not needed
         this.source.push("let pc=0");
         if (numTemps > numArgs) {
             this.needsVar['N'] = true;
             for (let i = numArgs ; i < numTemps; i++) this.source.push(`,t${i}=N`);
         }
         this.sourcePos['stack'] = this.source.length; this.source.push(''); // filled in below
-        this.source.push(`;\ntry{if(--vm.depth<=0||--vm.interruptCheckCounter<=0)vm.jitInterruptCheck();\n`);
+        this.source.push(`;\ntry{\nif(--vm.interruptCheckCounter<=0)vm.jitInterruptCheck();\nif(--vm.depth<=0)throw{};\n`);
         this.sourcePos['loop-start'] = this.source.length; this.source.push(`while(true)switch(pc){\ncase 0:`);
+        this.source.push("debugger;\n")
         this.generateBytecodes();
-        let stack = ""; for (let i = numTemps; i < this.maxSP + 1; i++) stack += `,s${i}`;
+        let stack = ""; for (let i = 1; i < this.maxSP + 1; i++) stack += `,s${i}`;
         this.sourcePos['loop-end'] = this.source.length; this.source.push(`default: throw Error("unexpected PC: " + pc);\n}`);
-        this.source.push(`}catch(frame){\n`);
-        this.source.push(`if("nonLocalReturnValue" in frame){vm.depth++;throw frame}\n`);
-        this.source.push(`frame.ctx={class:"MethodContext",pointers:[frame.ctx,pc,PCtoSP[pc],method,N,rcvr${temps}${stack}]};throw frame}\n}`);
+        this.source.push(`}catch(frame){\n` +
+                         `if("nonLocalReturnValue" in frame){vm.depth++;throw frame}\n` +
+                         `let c=${this.needsVar["thisContext"]?"thisContext||":""}vm.jitAllocContext();let f=c.pointers;` +
+                         `f.push(frame.ctx,pc+${method.pointers.length * 4 + 1},PCtoSP[pc]+${numTemps},method,N,rcvr${args}${temps}${stack});` +
+                         `f.length=${method.methodNeedsLargeFrame()?56:16};frame.ctx=c;throw frame}\n}`);
         this.source[this.sourcePos['stack']] = stack;
         this.source[this.sourcePos['pctosp']] = this.PCtoSP;
         this.deleteUnneededLabels();
         this.deleteUnneededVariables();
-        if (this.comments) {
-            // put closed-over variables outside the function into comment inside the function for debugging
-            this.source[this.sourcePos['closure comment']] = this.source.slice(
-                this.sourcePos['closure start'], this.sourcePos['closure end']).join("").replace(/^(const )?/gm, "// ") + ";\n";
-        }
         let src = this.source.join("");
-        console.log(src);
-        debugger
+        // console.log(src);
+        // debugger
         return new Function("vm", "method", src)(this.vm, method);
     },
     generateBytecodes() {
@@ -396,7 +389,7 @@ in practice. The mockups are promising though, with some browsers reaching
             // thisContext
             case 0x89:
                 this.needsVar["thisContext"] = true;
-                this.generateInstruction("push thisContext", `${this.push()} = thisContext`);
+                this.generateInstruction("push thisContext", `if(!thisContext)thisContext=vm.jitAllocContext();${this.push()}=thisContext`);
                 return;
             // closures
             case 0x8A:
@@ -498,7 +491,7 @@ in practice. The mockups are promising though, with some browsers reaching
         if (this.debug) this.generateDebugCode("return", what);
         this.generateLabel();
         this.needsVar[what] = true;
-        this.source.push(`return ${what};\n`);
+        this.source.push(`vm.depth++;return ${what};\n`);
         this.done = this.pc > this.endPC;
     },
     generateBlockReturn: function() {
@@ -560,7 +553,7 @@ in practice. The mockups are promising though, with some browsers reaching
         // generic version for the bytecodes not yet handled above
         let numArgs = this.vm.specialSelectors[(lobits*2)+1];
         this.sp -= numArgs;
-        this.source.push(`pc=${pc};throw Error("quick send #${this.specialSelectors[lobits]} not implemented yet");`);
+        this.source.push(`pc=${pc};throw {message: "quick send #${this.specialSelectors[lobits]} not implemented yet"};`);
     },
     generateNumericOp: function(byte) {
         const lobits = byte & 0x0F;
@@ -590,11 +583,11 @@ in practice. The mockups are promising though, with some browsers reaching
         this.generateUnimplemented("quick send #" + this.specialSelectors[lobits]);
     },
     generateSend: function(prefix, num, suffix, numArgs, superSend) {
-        if (this.debug) this.generateDebugCode("send " + (prefix === "lit[" ? this.method.pointers[num].bytesAsString() : "..."));
+        if (this.debug) this.generateDebugCode((superSend ? "super " : "send ") + (prefix === "lit[" ? this.method.pointers[num].bytesAsString() : "..."));
         // this.generateLabel();
         this.needsVar[prefix] = true;
         this.sp -= numArgs;
-        this.generateUnimplemented(`send ${prefix === "lit[" ? "literal #" + num : prefix}`);
+        this.generateUnimplemented(`${superSend ? "super send" : "send"} ${prefix === "lit[" ? "literal #" + num : prefix}`);
     },
     generateClosureTemps: function(count, popValues) {
         if (this.debug) this.generateDebugCode("closure temps");
@@ -670,7 +663,7 @@ in practice. The mockups are promising though, with some browsers reaching
     generateUnimplemented: function(command, what, arg1, suffix1, arg2, suffix2) {
         const pc = this.prevPC;
         this.generateLabel();
-        this.source.push(`pc=${pc};throw Error("Not yet implemented: ${command}`);
+        this.source.push(`pc=${pc};throw {message: "Not yet implemented: ${command}`);
         // append argument
         if (what) {
             this.source.push(" ");
@@ -693,7 +686,7 @@ in practice. The mockups are promising though, with some browsers reaching
                     this.source.push(what);
             }
         }
-        this.source.push(`");`);
+        this.source.push(`"};`);
     },
     generateInstruction: function(comment, instr) {
         if (this.debug) this.generateDebugCode(comment);

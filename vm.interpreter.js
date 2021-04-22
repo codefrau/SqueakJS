@@ -1245,6 +1245,7 @@ Object.subclass('Squeak.Interpreter',
             const args = interpreterContext.pointers.slice(this.sp - argCount + 1, this.sp + 1);
             this.popN(argCount + 1);
             this.storeContextRegisters();
+            this.reclaimableContextCount = 0; // check this later
             const result = method.run(rcvr, ...args);
             if (this.depth !== MAX_DEPTH) throw Error(`JIT depth count missmatch: ${this.depth - MAX_DEPTH}`);
             // it worked! just push result

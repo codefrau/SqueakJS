@@ -395,12 +395,12 @@ in practice. The mockups are promising though, with some browsers reaching
                 return;
             // dup
             case 0x88:
-                this.generateInstruction("dup", `${this.push()} = ${this.top()}`);
+                this.generateInstruction("dup", this.pushValue(this.top()));
                 return;
             // thisContext
             case 0x89:
                 this.needsVar["thisContext"] = true;
-                this.generateInstruction("push thisContext", `if(!thisContext)thisContext=vm.jitAllocContext();${this.push()}=thisContext`);
+                this.generateInstruction("push thisContext", `if(!thisContext)thisContext=vm.jitAllocContext();${this.pushValue("thisContext")}`);
                 return;
             // closures
             case 0x8A:
@@ -457,7 +457,10 @@ in practice. The mockups are promising though, with some browsers reaching
     },
     pop: function() {
         return "s" + this.sp--;
-    }
+    },
+    pushValue: function(value) {
+        return this.push() + "=" + value;
+    },
 },
 'generating', {
     generatePush: function(target, arg1, suffix1, arg2, suffix2) {

@@ -210,9 +210,14 @@ in practice. The mockups are promising though, with some browsers reaching
         this.deleteUnneededLabels();
         this.deleteUnneededVariables();
         let src = this.source.join("");
-        // console.log(src);
-        // debugger
-        return new Function("vm", "method", src)(this.vm, method);
+        try {
+            return new Function("vm", "method", src)(this.vm, method);
+        } catch(err) {
+            console.log(src);
+            console.error(err);
+            debugger
+            return new Function("vm", "method", src)(this.vm, method);
+        }
     },
     generateBytecodes() {
         this.done = false;

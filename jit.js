@@ -806,7 +806,7 @@ to single-step.
                     break;
                 case 'lit[':
                     var lit = this.method.pointers[arg1];
-                    if (suffix1 === ']') this.source.push(lit);
+                    if (suffix1 === ']') this.source.push((""+lit).replace(/[\r\n]/g, c => c === "\r" ? "\\r" : "\\n"));
                     else this.source.push(lit.pointers[0].bytesAsString());
                     break;
                 default:

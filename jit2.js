@@ -170,6 +170,7 @@ in practice. The mockups are promising though, with some browsers reaching
         this.sp = 0;                // generator SP
         this.maxSP = this.sp;       // num of stack vars needed
         this.PCtoSP = [];           // mapping from pc to sp
+        this.isLeaf = true;         // if there are no sends we can simplify the method
         this.source = [];           // snippets will be joined in the end
         this.sourceLabels = {};     // source pos of generated labels
         this.needsLabel = {};       // jump targets
@@ -186,15 +187,17 @@ in practice. The mockups are promising though, with some browsers reaching
         this.source.push(";\nreturn function ", funcName, "(rcvr", args, "){\n");
         if (this.comments && optClass && optSel) this.source.push("// ", optClass, ">>", optSel, "\n");
         // generate vars
-        this.sourcePos['inst[']       = this.source.length; this.source.push("let inst=rcvr.pointers;\n"); // deleted later if not needed
-        this.sourcePos['thisContext'] = this.source.length; this.source.push("let thisContext;\n"); // deleted later if not needed
-        this.source.push("let pc=0");
+        this.source.push("let "); this.sourcePos['vars'] = this.source.length;
+        this.sourcePos['inst['] = this.source.length; this.source.push(",inst=rcvr.pointers"); // deleted later if not needed
+        this.sourcePos['thisContext'] = this.source.length; this.source.push(",thisContext"); // deleted later if not needed
         if (numTemps > numArgs) {
             this.needsVar['N'] = true;
             for (let i = numArgs ; i < numTemps; i++) this.source.push(`,t${i}=N`);
         }
         this.sourcePos['stack'] = this.source.length; this.source.push(''); // filled in below
-        this.source.push(`;\ntry{\nif(--vm.interruptCheckCounter<=0)vm.jitInterruptCheck();\nif(--vm.depth<=0)throw{};\n`);
+        this.sourcePos['pc'] = this.source.length; this.source.push(',pc=0');
+        this.source.push(`;\ntry{\n`);
+        this.sourcePos['check'] = this.source.length; this.source.push(`if(--vm.depth<=0)throw{};\nif(--vm.interruptCheckCounter<=0)vm.jitInterruptCheck();\n`);
         this.sourcePos['loop-start'] = this.source.length; this.source.push(`while(true)switch(pc){\ncase 0:`);
         this.source.push("debugger;\n")
         this.generateBytecodes();
@@ -209,6 +212,7 @@ in practice. The mockups are promising though, with some browsers reaching
         this.source[this.sourcePos['pctosp']] = this.PCtoSP;
         this.deleteUnneededLabels();
         this.deleteUnneededVariables();
+        if (this.isLeaf) this.source[this.sourcePos['check']] = "vm.depth--;\n"; // omit depth+interrupt check for leaf methods
         let src = this.source.join("");
         try {
             return new Function("vm", "method", src)(this.vm, method);
@@ -511,7 +515,7 @@ in practice. The mockups are promising though, with some browsers reaching
         if (this.debug) this.generateDebugCode("jump to " + destination);
         this.generateLabel();
         this.source.push(`pc=${destination};`);
-        if (distance < 0) this.source.push("if(--vm.interruptCheckCounter<=0)vm.checkForInterrupts();");
+        if (distance < 0) this.source.push("if(--vm.interruptCheckCounter<=0)vm.jitInterruptCheck();");
         else if (this.PCtoSP[destination] === undefined) this.PCtoSP[destination] = this.sp;
         this.source.push("continue;\n");
         this.needsLabel[destination] = true;
@@ -528,6 +532,7 @@ in practice. The mockups are promising though, with some browsers reaching
         this.needsLabel[destination] = true;
         this.needsVar["F"] = true;
         this.needsVar["T"] = true;
+        this.isLeaf = false; // could send mustBeBoolean
         if (this.PCtoSP[destination] === undefined) this.PCtoSP[destination] = this.sp;
         if (destination > this.endPC) this.endPC = destination;
     },
@@ -561,6 +566,7 @@ in practice. The mockups are promising though, with some browsers reaching
         let numArgs = this.vm.specialSelectors[(lobits*2)+1];
         this.sp -= numArgs;
         this.source.push(`pc=${pc};throw {message: "quick send #${this.specialSelectors[lobits]} not implemented yet"};`);
+        this.isLeaf = false; // could do full send
     },
     generateNumericOp: function(byte) {
         const lobits = byte & 0x0F;
@@ -593,6 +599,7 @@ in practice. The mockups are promising though, with some browsers reaching
         if (this.debug) this.generateDebugCode((superSend ? "super " : "send ") + (prefix === "lit[" ? this.method.pointers[num].bytesAsString() : "..."));
         // this.generateLabel();
         this.needsVar[prefix] = true;
+        this.isLeaf = false;
         this.sp -= numArgs;
         this.generateUnimplemented(`${superSend ? "super send" : "send"} ${prefix === "lit[" ? "literal #" + num : prefix}`);
     },
@@ -671,6 +678,7 @@ in practice. The mockups are promising though, with some browsers reaching
         const pc = this.prevPC;
         this.generateLabel();
         this.source.push(`pc=${pc};throw {message: "Not yet implemented: ${command}`);
+        this.isLeaf = false; // throws
         // append argument
         if (what) {
             this.source.push(" ");
@@ -714,11 +722,15 @@ in practice. The mockups are promising though, with some browsers reaching
         }
     },
     deleteUnneededVariables: function() {
-        if (this.needsVar['inst[']) this.needsVar['rcvr'] = true;
+        // delete initial comma from first var
         for (var i = 0; i < this.optionalVars.length; i++) {
             var v = this.optionalVars[i];
             if (!this.needsVar[v])
                 this.source[this.sourcePos[v]] = "";
         }
+        // delete initial comma from first var
+        var p = this.sourcePos['vars'];
+        while (!this.source[p]) p++;
+        this.source[p] = this.source[p].slice(1);
     },
 });

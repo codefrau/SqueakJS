@@ -1236,7 +1236,7 @@ Object.subclass('Squeak.Interpreter',
     },
 },
 'jit', {
-    executeJITMethod: function(rcvr, method, argCount) {
+    executeJITMethod: function(rcvr, method, argCount, optClass, optSel) {
         const MAX_DEPTH = 50;
         let interpreterContext = this.activeContext;
         try {
@@ -1247,15 +1247,15 @@ Object.subclass('Squeak.Interpreter',
             this.storeContextRegisters();
             this.reclaimableContextCount = 0; // check this later
             const result = method.run(rcvr, ...args);
-            if (this.depth !== MAX_DEPTH) throw Error(`JIT depth count missmatch: ${this.depth - MAX_DEPTH}`);
+            if (this.depth !== MAX_DEPTH) throw Error("JIT depth count missmatch: " + this.depth - MAX_DEPTH);
             // it worked! just push result
-            console.log(`JIT success: ${result}`);
             this.push(result);
+            console.log("JIT success", this.printMethod(method, optClass, optSel), result);
             // this.nounwindCount++;
         } catch (frame) {
             // a non-local return to interpreter context
             if ("nonLocalReturnValue" in frame) {
-                if (this.depth !== MAX_DEPTH) throw Error(`JIT depth count missmatch (NLR): ${this.depth - MAX_DEPTH}`);
+                if (this.depth !== MAX_DEPTH) throw Error("JIT depth count missmatch (NLR): " + this.depth - MAX_DEPTH);
                 debugger
                 this.doReturn(frame.nonLocalReturnValue, frame.ctx);
                 return true;
@@ -1279,7 +1279,7 @@ Object.subclass('Squeak.Interpreter',
         }
         if (--this.interruptCheckCounter <= 0) this.checkForInterrupts();
     },
-    jitAllocContext() {
+    jitAllocContext: function() {
         // TODO: optimize
         // alloc with 0 size so jitted code can push to append
         var context = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassMethodContext], 0);
@@ -1287,7 +1287,7 @@ Object.subclass('Squeak.Interpreter',
         context.dirty = true;
         return context;
     },
-    jitInterruptCheck() {
+    jitInterruptCheck: function() {
         // called from JIT when this.interruptCheckCounter < 0
 
         // unwind to handle context switches

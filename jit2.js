@@ -223,7 +223,7 @@ in practice. The mockups are promising though, with some browsers reaching
             return new Function("vm", "method", src)(this.vm, method);
         }
     },
-    generateBytecodes() {
+    generateBytecodes: function() {
         this.done = false;
         while (!this.done) {
             if (this.PCtoSP[this.pc] === undefined) this.PCtoSP[this.pc] = this.sp;
@@ -447,15 +447,15 @@ in practice. The mockups are promising though, with some browsers reaching
     },
 },
 'helpers', {
-    top() {
+    top: function() {
         return "s" + this.sp;
     },
-    push() {
+    push: function() {
         this.sp++;
         if (this.sp > this.maxSP) this.maxSP = this.sp;
         return "s" + this.sp;
     },
-    pop() {
+    pop: function() {
         return "s" + this.sp--;
     }
 },

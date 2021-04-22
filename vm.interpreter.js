@@ -194,7 +194,6 @@ Object.subclass('Squeak.Interpreter',
                     this.method.compiled = null;
                     return this.interpretOne(singleStep);
                 }
-                this.breakNow();
             }
             this.method.compiled(this);
             return;

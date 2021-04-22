@@ -204,7 +204,7 @@ in practice. The mockups are promising though, with some browsers reaching
                          `if("nonLocalReturnValue" in frame){vm.depth++;throw frame}\n` +
                          `let c=${this.needsVar["thisContext"]?"thisContext||":""}vm.jitAllocContext();let f=c.pointers;` +
                          `f.push(frame.ctx,pc+${method.pointers.length * 4 + 1},PCtoSP[pc]+${numTemps},method,N,rcvr${args}${temps}${stack});` +
-                         `f.length=${method.methodNeedsLargeFrame()?56:16};frame.ctx=c;throw frame}\n}`);
+                         `f.length=${method.methodNeedsLargeFrame()?62:22};frame.ctx=c;throw frame}\n}`);
         this.source[this.sourcePos['stack']] = stack;
         this.source[this.sourcePos['pctosp']] = this.PCtoSP;
         this.deleteUnneededLabels();

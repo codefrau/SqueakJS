@@ -570,7 +570,7 @@ in practice. The mockups are promising though, with some browsers reaching
     },
     generateNumericOp: function(byte) {
         const lobits = byte & 0x0F;
-        if (this.debug) this.generateDebugCode("quick send #" + lobits);
+        if (this.debug) this.generateDebugCode("quick send #" + this.specialSelectors[lobits]);
         // this.generateLabel();
         // switch (byte) {
         //     case 0xB0: // PLUS +
@@ -650,10 +650,10 @@ in practice. The mockups are promising though, with some browsers reaching
         if (what) {
             this.source.push(" ");
             switch (what) {
-                case 'N':    this.source.push('nil'); break;
-                case 'T':   this.source.push('true'); break;
-                case 'F':  this.source.push('false'); break;
-                case 'rcvr':         this.source.push('self'); break;
+                case 'N': this.source.push('nil'); break;
+                case 'T': this.source.push('true'); break;
+                case 'F': this.source.push('false'); break;
+                case 'rcvr': this.source.push('self'); break;
                 case 'inst[':
                     if (!this.instVarNames) this.source.push('inst var ', arg1);
                     else this.source.push(this.instVarNames[arg1]);
@@ -683,11 +683,11 @@ in practice. The mockups are promising though, with some browsers reaching
         if (what) {
             this.source.push(" ");
             switch (what) {
-                case 'N':    this.source.push('nil'); break;
-                case 'T':   this.source.push('true'); break;
-                case 'F':  this.source.push('false'); break;
-                case 'rcvr':         this.source.push('self'); break;
-                case 'inst[':        this.source.push('inst var ', arg1); break;
+                case 'N': this.source.push('nil'); break;
+                case 'T': this.source.push('true'); break;
+                case 'F': this.source.push('false'); break;
+                case 'rcvr': this.source.push('self'); break;
+                case 'inst[': this.source.push('inst var ', arg1); break;
                 case 't':
                     this.source.push('temp ', arg1);
                     if (suffix1 !== '') this.source.push('[', arg2, ']');

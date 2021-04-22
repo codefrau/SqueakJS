@@ -199,7 +199,7 @@ in practice. The mockups are promising though, with some browsers reaching
         this.source.push(`;\ntry{\n`);
         this.sourcePos['check'] = this.source.length; this.source.push(`if(--vm.depth<=0)throw{};\nif(--vm.interruptCheckCounter<=0)vm.jitInterruptCheck();\n`);
         this.sourcePos['loop-start'] = this.source.length; this.source.push(`while(true)switch(pc){\ncase 0:`);
-        this.source.push("debugger;\n")
+        // this.source.push("debugger;\n")
         this.generateBytecodes();
         let stack = ""; for (let i = 1; i < this.maxSP + 1; i++) stack += `,s${i}`;
         this.sourcePos['loop-end'] = this.source.length; this.source.push(`default: throw Error("unexpected PC: " + pc);\n}`);

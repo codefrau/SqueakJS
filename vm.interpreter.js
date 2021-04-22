@@ -947,7 +947,7 @@ Object.subclass('Squeak.Interpreter',
             }
             currentClass = currentClass.superclass();
         }
-        //Cound not find a normal message -- send #doesNotUnderstand:
+        // Could not find a normal message -- send #doesNotUnderstand:
         var dnuSel = this.specialObjects[Squeak.splOb_SelectorDoesNotUnderstand];
         if (selector === dnuSel) // Cannot find #doesNotUnderstand: -- unrecoverable error.
             throw Error("Recursive not understood error encountered");
@@ -988,7 +988,7 @@ Object.subclass('Squeak.Interpreter',
             if (this.tryPrimitive(primitiveIndex, argumentCount, newMethod))
                 return;  //Primitive succeeded -- end of story
         if (typeof newMethod.run === "function") {
-            console.log(this.sendCount + ' JIT ' + this.printMethod(newMethod, optClass, optSel));
+            //console.log(this.sendCount + ' JIT ' + this.printMethod(newMethod, optClass, optSel));
             return this.executeJITMethod(newRcvr, newMethod, argumentCount);
         }
         var newContext = this.allocateOrRecycleContext(newMethod.methodNeedsLargeFrame());
@@ -1249,7 +1249,7 @@ Object.subclass('Squeak.Interpreter',
             if (this.depth !== MAX_DEPTH) throw Error("JIT depth count missmatch: " + this.depth - MAX_DEPTH);
             // it worked! just push result
             this.push(result);
-            console.log("JIT success", this.printMethod(method, optClass, optSel), result);
+            // console.log("JIT success", this.printMethod(method, optClass, optSel), result);
             // this.nounwindCount++;
         } catch (frame) {
             // a non-local return to interpreter context

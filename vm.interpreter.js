@@ -1239,16 +1239,17 @@ Object.subclass('Squeak.Interpreter',
     executeJITMethod: function(rcvr, method, argCount) {
         const MAX_DEPTH = 50;
         let interpreterContext = this.activeContext;
-        this.storeContextRegisters();
         try {
             // invoke and hope it comes back without unwinding
             this.depth = MAX_DEPTH;
             const args = interpreterContext.pointers.slice(this.sp - argCount + 1, this.sp + 1);
+            this.popN(argCount + 1);
+            this.storeContextRegisters();
             const result = method.run(rcvr, ...args);
             if (this.depth !== MAX_DEPTH) throw Error(`JIT depth count missmatch: ${this.depth - MAX_DEPTH}`);
             // it worked! just push result
-            this.popNandPush(argCount+1, result);
             console.log(`JIT success: ${result}`);
+            this.push(result);
             // this.nounwindCount++;
         } catch (frame) {
             // a non-local return to interpreter context

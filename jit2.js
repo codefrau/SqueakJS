@@ -124,6 +124,7 @@ in practice. The mockups are promising though, with some browsers reaching
             'bitShift:', '//', 'bitAnd:', 'bitOr:', 'at:', 'at:put:', 'size', 'next', 'nextPut:',
             'atEnd', '==', 'class', 'blockCopy:', 'value', 'value:', 'do:', 'new', 'new:', 'x', 'y'];
         this.doitCounter = 0;
+        this.count = 0;
     },
 },
 'accessing', {
@@ -157,6 +158,7 @@ in practice. The mockups are promising though, with some browsers reaching
 'decoding', {
     generate: function(method, optClass, optSel, optInstVarNames) {
         const funcName = this.functionNameFor(optClass, optSel);
+        console.log(++this.count + " generating " + funcName);
         const numArgs = method.methodNumArgs();
         const numTemps = method.methodTempCount();
         let args = ""; for (let i = 0; i < numArgs; i++) args += `,t${i}`;

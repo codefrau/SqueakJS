@@ -170,18 +170,20 @@ in practice. The mockups are promising though, with some browsers reaching
         this.sp = 0;                // generator SP
         this.maxSP = this.sp;       // num of stack vars needed
         this.PCtoSP = [];           // mapping from pc to sp
-        this.isLeaf = true;         // if there are no sends we can simplify the method
         this.source = [];           // snippets will be joined in the end
         this.sourceLabels = {};     // source pos of generated labels
         this.needsLabel = {};       // jump targets
         this.sourcePos = {};        // source pos of optional vars / statements
         this.needsVar = {};         // true if var was used
+        this.isLeaf = true;         // if there are no sends we can simplify the method
+        this.nonLeafCode = [];      // source positions of code to be removed if leaf
         this.optionalVars = ['lit[', 'F', 'T', 'inst[', 'thisContext']; // vars to remove if unused
         this.instVarNames = optInstVarNames;
         // start generating source
         this.source.push("'use strict';\n");
         // closure vars
-        this.sourcePos['pctosp'] = this.source.length + 1; this.source.push("let PCtoSP=[", "", "]\n"); // filled in below
+        this.source.push("let "); this.sourcePos['cvars'] = this.source.length;
+        this.sourcePos['pctosp'] = this.source.length; this.genUnlessLeaf(",PCtoSP=[]\n"); // filled in below
         this.sourcePos['N'] = this.source.length; this.source.push(",N=VM.nilObj"); // TODO: delete if not needed
         this.sourcePos['F'] = this.source.length; this.source.push(",F=VM.falseObj"); // deleted later if not needed
         this.sourcePos['T'] = this.source.length; this.source.push(",T=VM.trueObj"); // deleted later if not needed
@@ -190,7 +192,7 @@ in practice. The mockups are promising though, with some browsers reaching
         this.source.push(";\nreturn function ", funcName, "(rcvr", args, "){\n");
         if (this.comments && optClass && optSel) this.source.push("// ", optClass, ">>", optSel, "\n");
         // generate vars
-        this.source.push("let "); this.sourcePos['vars'] = this.source.length;
+        this.source.push("let "); this.sourcePos['tvars'] = this.source.length;
         this.sourcePos['inst['] = this.source.length; this.source.push(",inst=rcvr.pointers"); // deleted later if not needed
         this.sourcePos['thisContext'] = this.source.length; this.source.push(",thisContext"); // deleted later if not needed
         if (numTemps > numArgs) {
@@ -199,24 +201,25 @@ in practice. The mockups are promising though, with some browsers reaching
         }
         this.sourcePos['stack'] = this.source.length; this.source.push(''); // filled in below
         this.sourcePos['pc'] = this.source.length; this.source.push(',pc=0');
+        this.source.push(";\n");
         // now the actual code
-        this.source.push(`;\ntry{\n`);
-        this.sourcePos['check'] = this.source.length; this.source.push(`if(--VM.depth<=0)throw{};\nif(--VM.interruptCheckCounter<=0)VM.jitInterruptCheck();\n`);
+        this.genUnlessLeaf(`try{\nif(--VM.depth<=0)throw{};\nif(--VM.interruptCheckCounter<=0)VM.jitInterruptCheck();\n`);
         this.sourcePos['loop-start'] = this.source.length; this.source.push(`while(true)switch(pc){\ncase 0:`);
         // this.source.push("debugger;\n")
         this.generateBytecodes();
         let stack = ""; for (let i = 1; i < this.maxSP + 1; i++) stack += `,s${i}`;
         this.sourcePos['loop-end'] = this.source.length; this.source.push(`default: throw Error("unexpected PC: " + pc);\n}`);
-        this.source.push(`}catch(frame){\n` +
+        this.genUnlessLeaf(`}catch(frame){\n` +
                          `if("nonLocalReturnValue" in frame){VM.depth++;throw frame}\n` +
                          `let c=${this.needsVar["thisContext"]?"thisContext||":""}VM.jitAllocContext();let f=c.pointers;` +
                          `f.push(frame.ctx,pc+${method.pointers.length * 4 + 1},PCtoSP[pc]+${numTemps},M,N,rcvr${args}${temps}${stack});` +
-                         `f.length=${method.methodNeedsLargeFrame()?62:22};frame.ctx=c;throw frame}\n}`);
+                         `f.length=${method.methodNeedsLargeFrame()?62:22};frame.ctx=c;throw frame}`);
+        this.source.push("\n}");
         this.source[this.sourcePos['stack']] = stack;
-        this.source[this.sourcePos['pctosp']] = this.PCtoSP;
+        if (this.isLeaf) this.deleteNonLeafCode();
+        else this.source[this.sourcePos['pctosp']] = `,PCtoSP=[${this.PCtoSP}]\n`;
         this.deleteUnneededLabels();
         this.deleteUnneededVariables();
-        if (this.isLeaf) this.source[this.sourcePos['check']] = "VM.depth--;\n"; // omit depth+interrupt check for leaf methods
         let src = this.source.join("");
         try {
             return new Function("VM", "M", src)(this.vm, method);
@@ -509,7 +512,8 @@ in practice. The mockups are promising though, with some browsers reaching
         if (this.debug) this.generateDebugCode("return", what);
         this.generateLabel();
         this.needsVar[what] = true;
-        this.source.push(`VM.depth++;return ${what};\n`);
+        this.genUnlessLeaf("VM.depth++;");
+        this.source.push(`return ${what};\n`);
         this.done = this.pc > this.endPC;
     },
     generateBlockReturn: function() {
@@ -630,6 +634,10 @@ in practice. The mockups are promising though, with some browsers reaching
             this.source.push(`if (VM.primFailCode) { t${this.sp} = VM.getErrorObjectFromPrimFailCode(); VM.primFailCode = 0;}\n`);
         }
     },
+    genUnlessLeaf: function(code) {
+        this.nonLeafCode.push(this.source.length);
+        this.source.push(code);
+    },
     generateDirty: function(target, arg) {
         switch(target) {
             case "inst[": this.source.push("rcvr.dirty=true;"); break;
@@ -735,9 +743,18 @@ in practice. The mockups are promising though, with some browsers reaching
             if (!this.needsVar[v])
                 this.source[this.sourcePos[v]] = "";
         }
+        this.fixFirstVar("cvars");
+        this.fixFirstVar("tvars");
+    },
+    fixFirstVar: function(vars) {
         // delete initial comma from first var
-        var p = this.sourcePos['vars'];
+        var p = this.sourcePos[vars];
         while (!this.source[p]) p++;
         this.source[p] = this.source[p].slice(1);
+    },
+    deleteNonLeafCode: function() {
+        for (var i = 0; i < this.nonLeafCode.length; i++) {
+            this.source[this.nonLeafCode[i]] = "";
+        }
     },
 });

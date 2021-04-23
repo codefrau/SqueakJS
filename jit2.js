@@ -177,7 +177,7 @@ in practice. The mockups are promising though, with some browsers reaching
         this.needsVar = {};         // true if var was used
         this.isLeaf = true;         // if there are no sends we can simplify the method
         this.nonLeafCode = [];      // source positions of code to be removed if leaf
-        this.optionalVars = ['lit[', 'F', 'T', 'inst[', 'thisContext']; // vars to remove if unused
+        this.optionalVars = ['L[', 'F', 'T', 'i[', 'thisContext']; // vars to remove if unused
         this.instVarNames = optInstVarNames;
         // start generating source
         this.source.push("'use strict';\n");
@@ -187,13 +187,13 @@ in practice. The mockups are promising though, with some browsers reaching
         this.sourcePos['N'] = this.source.length; this.source.push(",N=VM.nilObj"); // TODO: delete if not needed
         this.sourcePos['F'] = this.source.length; this.source.push(",F=VM.falseObj"); // deleted later if not needed
         this.sourcePos['T'] = this.source.length; this.source.push(",T=VM.trueObj"); // deleted later if not needed
-        this.sourcePos['lit['] = this.source.length; this.source.push(",lit=M.pointers"); // deleted later if not needed
+        this.sourcePos['L['] = this.source.length; this.source.push(",L=M.pointers"); // deleted later if not needed
         // the actual function
-        this.source.push(";\nreturn function ", funcName, "(rcvr", args, "){\n");
+        this.source.push(";\nreturn function ", funcName, "(r", args, "){\n");
         if (this.comments && optClass && optSel) this.source.push("// ", optClass, ">>", optSel, "\n");
         // generate vars
         this.source.push("let "); this.sourcePos['tvars'] = this.source.length;
-        this.sourcePos['inst['] = this.source.length; this.source.push(",inst=rcvr.pointers"); // deleted later if not needed
+        this.sourcePos['i['] = this.source.length; this.source.push(",i=r.pointers"); // deleted later if not needed
         this.sourcePos['thisContext'] = this.source.length; this.source.push(",thisContext"); // deleted later if not needed
         if (numTemps > numArgs) {
             this.needsVar['N'] = true;
@@ -212,7 +212,7 @@ in practice. The mockups are promising though, with some browsers reaching
         this.genUnlessLeaf(`}catch(frame){\n` +
                          `if("nonLocalReturnValue" in frame){VM.depth++;throw frame}\n` +
                          `let c=${this.needsVar["thisContext"]?"thisContext||":""}VM.jitAllocContext();let f=c.pointers;` +
-                         `f.push(frame.ctx,pc+${method.pointers.length * 4 + 1},PCtoSP[pc]+${numTemps},M,N,rcvr${args}${temps}${stack});` +
+                         `f.push(frame.ctx,pc+${method.pointers.length * 4 + 1},PCtoSP[pc]+${numTemps},M,N,r${args}${temps}${stack});` +
                          `f.length=${method.methodNeedsLargeFrame()?62:22};frame.ctx=c;throw frame}`);
         this.source.push("\n}");
         this.source[this.sourcePos['stack']] = stack;
@@ -240,7 +240,7 @@ in practice. The mockups are promising though, with some browsers reaching
             switch (byte & 0xF8) {
                 // load inst var
                 case 0x00: case 0x08:
-                    this.generatePush("inst[", byte & 0x0F, "]");
+                    this.generatePush("i[", byte & 0x0F, "]");
                     break;
                 // load temp var
                 case 0x10: case 0x18:
@@ -248,15 +248,15 @@ in practice. The mockups are promising though, with some browsers reaching
                     break;
                 // loadLiteral
                 case 0x20: case 0x28: case 0x30: case 0x38:
-                    this.generatePush("lit[", 1 + (byte & 0x1F), "]");
+                    this.generatePush("L[", 1 + (byte & 0x1F), "]");
                     break;
                 // loadLiteralIndirect
                 case 0x40: case 0x48: case 0x50: case 0x58:
-                    this.generatePush("lit[", 1 + (byte & 0x1F), "].pointers[1]");
+                    this.generatePush("L[", 1 + (byte & 0x1F), "].pointers[1]");
                     break;
                 // storeAndPop inst var
                 case 0x60:
-                    this.generatePopInto("inst[", byte & 0x07, "]");
+                    this.generatePopInto("i[", byte & 0x07, "]");
                     break;
                 // storeAndPop temp var
                 case 0x68:
@@ -265,7 +265,7 @@ in practice. The mockups are promising though, with some browsers reaching
                 // Quick push
                 case 0x70:
                     switch (byte) {
-                        case 0x70: this.generatePush("rcvr"); break;
+                        case 0x70: this.generatePush("r"); break;
                         case 0x71: this.generatePush("T"); break;
                         case 0x72: this.generatePush("F"); break;
                         case 0x73: this.generatePush("N"); break;
@@ -278,7 +278,7 @@ in practice. The mockups are promising though, with some browsers reaching
                 // Quick return
                 case 0x78:
                     switch (byte) {
-                        case 0x78: this.generateReturn("rcvr"); break;
+                        case 0x78: this.generateReturn("r"); break;
                         case 0x79: this.generateReturn("T"); break;
                         case 0x7A: this.generateReturn("F"); break;
                         case 0x7B: this.generateReturn("N"); break;
@@ -319,13 +319,13 @@ in practice. The mockups are promising though, with some browsers reaching
                     break;
                 // send literal selector
                 case 0xD0: case 0xD8:
-                    this.generateSend("lit[", 1 + (byte & 0x0F), "]", 0, false);
+                    this.generateSend("L[", 1 + (byte & 0x0F), "]", 0, false);
                     break;
                 case 0xE0: case 0xE8:
-                    this.generateSend("lit[", 1 + (byte & 0x0F), "]", 1, false);
+                    this.generateSend("L[", 1 + (byte & 0x0F), "]", 1, false);
                     break;
                 case 0xF0: case 0xF8:
-                    this.generateSend("lit[", 1 + (byte & 0x0F), "]", 2, false);
+                    this.generateSend("L[", 1 + (byte & 0x0F), "]", 2, false);
                     break;
             }
         }
@@ -342,58 +342,58 @@ in practice. The mockups are promising though, with some browsers reaching
             case 0x80:
                 byte2 = this.method.bytes[this.pc++];
                 switch (byte2 >> 6) {
-                    case 0: this.generatePush("inst[", byte2 & 0x3F, "]"); return;
+                    case 0: this.generatePush("i[", byte2 & 0x3F, "]"); return;
                     case 1: this.generatePush("t", byte2 & 0x3F, ""); return;
-                    case 2: this.generatePush("lit[", 1 + (byte2 & 0x3F), "]"); return;
-                    case 3: this.generatePush("lit[", 1 + (byte2 & 0x3F), "].pointers[1]"); return;
+                    case 2: this.generatePush("L[", 1 + (byte2 & 0x3F), "]"); return;
+                    case 3: this.generatePush("L[", 1 + (byte2 & 0x3F), "].pointers[1]"); return;
                 }
             // extended store
             case 0x81:
                 byte2 = this.method.bytes[this.pc++];
                 switch (byte2 >> 6) {
-                    case 0: this.generateStoreInto("inst[", byte2 & 0x3F, "]"); return;
+                    case 0: this.generateStoreInto("i[", byte2 & 0x3F, "]"); return;
                     case 1: this.generateStoreInto("t", byte2 & 0x3F, ""); return;
                     case 2: throw Error("illegal store into literal");
-                    case 3: this.generateStoreInto("lit[", 1 + (byte2 & 0x3F), "].pointers[1]"); return;
+                    case 3: this.generateStoreInto("L[", 1 + (byte2 & 0x3F), "].pointers[1]"); return;
                 }
                 return;
             // extended pop into
             case 0x82:
                 byte2 = this.method.bytes[this.pc++];
                 switch (byte2 >> 6) {
-                    case 0: this.generatePopInto("inst[", byte2 & 0x3F, "]"); return;
+                    case 0: this.generatePopInto("i[", byte2 & 0x3F, "]"); return;
                     case 1: this.generatePopInto("t", byte2 & 0x3F, ""); return;
                     case 2: throw Error("illegal pop into literal");
-                    case 3: this.generatePopInto("lit[", 1 + (byte2 & 0x3F), "].pointers[1]"); return;
+                    case 3: this.generatePopInto("L[", 1 + (byte2 & 0x3F), "].pointers[1]"); return;
                 }
             // Single extended send
             case 0x83:
                 byte2 = this.method.bytes[this.pc++];
-                this.generateSend("lit[", 1 + (byte2 & 0x1F), "]", byte2 >> 5, false);
+                this.generateSend("L[", 1 + (byte2 & 0x1F), "]", byte2 >> 5, false);
                 return;
             // Double extended do-anything
             case 0x84:
                 byte2 = this.method.bytes[this.pc++];
                 byte3 = this.method.bytes[this.pc++];
                 switch (byte2 >> 5) {
-                    case 0: this.generateSend("lit[", 1 + byte3, "]", byte2 & 31, false); return;
-                    case 1: this.generateSend("lit[", 1 + byte3, "]", byte2 & 31, true); return;
-                    case 2: this.generatePush("inst[", byte3, "]"); return;
-                    case 3: this.generatePush("lit[", 1 + byte3, "]"); return;
-                    case 4: this.generatePush("lit[", 1 + byte3, "].pointers[1]"); return;
-                    case 5: this.generateStoreInto("inst[", byte3, "]"); return;
-                    case 6: this.generatePopInto("inst[", byte3, "]"); return;
-                    case 7: this.generateStoreInto("lit[", 1 + byte3, "].pointers[1]"); return;
+                    case 0: this.generateSend("L[", 1 + byte3, "]", byte2 & 31, false); return;
+                    case 1: this.generateSend("L[", 1 + byte3, "]", byte2 & 31, true); return;
+                    case 2: this.generatePush("i[", byte3, "]"); return;
+                    case 3: this.generatePush("L[", 1 + byte3, "]"); return;
+                    case 4: this.generatePush("L[", 1 + byte3, "].pointers[1]"); return;
+                    case 5: this.generateStoreInto("i[", byte3, "]"); return;
+                    case 6: this.generatePopInto("i[", byte3, "]"); return;
+                    case 7: this.generateStoreInto("L[", 1 + byte3, "].pointers[1]"); return;
                 }
             // Single extended send to super
             case 0x85:
                 byte2 = this.method.bytes[this.pc++];
-                this.generateSend("lit[", 1 + (byte2 & 0x1F), "]", byte2 >> 5, true);
+                this.generateSend("L[", 1 + (byte2 & 0x1F), "]", byte2 >> 5, true);
                 return;
             // Second extended send
             case 0x86:
                  byte2 = this.method.bytes[this.pc++];
-                 this.generateSend("lit[", 1 + (byte2 & 0x3F), "]", byte2 >> 6, false);
+                 this.generateSend("L[", 1 + (byte2 & 0x3F), "]", byte2 >> 6, false);
                  return;
             // pop
             case 0x87:
@@ -607,12 +607,12 @@ in practice. The mockups are promising though, with some browsers reaching
         this.generateUnimplemented("quick send #" + this.specialSelectors[lobits]);
     },
     generateSend: function(prefix, num, suffix, numArgs, superSend) {
-        if (this.debug) this.generateDebugCode((superSend ? "super " : "send ") + (prefix === "lit[" ? this.method.pointers[num].bytesAsString() : "..."));
+        if (this.debug) this.generateDebugCode((superSend ? "super " : "send ") + (prefix === "L[" ? this.method.pointers[num].bytesAsString() : "..."));
         // this.generateLabel();
         this.needsVar[prefix] = true;
         this.isLeaf = false;
         this.sp -= numArgs;
-        this.generateUnimplemented(`${superSend ? "super send" : "send"} ${prefix === "lit[" ? "literal #" + num : prefix}`);
+        this.generateUnimplemented(`${superSend ? "super send" : "send"} ${prefix === "L[" ? "literal #" + num : prefix}`);
     },
     generateClosureTemps: function(count, popValues) {
         if (this.debug) this.generateDebugCode("closure temps");
@@ -640,8 +640,8 @@ in practice. The mockups are promising though, with some browsers reaching
     },
     generateDirty: function(target, arg) {
         switch(target) {
-            case "inst[": this.source.push("rcvr.dirty=true;"); break;
-            case "lit[": this.source.push("lit[", arg, "].dirty=true;"); break;
+            case "i[": this.source.push("r.dirty=true;"); break;
+            case "L[": this.source.push("L[", arg, "].dirty=true;"); break;
             case "t": break;
             default:
                 throw Error("unexpected target " + target);
@@ -668,8 +668,8 @@ in practice. The mockups are promising though, with some browsers reaching
                 case 'N': this.source.push('nil'); break;
                 case 'T': this.source.push('true'); break;
                 case 'F': this.source.push('false'); break;
-                case 'rcvr': this.source.push('self'); break;
-                case 'inst[':
+                case 'r': this.source.push('self'); break;
+                case 'i[':
                     if (!this.instVarNames) this.source.push('inst var ', arg1);
                     else this.source.push(this.instVarNames[arg1]);
                     break;
@@ -677,10 +677,10 @@ in practice. The mockups are promising though, with some browsers reaching
                     this.source.push('temp ', arg1);
                     if (suffix1 !== '') this.source.push('[', arg2, ']');
                     break;
-                case 'lit[':
+                case 'L[':
                     var lit = this.method.pointers[arg1];
                     if (suffix1 === ']') this.source.push((""+lit).replace(/[\r\n]/g, c => c === "\r" ? "\\r" : "\\n"));
-                    else this.source.push(lit.pointers[0].bytesAsString());
+                    else this.source.push("value of ", lit.pointers[0].bytesAsString());
                     break;
                 default:
                     if (what === this.top()) what = "top";
@@ -701,13 +701,13 @@ in practice. The mockups are promising though, with some browsers reaching
                 case 'N': this.source.push('nil'); break;
                 case 'T': this.source.push('true'); break;
                 case 'F': this.source.push('false'); break;
-                case 'rcvr': this.source.push('self'); break;
-                case 'inst[': this.source.push('inst var ', arg1); break;
+                case 'r': this.source.push('self'); break;
+                case 'i[': this.source.push('inst var ', arg1); break;
                 case 't':
                     this.source.push('temp ', arg1);
                     if (suffix1 !== '') this.source.push('[', arg2, ']');
                     break;
-                case 'lit[':
+                case 'L[':
                     if (suffix1 === ']') this.source.push('literal ', arg1);
                     else this.source.push('literal var ', arg1);
                     break;

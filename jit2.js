@@ -180,10 +180,13 @@ in practice. The mockups are promising though, with some browsers reaching
         this.instVarNames = optInstVarNames;
         // start generating source
         this.source.push("'use strict';\n");
-        this.sourcePos['pctosp'] = this.source.length + 1; this.source.push("let PCtoSP=[", "", "],\nN=vm.nilObj"); // filled in below
-        this.sourcePos['F'] = this.source.length; this.source.push(",F=vm.falseObj"); // deleted later if not needed
-        this.sourcePos['T'] = this.source.length; this.source.push(",T=vm.trueObj"); // deleted later if not needed
-        this.sourcePos['lit['] = this.source.length; this.source.push(",lit=method.pointers"); // deleted later if not needed
+        // closure vars
+        this.sourcePos['pctosp'] = this.source.length + 1; this.source.push("let PCtoSP=[", "", "]\n"); // filled in below
+        this.sourcePos['N'] = this.source.length; this.source.push(",N=VM.nilObj"); // TODO: delete if not needed
+        this.sourcePos['F'] = this.source.length; this.source.push(",F=VM.falseObj"); // deleted later if not needed
+        this.sourcePos['T'] = this.source.length; this.source.push(",T=VM.trueObj"); // deleted later if not needed
+        this.sourcePos['lit['] = this.source.length; this.source.push(",lit=M.pointers"); // deleted later if not needed
+        // the actual function
         this.source.push(";\nreturn function ", funcName, "(rcvr", args, "){\n");
         if (this.comments && optClass && optSel) this.source.push("// ", optClass, ">>", optSel, "\n");
         // generate vars
@@ -196,31 +199,32 @@ in practice. The mockups are promising though, with some browsers reaching
         }
         this.sourcePos['stack'] = this.source.length; this.source.push(''); // filled in below
         this.sourcePos['pc'] = this.source.length; this.source.push(',pc=0');
+        // now the actual code
         this.source.push(`;\ntry{\n`);
-        this.sourcePos['check'] = this.source.length; this.source.push(`if(--vm.depth<=0)throw{};\nif(--vm.interruptCheckCounter<=0)vm.jitInterruptCheck();\n`);
+        this.sourcePos['check'] = this.source.length; this.source.push(`if(--VM.depth<=0)throw{};\nif(--VM.interruptCheckCounter<=0)VM.jitInterruptCheck();\n`);
         this.sourcePos['loop-start'] = this.source.length; this.source.push(`while(true)switch(pc){\ncase 0:`);
         // this.source.push("debugger;\n")
         this.generateBytecodes();
         let stack = ""; for (let i = 1; i < this.maxSP + 1; i++) stack += `,s${i}`;
         this.sourcePos['loop-end'] = this.source.length; this.source.push(`default: throw Error("unexpected PC: " + pc);\n}`);
         this.source.push(`}catch(frame){\n` +
-                         `if("nonLocalReturnValue" in frame){vm.depth++;throw frame}\n` +
-                         `let c=${this.needsVar["thisContext"]?"thisContext||":""}vm.jitAllocContext();let f=c.pointers;` +
-                         `f.push(frame.ctx,pc+${method.pointers.length * 4 + 1},PCtoSP[pc]+${numTemps},method,N,rcvr${args}${temps}${stack});` +
+                         `if("nonLocalReturnValue" in frame){VM.depth++;throw frame}\n` +
+                         `let c=${this.needsVar["thisContext"]?"thisContext||":""}VM.jitAllocContext();let f=c.pointers;` +
+                         `f.push(frame.ctx,pc+${method.pointers.length * 4 + 1},PCtoSP[pc]+${numTemps},M,N,rcvr${args}${temps}${stack});` +
                          `f.length=${method.methodNeedsLargeFrame()?62:22};frame.ctx=c;throw frame}\n}`);
         this.source[this.sourcePos['stack']] = stack;
         this.source[this.sourcePos['pctosp']] = this.PCtoSP;
         this.deleteUnneededLabels();
         this.deleteUnneededVariables();
-        if (this.isLeaf) this.source[this.sourcePos['check']] = "vm.depth--;\n"; // omit depth+interrupt check for leaf methods
+        if (this.isLeaf) this.source[this.sourcePos['check']] = "VM.depth--;\n"; // omit depth+interrupt check for leaf methods
         let src = this.source.join("");
         try {
-            return new Function("vm", "method", src)(this.vm, method);
+            return new Function("VM", "M", src)(this.vm, method);
         } catch(err) {
             console.log(src);
             console.error(err);
             debugger
-            return new Function("vm", "method", src)(this.vm, method);
+            return new Function("VM", "M", src)(this.vm, method);
         }
     },
     generateBytecodes: function() {
@@ -400,7 +404,7 @@ in practice. The mockups are promising though, with some browsers reaching
             // thisContext
             case 0x89:
                 this.needsVar["thisContext"] = true;
-                this.generateInstruction("push thisContext", `if(!thisContext)thisContext=vm.jitAllocContext();${this.pushValue("thisContext")}`);
+                this.generateInstruction("push thisContext", `if(!thisContext)thisContext=VM.jitAllocContext();${this.pushValue("thisContext")}`);
                 return;
             // closures
             case 0x8A:
@@ -505,7 +509,7 @@ in practice. The mockups are promising though, with some browsers reaching
         if (this.debug) this.generateDebugCode("return", what);
         this.generateLabel();
         this.needsVar[what] = true;
-        this.source.push(`vm.depth++;return ${what};\n`);
+        this.source.push(`VM.depth++;return ${what};\n`);
         this.done = this.pc > this.endPC;
     },
     generateBlockReturn: function() {
@@ -518,7 +522,7 @@ in practice. The mockups are promising though, with some browsers reaching
         if (this.debug) this.generateDebugCode("jump to " + destination);
         this.generateLabel();
         this.source.push(`pc=${destination};`);
-        if (distance < 0) this.source.push("if(--vm.interruptCheckCounter<=0)vm.jitInterruptCheck();");
+        if (distance < 0) this.source.push("if(--VM.interruptCheckCounter<=0)VM.jitInterruptCheck();");
         else if (this.PCtoSP[destination] === undefined) this.PCtoSP[destination] = this.sp;
         this.source.push("continue;\n");
         this.needsLabel[destination] = true;
@@ -623,7 +627,7 @@ in practice. The mockups are promising though, with some browsers reaching
         if (this.debug) this.generateDebugCode("call primitive " + index);
         this.generateLabel();
         if (this.method.bytes[this.pc] === 0x81)  {// extended store
-            this.source.push(`if (vm.primFailCode) { t${this.sp} = vm.getErrorObjectFromPrimFailCode(); vm.primFailCode = 0;}\n`);
+            this.source.push(`if (VM.primFailCode) { t${this.sp} = VM.getErrorObjectFromPrimFailCode(); VM.primFailCode = 0;}\n`);
         }
     },
     generateDirty: function(target, arg) {

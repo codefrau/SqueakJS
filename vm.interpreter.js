@@ -1261,6 +1261,14 @@ Object.subclass('Squeak.Interpreter',
             }
             // it stopped somewhere :(
             if (frame instanceof Error) throw frame;
+            // do this in browser console to start recording stats:
+            //     SqueakJS.vm.unimplemented = []
+            // and this to view stats:
+            //     Object.entries(SqueakJS.vm.unimplemented).sort((a,b) => b[1]-a[1])
+            if (this.unimplemented && frame.message) {
+                if (!this.unimplemented[frame.message]) this.unimplemented[frame.message] = 1;
+                else this.unimplemented[frame.message]++;
+            }
             // walk all contexts by following child pointer [0]
             let ctx = frame.ctx;
             while (ctx) {

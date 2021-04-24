@@ -549,7 +549,7 @@ in practice. The mockups are promising though, with some browsers reaching
     },
     generateQuickPrim: function(byte) {
         const lobits = (byte & 0x0F) + 16;
-        if (this.debug) this.generateDebugCode("quick send #" + this.specialSelectors[lobits]);
+        if (this.debug) this.generateDebugCode("quick send " + this.specialSelectors[lobits]);
         const pc = this.prevPC;
         this.generateLabel();
         switch (byte) {
@@ -576,12 +576,12 @@ in practice. The mockups are promising though, with some browsers reaching
         // generic version for the bytecodes not yet handled above
         let numArgs = this.vm.specialSelectors[(lobits*2)+1];
         this.sp -= numArgs;
-        this.source.push(`pc=${pc};throw {message: "quick send #${this.specialSelectors[lobits]} not implemented yet"};`);
+        this.source.push(`pc=${pc};throw {message: "Not yet implemented: quick send ${this.specialSelectors[lobits]}"};`);
         this.isLeaf = false; // could do full send
     },
     generateNumericOp: function(byte) {
         const lobits = byte & 0x0F;
-        if (this.debug) this.generateDebugCode("quick send #" + this.specialSelectors[lobits]);
+        if (this.debug) this.generateDebugCode("quick send " + this.specialSelectors[lobits]);
         // this.generateLabel();
         // switch (byte) {
         //     case 0xB0: // PLUS +
@@ -604,7 +604,7 @@ in practice. The mockups are promising though, with some browsers reaching
         // generic version for the bytecodes not yet handled above
         let numArgs = this.vm.specialSelectors[(lobits*2)+1];
         this.sp -= numArgs;
-        this.generateUnimplemented("quick send #" + this.specialSelectors[lobits]);
+        this.generateUnimplemented("quick send " + this.specialSelectors[lobits]);
     },
     generateSend: function(prefix, num, suffix, numArgs, superSend) {
         if (this.debug) this.generateDebugCode((superSend ? "super " : "send ") + (prefix === "L[" ? this.method.pointers[num].bytesAsString() : "..."));

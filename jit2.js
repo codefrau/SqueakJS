@@ -561,7 +561,7 @@ in practice. The mockups are promising though, with some browsers reaching
         //     case 0xC5: // atEnd
         case 0xC6: // ==
             this.needsVar["F"] = true; this.needsVar["T"] = true;
-            const b = this.pop(), a = this.top(); this.source.push(`${a}=${a}===${b}?T:F;`);
+            var b = this.pop(), a = this.top(); this.source.push(`${a}=${a}===${b}?T:F;`);
             return;
         //     case 0xC7: // class
         //     case 0xC8: // blockCopy:
@@ -570,11 +570,16 @@ in practice. The mockups are promising though, with some browsers reaching
         //     case 0xCB: // do:
         //     case 0xCC: // new
         //     case 0xCD: // new:
-        //     case 0xCE: // x
-        //     case 0xCF: // y
+        case 0xCE: // x
+        case 0xCF: // y
+            var a = this.top();
+            this.source.push(`if(${a}.sqClass===VM.specialObjects[12])${a}=${a}.pointers[${byte&1}];\nelse{`);
+            this.generateCachedSend(pc, a, `VM.specialSelectors[${lobits*2}]`, 0, false, this.specialSelectors[lobits]);
+            this.source.push("}\n");
+            return;
         }
         // generic version for the bytecodes not yet handled above
-        let numArgs = this.vm.specialSelectors[(lobits*2)+1];
+        const numArgs = this.vm.specialSelectors[(lobits*2)+1];
         this.sp -= numArgs;
         this.source.push(`pc=${pc};throw {message: "Not yet implemented: quick send ${this.specialSelectors[lobits]}"};`);
         this.isLeaf = false; // could do full send
@@ -612,7 +617,11 @@ in practice. The mockups are promising though, with some browsers reaching
         this.needsVar[prefix] = true;
         this.isLeaf = false;
         this.sp -= numArgs;
-        this.generateUnimplemented(`${superSend ? "super send" : "send"} ${prefix === "L[" ? "literal #" + num : prefix}`);
+        this.generateUnimplemented(`${superSend ? "super send" : "send"} ${prefix === "L[" ? "literal " + this.method.pointers[num].bytesAsString() : prefix}`);
+    },
+    generateCachedSend(pc, rcvrVar, selectorExpr, numArgs, superSend, debugSel) {
+        this.source.push(`pc=${pc};//${rcvrVar}.send(${selectorExpr},${numArgs},${superSend})\n`);
+        this.source.push(`throw{message:"Not yet implemented: full send ${debugSel}"}`);
     },
     generateClosureTemps: function(count, popValues) {
         if (this.debug) this.generateDebugCode("closure temps");

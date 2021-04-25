@@ -670,37 +670,184 @@ return Integer_benchFib;
 
 On my machine:
 
-|         | Current JIT  | New JIT Mockup | Speedup
-|---------|--------------|----------------|----------
-| Chrome  | 1.6 MSends/s | 38 MSends/s    | 23x
-| Firefox | 2.2 MSends/s | 20 MSends/s    | 9x
-| Safari  | 4.1 MSends/s | 13 MSends/s    | 3x
+|         | Current JIT  | New JIT Mockup | Speedup | vs Cog
+|---------|--------------|----------------|---------|------
+| Chrome  | 1.6 MSends/s | 38 MSends/s    | 23x     | 19%
+| Firefox | 2.2 MSends/s | 20 MSends/s    | 9x      | 10%
+| Safari  | 4.1 MSends/s | 13 MSends/s    | 3x      | 7%
 
 For comparison, Eliot's Cog VM does about 200 MSends/s on the same machine.
 Which is pretty much exactly what the [simple benchmark](#contextmapping/context-to-varmapping) above achieves.
-The question is how to get close to that speed.
+The question is how to get close to that speed -- which will likely take a wholly different approach, so I'm not too worried about that.
+
+### More realistic estimate: `yield`
+
+The scheme above does not actually implement process switching inside of `handleDepthAndInterrupts()`. We need to be able to suspend the current chain of execution and resume another one. One way to do that in JS is via co-routines, using `function*` generators and `yield`.
+
+I implemented a mockup of this here: https://codepen.io/codefrau/pen/RwomBOK
+
+|         | Current JIT  | Yielding JIT  | Speedup | vs Cog
+|---------|--------------|---------------|---------|------
+| Chrome  | 1.6 MSends/s | 13.5 MSends/s | 9x      | 7%
+| Firefox | 2.2 MSends/s | 2.1 MSends/s  | 1x      | 1%
+| Safari  | 4.1 MSends/s | 9.6 MSends/s  | 2x      | 5%
+
+This is significantly slower, because every suspendable function (that is every method) needs to be a generator `function*`, and needs to be invoked using `yield*`. This makes each send significantly slower, so much so that on Firefox this has no benefit over the current JIT at all.
 
 ### Exception-based scheme
 
 Based on C. Scott's [comments](https://twitter.com/cscottnet/status/1369012854528020488) I also implemented a different scheme.
 Instead of always allocating the `thisProxy` closure and passing it to inner sends, it wraps the whole method in a try/catch block and only reads the context variables on unwind.
 Any context access would trigger this unwinding and context allocation for the whole nested call sequence.
-Try it at https://codepen.io/codefrau/pen/mdOzYwB
+This needs the help of an interpreter to be able to continue after unwind.
+Try it at https://codepen.io/codefrau/pen/bGBXpPN
 
-This looks to be about 2x as efficient in the best case (when no unwind happens):
+This looks to be at least 2x as efficient (with relativley few unwinds):
 
-|         | Current JIT  | Best case    | Speedup
-|---------|--------------|--------------|------
-| Chrome  | 1.6 MSends/s | 55 MSends/s  | 42x
-| Firefox | 2.2 MSends/s | 43 MSends/s  | 20x
-| Safari  | 4.1 MSends/s | 25 MSends/s  | 6x
+|         | Current JIT  | Unwinding JIT | Speedup | vs Cog
+|---------|--------------|---------------|---------|--------
+| Chrome  | 1.6 MSends/s | 49 MSends/s   | 30x     | 25%
+| Firefox | 2.2 MSends/s | 8 MSends/s    | 4x      | 4%
+| Safari  | 4.1 MSends/s | 18 MSends/s   | 4x      | 9%
 
 However, it's hard to guess if this is enough to offset the performance penalty of constantly unwinding and reifying contexts, losing inline caches etc.
+We would at least need to find a way to deal with block closures -- they do refer to thisContext, so in this scheme every iteration would trigger an unwind.
 It does simplify the design quite a bit though, since the nested calling would be strictly temporary, and not affect the rest of the VM at all.
 
 # What about ...
 
 ## Blocks / Closures / FullBlockClosures?
+
+Let's use a simple block:
+
+~~~~~~~~~~~~~~~~~~~~
+foo: a
+    | n |
+    [:a | n := a + b] value: 4.
+    ^n
+~~~~~~~~~~~~~~~~~~~~
+
+Bytecodes:
+
+~~~~~~~~~~~~~~~~~~~~
+ 0 <89> push: thisContext
+ 1 <76> pushConst: 1
+ 2 <C8> send: #blockCopy:
+ 3 <A4 07> jumpTo: 12
+ 5 <6A> popIntoTemp: 2
+ 6 <12> pushTemp: 2
+ 7 <10> pushTemp: 0
+ 8 <B0> send: #+
+ 9 <81 41> storeIntoTemp: 1
+11 <7D> blockReturn
+12 <20> pushConst: 4
+13 <CA> send: #value:
+14 <87> pop
+15 <11> pushTemp: 1
+16 <7C> return: topOfStack
+~~~~~~~~~~~~~~~~~~~~
+
+Current JIT:
+
+~~~~~~~~~~~~~~~~~~~~ JS
+function Integer_foo_(vm) {
+    // Integer>>foo:
+    var context = vm.activeContext;
+    var stack = context.pointers;
+    var rcvr = vm.receiver;
+    var temp = vm.homeContext.pointers;
+    var lit = vm.method.pointers;
+    while (true) switch (vm.pc) {
+    case 0:
+        stack[++vm.sp] = vm.exportThisContext();
+        stack[++vm.sp] = 1;
+        vm.pc = 3; if (!vm.primHandler.quickSendOther(rcvr, 8)) {vm.sendSpecial(24); return}
+    case 3:
+        vm.pc = 12; continue;
+    case 5:
+        temp[8] = stack[vm.sp--];
+        stack[++vm.sp] = temp[8];
+        stack[++vm.sp] = temp[6];
+        var a = stack[vm.sp - 1], b = stack[vm.sp];
+        if (typeof a === 'number' && typeof b === 'number') {
+        stack[--vm.sp] = vm.primHandler.signed32BitIntegerFor(a + b);
+        } else { vm.pc = 9; vm.sendSpecial(0); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}
+    case 9:
+        temp[7] = stack[vm.sp];
+        vm.pc = 12; vm.doReturn(stack[vm.sp--], context.pointers[0]); return;
+    case 12:
+        stack[++vm.sp] = lit[1];
+        vm.pc = 14; if (!vm.primHandler.quickSendOther(rcvr, 10)) vm.sendSpecial(26); return;
+    case 14:
+        vm.sp--;
+        stack[++vm.sp] = temp[7];
+        vm.pc = 17; vm.doReturn(stack[vm.sp]); return;
+    default: vm.interpretOne(true); return;
+    }
+}
+~~~~~~~~~~~~~~~~~~~~
+
+Mockup:
+
+~~~~~~~~~~~~~~~~~~~~ JS
+
+var cache = new Array(3*2).fill(null);  // [class, method, function]
+function Integer_foo_(vm, depth, method, closureOrNil, rcvr, t_a) {
+    var pc = 0;
+    var t_b, t_n; // temps
+    var t1, t2; // stack
+    if (--depth <= 0 || --vm.interruptCheckCounter <= 0) throw Error("unwind");
+
+    var thisContext = [];
+    var closure1;
+    try {
+        while (true) switch (vm.pc) {
+        case 0:
+            t1 = thisContext;
+            t2 = 1;
+            pc = 3; t1 = closure1 = vm.blockCopy(t1, t2); closure1.block = block1;
+        case 3:
+            pc = 12; continue;
+        function block1(b1_i) {
+            var b1_1, b1_2;
+            pc = 5;
+            try {
+                while (true) switch (pc) {
+                    case 5:
+                        t_i = b1_i;
+                        b1_1 = t_b;
+                        b1_2 = t_a;
+                        if (typeof b1_1 === 'number' && typeof b1_2 === 'number') { b1_1 += b1_2; if (b1_1 < -0x40000000 || b1_1 > 0x3FFFFFFF) b1_1 = vm.makeLarge(b1_1); }
+                        else {
+                            if (cache[3*0] !== b1_1.sqClass) vm.jitCache(cache, 3*0,b1_1.sqClass, vm.specialSendSelector[0], false);  // #+
+                            pc = 9; b1_1 = cache[3*0+2](vm, depth, cache[3*0+1], null, b1_1, t2);
+                        }
+                    case 9:
+                        t_n = b1_1;
+                        pc = 12; return b1_1;
+                }
+            } catch(unwind) {
+                const stackp = [1,0,1,2,1][pc-5];
+                unwind.frame = [unwind.frame, pc, stackp, method, closure1, rcvr, t1, t2];
+                throw unwind;
+            }
+        }
+        case 12:
+            t2 = 4;
+            pc = 14; t1 = t1.block(t2);
+        case 14:
+            t1 = t_n;
+            return t1;
+        }
+    } catch(unwind) {
+        const stackp = [0,1,1,1,,,,,,,1,2,1,0,1][pc];
+        thisContext.push(unwind.frame, pc, stackp, method, vm.nilObj, rcvr, t1, t2);
+        unwind.frame = thisContext;
+        throw unwind;
+    }
+}
+~~~~~~~~~~~~~~~~~~~~
+
 
 _TODO_
 

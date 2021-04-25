@@ -180,23 +180,13 @@ in practice. The mockups are promising though, with some browsers reaching
         this.optionalVars = ['L[', 'F', 'T', 'i[', 'thisContext']; // vars to remove if unused
         this.instVarNames = optInstVarNames;
         // start generating source
-        this.source.push("'use strict';\n");
-        // closure vars
-        this.source.push("let "); this.sourcePos['cvars'] = this.source.length;
-        this.sourcePos['pctosp'] = this.source.length; this.genUnlessLeaf(",PCtoSP=[]\n"); // filled in below
-        this.sourcePos['N'] = this.source.length; this.source.push(",N=VM.nilObj"); // TODO: delete if not needed
-        this.sourcePos['F'] = this.source.length; this.source.push(",F=VM.falseObj"); // deleted later if not needed
-        this.sourcePos['T'] = this.source.length; this.source.push(",T=VM.trueObj"); // deleted later if not needed
-        this.sourcePos['L['] = this.source.length; this.source.push(",L=M.pointers"); // deleted later if not needed
-        // the actual function
-        this.source.push(";\nreturn function ", funcName, "(r", args, "){\n");
+        this.source.push("'use strict';return function ", funcName, "(r", args, "){\n");
         if (this.comments && optClass && optSel) this.source.push("// ", optClass, ">>", optSel, "\n");
         // generate vars
-        this.source.push("let "); this.sourcePos['tvars'] = this.source.length;
+        this.source.push("let "); this.sourcePos['vars'] = this.source.length;
         this.sourcePos['i['] = this.source.length; this.source.push(",i=r.pointers"); // deleted later if not needed
         this.sourcePos['thisContext'] = this.source.length; this.source.push(",thisContext"); // deleted later if not needed
         if (numTemps > numArgs) {
-            this.needsVar['N'] = true;
             for (let i = numArgs ; i < numTemps; i++) this.source.push(`,t${i}=N`);
         }
         this.sourcePos['stack'] = this.source.length; this.source.push(''); // filled in below
@@ -217,17 +207,18 @@ in practice. The mockups are promising though, with some browsers reaching
         this.source.push("\n}");
         this.source[this.sourcePos['stack']] = stack;
         if (this.isLeaf) this.deleteNonLeafCode();
-        else this.source[this.sourcePos['pctosp']] = `,PCtoSP=[${this.PCtoSP}]\n`;
         this.deleteUnneededLabels();
         this.deleteUnneededVariables();
         let src = this.source.join("");
         try {
-            return new Function("VM", "M", src)(this.vm, method);
+            return new Function("VM", "N", "F", "T", "M", "L", "PCtoSP", src)
+                (this.vm, this.vm.nilObj, this.vm.falseObj, this.vm.trueObj, method, method.pointers, this.PCtoSP);
         } catch(err) {
             console.log(src);
             console.error(err);
             debugger
-            return new Function("VM", "M", src)(this.vm, method);
+            return new Function("VM", "N", "F", "T", "M", "L", "PCtoSP", src)
+                (this.vm, this.vm.nilObj, this.vm.falseObj, this.vm.trueObj, method, method.pointers, this.PCtoSP);
         }
     },
     generateBytecodes: function() {
@@ -541,8 +532,6 @@ in practice. The mockups are promising though, with some browsers reaching
         this.source.push(`if(${v}===${bool?"T":"F"}){pc=${destination};continue}`);
         this.source.push(`else if(${v}!==${bool?"F":"T"}){pc=${prevPC};throw Error("todo: send #mustBeBoolean");}`);
         this.needsLabel[destination] = true;
-        this.needsVar["F"] = true;
-        this.needsVar["T"] = true;
         this.isLeaf = false; // could send mustBeBoolean
         if (this.PCtoSP[destination] === undefined) this.PCtoSP[destination] = this.sp;
         if (destination > this.endPC) this.endPC = destination;
@@ -560,7 +549,6 @@ in practice. The mockups are promising though, with some browsers reaching
         //     case 0xC4: // nextPut:
         //     case 0xC5: // atEnd
         case 0xC6: // ==
-            this.needsVar["F"] = true; this.needsVar["T"] = true;
             var b = this.pop(), a = this.top(); this.source.push(`${a}=${a}===${b}?T:F;`);
             return;
         //     case 0xC7: // class
@@ -752,12 +740,8 @@ in practice. The mockups are promising though, with some browsers reaching
             if (!this.needsVar[v])
                 this.source[this.sourcePos[v]] = "";
         }
-        this.fixFirstVar("cvars");
-        this.fixFirstVar("tvars");
-    },
-    fixFirstVar: function(vars) {
         // delete initial comma from first var
-        var p = this.sourcePos[vars];
+        var p = this.sourcePos['vars'];
         while (!this.source[p]) p++;
         this.source[p] = this.source[p].slice(1);
     },

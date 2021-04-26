@@ -184,11 +184,11 @@ Object.subclass('Squeak.Interpreter',
     },
 },
 'interpreting', {
-    interpretOne: function(singleStep) {
+    interpretOne: function(singleStep, forceInterpret) {
         if (this.method.methodSignFlag()) {
             return this.interpretOneSistaWithExtensions(singleStep, 0, 0);
         }
-        if (this.method.compiled) {
+        if (this.method.compiled && !forceInterpret) {
             if (singleStep) {
                 if (!this.compiler.enableSingleStepping(this.method)) {
                     this.method.compiled = null;

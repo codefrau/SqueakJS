@@ -316,7 +316,7 @@ to single-step.
             if (this.debug) this.source.push("// all valid PCs have a label;\n");
             this.source.push("default: throw Error('invalid PC');\n}"); // all PCs handled
         } else {
-            this.sourcePos['loop-end'] = this.source.length; this.source.push("default: vm.interpretOne(true); return;\n}");
+            this.sourcePos['loop-end'] = this.source.length; this.source.push("default: vm.interpretOne(true, true); return;\n}");
             this.deleteUnneededLabels();
         }
         this.deleteUnneededVariables();

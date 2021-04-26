@@ -118,6 +118,9 @@ in practice. The mockups are promising though, with some browsers reaching
 'initialization', {
     initialize: function(vm) {
         this.vm = vm;
+        // find context superclass (ContextPart in old images, Context in new ones)
+        this.ContextClass = vm.specialObjects[Squeak.splOb_ClassMethodContext];
+        while (this.ContextClass.superclass().classInstSize() > 2) this.ContextClass = this.ContextClass.superclass();
         this.comments = true, // generate comments
         // for debug-printing only
         this.specialSelectors = ['+', '-', '<', '>', '<=', '>=', '=', '~=', '*', '/', '\\\\', '@',
@@ -128,7 +131,7 @@ in practice. The mockups are promising though, with some browsers reaching
     },
 },
 'accessing', {
-    compile: function(method, optClass, optSel, force=false) {
+    compile: function(method, mClass, selector, force=false) {
         if (method.methodSignFlag()) {
             return; // Sista bytecode set not (yet) supported by JIT
         } else if (method.run === undefined && !force) {
@@ -137,9 +140,7 @@ in practice. The mockups are promising though, with some browsers reaching
         } else {
             // 2nd time
             this.debug = this.comments;
-            var clsName = optClass && optClass.className(),
-                sel = optSel && optSel.bytesAsString();
-            method.run = this.generate(method, clsName, sel);
+            method.run = this.generate(method, mClass, mClass.className(), selector.bytesAsString());
         }
     },
     functionNameFor: function(cls, sel) {
@@ -156,9 +157,10 @@ in practice. The mockups are promising though, with some browsers reaching
     },
 },
 'decoding', {
-    generate: function(method, optClass, optSel, optInstVarNames) {
-        const funcName = this.functionNameFor(optClass, optSel);
+    generate: function(method, mClass, clsName, sel, optInstVarNames) {
+        const funcName = this.functionNameFor(clsName, sel);
         console.log(++this.count + " generating " + funcName);
+        this.isContext = mClass.includesBehavior(this.ContextClass);
         const primitive = method.methodPrimitiveIndex();
         if (primitive > 255 && primitive < 520) return this.quickPrimitive(funcName, primitive);
         const numArgs = method.methodNumArgs();
@@ -227,7 +229,12 @@ in practice. The mockups are promising though, with some browsers reaching
     quickPrimitive: function(funcName, primIndex) {
         if (primIndex >= 264) {
             // return inst var
-            return new Function(`return function ${funcName}(r){return r.pointers[${primIndex - 264}]}`)();
+            if (!this.isContext) return new Function(`return function ${funcName}(r){return r.pointers[${primIndex - 264}]}`)();
+            // we can only handle reified contexts, otherwise bail out
+            return new Function(`return function ${funcName}(r) {
+                if (r.pointers.length > 0) return r.pointers[${primIndex - 264}];
+                throw{message:"context var push",op:{o:"push",r,i:${primIndex - 264}}}
+            }`)();
         }
         switch (primIndex) {
             case 256: return new Function(`return function ${funcName}(r){return r}`)(); // return self
@@ -474,18 +481,24 @@ in practice. The mockups are promising though, with some browsers reaching
 'generating', {
     generatePush: function(target, arg1, suffix1, arg2, suffix2) {
         if (this.debug) this.generateDebugCode("push", target, arg1, suffix1, arg2, suffix2);
+        const pc = this.pc, sp = this.sp; // pc after label, sp before push
         this.generateLabel();
         this.needsVar[target] = true;
+        const ctx = this.isContext && target === 'i[';
+        if (ctx) this.source.push("if(i.length>0)");    // reified context is fine, otherwise bail out
         this.source.push(`${this.push()}=${target}`);
         if (arg1 !== undefined) { this.source.push(arg1, suffix1);
             if (arg2 !== undefined) this.source.push(arg2, suffix2);
         }
         this.source.push(";");
+        if (ctx) this.source.push(`else{pc=${pc};sp=${sp};debugger;throw{message:"context read",op:{o:"push",r,i:${arg1}}}}`);
     },
     generateStoreInto: function(target, arg1, suffix1, arg2, suffix2) {
         if (this.debug) this.generateDebugCode("store into", target, arg1, suffix1, arg2, suffix2);
         this.generateLabel();
         this.needsVar[target] = true;
+        const ctx = this.isContext && target === 'i[';
+        if (ctx) this.source.push(`if(i.length===0)throw Error("context write not yet implemented")\n`);
         this.source.push(target);
         if (arg1 !== undefined) {
             this.source.push(arg1, suffix1);
@@ -500,6 +513,8 @@ in practice. The mockups are promising though, with some browsers reaching
         if (this.debug) this.generateDebugCode("pop into", target, arg1, suffix1, arg2, suffix2);
         this.generateLabel();
         this.needsVar[target] = true;
+        const ctx = this.isContext && target === 'i[';
+        if (ctx) this.source.push(`if(i.length===0)throw Error("context write not yet implemented")\n`);
         this.source.push(target);
         if (arg1 !== undefined) {
             this.source.push(arg1, suffix1);

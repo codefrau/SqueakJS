@@ -485,6 +485,14 @@ Object.subclass('Squeak.Object',
     superclass: function() {
         return this.pointers[0];
     },
+    includesBehavior(aClass) {
+        var cls = this;
+        while (!cls.isNil) {
+            if (cls === aClass) return true;
+            cls = cls.superclass();
+        }
+        return false;
+    },
     className: function() {
         if (!this.pointers) return "_NOTACLASS_";
         for (var nameIdx = 6; nameIdx <= 7; nameIdx++) {

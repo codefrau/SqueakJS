@@ -1284,6 +1284,15 @@ Object.subclass('Squeak.Interpreter',
             this.activeContext = interpreterContext;
             // re-initialize interpreter state
             this.fetchContextRegisters(this.activeContext);
+            // if the frame wanted us to do an operation after unwind, do that now
+            if (frame.op) {
+                const {o, r, i, v} = frame.op;
+                switch (o) {
+                    case "push": this.push(r.pointers[i]); break;
+                    case "store": r.pointers[i] = v; break;
+                    default: throw Error("unknown op " + frame.op)
+                }
+            }
             // this.unwindCount++;
         }
         if (--this.interruptCheckCounter <= 0) this.checkForInterrupts();

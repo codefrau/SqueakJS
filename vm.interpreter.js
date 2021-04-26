@@ -904,7 +904,7 @@ Object.subclass('Squeak.Interpreter',
             this.verifyAtSelector = selector;
             this.verifyAtClass = lookupClass;
         }
-        this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
+        this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, entry.selector);
     },
     sendSuperDirected: function(selector, argCount) {
         var lookupClass = this.pop().pointers[Squeak.Class_superclass];
@@ -915,7 +915,7 @@ Object.subclass('Squeak.Interpreter',
             this.verifyAtSelector = selector;
             this.verifyAtClass = lookupClass;
         }
-        this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
+        this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, entry.selector);
     },
     sendAsPrimitiveFailure: function(rcvr, method, argCount) {
         this.executeNewMethod(rcvr, method, argCount, 0);
@@ -940,6 +940,7 @@ Object.subclass('Squeak.Interpreter',
             if (!newMethod.isNil) {
                 // if method is not actually a CompiledMethod, let primitiveInvokeObjectAsMethod (576) handle it
                 cacheEntry.method = newMethod;
+                cacheEntry.selector = selector;
                 cacheEntry.primIndex = newMethod.isMethod() ? newMethod.methodPrimitiveIndex() : 576;
                 cacheEntry.argCount = argCount;
                 cacheEntry.mClass = currentClass;
@@ -989,7 +990,7 @@ Object.subclass('Squeak.Interpreter',
                 return;  //Primitive succeeded -- end of story
         if (typeof newMethod.run === "function") {
             //console.log(this.sendCount + ' JIT ' + this.printMethod(newMethod, optClass, optSel));
-            return this.executeJITMethod(newRcvr, newMethod, argumentCount);
+            return this.executeJITMethod(newRcvr, newMethod, argumentCount, optClass, optSel);
         }
         var newContext = this.allocateOrRecycleContext(newMethod.methodNeedsLargeFrame());
         var tempCount = newMethod.methodTempCount();
@@ -1139,7 +1140,7 @@ Object.subclass('Squeak.Interpreter',
         this.arrayCopy(stack, selectorIndex+1, stack, selectorIndex, trueArgCount);
         this.sp--; // adjust sp accordingly
         var entry = this.findSelectorInClass(selector, trueArgCount, this.getClass(rcvr));
-        this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
+        this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, entry.selector);
         return true;
     },
     primitivePerformWithArgs: function(argCount, supered) {
@@ -1163,7 +1164,7 @@ Object.subclass('Squeak.Interpreter',
         this.arrayCopy(args.pointers, 0, stack, selectorIndex, trueArgCount);
         this.sp += trueArgCount - argCount; //pop selector and array then push args
         var entry = this.findSelectorInClass(selector, trueArgCount, lookupClass);
-        this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
+        this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, entry.selector);
         return true;
     },
     primitiveInvokeObjectAsMethod: function(argCount, method) {

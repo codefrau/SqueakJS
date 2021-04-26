@@ -128,10 +128,10 @@ in practice. The mockups are promising though, with some browsers reaching
     },
 },
 'accessing', {
-    compile: function(method, optClass, optSel) {
+    compile: function(method, optClass, optSel, force=false) {
         if (method.methodSignFlag()) {
             return; // Sista bytecode set not (yet) supported by JIT
-        } else if (method.run === undefined) {
+        } else if (method.run === undefined && !force) {
             // 1st time
             method.run = false;
         } else {
@@ -157,6 +157,8 @@ in practice. The mockups are promising though, with some browsers reaching
 },
 'decoding', {
     generate: function(method, optClass, optSel, optInstVarNames) {
+        const primitive = method.methodPrimitiveIndex();
+        if (primitive > 0) return false;
         const funcName = this.functionNameFor(optClass, optSel);
         console.log(++this.count + " generating " + funcName);
         const numArgs = method.methodNumArgs();
@@ -174,8 +176,9 @@ in practice. The mockups are promising though, with some browsers reaching
         this.sourceLabels = {};     // source pos of generated labels
         this.needsLabel = {};       // jump targets
         this.sourcePos = {};        // source pos of optional vars / statements
+        this.cache = 0;             // number of inline cache entries
         this.needsVar = {};         // true if var was used
-        this.isLeaf = true;         // if there are no sends we can simplify the method
+        this.isLeaf = true;         // if there are no sends we can simplify the method because no throws
         this.nonLeafCode = [];      // source positions of code to be removed if leaf
         this.optionalVars = ['L[', 'F', 'T', 'i[', 'thisContext']; // vars to remove if unused
         this.instVarNames = optInstVarNames;
@@ -190,8 +193,7 @@ in practice. The mockups are promising though, with some browsers reaching
             for (let i = numArgs ; i < numTemps; i++) this.source.push(`,t${i}=N`);
         }
         this.sourcePos['stack'] = this.source.length; this.source.push(''); // filled in below
-        this.sourcePos['pc'] = this.source.length; this.source.push(',pc=0');
-        this.source.push(";\n");
+        this.source.push(",pc=0,sp=0;\n");
         // now the actual code
         this.genUnlessLeaf(`try{\nif(--VM.depth<=0)throw{};\nif(--VM.interruptCheckCounter<=0)VM.jitInterruptCheck();\n`);
         this.sourcePos['loop-start'] = this.source.length; this.source.push(`while(true)switch(pc){\ncase 0:`);
@@ -202,23 +204,24 @@ in practice. The mockups are promising though, with some browsers reaching
         this.genUnlessLeaf(`}catch(frame){\n` +
                          `if("nonLocalReturnValue" in frame){VM.depth++;throw frame}\n` +
                          `let c=${this.needsVar["thisContext"]?"thisContext||":""}VM.jitAllocContext();let f=c.pointers;` +
-                         `f.push(frame.ctx,pc+${method.pointers.length * 4 + 1},PCtoSP[pc]+${numTemps},M,N,r${args}${temps}${stack});` +
+                         `f.push(frame.ctx,pc+${method.pointers.length * 4 + 1},sp+${numTemps},M,N,r${args}${temps}${stack});` +
                          `f.length=${method.methodNeedsLargeFrame()?62:22};frame.ctx=c;throw frame}`);
         this.source.push("\n}");
         this.source[this.sourcePos['stack']] = stack;
         if (this.isLeaf) this.deleteNonLeafCode();
         this.deleteUnneededLabels();
         this.deleteUnneededVariables();
-        let src = this.source.join("");
+        const src = this.source.join("");
+        const cache = this.cache && new Array(this.cache).fill(this.vm.nilObj);
         try {
-            return new Function("VM", "N", "F", "T", "M", "L", "PCtoSP", src)
-                (this.vm, this.vm.nilObj, this.vm.falseObj, this.vm.trueObj, method, method.pointers, this.PCtoSP);
+            return new Function("VM", "N", "F", "T", "M", "L", "C", src)
+                (this.vm, this.vm.nilObj, this.vm.falseObj, this.vm.trueObj, method, method.pointers, cache);
         } catch(err) {
             console.log(src);
             console.error(err);
             debugger
-            return new Function("VM", "N", "F", "T", "M", "L", "PCtoSP", src)
-                (this.vm, this.vm.nilObj, this.vm.falseObj, this.vm.trueObj, method, method.pointers, this.PCtoSP);
+            return new Function("VM", "N", "F", "T", "M", "L", "C", src)
+                (this.vm, this.vm.nilObj, this.vm.falseObj, this.vm.trueObj, method, method.pointers, cache);
         }
     },
     generateBytecodes: function() {
@@ -319,11 +322,6 @@ in practice. The mockups are promising though, with some browsers reaching
                     this.generateSend("L[", 1 + (byte & 0x0F), "]", 2, false);
                     break;
             }
-        }
-        let prev = 0;
-        for (let i = 0; i < this.PCtoSP.length; i++) {
-            if (this.PCtoSP[i] === undefined) this.PCtoSP[i] = prev;
-            else prev = this.PCtoSP[i];
         }
     },
     generateExtended: function(bytecode) {
@@ -517,7 +515,7 @@ in practice. The mockups are promising though, with some browsers reaching
         if (this.debug) this.generateDebugCode("jump to " + destination);
         this.generateLabel();
         this.source.push(`pc=${destination};`);
-        if (distance < 0) this.source.push("if(--VM.interruptCheckCounter<=0)VM.jitInterruptCheck();");
+        if (distance < 0) this.source.push(`sp=${this.sp};if(--VM.interruptCheckCounter<=0)VM.jitInterruptCheck();`);
         else if (this.PCtoSP[destination] === undefined) this.PCtoSP[destination] = this.sp;
         this.source.push("continue;\n");
         this.needsLabel[destination] = true;
@@ -526,11 +524,12 @@ in practice. The mockups are promising though, with some browsers reaching
     generateJumpIf: function(bool, distance) {
         var destination = this.pc + distance;
         if (this.debug) this.generateDebugCode("jump if " + bool + " to " + destination);
-        var prevPC = this.prevPC;
+        var pc = this.prevPC;
+        var sp = this.sp;
         this.generateLabel();
         const v = this.pop();
         this.source.push(`if(${v}===${bool?"T":"F"}){pc=${destination};continue}`);
-        this.source.push(`else if(${v}!==${bool?"F":"T"}){pc=${prevPC};throw Error("todo: send #mustBeBoolean");}`);
+        this.source.push(`else if(${v}!==${bool?"F":"T"}){pc=${pc};sp=${sp};throw Error("todo: send #mustBeBoolean");}`);
         this.needsLabel[destination] = true;
         this.isLeaf = false; // could send mustBeBoolean
         if (this.PCtoSP[destination] === undefined) this.PCtoSP[destination] = this.sp;
@@ -540,6 +539,7 @@ in practice. The mockups are promising though, with some browsers reaching
         const lobits = (byte & 0x0F) + 16;
         if (this.debug) this.generateDebugCode("quick send " + this.specialSelectors[lobits]);
         const pc = this.prevPC;
+        const sp = this.sp;
         this.generateLabel();
         switch (byte) {
         //     case 0xC0: // at:
@@ -562,14 +562,14 @@ in practice. The mockups are promising though, with some browsers reaching
         case 0xCF: // y
             var a = this.top();
             this.source.push(`if(${a}.sqClass===VM.specialObjects[12])${a}=${a}.pointers[${byte&1}];\nelse{`);
-            this.generateCachedSend(pc, a, `VM.specialSelectors[${lobits*2}]`, 0, false, this.specialSelectors[lobits]);
+            this.generateCachedSend(pc, sp, a, `VM.specialSelectors[${lobits*2}]`, 0, false, this.specialSelectors[lobits]);
             this.source.push("}\n");
             return;
         }
         // generic version for the bytecodes not yet handled above
         const numArgs = this.vm.specialSelectors[(lobits*2)+1];
         this.sp -= numArgs;
-        this.source.push(`pc=${pc};throw {message: "Not yet implemented: quick send ${this.specialSelectors[lobits]}"};`);
+        this.source.push(`pc=${pc};sp=${sp};throw {message: "Not yet implemented: quick send ${this.specialSelectors[lobits]}"};`);
         this.isLeaf = false; // could do full send
     },
     generateNumericOp: function(byte) {
@@ -601,15 +601,29 @@ in practice. The mockups are promising though, with some browsers reaching
     },
     generateSend: function(prefix, num, suffix, numArgs, superSend) {
         if (this.debug) this.generateDebugCode((superSend ? "super " : "send ") + (prefix === "L[" ? this.method.pointers[num].bytesAsString() : "..."));
-        // this.generateLabel();
+        const pc = this.prevPC;
+        const sp = this.sp;
+        this.generateLabel();
         this.needsVar[prefix] = true;
         this.isLeaf = false;
-        this.sp -= numArgs;
-        this.generateUnimplemented(`${superSend ? "super send" : "send"} ${prefix === "L[" ? "literal " + this.method.pointers[num].bytesAsString() : prefix}`);
+        let args = ""; for (let i = 0; i < numArgs; i++) args = `,${this.pop()}` + args;
+        const rcvr = this.pop();
+        // method class for super sends is the last literal's value, its superclass is where we start lookup
+        const lookupClass = superSend ? `L[${this.method.methodNumLits()}].pointers[1].pointers[0]` : `${rcvr}.sqClass`;
+        const cls = this.cache++, func = this.cache++;
+        this.source.push(
+            `pc=${pc};sp=${sp};`,    // this PC is used when the lookup throws an error, before popping args off the stack
+            `if(C[${cls}]!==${rcvr}.sqClass){`,
+                `C[${func}]=VM.jitCache(C,${cls},${lookupClass},${prefix+num+suffix},${numArgs});`,
+                `C[${cls}]=${rcvr}.sqClass`,
+            `}\n`,
+            `pc=${this.prevPC};sp=${this.sp};`,    // and this PC is used when the called function unwinds, args+rcvr are already popped
+            this.pushValue(`C[${func}](${rcvr}${args})`), `;`);
     },
-    generateCachedSend(pc, rcvrVar, selectorExpr, numArgs, superSend, debugSel) {
-        this.source.push(`pc=${pc};//${rcvrVar}.send(${selectorExpr},${numArgs},${superSend})\n`);
+    generateCachedSend(pc, sp, rcvrVar, selectorExpr, numArgs, superSend, debugSel) {
+        this.source.push(`pc=${pc};sp=${sp};//${rcvrVar}.send(${selectorExpr},${numArgs},${superSend})\n`);
         this.source.push(`throw{message:"Not yet implemented: full send ${debugSel}"}`);
+        this.isLeaf = false;
     },
     generateClosureTemps: function(count, popValues) {
         if (this.debug) this.generateDebugCode("closure temps");
@@ -688,8 +702,9 @@ in practice. The mockups are promising though, with some browsers reaching
     },
     generateUnimplemented: function(command, what, arg1, suffix1, arg2, suffix2) {
         const pc = this.prevPC;
+        const sp = this.PCtoSP[pc];
         this.generateLabel();
-        this.source.push(`pc=${pc};throw {message: "Not yet implemented: ${command}`);
+        this.source.push(`pc=${pc};sp=${sp};throw {message: "Not yet implemented: ${command}`);
         this.isLeaf = false; // throws
         // append argument
         if (what) {

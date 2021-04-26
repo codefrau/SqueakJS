@@ -921,6 +921,7 @@ Object.subclass('Squeak.Interpreter',
         this.executeNewMethod(rcvr, method, argCount, 0);
     },
     findSelectorInClass: function(selector, argCount, startingClass) {
+        // NOTE: duplicated as jitFindSelectorInClass below
         this.currentSelector = selector; // for primitiveInvokeObjectAsMethod
         var cacheEntry = this.findMethodCacheEntry(selector, startingClass);
         if (cacheEntry.method) return cacheEntry; // Found it in the method cache
@@ -1286,6 +1287,46 @@ Object.subclass('Squeak.Interpreter',
             // this.unwindCount++;
         }
         if (--this.interruptCheckCounter <= 0) this.checkForInterrupts();
+    },
+    jitFindSelectorInClass: function(selector, argCount, startingClass) {
+        // simplified version of findSelectorInClass that throws instead of handling lookup failures
+        var cacheEntry = this.findMethodCacheEntry(selector, startingClass);
+        if (cacheEntry.method) return cacheEntry;
+        var currentClass = startingClass;
+        var mDict;
+        while (!currentClass.isNil) {
+            mDict = currentClass.pointers[Squeak.Class_mdict];
+            if (mDict.isNil) {
+                // MethodDict pointer is nil (hopefully due a swapped out stub)
+                //        -- send #cannotInterpret:
+                throw { message: "Not yet implemented: invoke cannotInterpret:" };
+            }
+            var newMethod = this.lookupSelectorInDict(mDict, selector);
+            if (!newMethod.isNil) {
+                if (!newMethod.isMethod()) {
+                    throw { message: "Not yet implemented: invoke object as method" };
+                }
+                cacheEntry.method = newMethod;
+                cacheEntry.selector = selector;
+                cacheEntry.primIndex = newMethod.methodPrimitiveIndex();
+                cacheEntry.argCount = argCount;
+                cacheEntry.mClass = currentClass;
+                return cacheEntry;
+            }
+            currentClass = currentClass.superclass();
+        }
+        // Could not find a normal message -- send #doesNotUnderstand:
+        throw { message: "Not yet implemented: invoke doesNotUnderstand:" };
+    },
+    jitCache: function(cache, cachePos, startingClass, selector, argCount) {
+        // called from JIT on an inline cache miss
+        // do the method lookup and compile if necessary
+        // TODO: use cache[cachePos] for cache invalidation
+        if (startingClass === undefined) startingClass = this.specialObjects[Squeak.splOb_ClassInteger];
+        const {method, primIndex, mClass, selector: mSelector} = this.jitFindSelectorInClass(selector, argCount, startingClass);
+        if (primIndex > 0) throw { message: `Not handled yet: primitive ${primIndex}` };
+        if (typeof method.run !== "function") this.compiler2.compile(method, mClass, mSelector, true);
+        return method.run;
     },
     jitAllocContext: function() {
         // TODO: optimize

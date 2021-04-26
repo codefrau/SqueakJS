@@ -157,10 +157,10 @@ in practice. The mockups are promising though, with some browsers reaching
 },
 'decoding', {
     generate: function(method, optClass, optSel, optInstVarNames) {
-        const primitive = method.methodPrimitiveIndex();
-        if (primitive > 0) return false;
         const funcName = this.functionNameFor(optClass, optSel);
         console.log(++this.count + " generating " + funcName);
+        const primitive = method.methodPrimitiveIndex();
+        if (primitive > 255 && primitive < 520) return this.quickPrimitive(funcName, primitive);
         const numArgs = method.methodNumArgs();
         const numTemps = method.methodTempCount();
         let args = ""; for (let i = 0; i < numArgs; i++) args += `,t${i}`;
@@ -184,7 +184,7 @@ in practice. The mockups are promising though, with some browsers reaching
         this.instVarNames = optInstVarNames;
         // start generating source
         this.source.push("'use strict';return function ", funcName, "(r", args, "){\n");
-        if (this.comments && optClass && optSel) this.source.push("// ", optClass, ">>", optSel, "\n");
+        if (this.comments && clsName && sel) this.source.push("// ", clsName, ">>", sel, "\n");
         // generate vars
         this.source.push("let "); this.sourcePos['vars'] = this.source.length;
         this.sourcePos['i['] = this.source.length; this.source.push(",i=r.pointers"); // deleted later if not needed
@@ -222,6 +222,19 @@ in practice. The mockups are promising though, with some browsers reaching
             debugger
             return new Function("VM", "N", "F", "T", "M", "L", "C", src)
                 (this.vm, this.vm.nilObj, this.vm.falseObj, this.vm.trueObj, method, method.pointers, cache);
+        }
+    },
+    quickPrimitive: function(funcName, primIndex) {
+        if (primIndex >= 264) {
+            // return inst var
+            return new Function(`return function ${funcName}(r){return r.pointers[${primIndex - 264}]}`)();
+        }
+        switch (primIndex) {
+            case 256: return new Function(`return function ${funcName}(r){return r}`)(); // return self
+            case 257: return new Function("T", `return function ${funcName}(){return T}`)(this.vm.trueObj); // return true
+            case 258: return new Function("F", `return function ${funcName}(){return F}`)(this.vm.falseObj); // return true
+            case 259: return new Function("N", `return function ${funcName}(){return N}`)(this.vm.nilObj); // return true
+            default: return new Function(`return function ${funcName}(){return ${primIndex - 261}}`)();  // return -1...2
         }
     },
     generateBytecodes: function() {

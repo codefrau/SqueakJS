@@ -122,6 +122,8 @@ in practice. The mockups are promising though, with some browsers reaching
         this.ContextClass = vm.specialObjects[Squeak.splOb_ClassMethodContext];
         while (this.ContextClass.superclass().classInstSize() > 2) this.ContextClass = this.ContextClass.superclass();
         this.comments = true, // generate comments
+        // JS equivalents for numeric ops
+        this.jsOperators = ['+', '-', '<', '>', '<=', '>=', '===', '!==', '*'];
         // for debug-printing only
         this.specialSelectors = ['+', '-', '<', '>', '<=', '>=', '=', '~=', '*', '/', '\\\\', '@',
             'bitShift:', '//', 'bitAnd:', 'bitOr:', 'at:', 'at:put:', 'size', 'next', 'nextPut:',
@@ -329,7 +331,7 @@ in practice. The mockups are promising though, with some browsers reaching
                     break;
                 // quick primitives: // at:, at:put:, size, next, nextPut:, ...
                 case 0xC0: case 0xC8:
-                    this.generateQuickPrim(byte);
+                    this.generateQuickSend(byte);
                     break;
                 // send literal selector
                 case 0xD0: case 0xD8:
@@ -563,7 +565,47 @@ in practice. The mockups are promising though, with some browsers reaching
         if (this.PCtoSP[destination] === undefined) this.PCtoSP[destination] = this.sp;
         if (destination > this.endPC) this.endPC = destination;
     },
-    generateQuickPrim: function(byte) {
+    generateNumericOp: function(byte) {
+        const lobits = byte & 0x0F;
+        if (this.debug) this.generateDebugCode("quick send " + this.specialSelectors[lobits]);
+        const pc = this.prevPC;
+        const sp = this.sp;
+        this.generateLabel();
+        switch (byte) {
+            case 0xB0: // PLUS +
+            case 0xB1: // MINUS -
+                var b = this.pop(), a = this.top(), op = this.jsOperators[lobits];
+                this.source.push(`if(typeof ${a}==="number"&&typeof ${b}==="number"){${a}${op}=${b};if(${a}>0x3FFFFFFF)${a}=VM.jitLargePos32(${a});else if(${a}<-0x40000000)${a}=VM.jitLargeNeg32(${a})}\nelse{`);
+                this.generateCachedSend(pc, sp, a, `VM.specialSelectors[${lobits*2}]`, 1, false, this.specialSelectors[lobits]);
+                this.source.push("}\n");
+                return;
+            case 0xB2: // LESS <
+            case 0xB3: // GRTR >
+            case 0xB4: // LEQ <=
+            case 0xB5: // GEQ >=
+            case 0xB6: // EQU =
+            case 0xB7: // NEQ ~=
+                var b = this.pop(), a = this.top(), op = this.jsOperators[lobits];
+                this.source.push(`if(typeof ${a}==="number"&&typeof ${b}==="number")${a}=${a}${op}${b}?T:F;\nelse{`);
+                this.generateCachedSend(pc, sp, a, `VM.specialSelectors[${lobits*2}]`, 1, false, this.specialSelectors[lobits]);
+                this.source.push("}\n");
+                return;
+        //     case 0xB8: // TIMES *
+        //     case 0xB9: // DIV /
+        //     case 0xBA: // MOD \
+        //     case 0xBB:  // MakePt int@int
+        //     case 0xBC: // bitShift:
+        //     case 0xBD: // Divide //
+        //     case 0xBE: // bitAnd:
+        //     case 0xBF: // bitOr:
+        }
+        // generic version for the bytecodes not yet handled above
+        let numArgs = this.vm.specialSelectors[(lobits*2)+1];
+        this.sp -= numArgs;
+        this.source.push(`pc=${pc};sp=${sp};throw {message: "Not yet implemented: quick send ${this.specialSelectors[lobits]}"};`);
+        this.isLeaf = false; // throws
+    },
+    generateQuickSend: function(byte) {
         const lobits = (byte & 0x0F) + 16;
         if (this.debug) this.generateDebugCode("quick send " + this.specialSelectors[lobits]);
         const pc = this.prevPC;
@@ -600,33 +642,6 @@ in practice. The mockups are promising though, with some browsers reaching
         this.source.push(`pc=${pc};sp=${sp};throw {message: "Not yet implemented: quick send ${this.specialSelectors[lobits]}"};`);
         this.isLeaf = false; // could do full send
     },
-    generateNumericOp: function(byte) {
-        const lobits = byte & 0x0F;
-        if (this.debug) this.generateDebugCode("quick send " + this.specialSelectors[lobits]);
-        // this.generateLabel();
-        // switch (byte) {
-        //     case 0xB0: // PLUS +
-        //     case 0xB1: // MINUS -
-        //     case 0xB2: // LESS <
-        //     case 0xB3: // GRTR >
-        //     case 0xB4: // LEQ <=
-        //     case 0xB5: // GEQ >=
-        //     case 0xB6: // EQU =
-        //     case 0xB7: // NEQ ~=
-        //     case 0xB8: // TIMES *
-        //     case 0xB9: // DIV /
-        //     case 0xBA: // MOD \
-        //     case 0xBB:  // MakePt int@int
-        //     case 0xBC: // bitShift:
-        //     case 0xBD: // Divide //
-        //     case 0xBE: // bitAnd:
-        //     case 0xBF: // bitOr:
-        // }
-        // generic version for the bytecodes not yet handled above
-        let numArgs = this.vm.specialSelectors[(lobits*2)+1];
-        this.sp -= numArgs;
-        this.generateUnimplemented("quick send " + this.specialSelectors[lobits]);
-    },
     generateSend: function(prefix, num, suffix, numArgs, superSend) {
         if (this.debug) this.generateDebugCode((superSend ? "super " : "send ") + (prefix === "L[" ? this.method.pointers[num].bytesAsString() : "..."));
         const pc = this.prevPC;
@@ -649,7 +664,7 @@ in practice. The mockups are promising though, with some browsers reaching
             this.pushValue(`C[${func}](${rcvr}${args})`), `;`);
     },
     generateCachedSend(pc, sp, rcvrVar, selectorExpr, numArgs, superSend, debugSel) {
-        this.source.push(`pc=${pc};sp=${sp};//${rcvrVar}.send(${selectorExpr},${numArgs},${superSend})\n`);
+        this.source.push(`pc=${pc};sp=${sp};/*${rcvrVar}.send(${selectorExpr},${numArgs},${superSend});*/`);
         this.source.push(`throw{message:"Not yet implemented: full send ${debugSel}"}`);
         this.isLeaf = false;
     },

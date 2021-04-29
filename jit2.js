@@ -612,9 +612,21 @@ in practice. The mockups are promising though, with some browsers reaching
         const sp = this.sp;
         this.generateLabel();
         switch (byte) {
-        //     case 0xC0: // at:
+        case 0xC0: // at:
+            var b = this.pop(), a = this.top();
+            this.source.push(`if(${a}.sqClass===VM.specialObjects[7]&&typeof ${b}==="number"&&${a}.pointers&&${b}>0&&${b}<=${a}.pointers.length)${a}=${a}.pointers[${b}-1];\nelse `); // Array
+            this.source.push(`if(${a}.sqClass===VM.specialObjects[6]&&typeof ${b}==="number"&&${a}.bytes&&${b}>0&&${b}<=${a}.bytes.length)${a}=VM.jitChar(${a}.bytes[${b}-1]);\nelse{`); // String
+            this.generateCachedSend(pc, sp, a, `VM.specialSelectors[${lobits*2}]`, 1, false, this.specialSelectors[lobits]);
+            this.source.push("}\n");
+            return;
         //     case 0xC1: // at:put:
-        //     case 0xC2: // size
+        case 0xC2: // size
+            var a = this.top();
+            this.source.push(`if(${a}.sqClass===VM.specialObjects[7])${a}=${a}.pointersSize();\nelse `); // Array
+            this.source.push(`if(${a}.sqClass===VM.specialObjects[6])${a}=${a}.bytesSize();\nelse{`);    // ByteString
+            this.generateCachedSend(pc, sp, a, `VM.specialSelectors[${lobits*2}]`, 0, false, this.specialSelectors[lobits]);
+            this.source.push("}\n");
+            return;
         //     case 0xC3: // next
         //     case 0xC4: // nextPut:
         //     case 0xC5: // atEnd

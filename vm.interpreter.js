@@ -1371,6 +1371,18 @@ Object.subclass('Squeak.Interpreter',
         this.interruptCheckCounter = this.interruptCheckCounterFeedBackReset; //reset the interrupt check counter
         this.lastTick = now; //used to detect wraparound of millisecond clock
     },
+    jitLargePos32(n) {
+        throw Error("Not yet implemented: jitLargePos32()");
+    },
+    jitLargeNeg32(n) {
+        throw Error("Not yet implemented: jitLargeNeg32()");
+    },
+    jitChar(n) {
+        return this.primHandler.charFromInt(n);
+    },
+    jitUnchar(c) {
+        return this.primHandler.charToInt(c);
+    },
 },
 'contexts', {
     isUnwindMarked: function(ctx) {

@@ -621,7 +621,10 @@ in practice. The mockups are promising though, with some browsers reaching
         case 0xC6: // ==
             var b = this.pop(), a = this.top(); this.source.push(`${a}=${a}===${b}?T:F;`);
             return;
-        //     case 0xC7: // class
+        case 0xC7: // class
+            var a = this.top();
+            this.source.push(`${a}=typeof ${a}==="number"?VM.specialObjects[5]:${a}.sqClass;\n`);
+            return;
         //     case 0xC8: // blockCopy:
         //     case 0xC9: // value
         //     case 0xCA: // value:

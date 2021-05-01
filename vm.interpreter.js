@@ -1393,6 +1393,11 @@ Object.subclass('Squeak.Interpreter',
     jitUnchar(c) {
         return this.primHandler.charToInt(c);
     },
+    jitArray(items) {
+        var array = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassArray], 0);
+        array.pointers = items;
+        return array;
+    },
     jitArrayN(count) {
         return this.instantiateClass(this.specialObjects[Squeak.splOb_ClassArray], count);
     },

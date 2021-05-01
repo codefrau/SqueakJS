@@ -709,14 +709,21 @@ in practice. The mockups are promising though, with some browsers reaching
     },
     generateClosureTemps: function(count, popValues) {
         if (this.debug) this.generateDebugCode("closure temps");
-        // this.generateLabel();
-        this.generateUnimplemented("closure temps");
+        this.generateLabel();
+        if (popValues) {
+            var args = [];
+            for (var i = 0; i < count; i++) args.unshift(this.pop());
+            this.source.push(`${this.push()}=VM.jitArray([${args}]);\n`);
+        } else {
+            this.source.push(`${this.push()}=VM.jitArrayN(${count});\n`);
+        }
     },
     generateClosureCopy: function(numArgs, numCopied, blockSize) {
         var from = this.pc,
             to = from + blockSize;
         if (this.debug) this.generateDebugCode("push closure(" + from + "-" + (to-1) + "): " + numCopied + " copied, " + numArgs + " args");
         // this.generateLabel();
+        this.sp -= numCopied - 1;
         this.generateUnimplemented("closure copy");
         if (to > this.endPC) this.endPC = to;
     },

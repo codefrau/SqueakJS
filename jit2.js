@@ -128,6 +128,7 @@ in practice. The mockups are promising though, with some browsers reaching
         this.specialSelectors = ['+', '-', '<', '>', '<=', '>=', '=', '~=', '*', '/', '\\\\', '@',
             'bitShift:', '//', 'bitAnd:', 'bitOr:', 'at:', 'at:put:', 'size', 'next', 'nextPut:',
             'atEnd', '==', 'class', 'blockCopy:', 'value', 'value:', 'do:', 'new', 'new:', 'x', 'y'];
+        this.disableInterruptChecks = ["Integer_benchmark"];
         this.doitCounter = 0;
         this.count = 0;
     },
@@ -201,12 +202,17 @@ in practice. The mockups are promising though, with some browsers reaching
         this.sourcePos['stack'] = this.source.length; this.source.push(''); // filled in below
         this.source.push(",pc=0,sp=0;\n");
         // now the actual code
+        if (this.disableInterruptChecks.includes(funcName)) {
+            this.source.push("let icc=VM.interruptCheckCounter;VM.interruptCheckCounter=1e9;\n");
+            this.doBeforeExit = "VM.interruptCheckCounter=icc;";
+        } else this.doBeforeExit = "";
         this.genUnlessLeaf(`try{\nif(--VM.depth<=0)throw{};\nif(--VM.interruptCheckCounter<=0)VM.jitInterruptCheck();\n`);
         this.sourcePos['loop-start'] = this.source.length; this.source.push(`while(true)switch(pc){\ncase 0:`);
         this.generateBytecodes();
         let stack = ""; for (let i = 1; i < this.maxSP + 1; i++) stack += `,s${i}`;
         this.sourcePos['loop-end'] = this.source.length; this.source.push(`default: throw Error("unexpected PC: " + pc);\n}`);
         this.genUnlessLeaf(`}catch(frame){\n` +
+                         this.doBeforeExit +
                          `if("nonLocalReturnValue" in frame){VM.depth++;throw frame}\n` +
                          `if(frame instanceof Error)debugger;\n` +
                          `let c=${this.needsVar["thisContext"]?"thisContext||":""}VM.jitAllocContext();let f=c.pointers;` +
@@ -544,6 +550,7 @@ in practice. The mockups are promising though, with some browsers reaching
         this.generateLabel();
         this.needsVar[what] = true;
         this.genUnlessLeaf("VM.depth++;");
+        this.source.push(this.doBeforeExit);
         this.source.push(`VM.jitSuccessCount++;`);
         this.source.push(`return ${what};\n`);
         this.done = this.pc > this.endPC;

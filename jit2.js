@@ -652,11 +652,17 @@ in practice. The mockups are promising though, with some browsers reaching
         //     case 0xCA: // value:
         //     case 0xCB: // do:
         //     case 0xCC: // new
-        //     case 0xCD: // new:
+        case 0xCD: // new:
+            var b = this.pop(), a = this.top();
+            this.source.push(`if(${a}===VM.specialObjects[7])${a}=VM.jitArrayN(${b});\nelse `);  // Array
+            this.source.push(`if(${a}===VM.specialObjects[6])${a}=VM.jitStringN(${b});\nelse{`); // ByteString
+            this.generateCachedSend(pc, sp, a, `VM.specialSelectors[${lobits*2}]`, 0, false, this.specialSelectors[lobits]);
+            this.source.push("}\n");
+            return;
         case 0xCE: // x
         case 0xCF: // y
             var a = this.top();
-            this.source.push(`if(${a}.sqClass===VM.specialObjects[12])${a}=${a}.pointers[${byte&1}];\nelse{`);
+            this.source.push(`if(${a}.sqClass===VM.specialObjects[12])${a}=${a}.pointers[${byte&1}];\nelse{`);  // Point
             this.generateCachedSend(pc, sp, a, `VM.specialSelectors[${lobits*2}]`, 0, false, this.specialSelectors[lobits]);
             this.source.push("}\n");
             return;

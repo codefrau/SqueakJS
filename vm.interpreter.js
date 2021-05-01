@@ -1393,6 +1393,12 @@ Object.subclass('Squeak.Interpreter',
     jitUnchar(c) {
         return this.primHandler.charToInt(c);
     },
+    jitArrayN(count) {
+        return this.instantiateClass(this.specialObjects[Squeak.splOb_ClassArray], count);
+    },
+    jitStringN(count) {
+        return this.instantiateClass(this.specialObjects[Squeak.splOb_ClassString], count);
+    },
 },
 'contexts', {
     isUnwindMarked: function(ctx) {

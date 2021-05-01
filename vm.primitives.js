@@ -1372,36 +1372,39 @@ Object.subclass('Squeak.Primitives',
         return this.popNIfOK(argCount);
     },
     doStringReplace: function() {
-        var dst = this.stackNonInteger(4);
-        var dstPos = this.stackInteger(3) - 1;
-        var count = this.stackInteger(2) - dstPos;
-        var src = this.stackNonInteger(1);
-        var srcPos = this.stackInteger(0) - 1;
-        if (!this.success) return dst; //some integer not right
-        if (!src.sameFormatAs(dst)) {this.success = false; return dst;} //incompatible formats
+        var dst = this.vm.stackValue(4);
+        var dstPos = this.vm.stackValue(3);
+        var dstEnd = this.vm.stackValue(2);
+        var src = this.vm.stackValue(1);
+        var srcPos = this.vm.stackValue(0);
+        var primResult = this.jitPrimReplace(dst, dstPos, dstEnd, src, srcPos);
+        if (primResult === false) this.success = false;
+        else return primResult;
+    },
+    jitPrimReplace(dst, dstPos, dstEnd, src, srcPos) {
+        if (typeof dst !== "object" || typeof dstPos !== "number" || typeof dstEnd !== "number"
+            || typeof src !== "object" || typeof srcPos !== "number") return false;
+        if (!src.sameFormatAs(dst)) return false; //incompatible formats
+        dstPos--; srcPos--; // make zero-based
+        var count = dstEnd - dstPos;
         if (src.isPointers()) {//pointer type objects
             var totalLength = src.pointersSize();
             var srcInstSize = src.instSize();
             srcPos += srcInstSize;
-            if ((srcPos < 0) || (srcPos + count) > totalLength)
-                {this.success = false; return dst;} //would go out of bounds
+            if ((srcPos < 0) || (srcPos + count) > totalLength) return false; //would go out of bounds
             totalLength = dst.pointersSize();
             var dstInstSize= dst.instSize();
             dstPos += dstInstSize;
-            if ((dstPos < 0) || (dstPos + count) > totalLength)
-                {this.success= false; return dst;} //would go out of bounds
+            if ((dstPos < 0) || (dstPos + count) > totalLength) return false; //would go out of bounds
             for (var i = 0; i < count; i++)
                 dst.pointers[dstPos + i] = src.pointers[srcPos + i];
             return dst;
         } else if (src.isWords()) { //words type objects
             var totalLength = src.wordsSize();
-            if ((srcPos < 0) || (srcPos + count) > totalLength)
-                {this.success = false; return dst;} //would go out of bounds
+            if ((srcPos < 0) || (srcPos + count) > totalLength) return false; //would go out of bounds
             totalLength = dst.wordsSize();
-            if ((dstPos < 0) || (dstPos + count) > totalLength)
-                {this.success = false; return dst;} //would go out of bounds
-            if (src.isFloat && dst.isFloat)
-                dst.float = src.float;
+            if ((dstPos < 0) || (dstPos + count) > totalLength) return false; //would go out of bounds
+            if (src.isFloat && dst.isFloat) dst.float = src.float;
             else if (src.isFloat)
                 dst.wordsAsFloat64Array()[dstPos] = src.float;
             else if (dst.isFloat)
@@ -1411,11 +1414,9 @@ Object.subclass('Squeak.Primitives',
             return dst;
         } else { //bytes type objects
             var totalLength = src.bytesSize();
-            if ((srcPos < 0) || (srcPos + count) > totalLength)
-                {this.success = false; return dst;} //would go out of bounds
+            if ((srcPos < 0) || (srcPos + count) > totalLength) return false; //would go out of bounds
             totalLength = dst.bytesSize();
-            if ((dstPos < 0) || (dstPos + count) > totalLength)
-                {this.success = false; return dst;} //would go out of bounds
+            if ((dstPos < 0) || (dstPos + count) > totalLength) return false; //would go out of bounds
             for (var i = 0; i < count; i++)
                 dst.bytes[dstPos + i] = src.bytes[srcPos + i];
             return dst;

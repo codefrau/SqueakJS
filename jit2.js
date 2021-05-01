@@ -191,6 +191,7 @@ in practice. The mockups are promising though, with some browsers reaching
         // start generating source
         this.source.push("'use strict';return function ", funcName, "(r", args, "){\n");
         if (this.comments && clsName && sel) this.source.push("// ", clsName, ">>", sel, "\n");
+        if (primitive > 0) this.generatePrimitive(primitive, args);
         // generate vars
         this.source.push("let "); this.sourcePos['vars'] = this.source.length;
         this.sourcePos['i['] = this.source.length; this.source.push(",i=r.pointers"); // deleted later if not needed
@@ -226,14 +227,14 @@ in practice. The mockups are promising though, with some browsers reaching
         const src = this.source.join("");
         const cache = this.cache && new Array(this.cache).fill(this.vm.nilObj);
         try {
-            return new Function("VM", "N", "F", "T", "M", "L", "C", src)
-                (this.vm, this.vm.nilObj, this.vm.falseObj, this.vm.trueObj, method, method.pointers, cache);
+            return new Function("VM", "N", "F", "T", "M", "L", "C", "P", src)
+                (this.vm, this.vm.nilObj, this.vm.falseObj, this.vm.trueObj, method, method.pointers, cache, this.vm.primHandler);
         } catch(err) {
             console.log(src);
             console.error(err);
             debugger
-            return new Function("VM", "N", "F", "T", "M", "L", "C", src)
-                (this.vm, this.vm.nilObj, this.vm.falseObj, this.vm.trueObj, method, method.pointers, cache);
+            return new Function("VM", "N", "F", "T", "M", "L", "C", "P", src)
+                (this.vm, this.vm.nilObj, this.vm.falseObj, this.vm.trueObj, method, method.pointers, cache, this.vm.primHandler);
         }
     },
     quickPrimitive: function(funcName, primIndex) {
@@ -253,6 +254,15 @@ in practice. The mockups are promising though, with some browsers reaching
             case 259: return new Function("N", `return function ${funcName}(){return N}`)(this.vm.nilObj); // return true
             default: return new Function(`return function ${funcName}(){return ${primIndex - 261}}`)();  // return -1...2
         }
+    },
+    generatePrimitive: function(primIndex, args) {
+        let prim = "";
+        switch (primIndex) {
+            case 105: prim = "Replace"; break;
+            default:
+                throw { message: `Not handled yet: primitive ${primIndex}` };
+        }
+        this.source.push("let p=P.jitPrim", prim, "(r",  args, ");if(p!==false){VM.jitSuccessCount++;return p;}\n");
     },
     generateBytecodes: function() {
         this.done = false;

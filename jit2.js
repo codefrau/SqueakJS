@@ -161,7 +161,7 @@ in practice. The mockups are promising though, with some browsers reaching
 'decoding', {
     generate: function(method, mClass, clsName, sel, optInstVarNames) {
         const funcName = this.functionNameFor(clsName, sel);
-        console.log(++this.count + " generating " + funcName);
+        // console.log(this.count + " generating " + funcName);
         this.isContext = mClass.includesBehavior(this.ContextClass);
         const primitive = method.methodPrimitiveIndex();
         if (primitive > 255 && primitive < 520) return this.quickPrimitive(funcName, primitive);

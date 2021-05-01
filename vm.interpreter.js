@@ -113,8 +113,6 @@ Object.subclass('Squeak.Interpreter',
         return [];
     },
     initCompiler: function() {
-        if (!Squeak.Compiler)
-            return console.warn("Squeak.Compiler not loaded, using interpreter only");
         // some JS environments disallow creating functions at runtime (e.g. FireFox OS apps)
         try {
             if (new Function("return 42")() !== 42)
@@ -126,19 +124,24 @@ Object.subclass('Squeak.Interpreter',
         var kObjPerSec = this.image.oldSpaceCount / (this.startupTime - this.image.startupTime);
         if (kObjPerSec < 10)
             return console.warn("Slow machine detected (loaded " + (kObjPerSec*1000|0) + " objects/sec), using interpreter only");
+        // try new JIT
+        if (Squeak.Compiler2) {
+            // compiler2 might decide to not handle current image
+            try {
+                console.log("squeak: initializing New JIT compiler");
+                this.compiler2 = new Squeak.Compiler2(this);
+                return;
+            } catch(e) {
+                console.warn("Compiler " + e);
+            }
+        }
+        if (!Squeak.Compiler)
+            return console.warn("Squeak.Compiler not loaded, using interpreter only");
+        console.warn("Squeak.Compiler2 not loaded, using basic JIT only");
         // compiler might decide to not handle current image
         try {
             console.log("squeak: initializing JIT compiler");
             this.compiler = new Squeak.Compiler(this);
-        } catch(e) {
-            console.warn("Compiler " + e);
-        }
-        if (!Squeak.Compiler2)
-            return console.warn("Squeak.Compiler2 not loaded, using basic JIT only");
-        // compiler2 might decide to not handle current image
-        try {
-            console.log("squeak: initializing New JIT compiler");
-            this.compiler2 = new Squeak.Compiler2(this);
         } catch(e) {
             console.warn("Compiler " + e);
         }
@@ -782,7 +785,7 @@ Object.subclass('Squeak.Interpreter',
     },
     callPrimBytecode: function(extendedStoreBytecode) {
         this.pc += 2; // skip over primitive number
-        if (this.primFailCode) {
+        if (this.primFailCode !== 0) {
             if (this.method.bytes[this.pc] === extendedStoreBytecode)
                 this.stackTopPut(this.getErrorObjectFromPrimFailCode());
             this.primFailCode = 0;
@@ -986,6 +989,9 @@ Object.subclass('Squeak.Interpreter',
             this.breakOnContextChanged = false;
             this.breakNow();
         }
+        if (!newMethod.run && this.compiler2) try {
+            this.compiler2.compile(newMethod, optClass, optSel);
+        } catch (ex) { if (ex instanceof Error) throw ex; } // silently catch non-errors
         if (primitiveIndex > 0)
             if (this.tryPrimitive(primitiveIndex, argumentCount, newMethod))
                 return;  //Primitive succeeded -- end of story
@@ -1022,8 +1028,6 @@ Object.subclass('Squeak.Interpreter',
             throw Error("receivers don't match");
         if (!newMethod.compiled && this.compiler)
             this.compiler.compile(newMethod, optClass, optSel);
-        else if (!newMethod.run && this.compiler2)
-            this.compiler2.compile(newMethod, optClass, optSel);
         // check for process switch on full method activation
         if (this.interruptCheckCounter-- <= 0) this.checkForInterrupts();
     },

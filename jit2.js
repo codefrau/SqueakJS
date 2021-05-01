@@ -160,6 +160,7 @@ in practice. The mockups are promising though, with some browsers reaching
 },
 'decoding', {
     generate: function(method, mClass, clsName, sel, optInstVarNames) {
+        this.count++;
         const funcName = this.functionNameFor(clsName, sel);
         // console.log(this.count + " generating " + funcName);
         this.isContext = mClass.includesBehavior(this.ContextClass);
@@ -202,12 +203,12 @@ in practice. The mockups are promising though, with some browsers reaching
         // now the actual code
         this.genUnlessLeaf(`try{\nif(--VM.depth<=0)throw{};\nif(--VM.interruptCheckCounter<=0)VM.jitInterruptCheck();\n`);
         this.sourcePos['loop-start'] = this.source.length; this.source.push(`while(true)switch(pc){\ncase 0:`);
-        // this.source.push("debugger;\n")
         this.generateBytecodes();
         let stack = ""; for (let i = 1; i < this.maxSP + 1; i++) stack += `,s${i}`;
         this.sourcePos['loop-end'] = this.source.length; this.source.push(`default: throw Error("unexpected PC: " + pc);\n}`);
         this.genUnlessLeaf(`}catch(frame){\n` +
                          `if("nonLocalReturnValue" in frame){VM.depth++;throw frame}\n` +
+                         `if(frame instanceof Error)debugger;\n` +
                          `let c=${this.needsVar["thisContext"]?"thisContext||":""}VM.jitAllocContext();let f=c.pointers;` +
                          `f.push(frame.ctx,pc+${method.pointers.length * 4 + 1},sp+${numTemps},M,N,r${args}${temps}${stack});` +
                          `f.length=${method.methodNeedsLargeFrame()?62:22};frame.ctx=c;throw frame}`);
@@ -504,7 +505,7 @@ in practice. The mockups are promising though, with some browsers reaching
             if (arg2 !== undefined) this.source.push(arg2, suffix2);
         }
         this.source.push(";");
-        if (ctx) this.source.push(`else{pc=${pc};sp=${sp};debugger;throw{message:"context read",op:{o:"push",r,i:${arg1}}}}`);
+        if (ctx) this.source.push(`else{pc=${pc};sp=${sp};throw{message:"context read",op:{o:"push",r,i:${arg1}}}}`);
     },
     generateStoreInto: function(target, arg1, suffix1, arg2, suffix2) {
         if (this.debug) this.generateDebugCode("store into", target, arg1, suffix1, arg2, suffix2);
@@ -543,6 +544,7 @@ in practice. The mockups are promising though, with some browsers reaching
         this.generateLabel();
         this.needsVar[what] = true;
         this.genUnlessLeaf("VM.depth++;");
+        this.source.push(`VM.jitSuccessCount++;`);
         this.source.push(`return ${what};\n`);
         this.done = this.pc > this.endPC;
     },
@@ -613,7 +615,7 @@ in practice. The mockups are promising though, with some browsers reaching
         // generic version for the bytecodes not yet handled above
         let numArgs = this.vm.specialSelectors[(lobits*2)+1];
         this.sp -= numArgs;
-        this.source.push(`pc=${pc};sp=${sp};throw {message: "Not yet implemented: quick send ${this.specialSelectors[lobits]}"};`);
+        this.source.push(`pc=${pc};sp=${sp};throw {message: "Not yet implemented: quick send ${this.specialSelectors[lobits]} to " + VM.jitInstName(${this.top()})};`);
         this.isLeaf = false; // throws
     },
     generateQuickSend: function(byte) {
@@ -678,7 +680,7 @@ in practice. The mockups are promising though, with some browsers reaching
         // generic version for the bytecodes not yet handled above
         const numArgs = this.vm.specialSelectors[(lobits*2)+1];
         this.sp -= numArgs;
-        this.source.push(`pc=${pc};sp=${sp};throw {message: "Not yet implemented: quick send ${this.specialSelectors[lobits]}"};`);
+        this.source.push(`pc=${pc};sp=${sp};throw {message: "Not yet implemented: quick send ${this.specialSelectors[lobits]} to " + VM.jitInstName(${this.top()})};`);
         this.isLeaf = false; // could do full send
     },
     generateSend: function(prefix, num, suffix, numArgs, superSend) {
@@ -699,12 +701,13 @@ in practice. The mockups are promising though, with some browsers reaching
                 `C[${func}]=VM.jitCache(C,${cls},${lookupClass},${prefix+num+suffix},${numArgs});`,
                 `C[${cls}]=${rcvr}.sqClass`,
             `}\n`,
+            `VM.sendCount++;`,
             `pc=${this.prevPC};sp=${this.sp};`,    // and this PC is used when the called function unwinds, args+rcvr are already popped
             this.pushValue(`C[${func}](${rcvr}${args})`), `;`);
     },
     generateCachedSend(pc, sp, rcvrVar, selectorExpr, numArgs, superSend, debugSel) {
         this.source.push(`pc=${pc};sp=${sp};/*${rcvrVar}.send(${selectorExpr},${numArgs},${superSend});*/`);
-        this.source.push(`throw{message:"Not yet implemented: full send ${debugSel}"}`);
+        this.source.push(`throw{message:"Not yet implemented: full send ${debugSel} to " + VM.jitInstName(${rcvrVar})}`);
         this.isLeaf = false;
     },
     generateClosureTemps: function(count, popValues) {
@@ -777,8 +780,8 @@ in practice. The mockups are promising though, with some browsers reaching
                     break;
                 case 'L[':
                     var lit = this.method.pointers[arg1];
-                    if (suffix1 === ']') this.source.push((""+lit).replace(/[\r\n]/g, c => c === "\r" ? "\\r" : "\\n"));
-                    else this.source.push("value of ", lit.pointers[0].bytesAsString());
+                    if (suffix1 === ']') this.source.push(("literal "+lit).replace(/[\r\n]/g, c => c === "\r" ? "\\r" : "\\n"));
+                    else this.source.push("literal ", lit.pointers[0].bytesAsString());
                     break;
                 default:
                     if (what === this.top()) what = "top";

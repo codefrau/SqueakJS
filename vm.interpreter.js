@@ -54,6 +54,7 @@ Object.subclass('Squeak.Interpreter',
     initVMState: function() {
         this.byteCodeCount = 0;
         this.sendCount = 0;
+        this.jitSuccessCount = 0;
         this.interruptCheckCounter = 0;
         this.interruptCheckCounterFeedBackReset = 1000;
         this.interruptChecksEveryNms = 3;
@@ -1360,13 +1361,12 @@ Object.subclass('Squeak.Interpreter',
 
         // unwind to handle context switches
         var now = this.primHandler.millisecondClockValue();
-        if (this.interruptPending
-            || ((this.nextWakeupTick !== 0) && (now >= this.nextWakeupTick))
-            || (this.pendingFinalizationSignals > 0)
-            || (this.primHandler.semaphoresToSignal.length > 0)
-            || (now < this.lastTick || now >= this.breakOutTick)
-            || this.interruptCheckCounter < -100)
-                throw { message: "handleInterrupts" };
+        if (this.interruptPending) throw { message: "handle pending interrupt" };
+        if (this.nextWakeupTick !== 0 && now >= this.nextWakeupTick) throw { message: "handle timer interrupt" };
+        if (this.pendingFinalizationSignals > 0) throw { message: "handle finalization interrupt" };
+        if (this.primHandler.semaphoresToSignal.length > 0) throw { message: "handle semaphore interrupt" };
+        if (now < this.lastTick || now >= this.breakOutTick) throw { message: "handle breakout interrupt" };
+        if (this.interruptCheckCounter < -100) throw { message: "forced interrupt check" };
 
         // Feedback logic attempts to keep interrupt response around 3ms...
         if ((now - this.lastTick) < this.interruptChecksEveryNms) { //wrapping is not a concern
@@ -1403,6 +1403,18 @@ Object.subclass('Squeak.Interpreter',
     },
     jitStringN(count) {
         return this.instantiateClass(this.specialObjects[Squeak.splOb_ClassString], count);
+    },
+    jitInstName(o) {
+        // only while collecting statistics
+        if (this.unimplemented) {
+            if (typeof o === "number") return "aSmallInteger";
+            let instProto = o.sqClass.instProto;
+            if (instProto) return instProto.name;
+            instProto = o.sqClass.sqClass.instProto;
+            if (instProto && instProto.name === "aMetaclass") return `class ${o.className()}`;
+            return o.toString();
+        }
+        return "?";
     },
 },
 'contexts', {

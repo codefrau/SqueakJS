@@ -83,7 +83,7 @@ Object.subclass('Squeak.Interpreter',
         this.breakOnContextChanged = false;
         this.breakOnContextReturned = null; // context to break on
         this.messages = {};
-        if (SqueakJS.options.stats) this.unimplemented = {};
+        if (SqueakJS.options.stats) this.stats = {};
         this.startupTime = Date.now(); // base for millisecond clock
     },
     loadInitialContext: function() {
@@ -1270,14 +1270,7 @@ Object.subclass('Squeak.Interpreter',
             }
             // it stopped somewhere :(
             if (frame instanceof Error) throw frame;
-            // do this in browser console to start recording stats:
-            //     SqueakJS.vm.unimplemented = []
-            // and this to view stats:
-            //     Object.entries(SqueakJS.vm.unimplemented).sort((a,b) => b[1]-a[1])
-            if (this.unimplemented && frame.message) {
-                if (!this.unimplemented[frame.message]) this.unimplemented[frame.message] = 1;
-                else this.unimplemented[frame.message]++;
-            }
+            if (this.stats && frame.message) this.jitAddStat(frame.message);
             // walk all contexts by following child pointer [0]
             let ctx = frame.ctx;
             while (ctx) {
@@ -1407,7 +1400,7 @@ Object.subclass('Squeak.Interpreter',
     },
     jitInstName(o) {
         // only while collecting statistics
-        if (this.unimplemented) {
+        if (this.stats) {
             if (typeof o === "number") return "aSmallInteger";
             let instProto = o.sqClass.instProto;
             if (instProto) return instProto.name;
@@ -1416,6 +1409,14 @@ Object.subclass('Squeak.Interpreter',
             return o.toString();
         }
         return "?";
+    },
+    jitAddStat(what) {
+        if (!this.stats[what]) this.stats[what] = 1;
+        else this.stats[what]++;
+    },
+    jitStats() {
+        console.log(Object.entries(SqueakJS.vm.stats).sort((a,b) => b[1]-a[1]));
+        console.log(`Successful JIT sends: ${(SqueakJS.vm.jitSuccessCount * 100 / SqueakJS.vm.sendCount).toFixed(1)}%`);
     },
 },
 'contexts', {

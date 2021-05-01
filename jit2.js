@@ -214,7 +214,7 @@ in practice. The mockups are promising though, with some browsers reaching
         this.sourcePos['loop-end'] = this.source.length; this.source.push(`default: throw Error("unexpected PC: " + pc);\n}`);
         this.genUnlessLeaf(`}catch(frame){\n` +
                          this.doBeforeExit +
-                         `if("nonLocalReturnValue" in frame){VM.depth++;throw frame}\n` +
+                         `if("nlrValue" in frame){VM.depth++;VM.jitSuccessCount++;throw frame}\n` +
                          `if(frame instanceof Error)debugger;\n` +
                          `let c=${this.needsVar["thisContext"]?"thisContext||":""}VM.jitAllocContext();let f=c.pointers;` +
                          `f.push(frame.ctx,pc+${method.pointers.length * 4 + 1},sp+${numTemps},M,N,r${args}${temps}${stack});` +
@@ -682,6 +682,7 @@ in practice. The mockups are promising though, with some browsers reaching
         let numArgs = this.vm.specialSelectors[(lobits*2)+1];
         let args = []; for (let i = 0; i < numArgs; i++) args.unshift(this.pop());
         let rcvr = this.pop();
+        this.source.push(`if(VM.stats)VM.jitAddStat("unoptimized send ${this.specialSelectors[lobits]} to "+VM.jitInstName(${rcvr}));\n`);
         this.generateCachedSend(pc, sp, rcvr, args, `VM.specialSelectors[${lobits*2}]`, false, this.specialSelectors[lobits]);
     },
     generateSend: function(prefix, num, suffix, numArgs, superSend) {

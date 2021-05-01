@@ -1338,7 +1338,7 @@ Object.subclass('Squeak.Interpreter',
         // TODO: use cache[cachePos] for cache invalidation
         if (startingClass === undefined) startingClass = this.specialObjects[Squeak.splOb_ClassInteger];
         const {method, primIndex, mClass, selector: mSelector} = this.jitFindSelectorInClass(selector, argCount, startingClass);
-        if (primIndex > 0 && (primIndex < 256 || primIndex >= 520)) throw { message: `Not handled yet: primitive ${primIndex}` };
+        if (!("run" in method)) { method.run = false; throw { message: `delaying compilation until called again` }};
         if (typeof method.run !== "function") this.compiler2.compile(method, mClass, mSelector, true);
         return method.run;
     },

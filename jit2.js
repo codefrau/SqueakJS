@@ -345,9 +345,7 @@ in practice. The mockups are promising though, with some browsers reaching
                     break;
                 // SmallInteger ops: + - < > <= >= = ~= * /  @ lshift: lxor: land: lor:
                 case 0xB0: case 0xB8:
-                    this.generateNumericOp(byte);
-                    break;
-                // quick primitives: // at:, at:put:, size, next, nextPut:, ...
+                // quick sends: at:, at:put:, size, next, nextPut:, ...
                 case 0xC0: case 0xC8:
                     this.generateQuickSend(byte);
                     break;
@@ -595,8 +593,8 @@ in practice. The mockups are promising though, with some browsers reaching
         if (this.PCtoSP[destination] === undefined) this.PCtoSP[destination] = this.sp;
         if (destination > this.endPC) this.endPC = destination;
     },
-    generateNumericOp: function(byte) {
-        const lobits = byte & 0x0F;
+    generateQuickSend: function(byte) {
+        const lobits = byte - 0xB0;
         if (this.debug) this.generateDebugCode("quick send " + this.specialSelectors[lobits]);
         const pc = this.prevPC;
         const sp = this.sp;
@@ -604,9 +602,9 @@ in practice. The mockups are promising though, with some browsers reaching
         switch (byte) {
             case 0xB0: // PLUS +
             case 0xB1: // MINUS -
-                var b = this.pop(), a = this.top(), op = this.jsOperators[lobits];
+                var b = this.pop(), a = this.pop(), op = this.jsOperators[lobits];
                 this.source.push(`if(typeof ${a}==="number"&&typeof ${b}==="number"){${a}${op}=${b};if(${a}>0x3FFFFFFF)${a}=VM.jitLargePos32(${a});else if(${a}<-0x40000000)${a}=VM.jitLargeNeg32(${a})}\nelse{`);
-                this.generateCachedSend(pc, sp, a, `VM.specialSelectors[${lobits*2}]`, 1, false, this.specialSelectors[lobits]);
+                this.generateCachedSend(pc, sp, a, [b], `VM.specialSelectors[${lobits*2}]`, false, this.specialSelectors[lobits]);
                 this.source.push("}\n");
                 return;
             case 0xB2: // LESS <
@@ -615,9 +613,9 @@ in practice. The mockups are promising though, with some browsers reaching
             case 0xB5: // GEQ >=
             case 0xB6: // EQU =
             case 0xB7: // NEQ ~=
-                var b = this.pop(), a = this.top(), op = this.jsOperators[lobits];
+                var b = this.pop(), a = this.pop(), op = this.jsOperators[lobits];
                 this.source.push(`if(typeof ${a}==="number"&&typeof ${b}==="number")${a}=${a}${op}${b}?T:F;\nelse{`);
-                this.generateCachedSend(pc, sp, a, `VM.specialSelectors[${lobits*2}]`, 1, false, this.specialSelectors[lobits]);
+                this.generateCachedSend(pc, sp, a, [b], `VM.specialSelectors[${lobits*2}]`, false, this.specialSelectors[lobits]);
                 this.source.push("}\n");
                 return;
         //     case 0xB8: // TIMES *
@@ -628,40 +626,26 @@ in practice. The mockups are promising though, with some browsers reaching
         //     case 0xBD: // Divide //
         //     case 0xBE: // bitAnd:
         //     case 0xBF: // bitOr:
-        }
-        // generic version for the bytecodes not yet handled above
-        let numArgs = this.vm.specialSelectors[(lobits*2)+1];
-        this.sp -= numArgs;
-        this.source.push(`pc=${pc};sp=${sp};throw {message: "Not yet implemented: quick send ${this.specialSelectors[lobits]} to " + VM.jitInstName(${this.top()})};`);
-        this.isLeaf = false; // throws
-    },
-    generateQuickSend: function(byte) {
-        const lobits = (byte & 0x0F) + 16;
-        if (this.debug) this.generateDebugCode("quick send " + this.specialSelectors[lobits]);
-        const pc = this.prevPC;
-        const sp = this.sp;
-        this.generateLabel();
-        switch (byte) {
         case 0xC0: // at:
-            var b = this.pop(), a = this.top();
+            var b = this.pop(), a = this.pop();
             this.source.push(`if(${a}.sqClass===VM.specialObjects[7]&&typeof ${b}==="number"&&${a}.pointers&&${b}>0&&${b}<=${a}.pointers.length)${a}=${a}.pointers[${b}-1];\nelse `); // Array
             this.source.push(`if(${a}.sqClass===VM.specialObjects[6]&&typeof ${b}==="number"&&${a}.bytes&&${b}>0&&${b}<=${a}.bytes.length)${a}=VM.jitChar(${a}.bytes[${b}-1]);\nelse{`); // String
-            this.generateCachedSend(pc, sp, a, `VM.specialSelectors[${lobits*2}]`, 1, false, this.specialSelectors[lobits]);
+            this.generateCachedSend(pc, sp, a, [b], `VM.specialSelectors[${lobits*2}]`, false, this.specialSelectors[lobits]);
             this.source.push("}\n");
             return;
         case 0xC1: // at:put:
             this.needsVar['_'] = true;
-            var c = this.pop(), b = this.pop(), a = this.top();
+            var c = this.pop(), b = this.pop(), a = this.pop();
             this.source.push(`if(${a}.sqClass===VM.specialObjects[7]&&typeof ${b}==="number"&&${a}.pointers&&${b}>0&&${b}<=${a}.pointers.length)${a}=${a}.pointers[${b}-1]=${c};\nelse `); // Array
             this.source.push(`if(${a}.sqClass===VM.specialObjects[6]&&typeof ${b}==="number"&&${c}.sqClass===VM.specialObjects[19]&&(_=VM.jitUnchar(${c}))<256&&${a}.bytes&&${b}>0&&${b}<=${a}.bytes.length){${a}.bytes[${b}-1]=_;${a}=${c}}\nelse{`); // String
-            this.generateCachedSend(pc, sp, a, `VM.specialSelectors[${lobits*2}]`, 1, false, this.specialSelectors[lobits]);
+            this.generateCachedSend(pc, sp, a, [b, c], `VM.specialSelectors[${lobits*2}]`, false, this.specialSelectors[lobits]);
             this.source.push("}\n");
             return;
         case 0xC2: // size
-            var a = this.top();
+            var a = this.pop();
             this.source.push(`if(${a}.sqClass===VM.specialObjects[7])${a}=${a}.pointersSize();\nelse `); // Array
             this.source.push(`if(${a}.sqClass===VM.specialObjects[6])${a}=${a}.bytesSize();\nelse{`);    // ByteString
-            this.generateCachedSend(pc, sp, a, `VM.specialSelectors[${lobits*2}]`, 0, false, this.specialSelectors[lobits]);
+            this.generateCachedSend(pc, sp, a, [], `VM.specialSelectors[${lobits*2}]`, false, this.specialSelectors[lobits]);
             this.source.push("}\n");
             return;
         //     case 0xC3: // next
@@ -680,25 +664,25 @@ in practice. The mockups are promising though, with some browsers reaching
         //     case 0xCB: // do:
         //     case 0xCC: // new
         case 0xCD: // new:
-            var b = this.pop(), a = this.top();
+            var b = this.pop(), a = this.pop();
             this.source.push(`if(${a}===VM.specialObjects[7])${a}=VM.jitArrayN(${b});\nelse `);  // Array
             this.source.push(`if(${a}===VM.specialObjects[6])${a}=VM.jitStringN(${b});\nelse{`); // ByteString
-            this.generateCachedSend(pc, sp, a, `VM.specialSelectors[${lobits*2}]`, 0, false, this.specialSelectors[lobits]);
+            this.generateCachedSend(pc, sp, a, [b], `VM.specialSelectors[${lobits*2}]`, false, this.specialSelectors[lobits]);
             this.source.push("}\n");
             return;
         case 0xCE: // x
         case 0xCF: // y
-            var a = this.top();
+            var a = this.pop();
             this.source.push(`if(${a}.sqClass===VM.specialObjects[12])${a}=${a}.pointers[${byte&1}];\nelse{`);  // Point
-            this.generateCachedSend(pc, sp, a, `VM.specialSelectors[${lobits*2}]`, 0, false, this.specialSelectors[lobits]);
+            this.generateCachedSend(pc, sp, a, [], `VM.specialSelectors[${lobits*2}]`, false, this.specialSelectors[lobits]);
             this.source.push("}\n");
             return;
         }
         // generic version for the bytecodes not yet handled above
-        const numArgs = this.vm.specialSelectors[(lobits*2)+1];
-        this.sp -= numArgs;
-        this.source.push(`pc=${pc};sp=${sp};throw {message: "Not yet implemented: quick send ${this.specialSelectors[lobits]} to " + VM.jitInstName(${this.top()})};`);
-        this.isLeaf = false; // could do full send
+        let numArgs = this.vm.specialSelectors[(lobits*2)+1];
+        let args = []; for (let i = 0; i < numArgs; i++) args.unshift(this.pop());
+        let rcvr = this.pop();
+        this.generateCachedSend(pc, sp, rcvr, args, `VM.specialSelectors[${lobits*2}]`, false, this.specialSelectors[lobits]);
     },
     generateSend: function(prefix, num, suffix, numArgs, superSend) {
         if (this.debug) this.generateDebugCode((superSend ? "super " : "send ") + (prefix === "L[" ? this.method.pointers[num].bytesAsString() : "..."));
@@ -706,26 +690,26 @@ in practice. The mockups are promising though, with some browsers reaching
         const sp = this.sp;
         this.generateLabel();
         this.needsVar[prefix] = true;
-        this.isLeaf = false;
-        let args = ""; for (let i = 0; i < numArgs; i++) args = `,${this.pop()}` + args;
+        let args = []; for (let i = 0; i < numArgs; i++) args.unshift(this.pop());
         const rcvr = this.pop();
+        this.generateCachedSend(pc, sp, rcvr, args, prefix+num+suffix, superSend);
+    },
+    generateCachedSend(pc, sp, rcvr, args, selectorExpr, superSend) {
+        this.isLeaf = false;
         // method class for super sends is the last literal's value, its superclass is where we start lookup
         const lookupClass = superSend ? `L[${this.method.methodNumLits()}].pointers[1].pointers[0]` : `${rcvr}.sqClass`;
         const cls = this.cache++, func = this.cache++;
+        const numArgs = args.length;
+        const strArgs = numArgs > 0 ? `,${args}` : "";
         this.source.push(
             `pc=${pc};sp=${sp};`,    // this PC is used when the lookup throws an error, before popping args off the stack
             `if(C[${cls}]!==${rcvr}.sqClass){`,
-                `C[${func}]=VM.jitCache(C,${cls},${lookupClass},${prefix+num+suffix},${numArgs});`,
+                `C[${func}]=VM.jitCache(C,${cls},${lookupClass},${selectorExpr},${numArgs});`,
                 `C[${cls}]=${rcvr}.sqClass`,
-            `}\n`,
+            `}`,
             `VM.sendCount++;`,
             `pc=${this.prevPC};sp=${this.sp};`,    // and this PC is used when the called function unwinds, args+rcvr are already popped
-            this.pushValue(`C[${func}](${rcvr}${args})`), `;`);
-    },
-    generateCachedSend(pc, sp, rcvrVar, selectorExpr, numArgs, superSend, debugSel) {
-        this.source.push(`pc=${pc};sp=${sp};/*${rcvrVar}.send(${selectorExpr},${numArgs},${superSend});*/`);
-        this.source.push(`throw{message:"Not yet implemented: full send ${debugSel} to " + VM.jitInstName(${rcvrVar})}`);
-        this.isLeaf = false;
+            this.pushValue(`C[${func}](${rcvr}${strArgs})`), `;`);
     },
     generateClosureTemps: function(count, popValues) {
         if (this.debug) this.generateDebugCode("closure temps");

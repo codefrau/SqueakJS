@@ -83,6 +83,7 @@ Object.subclass('Squeak.Interpreter',
         this.breakOnContextChanged = false;
         this.breakOnContextReturned = null; // context to break on
         this.messages = {};
+        if (SqueakJS.options.stats) this.unimplemented = {};
         this.startupTime = Date.now(); // base for millisecond clock
     },
     loadInitialContext: function() {

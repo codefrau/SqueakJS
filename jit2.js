@@ -184,7 +184,7 @@ in practice. The mockups are promising though, with some browsers reaching
         this.needsVar = {};         // true if var was used
         this.isLeaf = true;         // if there are no sends we can simplify the method because no throws
         this.nonLeafCode = [];      // source positions of code to be removed if leaf
-        this.optionalVars = ['L[', 'F', 'T', 'i[', 'thisContext']; // vars to remove if unused
+        this.optionalVars = ['L[', 'F', 'T', 'i[', 'thisContext', '_']; // vars to remove if unused
         this.instVarNames = optInstVarNames;
         // start generating source
         this.source.push("'use strict';return function ", funcName, "(r", args, "){\n");
@@ -193,6 +193,7 @@ in practice. The mockups are promising though, with some browsers reaching
         this.source.push("let "); this.sourcePos['vars'] = this.source.length;
         this.sourcePos['i['] = this.source.length; this.source.push(",i=r.pointers"); // deleted later if not needed
         this.sourcePos['thisContext'] = this.source.length; this.source.push(",thisContext"); // deleted later if not needed
+        this.sourcePos['_'] = this.source.length; this.source.push(",_"); // deleted later if not needed
         if (numTemps > numArgs) {
             for (let i = numArgs ; i < numTemps; i++) this.source.push(`,t${i}=N`);
         }
@@ -629,7 +630,14 @@ in practice. The mockups are promising though, with some browsers reaching
             this.generateCachedSend(pc, sp, a, `VM.specialSelectors[${lobits*2}]`, 1, false, this.specialSelectors[lobits]);
             this.source.push("}\n");
             return;
-        //     case 0xC1: // at:put:
+        case 0xC1: // at:put:
+            this.needsVar['_'] = true;
+            var c = this.pop(), b = this.pop(), a = this.top();
+            this.source.push(`if(${a}.sqClass===VM.specialObjects[7]&&typeof ${b}==="number"&&${a}.pointers&&${b}>0&&${b}<=${a}.pointers.length)${a}=${a}.pointers[${b}-1]=${c};\nelse `); // Array
+            this.source.push(`if(${a}.sqClass===VM.specialObjects[6]&&typeof ${b}==="number"&&${c}.sqClass===VM.specialObjects[19]&&(_=VM.jitUnchar(${c}))<256&&${a}.bytes&&${b}>0&&${b}<=${a}.bytes.length){${a}.bytes[${b}-1]=_;${a}=${c}}\nelse{`); // String
+            this.generateCachedSend(pc, sp, a, `VM.specialSelectors[${lobits*2}]`, 1, false, this.specialSelectors[lobits]);
+            this.source.push("}\n");
+            return;
         case 0xC2: // size
             var a = this.top();
             this.source.push(`if(${a}.sqClass===VM.specialObjects[7])${a}=${a}.pointersSize();\nelse `); // Array

@@ -63,6 +63,7 @@ Object.subclass('Squeak.Interpreter',
         this.interruptKeycode = 2094;  //"cmd-."
         this.interruptPending = false;
         this.pendingFinalizationSignals = 0;
+        this.primFailCode = 0;
         this.freeContexts = this.nilObj;
         this.freeLargeContexts = this.nilObj;
         this.reclaimableContextCount = 0;
@@ -1348,6 +1349,11 @@ Object.subclass('Squeak.Interpreter',
         context.pointers.length = 0; // remove inst vars too
         context.dirty = true;
         return context;
+    },
+    jitPrimFail() {
+        var errorObj = this.getErrorObjectFromPrimFailCode();
+        this.primFailCode = 0;
+        return errorObj;
     },
     jitInterruptCheck: function() {
         // called from JIT when this.interruptCheckCounter < 0

@@ -429,10 +429,20 @@ in practice. The mockups are promising though, with some browsers reaching
                 return;
             // call primitive
             case 0x8B:
+                if (this.prevPC !== 0) {debugger;throw Error("inline primitive not handled yet");}
                 byte2 = this.method.bytes[this.pc++];
                 byte3 = this.method.bytes[this.pc++];
-                this.generateCallPrimitive(byte2 + 256 * byte3);
-                return
+                var primIndex = byte2 + 256 * byte3;
+                if (this.method.bytes[this.pc] !== 0x81) {
+                    // if not followed by extended store, ignore for now
+                    this.generateInstruction("call primitive " + primIndex, ""); // no-op
+                } else {
+                    // store into temp 0
+                    this.pc++;
+                    if (this.method.bytes[this.pc++] !== 0x40) {debugger;throw Error("unexpected prim failcode store");}
+                    this.generateStorePrimFailCode(primIndex);
+                }
+                return;
             // remote push from temp vector
             case 0x8C:
                 byte2 = this.method.bytes[this.pc++];
@@ -696,12 +706,10 @@ in practice. The mockups are promising though, with some browsers reaching
         this.generateUnimplemented("closure copy");
         if (to > this.endPC) this.endPC = to;
     },
-    generateCallPrimitive: function(index) {
-        if (this.debug) this.generateDebugCode("call primitive " + index);
+    generateStorePrimFailCode: function(index) {
+        if (this.debug) this.generateDebugCode("store primitive fail code " + index);
         this.generateLabel();
-        if (this.method.bytes[this.pc] === 0x81)  {// extended store
-            this.source.push(`if (VM.primFailCode) { t${this.sp} = VM.getErrorObjectFromPrimFailCode(); VM.primFailCode = 0;}\n`);
-        }
+        this.source.push(`if(VM.primFailCode!==0)t0=VM.jitPrimFail();\n`);
     },
     genUnlessLeaf: function(code) {
         this.nonLeafCode.push(this.source.length);

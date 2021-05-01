@@ -1376,10 +1376,23 @@ Object.subclass('Squeak.Interpreter',
         this.lastTick = now; //used to detect wraparound of millisecond clock
     },
     jitLargePos32(n) {
-        throw Error("Not yet implemented: jitLargePos32()");
+        var lgIntObj = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassLargePositiveInteger], 4),
+            bytes = lgIntObj.bytes;
+        bytes[0] = n     & 255;
+        bytes[1] = n>>8  & 255;
+        bytes[2] = n>>16 & 255;
+        bytes[3] = n>>24 & 255;
+        return lgIntObj;
     },
     jitLargeNeg32(n) {
-        throw Error("Not yet implemented: jitLargeNeg32()");
+        var lgIntObj = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassLargeNegativeInteger], 4),
+            bytes = lgIntObj.bytes;
+        n = -n;
+        bytes[0] = n     & 255;
+        bytes[1] = n>>8  & 255;
+        bytes[2] = n>>16 & 255;
+        bytes[3] = n>>24 & 255;
+        return lgIntObj;
     },
     jitChar(n) {
         return this.primHandler.charFromInt(n);

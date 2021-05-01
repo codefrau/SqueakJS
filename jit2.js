@@ -618,7 +618,13 @@ in practice. The mockups are promising though, with some browsers reaching
                 this.generateCachedSend(pc, sp, a, [b], `VM.specialSelectors[${lobits*2}]`, false, this.specialSelectors[lobits]);
                 this.source.push("}\n");
                 return;
-        //     case 0xB8: // TIMES *
+            case 0xB8: // TIMES *
+                this.needsVar['_'] = true;
+                var b = this.pop(), a = this.pop();
+                this.source.push(`if(typeof ${a}==="number"&&typeof ${b}==="number"&&(_=${a}*${b})<=0xFFFFFFFF&&_>=-0xFFFFFFFF){${a}=_;if(${a}>0x3FFFFFFF)${a}=VM.jitLargePos32(${a});else if(${a}<-0x40000000)${a}=VM.jitLargeNeg32(-${a})}\nelse{`);
+                this.generateCachedSend(pc, sp, a, [b], `VM.specialSelectors[${lobits*2}]`, false, this.specialSelectors[lobits]);
+                this.source.push("}\n");
+                return;
         //     case 0xB9: // DIV /
         //     case 0xBA: // MOD \
         //     case 0xBB:  // MakePt int@int
@@ -665,8 +671,8 @@ in practice. The mockups are promising though, with some browsers reaching
         //     case 0xCC: // new
         case 0xCD: // new:
             var b = this.pop(), a = this.pop();
-            this.source.push(`if(${a}===VM.specialObjects[7])${a}=VM.jitArrayN(${b});\nelse `);  // Array
-            this.source.push(`if(${a}===VM.specialObjects[6])${a}=VM.jitStringN(${b});\nelse{`); // ByteString
+            this.source.push(`if(${a}===VM.specialObjects[7]&&typeof ${b}==="number"&&${b}>=0)${a}=VM.jitArrayN(${b});\nelse `);  // Array
+            this.source.push(`if(${a}===VM.specialObjects[6]&&typeof ${b}==="number"&&${b}>=0)${a}=VM.jitStringN(${b});\nelse{`); // ByteString
             this.generateCachedSend(pc, sp, a, [b], `VM.specialSelectors[${lobits*2}]`, false, this.specialSelectors[lobits]);
             this.source.push("}\n");
             return;

@@ -192,7 +192,7 @@ in practice. The mockups are promising though, with some browsers reaching
         this.source.push("'use strict';return function ", funcName, "(r", args, "){\n");
         if (this.comments && clsName && sel) this.source.push("// ", clsName, ">>", sel, "\n");
         this.source.push("VM.jitSendCount++;\n");
-        if (primitive > 0) this.generatePrimitive(primitive, args);
+        if (primitive > 0) this.generatePrimitive(primitive, numArgs);
         // generate vars
         this.source.push("let "); this.sourcePos['vars'] = this.source.length;
         this.sourcePos['i['] = this.source.length; this.source.push(",i=r.pointers"); // deleted later if not needed
@@ -256,14 +256,25 @@ in practice. The mockups are promising though, with some browsers reaching
             default: return new Function(`return function ${funcName}(){return ${primIndex - 261}}`)();  // return -1...2
         }
     },
-    generatePrimitive: function(primIndex, args) {
+    generatePrimitive: function(primIndex, numArgs) {
+        // mapping for primitive args: 0 = top, 1 = top-1, etc
+        const stack = n => numArgs-n > 0 ? "t" + (numArgs-n-1) : "r";
         let prim = "";
+        let code = "";
         switch (primIndex) {
             case 105: prim = "Replace"; break;
+            case 111:  // primitiveClass
+                code = `typeof ${stack(0)}==="number"?VM.specialObjects[5]:${stack(0)}.sqClass`; break;
             default:
                 throw { message: `Not handled yet: primitive ${primIndex}` };
         }
-        this.source.push("let p=P.jitPrim", prim, "(r",  args, ");if(p!==false){VM.jitSuccessCount++;return p;}\n");
+        this.source.push("// primitive ", primIndex, "\nlet p=");
+        if (code) this.source.push(code);
+        else {
+            let args = "r"; for (let i = 0; i < numArgs; i++) args += ",t" + i;
+            this.source.push("P.jitPrim", prim, "(",  args, ")")
+        }
+        this.source.push(";\nif(p!==false){VM.jitSuccessCount++;return p;}\n");
     },
     generateBytecodes: function() {
         this.done = false;

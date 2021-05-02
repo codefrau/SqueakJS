@@ -123,7 +123,7 @@ in practice. The mockups are promising though, with some browsers reaching
         while (this.ContextClass.superclass().classInstSize() > 2) this.ContextClass = this.ContextClass.superclass();
         this.comments = true, // generate comments
         // JS equivalents for numeric ops
-        this.jsOperators = ['+', '-', '<', '>', '<=', '>=', '===', '!==', '*'];
+        this.jsOperators = ['+', '-', '<', '>', '<=', '>=', '===', '!==', '*', '/', '%', '@', '<<>>', '/', '&', '|'];
         // for debug-printing only
         this.specialSelectors = ['+', '-', '<', '>', '<=', '>=', '=', '~=', '*', '/', '\\\\', '@',
             'bitShift:', '//', 'bitAnd:', 'bitOr:', 'at:', 'at:put:', 'size', 'next', 'nextPut:',
@@ -642,8 +642,13 @@ in practice. The mockups are promising though, with some browsers reaching
         //     case 0xBB:  // MakePt int@int
         //     case 0xBC: // bitShift:
         //     case 0xBD: // Divide //
-        //     case 0xBE: // bitAnd:
-        //     case 0xBF: // bitOr:
+        case 0xBE: // bitAnd:
+        case 0xBF: // bitOr:
+            var b = this.pop(), a = this.pop(), op = this.jsOperators[lobits];
+            this.source.push(`if(typeof ${a}==="number"&&typeof ${b}==="number")${a}${op}=${b};\nelse{`);
+            this.generateCachedSend(pc, sp, a, [b], `VM.specialSelectors[${lobits*2}]`, false, this.specialSelectors[lobits]);
+            this.source.push("}\n");
+            return;
         case 0xC0: // at:
             var b = this.pop(), a = this.pop();
             this.source.push(`if(${a}.sqClass===VM.specialObjects[7]&&typeof ${b}==="number"&&${a}.pointers&&${b}>0&&${b}<=${a}.pointers.length)${a}=${a}.pointers[${b}-1];\nelse `); // Array

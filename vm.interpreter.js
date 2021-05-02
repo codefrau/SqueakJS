@@ -54,6 +54,7 @@ Object.subclass('Squeak.Interpreter',
     initVMState: function() {
         this.byteCodeCount = 0;
         this.sendCount = 0;
+        this.jitSendCount = 0;
         this.jitSuccessCount = 0;
         this.interruptCheckCounter = 0;
         this.interruptCheckCounterFeedBackReset = 1000;
@@ -998,10 +999,8 @@ Object.subclass('Squeak.Interpreter',
         if (primitiveIndex > 0)
             if (this.tryPrimitive(primitiveIndex, argumentCount, newMethod))
                 return;  //Primitive succeeded -- end of story
-        if (typeof newMethod.run === "function") {
-            //console.log(this.sendCount + ' JIT ' + this.printMethod(newMethod, optClass, optSel));
+        if (typeof newMethod.run === "function")
             return this.executeJITMethod(newRcvr, newMethod, argumentCount, optClass, optSel);
-        }
         var newContext = this.allocateOrRecycleContext(newMethod.methodNeedsLargeFrame());
         var tempCount = newMethod.methodTempCount();
         var newPC = 0; // direct zero-based index into byte codes
@@ -1428,8 +1427,12 @@ Object.subclass('Squeak.Interpreter',
         else this.stats[what]++;
     },
     jitStats() {
-        console.log(Object.entries(SqueakJS.vm.stats).sort((a,b) => b[1]-a[1]));
-        console.log(`Successful JIT sends: ${(SqueakJS.vm.jitSuccessCount * 100 / SqueakJS.vm.sendCount).toFixed(1)}%`);
+        if (this.stats) console.log(Object.entries(this.stats).sort((a,b) => b[1]-a[1]));
+        else console.log("No detailed stats. Enable by adding 'stats' to url options.");
+        const totalSends = this.sendCount + this.jitSendCount;
+        const jitRatio = this.jitSendCount / totalSends;
+        const jitSuccess = this.jitSuccessCount / this.jitSendCount;
+        console.log(`JIT sends: ${(jitRatio * 100).toFixed(1)}% total (${(jitSuccess * 100).toFixed(1)}% success)`);
     },
 },
 'contexts', {

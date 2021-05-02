@@ -191,6 +191,7 @@ in practice. The mockups are promising though, with some browsers reaching
         // start generating source
         this.source.push("'use strict';return function ", funcName, "(r", args, "){\n");
         if (this.comments && clsName && sel) this.source.push("// ", clsName, ">>", sel, "\n");
+        this.source.push("VM.jitSendCount++;\n");
         if (primitive > 0) this.generatePrimitive(primitive, args);
         // generate vars
         this.source.push("let "); this.sourcePos['vars'] = this.source.length;
@@ -714,7 +715,6 @@ in practice. The mockups are promising though, with some browsers reaching
                 `C[${func}]=VM.jitCache(C,${cls},${lookupClass},${selectorExpr},${numArgs});`,
                 `C[${cls}]=${rcvr}.sqClass`,
             `}`,
-            `VM.sendCount++;`,
             `pc=${this.prevPC};sp=${this.sp};`,    // and this PC is used when the called function unwinds, args+rcvr are already popped
             this.pushValue(`C[${func}](${rcvr}${strArgs})`), `;`);
     },

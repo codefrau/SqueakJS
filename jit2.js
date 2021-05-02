@@ -643,13 +643,15 @@ in practice. The mockups are promising though, with some browsers reaching
         case 0xBC: // bitShift:
             var b = this.pop(), a = this.pop();
             this.needsVar["_"] = true;
-            // JS shifts only up to 31 bits
-            this.source.push(`_=0;if(typeof ${a}==="number"&&${a}>=0&&typeof ${b}==="number"&&${b}<32){\n`);
-            // OK to lose bits shifting right
-            this.source.push(`if(${b}<0){${a}=${b}<-31?0:${a}>>-${b};_=1}\n`);
-            // check for lost bits by seeing if computation is reversible
-            this.source.push(`else{_=${a}<<${b};if(_>>${b}===${a}){${a}=_;if(${a}>0x3FFFFFFF)${a}=VM.jitLargePos32(${a});_=1}}}\n`);
-            this.source.push(`if(_===0){`);
+            this.source.push(
+                // JS shifts only up to 31 bits
+                `_=0;if(typeof ${a}==="number"&&${a}>=0&&typeof ${b}==="number"&&${b}<32){`,
+                // OK to lose bits shifting right
+                `if(${b}<0){${a}=${b}<-31?0:${a}>>-${b};_=1}`,
+                // check for lost bits by seeing if computation is reversible
+                `else{_=${a}<<${b};if(_>>${b}===${a}){${a}=_>0x3FFFFFFF?VM.jitLargePos32(_):_;_=1}}}\n`,
+                // otherwise do full send
+                `if(_===0){`);
             this.generateCachedSend(pc, sp, a, [b], `VM.specialSelectors[${lobits*2}]`, false, this.specialSelectors[lobits]);
             this.source.push("}\n");
             return;

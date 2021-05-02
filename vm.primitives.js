@@ -708,7 +708,7 @@ Object.subclass('Squeak.Primitives',
         if (!this.success) return 0;
         var result = this.vm.safeShift(rcvr, arg); // returns negative result if failed
         if (result > 0)
-            return this.pos32BitIntFor(this.vm.safeShift(rcvr, arg));
+            return this.pos32BitIntFor(result);
         this.success = false;
         return 0;
     },

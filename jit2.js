@@ -640,7 +640,19 @@ in practice. The mockups are promising though, with some browsers reaching
         //     case 0xB9: // DIV /
         //     case 0xBA: // MOD \
         //     case 0xBB:  // MakePt int@int
-        //     case 0xBC: // bitShift:
+        case 0xBC: // bitShift:
+            var b = this.pop(), a = this.pop();
+            this.needsVar["_"] = true;
+            // JS shifts only up to 31 bits
+            this.source.push(`_=0;if(typeof ${a}==="number"&&${a}>=0&&typeof ${b}==="number"&&${b}<32){\n`);
+            // OK to lose bits shifting right
+            this.source.push(`if(${b}<0){${a}=${b}<-31?0:${a}>>-${b};_=1}\n`);
+            // check for lost bits by seeing if computation is reversible
+            this.source.push(`else{_=${a}<<${b};if(_>>${b}===${a}){${a}=_;if(${a}>0x3FFFFFFF)${a}=VM.jitLargePos32(${a});_=1}}}\n`);
+            this.source.push(`if(_===0){`);
+            this.generateCachedSend(pc, sp, a, [b], `VM.specialSelectors[${lobits*2}]`, false, this.specialSelectors[lobits]);
+            this.source.push("}\n");
+            return;
         //     case 0xBD: // Divide //
         case 0xBE: // bitAnd:
         case 0xBF: // bitOr:
@@ -804,7 +816,7 @@ in practice. The mockups are promising though, with some browsers reaching
                     break;
                 case 'L[':
                     var lit = this.method.pointers[arg1];
-                    if (suffix1 === ']') this.source.push(("literal "+lit).replace(/[\r\n]/g, c => c === "\r" ? "\\r" : "\\n"));
+                    if (suffix1 === ']') this.source.push(("constant "+lit).replace(/[\r\n]/g, c => c === "\r" ? "\\r" : "\\n"));
                     else this.source.push("literal ", lit.pointers[0].bytesAsString());
                     break;
                 default:

@@ -280,8 +280,12 @@ in practice. The mockups are promising though, with some browsers reaching
     generateBytecodes: function() {
         this.done = false;
         while (!this.done) {
+            // keep track of pushed integer constant but only for immediately preceding bytecode
+            this.constant = this.pushedConst; this.pushedConst = undefined;
+            // jump targets get their stack pointer set when jumping
             if (this.PCtoSP[this.pc] === undefined) this.PCtoSP[this.pc] = this.sp;
             else { if (this.comments) this.source.push(`// sp set to ${this.PCtoSP[this.pc]} (was ${this.sp})\n`); this.sp = this.PCtoSP[this.pc]; };
+            // now decode
             var byte = this.method.bytes[this.pc++],
                 byte2 = 0;
             switch (byte & 0xF8) {
@@ -316,10 +320,10 @@ in practice. The mockups are promising though, with some browsers reaching
                         case 0x71: this.generatePush("T"); break;
                         case 0x72: this.generatePush("F"); break;
                         case 0x73: this.generatePush("N"); break;
-                        case 0x74: this.generatePush("-1"); break;
-                        case 0x75: this.generatePush("0"); break;
-                        case 0x76: this.generatePush("1"); break;
-                        case 0x77: this.generatePush("2"); break;
+                        case 0x74: this.generatePush("-1"); this.pushedConst = -1; break;
+                        case 0x75: this.generatePush("0"); this.pushedConst = 0; break;
+                        case 0x76: this.generatePush("1"); this.pushedConst = 1; break;
+                        case 0x77: this.generatePush("2"); this.pushedConst = 2; break;
                     }
                     break;
                 // Quick return
@@ -529,6 +533,7 @@ in practice. The mockups are promising though, with some browsers reaching
             if (typeof value === "number") {
                 // generate number literal as constant so JS JIT can optimize
                 this.source.push(`${this.push()}=${value};`);
+                this.pushedConst = value;
                 return;
             }
         }

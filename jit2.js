@@ -172,6 +172,7 @@ in practice. The mockups are promising though, with some browsers reaching
         let args = ""; for (let i = 0; i < numArgs; i++) args += `,t${i}`;
         let temps = ""; for (let i = numArgs; i < numTemps; i++) temps += `,t${i}`;
         this.method = method;
+        this.literals = method.pointers;
         this.pc = 0;                // next bytecode
         this.endPC = 0;             // pc of furthest jump target
         this.prevPC = 0;            // pc at start of current instruction
@@ -523,6 +524,14 @@ in practice. The mockups are promising though, with some browsers reaching
         if (this.debug) this.generateDebugCode("push", target, arg1, suffix1, arg2, suffix2);
         const pc = this.pc, sp = this.sp; // pc after label, sp before push
         this.generateLabel();
+        if (target === "L[" && suffix1=== "]") {
+            const value = this.literals[arg1];
+            if (typeof value === "number") {
+                // generate number literal as constant so JS JIT can optimize
+                this.source.push(`${this.push()}=${value};`);
+                return;
+            }
+        }
         this.needsVar[target] = true;
         const ctx = this.isContext && target === 'o[';
         if (ctx) this.source.push("if(o.length>0)");    // reified context is fine, otherwise bail out
@@ -723,7 +732,7 @@ in practice. The mockups are promising though, with some browsers reaching
         this.generateCachedSend(pc, sp, rcvr, args, `VM.specialSelectors[${lobits*2}]`, false, this.specialSelectors[lobits]);
     },
     generateSend: function(prefix, num, suffix, numArgs, superSend) {
-        if (this.debug) this.generateDebugCode((superSend ? "super " : "send ") + (prefix === "L[" ? this.method.pointers[num].bytesAsString() : "..."));
+        if (this.debug) this.generateDebugCode((superSend ? "super " : "send ") + (prefix === "L[" ? this.literals[num].bytesAsString() : "..."));
         const pc = this.prevPC;
         const sp = this.sp;
         this.generateLabel();
@@ -817,7 +826,7 @@ in practice. The mockups are promising though, with some browsers reaching
                     if (suffix1 !== '') this.source.push('[', arg2, ']');
                     break;
                 case 'L[':
-                    var lit = this.method.pointers[arg1];
+                    var lit = this.literals[arg1];
                     if (suffix1 === ']') this.source.push(("constant "+lit).replace(/[\r\n]/g, c => c === "\r" ? "\\r" : "\\n"));
                     else this.source.push("literal ", lit.pointers[0].bytesAsString());
                     break;

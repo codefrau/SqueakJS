@@ -1410,6 +1410,12 @@ Object.subclass('Squeak.Interpreter',
     jitStringN(count) {
         return this.instantiateClass(this.specialObjects[Squeak.splOb_ClassString], count);
     },
+    jitPoint(x, y) {
+        var pt = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassPoint], 0);
+        pt.pointers[0] = x;
+        pt.pointers[1] = y;
+        return pt;
+    },
     jitInstName(o) {
         // only while collecting statistics
         if (this.stats) {

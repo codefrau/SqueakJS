@@ -653,7 +653,12 @@ in practice. The mockups are promising though, with some browsers reaching
                 return;
         //     case 0xB9: // DIV /
         //     case 0xBA: // MOD \
-        //     case 0xBB:  // MakePt int@int
+        case 0xBB:  // MakePoint num@num
+            var b = this.pop(), a = this.pop(), op = this.jsOperators[lobits];
+            this.source.push(`if((typeof ${a}==="number"||${a}.isFloat)&&(typeof ${b}==="number"||${b}.isFloat))${a}=VM.jitPoint(${a},${b});\nelse{`);
+            this.generateCachedSend(pc, sp, a, [b], `VM.specialSelectors[${lobits*2}]`, false, this.specialSelectors[lobits]);
+            this.source.push("}\n");
+            return;
         case 0xBC: // bitShift:
             var b = this.pop(), a = this.pop();
             // this is slightly over-engineered but bitShift semantics are rather

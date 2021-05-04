@@ -118,6 +118,7 @@ in practice. The mockups are promising though, with some browsers reaching
 'initialization', {
     initialize: function(vm) {
         this.vm = vm;
+        this.isSpur = vm.image.isSpur;
         // find context superclass (ContextPart in old images, Context in new ones)
         this.ContextClass = vm.specialObjects[Squeak.splOb_ClassMethodContext];
         while (this.ContextClass.superclass().classInstSize() > 2) this.ContextClass = this.ContextClass.superclass();
@@ -271,6 +272,10 @@ in practice. The mockups are promising though, with some browsers reaching
             case 71: // new:
                 code = `typeof ${stack(1)}==="object"&&typeof ${top}==="number"&&P.instantiateClass(${stack(1)},${top})`;
                 checkSuccess = "p!==false&&p!==null"; // P.instantiateClass can fail
+                break;
+            case 75: // identityHash
+                if (this.isSpur) code = `typeof ${top}==="object"&&(${top}.hash||(${top}.hash=(Math.random()*0x3FFFFE|0)+1))`;
+                else code = `typeof ${top}==="object"&&${top}.hash`;
                 break;
             case 105: prim = "Replace"; break;
             case 111:  // primitiveClass

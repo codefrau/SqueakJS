@@ -194,39 +194,42 @@ in practice. The mockups are promising though, with some browsers reaching
         this.source.push("'use strict';return function ", funcName, "(r", args, "){\n");
         if (this.comments && clsName && sel) this.source.push("// ", clsName, ">>", sel, "\n");
         this.source.push("VM.jitSendCount++;\n");
-        // generate vars
-        this.source.push("let "); this.sourcePos['vars'] = this.source.length;
-        this.sourcePos['o['] = this.source.length; this.source.push(",o=r.pointers"); // deleted later if not needed
-        this.sourcePos['thisContext'] = this.source.length; this.source.push(",thisContext"); // deleted later if not needed
-        this.sourcePos['_'] = this.source.length; this.source.push(",_"); // deleted later if not needed
-        if (numTemps > numArgs) {
-            for (let i = numArgs ; i < numTemps; i++) this.source.push(`,t${i}=N`);
-        if (primitive > 0) this.generatePrimitive(primitive, numArgs, mClass);
+        if (primitive > 0 && this.generatePrimitive(primitive, numArgs, mClass) === true) {
+            this.source.push("}");
+        } else {
+            // generate vars
+            this.source.push("let "); this.sourcePos['vars'] = this.source.length;
+            this.sourcePos['o['] = this.source.length; this.source.push(",o=r.pointers"); // deleted later if not needed
+            this.sourcePos['thisContext'] = this.source.length; this.source.push(",thisContext"); // deleted later if not needed
+            this.sourcePos['_'] = this.source.length; this.source.push(",_"); // deleted later if not needed
+            if (numTemps > numArgs) {
+                for (let i = numArgs ; i < numTemps; i++) this.source.push(`,t${i}=N`);
+            }
+            this.sourcePos['stack'] = this.source.length; this.source.push(''); // filled in below
+            this.source.push(",pc=0,sp=0;\n");
+            // now the actual code
+            if (this.disableInterruptChecks.includes(funcName)) {
+                this.source.push("let icc=VM.interruptCheckCounter;VM.interruptCheckCounter=1e9;\n");
+                this.doBeforeExit = "VM.interruptCheckCounter=icc;";
+            } else this.doBeforeExit = "";
+            this.genUnlessLeaf(`try{\nif(--VM.depth<=0)throw{};\nif(--VM.interruptCheckCounter<=0)VM.jitInterruptCheck();\n`);
+            this.sourcePos['loop-start'] = this.source.length; this.source.push(`while(true)switch(pc){\ncase 0:`);
+            this.generateBytecodes();
+            let stack = ""; for (let i = 1; i < this.maxSP + 1; i++) stack += `,s${i}`;
+            this.sourcePos['loop-end'] = this.source.length; this.source.push(`default: throw Error("unexpected PC: " + pc);\n}`);
+            this.genUnlessLeaf(`}catch(frame){\n` +
+                            this.doBeforeExit +
+                            `if("nlrValue" in frame){VM.depth++;VM.jitSuccessCount++;throw frame}\n` +
+                            `if(frame instanceof Error)debugger;\n` +
+                            `let c=${this.needsVar["thisContext"]?"thisContext||":""}VM.jitAllocContext();let f=c.pointers;` +
+                            `f.push(frame.ctx,pc+${method.pointers.length * 4 + 1},sp+${numTemps},M,N,r${args}${temps}${stack});` +
+                            `f.length=${method.methodNeedsLargeFrame()?62:22};frame.ctx=c;throw frame}`);
+            this.source.push("\n}");
+            this.source[this.sourcePos['stack']] = stack;
+            if (this.isLeaf) this.deleteNonLeafCode();
+            this.deleteUnneededLabels();
+            this.deleteUnneededVariables();
         }
-        this.sourcePos['stack'] = this.source.length; this.source.push(''); // filled in below
-        this.source.push(",pc=0,sp=0;\n");
-        // now the actual code
-        if (this.disableInterruptChecks.includes(funcName)) {
-            this.source.push("let icc=VM.interruptCheckCounter;VM.interruptCheckCounter=1e9;\n");
-            this.doBeforeExit = "VM.interruptCheckCounter=icc;";
-        } else this.doBeforeExit = "";
-        this.genUnlessLeaf(`try{\nif(--VM.depth<=0)throw{};\nif(--VM.interruptCheckCounter<=0)VM.jitInterruptCheck();\n`);
-        this.sourcePos['loop-start'] = this.source.length; this.source.push(`while(true)switch(pc){\ncase 0:`);
-        this.generateBytecodes();
-        let stack = ""; for (let i = 1; i < this.maxSP + 1; i++) stack += `,s${i}`;
-        this.sourcePos['loop-end'] = this.source.length; this.source.push(`default: throw Error("unexpected PC: " + pc);\n}`);
-        this.genUnlessLeaf(`}catch(frame){\n` +
-                         this.doBeforeExit +
-                         `if("nlrValue" in frame){VM.depth++;VM.jitSuccessCount++;throw frame}\n` +
-                         `if(frame instanceof Error)debugger;\n` +
-                         `let c=${this.needsVar["thisContext"]?"thisContext||":""}VM.jitAllocContext();let f=c.pointers;` +
-                         `f.push(frame.ctx,pc+${method.pointers.length * 4 + 1},sp+${numTemps},M,N,r${args}${temps}${stack});` +
-                         `f.length=${method.methodNeedsLargeFrame()?62:22};frame.ctx=c;throw frame}`);
-        this.source.push("\n}");
-        this.source[this.sourcePos['stack']] = stack;
-        if (this.isLeaf) this.deleteNonLeafCode();
-        this.deleteUnneededLabels();
-        this.deleteUnneededVariables();
         const src = this.source.join("");
         const cache = this.cache && new Array(this.cache).fill(this.vm.nilObj);
         try {
@@ -965,7 +968,7 @@ in practice. The mockups are promising though, with some browsers reaching
                 break;
             case 105: prim = "Replace"; break;
             case 111:  // primitiveClass
-                code = `typeof ${top}==="number"?VM.specialObjects[5]:${top}.sqClass`; break;
+                code = `typeof ${top}==="number"?VM.specialObjects[5]:${top}.sqClass`; checkSuccess = "true"; break;
             case 169: // not identical
                 if (oldPrims) code = "false"; // primitiveDirectorySetMacTypeAndCreator
                 else { code = `${stack(1)}!==${top}?T:F`; checkSuccess = "true"; }
@@ -978,6 +981,10 @@ in practice. The mockups are promising though, with some browsers reaching
         else {
             let args = "r"; for (let i = 0; i < numArgs; i++) args += ",t" + i;
             this.source.push("\nlet p=P.jitPrim", prim, "(",  args, ")")
+        }
+        if (checkSuccess === "true") {
+            this.source.push(";\nVM.jitSuccessCount++;return p;\n");
+            return true;
         }
         this.source.push(";\nif(", checkSuccess, "){VM.jitSuccessCount++;return p;}\n");
     },

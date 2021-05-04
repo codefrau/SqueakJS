@@ -194,7 +194,6 @@ in practice. The mockups are promising though, with some browsers reaching
         this.source.push("'use strict';return function ", funcName, "(r", args, "){\n");
         if (this.comments && clsName && sel) this.source.push("// ", clsName, ">>", sel, "\n");
         this.source.push("VM.jitSendCount++;\n");
-        if (primitive > 0) this.generatePrimitive(primitive, numArgs);
         // generate vars
         this.source.push("let "); this.sourcePos['vars'] = this.source.length;
         this.sourcePos['o['] = this.source.length; this.source.push(",o=r.pointers"); // deleted later if not needed
@@ -202,6 +201,7 @@ in practice. The mockups are promising though, with some browsers reaching
         this.sourcePos['_'] = this.source.length; this.source.push(",_"); // deleted later if not needed
         if (numTemps > numArgs) {
             for (let i = numArgs ; i < numTemps; i++) this.source.push(`,t${i}=N`);
+        if (primitive > 0) this.generatePrimitive(primitive, numArgs, mClass);
         }
         this.sourcePos['stack'] = this.source.length; this.source.push(''); // filled in below
         this.source.push(",pc=0,sp=0;\n");
@@ -931,7 +931,7 @@ in practice. The mockups are promising though, with some browsers reaching
     },
 },
 "primitives", {
-    generatePrimitive: function(primIndex, numArgs) {
+    generatePrimitive: function(primIndex, numArgs, mClass) {
         // mapping for primitive args: 0 = top, 1 = top-1, etc
         const stack = n => numArgs-n > 0 ? "t" + (numArgs-n-1) : "r";
         const top = stack(0);
@@ -941,7 +941,11 @@ in practice. The mockups are promising though, with some browsers reaching
         let checkSuccess = "p!==false";
         switch (primIndex) {
             case 60: // basicAt:
-                code = `typeof ${stack(1)}==="object"&&typeof ${top}==="number"&&VM.jitBasicAt(${stack(1)},${top})`;
+                if (mClass.classInstIsBytes() && numArgs === 1) {
+                    code = `r.bytes&&typeof t0==="number"&&t0>0&&t0<=r.bytes.length&&r.bytes[t0-1]`;
+                } else {
+                    code = `typeof ${stack(1)}==="object"&&typeof ${top}==="number"&&VM.jitBasicAt(${stack(1)},${top})`;
+                }
                 break;
             case 62: // basicSize
                 code = `P.indexableSize(${top});if(p>0x3FFFFFFF)p=VM.jitLargePos32(p)`;

@@ -260,12 +260,21 @@ in practice. The mockups are promising though, with some browsers reaching
     generatePrimitive: function(primIndex, numArgs) {
         // mapping for primitive args: 0 = top, 1 = top-1, etc
         const stack = n => numArgs-n > 0 ? "t" + (numArgs-n-1) : "r";
+        const top = stack(0);
         let prim = "";
         let code = "";
+        let checkSuccess = "p!==false";
         switch (primIndex) {
+            case 70: // new
+                code = `typeof ${top}==="object"&&VM.instantiateClass(${top},0)`; // VM.instantiateClass does not fail
+                break;
+            case 71: // new:
+                code = `typeof ${stack(1)}==="object"&&typeof ${top}==="number"&&P.instantiateClass(${stack(1)},${top})`;
+                checkSuccess = "p!==false&&p!==null"; // P.instantiateClass can fail
+                break;
             case 105: prim = "Replace"; break;
             case 111:  // primitiveClass
-                code = `typeof ${stack(0)}==="number"?VM.specialObjects[5]:${stack(0)}.sqClass`; break;
+                code = `typeof ${top}==="number"?VM.specialObjects[5]:${top}.sqClass`; break;
             default:
                 throw { message: `Not handled yet: primitive ${primIndex}` };
         }
@@ -275,7 +284,7 @@ in practice. The mockups are promising though, with some browsers reaching
             let args = "r"; for (let i = 0; i < numArgs; i++) args += ",t" + i;
             this.source.push("P.jitPrim", prim, "(",  args, ")")
         }
-        this.source.push(";\nif(p!==false){VM.jitSuccessCount++;return p;}\n");
+        this.source.push(";\nif(", checkSuccess, "){VM.jitSuccessCount++;return p;}\n");
     },
     generateBytecodes: function() {
         this.done = false;

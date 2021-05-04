@@ -258,46 +258,6 @@ in practice. The mockups are promising though, with some browsers reaching
             default: return new Function(`return function ${funcName}(){return ${primIndex - 261}}`)();  // return -1...2
         }
     },
-    generatePrimitive: function(primIndex, numArgs) {
-        // mapping for primitive args: 0 = top, 1 = top-1, etc
-        const stack = n => numArgs-n > 0 ? "t" + (numArgs-n-1) : "r";
-        const top = stack(0);
-        let prim = "";
-        let code = "";
-        let checkSuccess = "p!==false";
-        switch (primIndex) {
-            case 60: // basicAt:
-                code = `typeof ${stack(1)}==="object"&&typeof ${top}==="number"&&VM.jitBasicAt(${stack(1)},${top})`;
-                break;
-            case 62: // basicSize
-                code = `P.indexableSize(${top});if(p>0x3FFFFFFF)p=VM.jitLargePos32(p)`;
-                checkSuccess = "p>=0";
-                break;
-            case 70: // new
-                code = `typeof ${top}==="object"&&VM.instantiateClass(${top},0)`; // VM.instantiateClass does not fail
-                break;
-            case 71: // new:
-                code = `typeof ${stack(1)}==="object"&&typeof ${top}==="number"&&P.instantiateClass(${stack(1)},${top})`;
-                checkSuccess = "p!==false&&p!==null"; // P.instantiateClass can fail
-                break;
-            case 75: // identityHash
-                if (this.isSpur) code = `typeof ${top}==="object"&&(${top}.hash||(${top}.hash=(Math.random()*0x3FFFFE|0)+1))`;
-                else code = `typeof ${top}==="object"&&${top}.hash`;
-                break;
-            case 105: prim = "Replace"; break;
-            case 111:  // primitiveClass
-                code = `typeof ${top}==="number"?VM.specialObjects[5]:${top}.sqClass`; break;
-            default:
-                throw { message: `Not handled yet: primitive ${primIndex}` };
-        }
-        this.source.push("// primitive ", primIndex, "\nlet p=");
-        if (code) this.source.push(code);
-        else {
-            let args = "r"; for (let i = 0; i < numArgs; i++) args += ",t" + i;
-            this.source.push("P.jitPrim", prim, "(",  args, ")")
-        }
-        this.source.push(";\nif(", checkSuccess, "){VM.jitSuccessCount++;return p;}\n");
-    },
     generateBytecodes: function() {
         this.done = false;
         while (!this.done) {
@@ -968,5 +928,48 @@ in practice. The mockups are promising though, with some browsers reaching
         for (var i = 0; i < this.nonLeafCode.length; i++) {
             this.source[this.nonLeafCode[i]] = "";
         }
+    },
+},
+"primitives", {
+    generatePrimitive: function(primIndex, numArgs) {
+        // mapping for primitive args: 0 = top, 1 = top-1, etc
+        const stack = n => numArgs-n > 0 ? "t" + (numArgs-n-1) : "r";
+        const top = stack(0);
+        this.source.push("// primitive ", primIndex);
+        let prim = "";
+        let code = "";
+        let checkSuccess = "p!==false";
+        switch (primIndex) {
+            case 60: // basicAt:
+                code = `typeof ${stack(1)}==="object"&&typeof ${top}==="number"&&VM.jitBasicAt(${stack(1)},${top})`;
+                break;
+            case 62: // basicSize
+                code = `P.indexableSize(${top});if(p>0x3FFFFFFF)p=VM.jitLargePos32(p)`;
+                checkSuccess = "p>=0";
+                break;
+            case 70: // new
+                code = `typeof ${top}==="object"&&VM.instantiateClass(${top},0)`; // VM.instantiateClass does not fail
+                break;
+            case 71: // new:
+                code = `typeof ${stack(1)}==="object"&&typeof ${top}==="number"&&P.instantiateClass(${stack(1)},${top})`;
+                checkSuccess = "p!==false&&p!==null"; // P.instantiateClass can fail
+                break;
+            case 75: // identityHash
+                if (this.isSpur) code = `typeof ${top}==="object"&&(${top}.hash||(${top}.hash=(Math.random()*0x3FFFFE|0)+1))`;
+                else code = `typeof ${top}==="object"&&${top}.hash`;
+                break;
+            case 105: prim = "Replace"; break;
+            case 111:  // primitiveClass
+                code = `typeof ${top}==="number"?VM.specialObjects[5]:${top}.sqClass`; break;
+            default:
+                throw { message: `Not handled yet: primitive ${primIndex}` };
+        }
+        // if (primIndex===62) this.source.push("debugger;\n");
+        if (code) this.source.push("\nlet p=", code);
+        else {
+            let args = "r"; for (let i = 0; i < numArgs; i++) args += ",t" + i;
+            this.source.push("\nlet p=P.jitPrim", prim, "(",  args, ")")
+        }
+        this.source.push(";\nif(", checkSuccess, "){VM.jitSuccessCount++;return p;}\n");
     },
 });

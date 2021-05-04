@@ -658,6 +658,7 @@ in practice. The mockups are promising though, with some browsers reaching
             var b = this.pop(), a = this.pop();
             // this is slightly over-engineered but bitShift semantics are rather
             // different from << and >> so we want to avoid the generic case below if possible
+            // we only left-shift non-negative recipients here, enabling the full unsigned 32 bit range.
             // TODO: fast path for negative recipient (an admittedly rare case)
             if (typeof this.constant === "number") {
                 // shift amount b is a constant
@@ -665,8 +666,8 @@ in practice. The mockups are promising though, with some browsers reaching
                 if (b < 32) {
                     if (b <= 0) { // right shift
                         this.source.push(
-                            `if(typeof ${a}==="number"&&${a}>=0)`,
-                            b < -31 ? `${a}=0` : `${a}>>=${-b}`, // OK to lose bits
+                            `if(typeof ${a}==="number")`, // works for both pos and neg recipient
+                            b < -31 ? `${a}=${a}<0?-1:0` : `${a}>>=${-b}`, // OK to lose bits
                             ";\nelse{"
                         );
                     } else { // left shift
@@ -675,7 +676,7 @@ in practice. The mockups are promising though, with some browsers reaching
                         var checkMax = b > 2 ? `&&${a}<=0x${(0xFFFFFFFF >>> b).toString(16)}` : "";
                         this.source.push(
                             `if(typeof ${a}==="number"&&${a}>=0${checkMax}){`,
-                            `${a}<<=${b};if(${a}>0x3FFFFFFF)${a}=VM.jitLargePos32(${a})`,
+                            `${a}=${a}<<${b}>>>0;if(${a}>0x3FFFFFFF)${a}=VM.jitLargePos32(${a})`,
                             "}\nelse{"
                         );
                     }
@@ -688,11 +689,11 @@ in practice. The mockups are promising though, with some browsers reaching
                 this.needsVar["_"] = true;
                 this.source.push(
                     // JS shifts only up to 31 bits
-                    `_=0;if(typeof ${a}==="number"&&${a}>=0&&typeof ${b}==="number"&&${b}<32){`,
+                    `_=0;if(typeof ${a}==="number"&&typeof ${b}==="number"&&${b}<32){`,
                     // OK to lose bits shifting right
-                    `if(${b}<=0){${a}=${b}<-31?0:${a}>>-${b};_=1}`,
+                    `if(${b}<=0){${a}=${b}<-31?(${a}<0?-1:0):${a}>>-${b};_=1}`,
                     // only do it if we won't lose bits
-                    `else if(${a}<=(0xFFFFFFFF>>>${b})){${a}<<=${b};if(${a}>0x3FFFFFFF)${a}=VM.jitLargePos32(${a});_=1}}\n`,
+                    `else if(${a}>=0&&${a}<=(0xFFFFFFFF>>>${b})){${a}=${a}<<${b}>>>0;if(${a}>0x3FFFFFFF)${a}=VM.jitLargePos32(${a});_=1}}\n`,
                     // otherwise do full send
                     `if(_===0){`
                 );

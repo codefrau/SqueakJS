@@ -935,6 +935,7 @@ in practice. The mockups are promising though, with some browsers reaching
         // mapping for primitive args: 0 = top, 1 = top-1, etc
         const stack = n => numArgs-n > 0 ? "t" + (numArgs-n-1) : "r";
         const top = stack(0);
+        const oldPrims = this.vm.primHandler.oldPrims;
         this.source.push("// primitive ", primIndex);
         let prim = "";
         let code = "";
@@ -965,6 +966,10 @@ in practice. The mockups are promising though, with some browsers reaching
             case 105: prim = "Replace"; break;
             case 111:  // primitiveClass
                 code = `typeof ${top}==="number"?VM.specialObjects[5]:${top}.sqClass`; break;
+            case 169: // not identical
+                if (oldPrims) code = "false"; // primitiveDirectorySetMacTypeAndCreator
+                else { code = `${stack(1)}!==${top}?T:F`; checkSuccess = "true"; }
+                break;
             default:
                 throw { message: `Not handled yet: primitive ${primIndex}` };
         }

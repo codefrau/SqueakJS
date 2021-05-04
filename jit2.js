@@ -750,7 +750,11 @@ in practice. The mockups are promising though, with some browsers reaching
         //     case 0xC9: // value
         //     case 0xCA: // value:
         //     case 0xCB: // do:
-        //     case 0xCC: // new
+        case 0xCC: // new
+            var a = this.pop();
+            // can't think of a non-indexable class to special-case here ...
+            this.generateCachedSend(pc, sp, a, [], `VM.specialSelectors[${lobits*2}]`, false, this.specialSelectors[lobits]);
+            return;
         case 0xCD: // new:
             var b = this.pop(), a = this.pop();
             this.source.push(`if(${a}===VM.specialObjects[7]&&typeof ${b}==="number"&&${b}>=0)${a}=VM.jitArrayN(${b});\nelse `);  // Array

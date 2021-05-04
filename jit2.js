@@ -458,7 +458,7 @@ in practice. The mockups are promising though, with some browsers reaching
                 byte2 = this.method.bytes[this.pc++];
                 var popValues = byte2 > 127,
                     count = byte2 & 127;
-                this.generateClosureTemps(count, popValues);
+                this.generateMakeArray(count, popValues);
                 return;
             // call primitive
             case 0x8B:
@@ -794,8 +794,8 @@ in practice. The mockups are promising though, with some browsers reaching
             `pc=${this.prevPC};sp=${this.sp};`,    // and this PC is used when the called function unwinds, args+rcvr are already popped
             this.pushValue(`C[${func}](${rcvr}${strArgs})`), `;`);
     },
-    generateClosureTemps: function(count, popValues) {
-        if (this.debug) this.generateDebugCode("closure temps");
+    generateMakeArray: function(count, popValues) {
+        if (this.debug) this.generateDebugCode(popValues ? "pop into array" : "make array");
         this.generateLabel();
         if (popValues) {
             var args = [];

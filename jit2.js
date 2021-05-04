@@ -266,6 +266,9 @@ in practice. The mockups are promising though, with some browsers reaching
         let code = "";
         let checkSuccess = "p!==false";
         switch (primIndex) {
+            case 60: // basicAt:
+                code = `typeof ${stack(1)}==="object"&&typeof ${top}==="number"&&VM.jitBasicAt(${stack(1)},${top})`;
+                break;
             case 70: // new
                 code = `typeof ${top}==="object"&&VM.instantiateClass(${top},0)`; // VM.instantiateClass does not fail
                 break;

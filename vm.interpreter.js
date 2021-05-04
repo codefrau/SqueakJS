@@ -1416,6 +1416,24 @@ Object.subclass('Squeak.Interpreter',
         pt.pointers[1] = y;
         return pt;
     },
+    jitBasicAt(obj, index) {
+        if (this.stats) this.jitAddStat("jitBasicAt for " + this.jitInstName(obj));
+        const pos32BitIntFor = n => n <= 0x3FFFFFFF ? n : this.jitLargePos32(n);
+        if (obj.isFloat) { // present float as word obj
+            var floatData = obj.floatData();
+            if (index===1) return pos32BitIntFor(floatData.getUint32(0, false));
+            if (index===2) return pos32BitIntFor(floatData.getUint32(4, false));
+            return false;
+        }
+        if (index < 1 || index > obj.indexableSize(this.primHandler)) return false;
+        if (obj.isPointers()) return obj.pointers[index-1+obj.instSize()];
+        if (obj.isWords()) return pos32BitIntFor(obj.words[index-1]);
+        if (obj.isBytes()) return obj.bytes[index-1];
+        // methods must simulate Squeak's method indexing
+        var offset = obj.pointersSize() * 4;
+        if (index-1-offset < 0) return false; //reading lits as bytes
+        return obj.bytes[index-1-offset];
+    },
     jitInstName(o) {
         // only while collecting statistics
         if (this.stats) {
@@ -1424,7 +1442,7 @@ Object.subclass('Squeak.Interpreter',
             if (instProto) return instProto.name;
             instProto = o.sqClass.sqClass.instProto;
             if (instProto && instProto.name === "aMetaclass") return `class ${o.className()}`;
-            return o.toString();
+            return "some" + o.sqClass.className();
         }
         return "?";
     },

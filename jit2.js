@@ -472,8 +472,8 @@ in practice. The mockups are promising though, with some browsers reaching
                 } else {
                     // store into temp 0
                     this.pc++;
-                    if (this.method.bytes[this.pc++] !== 0x40) {debugger;throw Error("unexpected prim failcode store");}
-                    this.generateStorePrimFailCode(primIndex);
+                    byte2 = this.method.bytes[this.pc++];
+                    this.generateStorePrimFailCode(primIndex, byte2 - 0x40);
                 }
                 return;
             // remote push from temp vector
@@ -814,10 +814,10 @@ in practice. The mockups are promising though, with some browsers reaching
         this.generateUnimplemented("closure copy");
         if (to > this.endPC) this.endPC = to;
     },
-    generateStorePrimFailCode: function(index) {
-        if (this.debug) this.generateDebugCode("store primitive fail code " + index);
+    generateStorePrimFailCode: function(primIndex, tempIndex) {
+        if (this.debug) this.generateDebugCode("store primitive fail code " + primIndex);
         this.generateLabel();
-        this.source.push(`if(VM.primFailCode!==0)t0=VM.jitPrimFail();\n`);
+        this.source.push(`if(VM.primFailCode!==0)t${tempIndex}=VM.jitPrimFail();\n`);
     },
     genUnlessLeaf: function(code) {
         this.nonLeafCode.push(this.source.length);

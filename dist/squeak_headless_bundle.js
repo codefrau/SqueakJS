@@ -1443,7 +1443,8 @@ Object.subclass('Squeak.Image',
 },
 'initializing', {
     initialize: function(name) {
-        this.totalMemory = 100000000;
+        this.headRoom = 32000000; // TODO: pass as option
+        this.totalMemory = 0;
         this.name = name;
         this.gcCount = 0;
         this.gcMilliseconds = 0;
@@ -1648,6 +1649,8 @@ Object.subclass('Squeak.Image',
             this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
         }
 
+        this.totalMemory = this.oldSpaceBytes + this.headRoom;
+
         {
             // For debugging: re-create all objects from named prototypes
             var _splObs = oopMap[specialObjectsOopInt],
@@ -1809,7 +1812,7 @@ Object.subclass('Squeak.Image',
     },
     ensureFullBlockClosureClass: function(splObs, compactClasses) {
         // Read FullBlockClosure class from compactClasses if not yet present in specialObjectsArray.
-        if (splObs.pointers[Squeak.splOb_ClassFullBlockClosure].isNil) {
+        if (splObs.pointers[Squeak.splOb_ClassFullBlockClosure].isNil && compactClasses[38]) {
             splObs.pointers[Squeak.splOb_ClassFullBlockClosure] = compactClasses[38];
         }
     },
@@ -6627,7 +6630,7 @@ Object.subclass('Squeak.Primitives',
         block.pointers[Squeak.BlockContext_caller] = this.vm.activeContext;
         this.vm.popN(argCount+1);
         this.vm.newActiveContext(block);
-        if (this.vm.interruptCheckCounter-- <= 0) this.vm.checkForInterrupts(); // jit compile block method
+        if (this.vm.interruptCheckCounter-- <= 0) this.vm.checkForInterrupts();
         return true;
     },
     primitiveBlockValueWithArgs: function(argCount) {
@@ -6646,7 +6649,7 @@ Object.subclass('Squeak.Primitives',
         block.pointers[Squeak.BlockContext_caller] = this.vm.activeContext;
         this.vm.popN(argCount+1);
         this.vm.newActiveContext(block);
-        if (this.vm.interruptCheckCounter-- <= 0) this.vm.checkForInterrupts(); // jit compile block method
+        if (this.vm.interruptCheckCounter-- <= 0) this.vm.checkForInterrupts();
         return true;
     },
     primitiveClosureCopyWithCopiedValues: function(argCount) {
@@ -6658,7 +6661,9 @@ Object.subclass('Squeak.Primitives',
         var blockClosure = this.vm.stackValue(argCount),
             blockArgCount = blockClosure.pointers[Squeak.Closure_numArgs];
         if (argCount !== blockArgCount) return false;
-        return this.activateNewClosureMethod(blockClosure, argCount);
+        this.activateNewClosureMethod(blockClosure, argCount);
+        if (this.vm.interruptCheckCounter-- <= 0) this.vm.checkForInterrupts();
+        return true;
     },
     primitiveClosureValueWithArgs: function(argCount) {
         var array = this.vm.top(),
@@ -6669,16 +6674,25 @@ Object.subclass('Squeak.Primitives',
         this.vm.pop();
         for (var i = 0; i < arraySize; i++)
             this.vm.push(array.pointers[i]);
-        return this.activateNewClosureMethod(blockClosure, arraySize);
+        this.activateNewClosureMethod(blockClosure, arraySize);
+        if (this.vm.interruptCheckCounter-- <= 0) this.vm.checkForInterrupts();
+        return true;
     },
     primitiveClosureValueNoContextSwitch: function(argCount) {
-        return this.primitiveClosureValue(argCount);
+        // An exact clone of primitiveClosureValue except that this version will not check for interrupts
+        var blockClosure = this.vm.stackValue(argCount),
+            blockArgCount = blockClosure.pointers[Squeak.Closure_numArgs];
+        if (argCount !== blockArgCount) return false;
+        this.activateNewClosureMethod(blockClosure, argCount);
+        return true;
     },
     primitiveFullClosureValue: function(argCount) {
         var blockClosure = this.vm.stackValue(argCount),
             blockArgCount = blockClosure.pointers[Squeak.Closure_numArgs];
         if (argCount !== blockArgCount) return false;
-        return this.activateNewFullClosure(blockClosure, argCount);
+        this.activateNewFullClosure(blockClosure, argCount);
+        if (this.vm.interruptCheckCounter-- <= 0) this.vm.checkForInterrupts();
+        return true;
     },
     primitiveFullClosureValueWithArgs: function(argCount) {
         var array = this.vm.top(),
@@ -6689,10 +6703,17 @@ Object.subclass('Squeak.Primitives',
         this.vm.pop();
         for (var i = 0; i < arraySize; i++)
             this.vm.push(array.pointers[i]);
-        return this.activateNewFullClosure(blockClosure, arraySize);
+        this.activateNewFullClosure(blockClosure, arraySize);
+        if (this.vm.interruptCheckCounter-- <= 0) this.vm.checkForInterrupts();
+        return true;
     },
     primitiveFullClosureValueNoContextSwitch: function(argCount) {
-        return this.primitiveFullClosureValue(argCount);
+        // An exact clone of primitiveFullClosureValue except that this version will not check for interrupts
+        var blockClosure = this.vm.stackValue(argCount),
+            blockArgCount = blockClosure.pointers[Squeak.Closure_numArgs];
+        if (argCount !== blockArgCount) return false;
+        this.activateNewFullClosure(blockClosure, argCount);
+        return true;
     },
     activateNewClosureMethod: function(blockClosure, argCount) {
         var outerContext = blockClosure.pointers[Squeak.Closure_outerContext],
@@ -6714,7 +6735,6 @@ Object.subclass('Squeak.Primitives',
         // The initial instructions in the block nil-out remaining temps.
         this.vm.popN(argCount + 1);
         this.vm.newActiveContext(newContext);
-        return true;
     },
     activateNewFullClosure: function(blockClosure, argCount) {
         var closureMethod = blockClosure.pointers[Squeak.ClosureFull_method],
@@ -6735,7 +6755,6 @@ Object.subclass('Squeak.Primitives',
         // No need to nil-out remaining temps as context pointers are nil-initialized.
         this.vm.popN(argCount + 1);
         this.vm.newActiveContext(newContext);
-        return true;
     },
 },
 'scheduling', {
@@ -7377,7 +7396,7 @@ to single-step.
         this.vm = vm;
         this.comments = !!Squeak.Compiler.comments, // generate comments
         // for debug-printing only
-        this.specialSelectors = ['+', '-', '<', '>', '<=', '>=', '=', '~=', '*', '/', '\\', '@',
+        this.specialSelectors = ['+', '-', '<', '>', '<=', '>=', '=', '~=', '*', '/', '\\\\', '@',
             'bitShift:', '//', 'bitAnd:', 'bitOr:', 'at:', 'at:put:', 'size', 'next', 'nextPut:',
             'atEnd', '==', 'class', 'blockCopy:', 'value', 'value:', 'do:', 'new', 'new:', 'x', 'y'];
         this.doitCounter = 0;

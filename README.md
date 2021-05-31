@@ -110,9 +110,10 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
-    2020-03-21: 1.0.3 headless fixes (Erik Stel); fixes object-as-method
-    2020-02-07: 1.0.2 new one-way become prim (Christoph Tiede); JIT-compile Array at:/at:put:
-    2020-01-05: 1.0.1 fixes some primitives to properly pop the stack
+    2021-05-31: 1.0.4 fixes
+    2021-03-21: 1.0.3 headless fixes (Erik Stel); fixes object-as-method
+    2021-02-07: 1.0.2 new one-way become prim (Christoph Tiede); JIT-compile Array at:/at:put:
+    2021-01-05: 1.0.1 fixes some primitives to properly pop the stack
     2020-12-20: 1.0 supports 64 bits and Sista
     2020-06-20: renamed "master" branch to "main"
     2020-06-20: 0.9.9 JSBridge additions (Bill Burdick), fixes

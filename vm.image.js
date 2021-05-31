@@ -67,7 +67,8 @@ Object.subclass('Squeak.Image',
 },
 'initializing', {
     initialize: function(name) {
-        this.totalMemory = 100000000;
+        this.headRoom = 32000000; // TODO: pass as option
+        this.totalMemory = 0;
         this.name = name;
         this.gcCount = 0;
         this.gcMilliseconds = 0;
@@ -272,6 +273,8 @@ Object.subclass('Squeak.Image',
             this.lastOldObject = object;
             this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
         }
+
+        this.totalMemory = this.oldSpaceBytes + this.headRoom;
 
         if (true) {
             // For debugging: re-create all objects from named prototypes

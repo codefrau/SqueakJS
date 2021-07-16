@@ -7,12 +7,12 @@ Embedding a Smalltalk application in your webpage can be as simple as:
 
     SqueakJS.runSqueak(imageUrl, canvas, { fullscreen: true });
 
-The interpreter core is divided in a number of "vm.\*.js" modules, internal plugins in "vm.plugins.\*.js" modules and external plugins in the "plugins" directory. The Just-in-Time compiler is optional ("jit.js") and can be easily replaced with your own.
+The interpreter core is divided in a number of `vm.*.js` modules, internal plugins in `vm.plugins.*.js` modules and external plugins in the "plugins" directory. The Just-in-Time compiler is optional ("jit.js") and can be easily replaced with your own.
 
 There are a number of interfaces:
 * browser: the regular HTML interface lets you use SqueakJS on your own web page. Just include "squeak.js".
-* headless browser: a headless VM. It lets you use SqueakJS in your browser without a direct UI (you can create your own UI with a plugin). Include "squeak\_headless.js" and add an "imageName" parameter to your website URL (eg. https://example.com/my/page.html?imageName=./example.image) or call the Javascript function "fetchImageAndRun('https://example.com/my/example.image')" to start the specified image.
-* Node.js: another headless VM. It lets you use SqueakJS as a Node.js application. Just run "node squeak\_node.js <image name>".
+* headless browser: a headless VM. It lets you use SqueakJS in your browser without a direct UI (you can create your own UI with a plugin). Include "squeak_headless.js" and add an "imageName" parameter to your website URL (eg. https://example.com/my/page.html?imageName=./example.image) or call the Javascript function "fetchImageAndRun('https://example.com/my/example.image')" to start the specified image.
+* Node.js: another headless VM. It lets you use SqueakJS as a Node.js application. Just run "node squeak_node.js <image name>".
 
 For discussions, please use the [vm-dev mailing list][vm-dev]. Also, please visit the [project home page][homepage]!
 
@@ -32,12 +32,12 @@ Running it
 **Run your own Squeak image from the command line**
 
 * Install a recent version of Node.js
-* Run example image: `node squeak\_node.js headless/headless.image`
+* Run example image: `node squeak_node.js headless/headless.image`
 
 **Run an interactive shell based on WebSocket communication with Cuis image**
 
 * Install a recent version of Node.js
-* Go to [ws][ws] and execute `start\_server.sh` in a first shell and `start\_client.sh` in a second shell.
+* Go to [ws][ws] and execute `start_server.sh` in a first shell and `start_client.sh` in a second shell.
 * After initialization it should be possible to issue Smalltalk statements which will be executed in the Smalltalk image.
 * Try commands like: `Object allSubclasses size` `1837468731248764723 * 321653125376153761` `Collection allSubclasses collect: [ :c | c name ]`
 
@@ -102,8 +102,8 @@ There's a gazillion exciting things to do :)
   [mini]:     https://squeak.js.org/demo/simple.html
   [etoys]:    https://squeak.js.org/etoys/
   [scratch]:  https://squeak.js.org/scratch/
-  [ws]:       https://squeak.js.org/ws/
-  [dist]:     https://github.com/codefrau/SqueakJS/main/dist
+  [ws]:       https://github.com/codefrau/SqueakJS/tree/main/ws
+  [dist]:     https://github.com/codefrau/SqueakJS/tree/main/dist
   [zip]:      https://github.com/codefrau/SqueakJS/archive/main.zip
   [pullreq]:  https://help.github.com/articles/using-pull-requests
 

@@ -5435,7 +5435,7 @@ Object.subclass('Squeak.Primitives',
             case 175: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySilence', argCount);
                 else return this.popNandPushIfOK(argCount+1, this.behaviorHash(this.stackNonInteger(0)));
             case 176: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primWaveTableSoundmixSampleCountintostartingAtpan', argCount);
-                break;  // fail
+                else return this.popNandPushIfOK(argCount+1, this.vm.image.isSpur ? 0x3FFFFF : 0xFFF); // primitiveMaxIdentityHash
             case 177: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primFMSoundmixSampleCountintostartingAtpan', argCount);
                 return this.popNandPushIfOK(argCount+1, this.allInstancesOf(this.stackNonInteger(0)));
             case 178: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primPluckedSoundmixSampleCountintostartingAtpan', argCount);
@@ -8327,6 +8327,7 @@ Object.extend(Squeak.Primitives.prototype,
             SqueakFFIPrims:         this.findPluginFunctions("ffi_", "", true),
             SecurityPlugin: {
                 primitiveDisableImageWrite: this.fakePrimitive.bind(this, "SecurityPlugin.primitiveDisableImageWrite", 0),
+                primitiveGetUntrustedUserDirectory: this.fakePrimitive.bind(this, "SecurityPlugin.primitiveGetUntrustedUserDirectory", "/SqueakJS"),
             },
             LocalePlugin: {
                 primitiveTimezoneOffset: this.fakePrimitive.bind(this, "LocalePlugin.primitiveTimezoneOffset", 0),

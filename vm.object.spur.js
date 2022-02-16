@@ -95,16 +95,6 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                     //These words are actually a Float
                     this.isFloat = true;
                     this.float = this.decodeFloat(bits, littleEndian, true);
-                    if (this.float == 1.3797216632888e-310) {
-                        if (Squeak.noFloatDecodeWorkaround) {
-                            // floatDecode workaround disabled
-                        } else {
-                            this.constructor.prototype.decodeFloat = this.decodeFloatDeoptimized;
-                            this.float = this.decodeFloat(bits, littleEndian, true);
-                            if (this.float == 1.3797216632888e-310)
-                                throw Error("Cannot deoptimize decodeFloat");
-                        }
-                    }
                 } else if (nWords > 0) {
                     this.words = this.decodeWords(nWords, bits, littleEndian);
                 }

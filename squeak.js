@@ -1192,7 +1192,6 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
         SqueakJS.appName = options.appName || image.name.replace(/\.image$/, "");
         SqueakJS.runImage(image.data, options.root + image.name, display, options);
     });
-    Squeak.noFloatDecodeWorkaround = !!options.noFloatDecodeWorkaround;
     return display;
 };
 

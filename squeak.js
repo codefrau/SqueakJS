@@ -185,9 +185,12 @@ function recordModifiers(evt, display) {
     return modifiers;
 }
 
-var canUseMouseOffset = navigator.userAgent.match("AppleWebKit/");
+var canUseMouseOffset = navigator.userAgent.match("AppleWebKit/") === null ? null : true;
 
 function updateMousePos(evt, canvas, display) {
+    if (canUseMouseOffset === null) {
+        canUseMouseOffset = 'offsetX' in evt;
+    }
     var evtX = canUseMouseOffset ? evt.offsetX : evt.layerX,
         evtY = canUseMouseOffset ? evt.offsetY : evt.layerY;
     if (display.cursorCanvas) {

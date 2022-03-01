@@ -734,17 +734,34 @@ function createSqueakDisplay(canvas, options) {
     };
     // touch keyboard button
     if ('ontouchstart' in document) {
+        var keyboardInput = document.createElement('input');
+        keyboardInput.setAttribute('style', 'position:fixed;top:0;left:0;width:10em;z-index:-1;');
+        keyboardInput.addEventListener('compositionstart', function(evt) {
+            keyboardInput.style.zIndex = 1;
+        });
+        keyboardInput.addEventListener('compositionend', function(evt) {
+            var str = evt.data;
+            for (var i = 0; i < str.length; i++) {
+                var shiftPressed = str[i] === str[i].toUpperCase();
+                recordModifiers({ shiftKey: shiftPressed }, display);
+                recordKeyboardEvent(str[i].charCodeAt(0), evt.timeStamp, display, eventQueue);
+            }
+            keyboardInput.value = '';
+            keyboardInput.style.zIndex = -1;
+        });
+
         var keyboardButton = document.createElement('div');
         keyboardButton.innerHTML = '<?xml version="1.0" encoding="UTF-8" standalone="no"?><svg width="50px" height="50px" viewBox="0 0 150 150" version="1.1" xmlns="http://www.w3.org/2000/svg"><g id="Page-1" stroke="none" fill="#000000"><rect x="33" y="105" width="10" height="10" rx="1"></rect><rect x="26" y="60" width="10" height="10" rx="1"></rect><rect x="41" y="60" width="10" height="10" rx="1"></rect><rect x="56" y="60" width="10" height="10" rx="1"></rect><rect x="71" y="60" width="10" height="10" rx="1"></rect><rect x="86" y="60" width="10" height="10" rx="1"></rect><rect x="101" y="60" width="10" height="10" rx="1"></rect><rect x="116" y="60" width="10" height="10" rx="1"></rect><rect x="108" y="105" width="10" height="10" rx="1"></rect><rect x="33" y="75" width="10" height="10" rx="1"></rect><rect x="48" y="75" width="10" height="10" rx="1"></rect><rect x="63" y="75" width="10" height="10" rx="1"></rect><rect x="78" y="75" width="10" height="10" rx="1"></rect><rect x="93" y="75" width="10" height="10" rx="1"></rect><rect x="108" y="75" width="10" height="10" rx="1"></rect><rect x="41" y="90" width="10" height="10" rx="1"></rect><rect x="26" y="90" width="10" height="10" rx="1"></rect><rect x="56" y="90" width="10" height="10" rx="1"></rect><rect x="71" y="90" width="10" height="10" rx="1"></rect><rect x="86" y="90" width="10" height="10" rx="1"></rect><rect x="101" y="90" width="10" height="10" rx="1"></rect><rect x="116" y="90" width="10" height="10" rx="1"></rect><rect x="48" y="105" width="55" height="10" rx="1"></rect><path d="M20.0056004,51 C18.3456532,51 17.0000001,52.3496496 17.0000001,54.0038284 L17.0000001,85.6824519 L17,120.003453 C17.0000001,121.6584 18.3455253,123 20.0056004,123 L131.9944,123 C133.654347,123 135,121.657592 135,119.997916 L135,54.0020839 C135,52.3440787 133.654475,51 131.9944,51 L20.0056004,51 Z" fill="none" stroke="#000000" stroke-width="2"></path><path d="M52.0410156,36.6054687 L75.5449219,21.6503905 L102.666016,36.6054687" id="Line" stroke="#000000" stroke-width="3" stroke-linecap="round" fill="none"></path></g></svg>';
         keyboardButton.setAttribute('style', 'position:fixed;right:0;bottom:0;background-color:rgba(128,128,128,0.5);border-radius:5px');
         canvas.parentElement.appendChild(keyboardButton);
         keyboardButton.onmousedown = function(evt) {
-            canvas.contentEditable = true;
-            canvas.setAttribute('autocomplete', 'off');
-            canvas.setAttribute('autocorrect', 'off');
-            canvas.setAttribute('autocapitalize', 'off');
-            canvas.setAttribute('spellcheck', 'off');
-            canvas.focus();
+            canvas.parentElement.appendChild(keyboardInput);
+            keyboardInput.contentEditable = true;
+            keyboardInput.setAttribute('autocomplete', 'off');
+            keyboardInput.setAttribute('autocorrect', 'off');
+            keyboardInput.setAttribute('autocapitalize', 'off');
+            keyboardInput.setAttribute('spellcheck', 'off');
+            keyboardInput.focus();
             evt.preventDefault();
         }
         keyboardButton.ontouchstart = keyboardButton.onmousedown

@@ -166,10 +166,13 @@ function recordModifiers(evt, display) {
     return modifiers;
 }
 
-var canUseMouseOffset = navigator.userAgent.match("AppleWebKit/") === null ? null : true;
+var canUseMouseOffset = null;
 
 function updateMousePos(evt, canvas, display) {
     if (canUseMouseOffset === null) {
+        // Per https://caniuse.com/mdn-api_mouseevent_offsetx, essentially all *current*
+        // browsers support `offsetX`/`offsetY`, but it does little harm to fall back to the
+        // older `layerX`/`layerY` for now.
         canUseMouseOffset = 'offsetX' in evt;
     }
     var evtX = canUseMouseOffset ? evt.offsetX : evt.layerX,

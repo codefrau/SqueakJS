@@ -1493,7 +1493,7 @@
                 }
             };
             // read version and determine endianness
-            var versions = [6501, 6502, 6504, 6505, 6521, 68000, 68002, 68003, 68021],
+            var versions = [6501, 6502, 6504, 6505, 6521, 68000, 68002, 68003, 68021, 68533],
                 version = 0,
                 fileHeaderSize = 0;
             while (true) {  // try all four endianness + header combos
@@ -1504,9 +1504,9 @@
                 if (!littleEndian) fileHeaderSize += 512;
                 if (fileHeaderSize > 512) throw Error("bad image version");
             }        this.version = version;
-            var nativeFloats = [6505, 6521, 68003, 68021].indexOf(version) >= 0;
-            this.hasClosures = [6504, 6505, 6521, 68002, 68003, 68021].indexOf(version) >= 0;
-            this.isSpur = [6521, 68021].indexOf(version) >= 0;
+            var nativeFloats = [6505, 6521, 68003, 68021, 68533].indexOf(version) >= 0;
+            this.hasClosures = [6504, 6505, 6521, 68002, 68003, 68021, 68533].indexOf(version) >= 0;
+            this.isSpur = [6521, 68021, 68533].indexOf(version) >= 0;
             var is64Bit = version >= 68000;
             if (is64Bit && !this.isSpur) throw Error("64 bit non-spur images not supported yet");
             if (is64Bit)  { readWord = readWord64; wordSize = 8; }
@@ -5438,7 +5438,7 @@
                 case 175: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySilence', argCount);
                     else return this.popNandPushIfOK(argCount+1, this.behaviorHash(this.stackNonInteger(0)));
                 case 176: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primWaveTableSoundmixSampleCountintostartingAtpan', argCount);
-                    break;  // fail
+                    else return this.popNandPushIfOK(argCount+1, this.vm.image.isSpur ? 0x3FFFFF : 0xFFF); // primitiveMaxIdentityHash
                 case 177: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primFMSoundmixSampleCountintostartingAtpan', argCount);
                     return this.popNandPushIfOK(argCount+1, this.allInstancesOf(this.stackNonInteger(0)));
                 case 178: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primPluckedSoundmixSampleCountintostartingAtpan', argCount);
@@ -40050,6 +40050,10 @@
        from
     	DeflatePlugin VMMaker-bf.353 uuid: 8ae25e7e-8d2c-451e-8277-598b30e9c002
      */
+    /*
+    	Manual fixes:
+    	2022-01-15 VMMaker.oscog-mt.3135 and VMMaker.oscog-mt.3136
+    */
 
     (function ZipPlugin() {
 
@@ -40302,7 +40306,7 @@
     }
 
 
-    /*	Determine the inst size of the class above DeflateStream by
+    /*	Determine the inst size of the class above InflateStream by
     	 looking for the first class whose inst size is less than 13. */
 
     function determineSizeOfReadStream(rcvr) {
@@ -40578,8 +40582,8 @@
     	/* zipWriteLimit := interpreterProxy fetchInteger: 3 ofObject: rcvr. */
 
     	zipReadLimit = interpreterProxy.fetchIntegerofObject(2, rcvr);
-    	zipBitBuf = interpreterProxy.fetchIntegerofObject(writeStreamInstSize + 1, rcvr);
-    	zipBitPos = interpreterProxy.fetchIntegerofObject(writeStreamInstSize + 2, rcvr);
+    	zipBitBuf = interpreterProxy.fetchIntegerofObject(writeStreamInstSize + 0, rcvr);
+    	zipBitPos = interpreterProxy.fetchIntegerofObject(writeStreamInstSize + 1, rcvr);
     	return !interpreterProxy.failed();
     }
 
@@ -40888,8 +40892,8 @@
     	result = sendBlockwithwithwith(litStream, distStream, litTree, distTree);
     	if (!interpreterProxy.failed()) {
     		interpreterProxy.storeIntegerofObjectwithValue(1, rcvr, zipPosition);
-    		interpreterProxy.storeIntegerofObjectwithValue(readStreamInstSize + 1, rcvr, zipBitBuf);
-    		interpreterProxy.storeIntegerofObjectwithValue(readStreamInstSize + 2, rcvr, zipBitPos);
+    		interpreterProxy.storeIntegerofObjectwithValue(writeStreamInstSize + 0, rcvr, zipBitBuf);
+    		interpreterProxy.storeIntegerofObjectwithValue(writeStreamInstSize + 1, rcvr, zipBitPos);
     	}
     	if (!interpreterProxy.failed()) {
     		interpreterProxy.pop(5);

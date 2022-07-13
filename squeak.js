@@ -462,14 +462,6 @@
                 //These words are actually a Float
                 this.isFloat = true;
                 this.float = this.decodeFloat(bits, littleEndian, nativeFloats);
-                if (this.float == 1.3797216632888e-310) {
-                    if (Squeak.noFloatDecodeWorkaround) ; else {
-                        this.constructor.prototype.decodeFloat = this.decodeFloatDeoptimized;
-                        this.float = this.decodeFloat(bits, littleEndian, nativeFloats);
-                        if (this.float == 1.3797216632888e-310)
-                            throw Error("Cannot deoptimize decodeFloat");
-                    }
-                }
             } else {
                 if (nWords > 0)
                     this.words = this.decodeWords(nWords, bits, littleEndian);
@@ -519,23 +511,6 @@
                 swapped = new DataView(buffer);
             swapped.setUint32(0, data.getUint32(4));
             swapped.setUint32(4, data.getUint32(0));
-            return swapped.getFloat64(0, true);
-        },
-        decodeFloatDeoptimized: function(theBits, littleEndian, nativeFloats) {
-            var data = new DataView(theBits.buffer, theBits.byteOffset);
-            // it's either big endian ...
-            if (!littleEndian) return data.getFloat64(0, false);
-            // or real little endian
-            if (nativeFloats) return data.getFloat64(0, true);
-            // or little endian, but with swapped words
-            var buffer = new ArrayBuffer(8),
-                swapped = new DataView(buffer);
-            // wrap in function to defeat Safari's optimizer, which always
-            // answers 1.3797216632888e-310 if called more than 25000 times
-            (function() {
-                swapped.setUint32(0, data.getUint32(4));
-                swapped.setUint32(4, data.getUint32(0));
-            })();
             return swapped.getFloat64(0, true);
         },
         fillArray: function(length, filler) {
@@ -1007,14 +982,6 @@
                         //These words are actually a Float
                         this.isFloat = true;
                         this.float = this.decodeFloat(bits, littleEndian, true);
-                        if (this.float == 1.3797216632888e-310) {
-                            if (Squeak.noFloatDecodeWorkaround) ; else {
-                                this.constructor.prototype.decodeFloat = this.decodeFloatDeoptimized;
-                                this.float = this.decodeFloat(bits, littleEndian, true);
-                                if (this.float == 1.3797216632888e-310)
-                                    throw Error("Cannot deoptimize decodeFloat");
-                            }
-                        }
                     } else if (nWords > 0) {
                         this.words = this.decodeWords(nWords, bits, littleEndian);
                     }
@@ -5438,7 +5405,7 @@
                 case 175: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySilence', argCount);
                     else return this.popNandPushIfOK(argCount+1, this.behaviorHash(this.stackNonInteger(0)));
                 case 176: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primWaveTableSoundmixSampleCountintostartingAtpan', argCount);
-                    break;  // fail
+                    else return this.popNandPushIfOK(argCount+1, this.vm.image.isSpur ? 0x3FFFFF : 0xFFF); // primitiveMaxIdentityHash
                 case 177: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primFMSoundmixSampleCountintostartingAtpan', argCount);
                     return this.popNandPushIfOK(argCount+1, this.allInstancesOf(this.stackNonInteger(0)));
                 case 178: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primPluckedSoundmixSampleCountintostartingAtpan', argCount);
@@ -8557,6 +8524,11 @@
                 w = display.width || display.context.canvas.width,
                 h = display.height || display.context.canvas.height;
             return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(w, h));
+        },
+        primitiveScreenScaleFactor: function(argCount) {
+            var scale = this.display.initialScale || 1.0,
+                scaleFactor = 1.0 / scale;
+            return this.popNandPushIfOK(argCount+1, this.makeFloat(scaleFactor));
         },
         primitiveSetFullScreen: function(argCount) {
             var flag = this.stackBoolean(0);
@@ -40050,6 +40022,10 @@
        from
     	DeflatePlugin VMMaker-bf.353 uuid: 8ae25e7e-8d2c-451e-8277-598b30e9c002
      */
+    /*
+    	Manual fixes:
+    	2022-01-15 VMMaker.oscog-mt.3135 and VMMaker.oscog-mt.3136
+    */
 
     (function ZipPlugin() {
 
@@ -40302,7 +40278,7 @@
     }
 
 
-    /*	Determine the inst size of the class above DeflateStream by
+    /*	Determine the inst size of the class above InflateStream by
     	 looking for the first class whose inst size is less than 13. */
 
     function determineSizeOfReadStream(rcvr) {
@@ -40578,8 +40554,8 @@
     	/* zipWriteLimit := interpreterProxy fetchInteger: 3 ofObject: rcvr. */
 
     	zipReadLimit = interpreterProxy.fetchIntegerofObject(2, rcvr);
-    	zipBitBuf = interpreterProxy.fetchIntegerofObject(writeStreamInstSize + 1, rcvr);
-    	zipBitPos = interpreterProxy.fetchIntegerofObject(writeStreamInstSize + 2, rcvr);
+    	zipBitBuf = interpreterProxy.fetchIntegerofObject(writeStreamInstSize + 0, rcvr);
+    	zipBitPos = interpreterProxy.fetchIntegerofObject(writeStreamInstSize + 1, rcvr);
     	return !interpreterProxy.failed();
     }
 
@@ -40888,8 +40864,8 @@
     	result = sendBlockwithwithwith(litStream, distStream, litTree, distTree);
     	if (!interpreterProxy.failed()) {
     		interpreterProxy.storeIntegerofObjectwithValue(1, rcvr, zipPosition);
-    		interpreterProxy.storeIntegerofObjectwithValue(readStreamInstSize + 1, rcvr, zipBitBuf);
-    		interpreterProxy.storeIntegerofObjectwithValue(readStreamInstSize + 2, rcvr, zipBitPos);
+    		interpreterProxy.storeIntegerofObjectwithValue(writeStreamInstSize + 0, rcvr, zipBitBuf);
+    		interpreterProxy.storeIntegerofObjectwithValue(writeStreamInstSize + 1, rcvr, zipBitPos);
     	}
     	if (!interpreterProxy.failed()) {
     		interpreterProxy.pop(5);
@@ -55073,6 +55049,7 @@
                 var scaleW = w < options.minWidth ? options.minWidth / w : 1,
                     scaleH = h < options.minHeight ? options.minHeight / h : 1,
                     scale = Math.max(scaleW, scaleH);
+                if (options.highdpi) scale *= window.devicePixelRatio;
                 display.width = Math.floor(w * scale);
                 display.height = Math.floor(h * scale);
                 display.initialScale = w / display.width;
@@ -55432,7 +55409,6 @@
             SqueakJS.appName = options.appName || image.name.replace(/\.image$/, "");
             SqueakJS.runImage(image.data, options.root + image.name, display, options);
         });
-        Squeak.noFloatDecodeWorkaround = !!options.noFloatDecodeWorkaround;
         return display;
     };
 

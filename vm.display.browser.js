@@ -338,6 +338,11 @@ Object.extend(Squeak.Primitives.prototype,
             h = display.height || display.context.canvas.height;
         return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(w, h));
     },
+    primitiveScreenScaleFactor: function(argCount) {
+        var scale = this.display.initialScale || 1.0,
+            scaleFactor = 1.0 / scale;
+        return this.popNandPushIfOK(argCount+1, this.makeFloat(scaleFactor));
+    },
     primitiveSetFullScreen: function(argCount) {
         var flag = this.stackBoolean(0);
         if (!this.success) return false;

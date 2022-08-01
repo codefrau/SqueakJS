@@ -1146,9 +1146,10 @@ Object.subclass('Squeak.Image',
                 var classObj = this.classTable[classID];
                 if (classObj && classObj.pointers) {
                     if (!classObj.hash) throw Error("class without id");
-                    if (classObj.hash !== classID && classID >= 32) {
+                    if (classObj.hash !== classID && classID >= 32 || classObj.oop < 0) {
                         console.warn("freeing class index " + classID + " " + classObj.className());
                         classObj = null;
+                        delete this.classTable[classID];
                     }
                 }
                 if (classObj) data.setUint32(pos, objToOop(classObj), littleEndian);

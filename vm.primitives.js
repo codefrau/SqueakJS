@@ -2008,6 +2008,7 @@ Object.subclass('Squeak.Primitives',
             return this.popNandPushIfOK(1, this.makeStString(this.filenameToSqueak(this.vm.image.name)));
         this.vm.image.name = this.filenameFromSqueak(this.vm.top().bytesAsString());
         Squeak.Settings['squeakImageName'] = this.vm.image.name;
+        this.vm.popN(argCount);
         return true;
     },
     primitiveSnapshot: function(argCount) {

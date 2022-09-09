@@ -114,7 +114,7 @@ Object.subclass('Squeak.Image',
             }
         };
         // read version and determine endianness
-        var versions = [6501, 6502, 6504, 6505, 6521, 68000, 68002, 68003, 68021, 68533],
+        var versions = [6501, 6502, 6504, 6505, 6521, 7033, 68000, 68002, 68003, 68021, 68533],
             version = 0,
             fileHeaderSize = 0;
         while (true) {  // try all four endianness + header combos

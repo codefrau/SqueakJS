@@ -24,8 +24,7 @@
 Object.extend(Squeak.Primitives.prototype,
 'JavaScriptPlugin', {
     js_primitiveDoUnderstand: function(argCount) {
-        // This is JS's doesNotUnderstand handler,
-        // as well as JS class's doesNotUnderstand handler.
+        // This is JSObjectProxy's doesNotUnderstand handler.
         // Property name is the selector up to first colon.
         // If it is 'new', create an instance;
         // otherwise if the property is a function, call it;

@@ -114,21 +114,23 @@ Object.subclass('Squeak.Image',
             }
         };
         // read version and determine endianness
-        var versions = [6501, 6502, 6504, 6505, 6521, 68000, 68002, 68003, 68021, 68533],
+        var baseVersions = [6501, 6502, 6504, 68000, 68002, 68004],
+            baseVersionMask = 0x119EE,
             version = 0,
             fileHeaderSize = 0;
         while (true) {  // try all four endianness + header combos
             littleEndian = !littleEndian;
             pos = fileHeaderSize;
             version = readWord();
-            if (versions.indexOf(version) >= 0) break;
+            if (baseVersions.indexOf(version & baseVersionMask) >= 0) break;
             if (!littleEndian) fileHeaderSize += 512;
-            if (fileHeaderSize > 512) throw Error("bad image version");
+            if (fileHeaderSize > 512) throw Error("bad image version"); // we tried all combos
         };
         this.version = version;
-        var nativeFloats = [6505, 6521, 68003, 68021, 68533].indexOf(version) >= 0;
-        this.hasClosures = [6504, 6505, 6521, 68002, 68003, 68021, 68533].indexOf(version) >= 0;
-        this.isSpur = [6521, 68021, 68533].indexOf(version) >= 0;
+        var nativeFloats = (version & 1) !== 0;
+        this.hasClosures = !([6501, 6502, 68000].indexOf(version) >= 0);
+        this.isSpur = (version & 16) !== 0;
+        // var multipleByteCodeSetsActive = (version & 256) !== 0; // not used
         var is64Bit = version >= 68000;
         if (is64Bit && !this.isSpur) throw Error("64 bit non-spur images not supported yet");
         if (is64Bit)  { readWord = readWord64; wordSize = 8; }

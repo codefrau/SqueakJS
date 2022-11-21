@@ -8,12 +8,12 @@
 <canvas id="canvas" width="350" height="250"></canvas>
 <p>This is rendered using <tt>putImageData</tt> only (see code below). On a retina display, the animating square leaves gribblies in some browsers. By clicking, the square jumps, and the browser (not the JS code!) is clearing a larger rectangle, revealing the actual canvas backing store is indeed clean. Similarly, changing the page zoom temporarily clears the gribblies.</p>
 <p>Judging from the symptoms I'd say the fix would be to enlarge the damage rectangle for <tt>putImageData</tt> by 1&nbsp;pixel in all directions.</p>
-<p><a href="https://twitter.com/bertfreudenberg">@bertfreudenberg</a></p>
+<p><a href="https://twitter.com/codefrau">@codefrau</a></p>
 <p>Bug status (June 2016):
     <ul>
         <li>Safari Tech Preview: fixed (buggy in 9.1.1, bug <a href="https://bugs.webkit.org/show_bug.cgi?id=156039">156039</a>)</li>
         <li>Chrome Dev (52): fixed (buggy in 51, bug <a href="https://bugs.chromium.org/p/chromium/issues/detail?id=609820">609820</a>)</li>
-        <li>Firefox 45: fine</li> 
+        <li>Firefox 45: fine</li>
     </ul>
 </p>
 <script id="script">
@@ -24,14 +24,14 @@
     for (var y = 0; y < img.height; y++)
         for (var x = 0; x < img.width; x++)
             pix[img.width * y + x] = x % 9 && y % 9 ? 0xFFFFFFFF : 0xFF000000;
-    
+
     var animating = true;
     var dx = dy = 1;
     function animate() {
         if (animating) {
             ctx.putImageData(bg, x, y);
             x += dx;
-            y += dy; 
+            y += dy;
             dx = x < 0 ? 1 : x + img.width > canvas.width ? -1 : dx;
             dy = y < 0 ? 1 : y + img.height > canvas.height ? -1 : dy;
             ctx.putImageData(img, x, y);

@@ -43,7 +43,7 @@ Object.subclass('Squeak.Interpreter',
         this.falseObj = this.specialObjects[Squeak.splOb_FalseObject];
         this.trueObj = this.specialObjects[Squeak.splOb_TrueObject];
         this.hasClosures = this.image.hasClosures;
-        this.globals = this.findGlobals();
+        this.getGlobals = this.globalsGetter();
         // hack for old image that does not support Unix files
         if (!this.hasClosures && !this.findMethod("UnixFileDirectory class>>pathNameDelimiter"))
             this.primHandler.emulateMac = true;
@@ -92,7 +92,13 @@ Object.subclass('Squeak.Interpreter',
         this.fetchContextRegisters(this.activeContext);
         this.reclaimableContextCount = 0;
     },
-    findGlobals: function() {
+    globalsGetter: function() {
+        // Globals (more specifically the pointers we are interested in) might
+        // change during execution, because a Dictionary needs growing for example.
+        // Therefore answer a getter function to access the actual globals (pointers).
+        // This getter can be used, even if the Dictionary has grown (and thereby the
+        // underlying Array is replaced by a larger one), because it uses the reference
+        // to the 'outer' Dictionary instead of the pointers to the values.
         var smalltalk = this.specialObjects[Squeak.splOb_SmalltalkDictionary],
             smalltalkClass = smalltalk.sqClass.className();
         if (smalltalkClass === "Association") {
@@ -100,17 +106,17 @@ Object.subclass('Squeak.Interpreter',
             smalltalkClass = smalltalk.sqClass.className();
         }
         if (smalltalkClass === "SystemDictionary")
-            return smalltalk.pointers[1].pointers;
+            return function() { return smalltalk.pointers[1].pointers; };
         if (smalltalkClass === "SmalltalkImage") {
             var globals = smalltalk.pointers[0],
                 globalsClass = globals.sqClass.className();
             if (globalsClass === "SystemDictionary")
-                return globals.pointers[1].pointers;
+                return function() { return globals.pointers[1].pointers; };
             if (globalsClass === "Environment")
-                return globals.pointers[2].pointers[1].pointers
+                return function() { return globals.pointers[2].pointers[1].pointers; };
         }
         console.warn("cannot find global dict");
-        return [];
+        return function() { return []; };
     },
     initCompiler: function() {
         if (!Squeak.Compiler)
@@ -1523,7 +1529,7 @@ Object.subclass('Squeak.Interpreter',
     },
     allGlobalsDo: function(callback) {
         // callback(globalNameObj, globalObj), truish result breaks out of iteration
-        var globals = this.globals;
+        var globals = this.getGlobals();
         for (var i = 0; i < globals.length; i++) {
             var assn = globals[i];
             if (!assn.isNil) {

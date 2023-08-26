@@ -564,6 +564,13 @@ Object.subclass('Squeak.Image',
         this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
         this.oldSpaceCount += newObjects.length;
         this.gcTenured += newObjects.length;
+        // this is the only place that increases oldSpaceBytes / decreases bytesLeft
+        this.vm.signalLowSpaceIfNecessary(this.bytesLeft());
+        // TODO: keep track of newSpaceBytes and youngSpaceBytes, and signal low space if necessary
+        // basically, add obj.totalBytes() to newSpaceBytes when instantiating,
+        // trigger partial GC if newSpaceBytes + lowSpaceThreshold > totalMemory - (youngSpaceBytes + oldSpaceBytes)
+        // which would set newSpaceBytes to 0 and youngSpaceBytes to the actual survivors.
+        // for efficiency, only compute object size once per object and store? test impact on GC speed
     },
     tenureIfYoung: function(object) {
         if (object.oop < 0) {

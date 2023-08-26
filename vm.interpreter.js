@@ -57,6 +57,8 @@ Object.subclass('Squeak.Interpreter',
         this.interruptCheckCounter = 0;
         this.interruptCheckCounterFeedBackReset = 1000;
         this.interruptChecksEveryNms = 3;
+        this.lowSpaceThreshold = 1000000;
+        this.signalLowSpace = false;
         this.nextPollTick = 0;
         this.nextWakeupTick = 0;
         this.lastTick = 0;
@@ -664,10 +666,11 @@ Object.subclass('Squeak.Interpreter',
         }
         this.interruptCheckCounter = this.interruptCheckCounterFeedBackReset; //reset the interrupt check counter
         this.lastTick = now; //used to detect wraparound of millisecond clock
-        //  if(signalLowSpace) {
-        //            signalLowSpace= false; //reset flag
-        //            sema= getSpecialObject(Squeak.splOb_TheLowSpaceSemaphore);
-        //            if(sema != nilObj) synchronousSignal(sema); }
+        if (this.signalLowSpace) {
+            this.signalLowSpace = false; // reset flag
+            var sema = this.specialObjects[Squeak.splOb_TheLowSpaceSemaphore];
+            if (!sema.isNil) this.primHandler.synchronousSignal(sema);
+        }
         //  if(now >= nextPollTick) {
         //            ioProcessEvents(); //sets interruptPending if interrupt key pressed
         //            nextPollTick= now + 500; } //msecs to wait before next call to ioProcessEvents"
@@ -1482,6 +1485,17 @@ Object.subclass('Squeak.Interpreter',
             for (var i = 0; i < length; i++)
                 dest[destPos + i] = src[srcPos + i];
     },
+    signalLowSpaceIfNecessary: function(bytesLeft) {
+        if (bytesLeft < this.lowSpaceThreshold && this.lowSpaceThreshold > 0) {
+            this.signalLowSpace = true;
+            this.lowSpaceThreshold = 0;
+            var lastSavedProcess = this.specialObjects[Squeak.splOb_ProcessSignalingLowSpace];
+            if (lastSavedProcess.isNil) {
+                this.specialObjects[Squeak.splOb_ProcessSignalingLowSpace] = this.activeProcess;
+            }
+            this.forceInterruptCheck();
+        }
+   },
 },
 'debugging', {
     addMessage: function(message) {

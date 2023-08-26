@@ -2004,6 +2004,7 @@ Object.subclass('Squeak.Primitives',
             case 65: return 0;
             // 66   the byte size of a stack page in the stack zone  (read-only; Cog VMs only)
             // 67   the maximum allowed size of old space in bytes, 0 implies no internal limit (Spur VMs only).
+            case 67: return this.vm.image.totalMemory;
             // 68 - 69 reserved for more Cog-related info
             // 70   the value of VM_PROXY_MAJOR (the interpreterProxy major version number)
             // 71   the value of VM_PROXY_MINOR (the interpreterProxy minor version number)

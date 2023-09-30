@@ -203,7 +203,7 @@ function SocketPlugin() {
           var url = '';
           if (isRetry || this._requestNeedsProxy()) {
             var proxy = typeof SqueakJS === "object" && SqueakJS.options.proxy;
-            url += proxy || 'https://crossorigin.me/';
+            url = proxy || 'https://corsproxy.io/?';
           }
           if (this.port !== 443) {
             url += 'http://' + this._hostAndPort() + targetURL;

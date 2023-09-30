@@ -1110,7 +1110,7 @@ function downloadFile(file, display, options, thenDo) {
             return alert("Failed to download:\n" + file.url);
         }
         console.warn('Retrying with CORS proxy: ' + file.url);
-        var proxy = 'https://cors-anywhere.herokuapp.com/',
+        var proxy = 'https://corsproxy.io/?',
             retry = new XMLHttpRequest();
         retry.open('GET', proxy + file.url);
         if (options.ajax) retry.setRequestHeader("X-Requested-With", "XMLHttpRequest");

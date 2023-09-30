@@ -110,12 +110,13 @@ if (!Function.prototype.subclass) {
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 1.0.5",
-    vmDate: "2022-11-19",               // Maybe replace at build time?
+    vmVersion: "SqueakJS 1.0.6",
+    vmDate: "2023-09-30",               // Maybe replace at build time?
     vmBuild: "unknown",                 // or replace at runtime by last-modified?
     vmPath: "unknown",                  // Replace at runtime
     vmFile: "vm.js",
     vmMakerVersion: "[VMMakerJS-bf.17 VMMaker-bf.353]", // for Smalltalk vmVMMakerVersion
+    vmInterpreterVersion: "JSInterpreter VMMaker.js-codefrau.1", // for Smalltalk interpreterVMMakerVersion
     platformName: "JS",
     platformSubtype: "unknown",         // Replace at runtime
     osVersion: "unknown",               // Replace at runtime
@@ -153,7 +154,8 @@ Object.extend(Squeak,
     splOb_ClassCharacter: 19,
     splOb_SelectorDoesNotUnderstand: 20,
     splOb_SelectorCannotReturn: 21,
-    splOb_TheInputSemaphore: 22,
+    // splOb_TheInputSemaphore: 22, // old? unused in SqueakJS
+    splOb_ProcessSignalingLowSpace: 22,
     splOb_SpecialSelectors: 23,
     splOb_CharacterTable: 24,
     splOb_SelectorMustBeBoolean: 25,
@@ -1904,6 +1906,13 @@ Object.subclass('Squeak.Image',
         this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
         this.oldSpaceCount += newObjects.length;
         this.gcTenured += newObjects.length;
+        // this is the only place that increases oldSpaceBytes / decreases bytesLeft
+        this.vm.signalLowSpaceIfNecessary(this.bytesLeft());
+        // TODO: keep track of newSpaceBytes and youngSpaceBytes, and signal low space if necessary
+        // basically, add obj.totalBytes() to newSpaceBytes when instantiating,
+        // trigger partial GC if newSpaceBytes + lowSpaceThreshold > totalMemory - (youngSpaceBytes + oldSpaceBytes)
+        // which would set newSpaceBytes to 0 and youngSpaceBytes to the actual survivors.
+        // for efficiency, only compute object size once per object and store? test impact on GC speed
     },
     tenureIfYoung: function(object) {
         if (object.oop < 0) {
@@ -2112,6 +2121,11 @@ Object.subclass('Squeak.Image',
             var fromHash = fromArray[i].hash;
             fromArray[i].hash = toArray[i].hash;
             toArray[i].hash = fromHash;
+            // Spur class table is not part of the object memory in SqueakJS
+            // so won't be updated below, we have to update it manually
+            if (this.isSpur && this.classTable[fromHash] === fromArray[i]) {
+                this.classTable[fromHash] = toArray[i];
+            }
         }
         // temporarily append young objects to old space
         this.lastOldObject.nextObject = firstYoungObject;
@@ -2604,7 +2618,7 @@ Object.subclass('Squeak.Interpreter',
         this.falseObj = this.specialObjects[Squeak.splOb_FalseObject];
         this.trueObj = this.specialObjects[Squeak.splOb_TrueObject];
         this.hasClosures = this.image.hasClosures;
-        this.globals = this.findGlobals();
+        this.getGlobals = this.globalsGetter();
         // hack for old image that does not support Unix files
         if (!this.hasClosures && !this.findMethod("UnixFileDirectory class>>pathNameDelimiter"))
             this.primHandler.emulateMac = true;
@@ -2618,6 +2632,8 @@ Object.subclass('Squeak.Interpreter',
         this.interruptCheckCounter = 0;
         this.interruptCheckCounterFeedBackReset = 1000;
         this.interruptChecksEveryNms = 3;
+        this.lowSpaceThreshold = 1000000;
+        this.signalLowSpace = false;
         this.nextPollTick = 0;
         this.nextWakeupTick = 0;
         this.lastTick = 0;
@@ -2653,7 +2669,13 @@ Object.subclass('Squeak.Interpreter',
         this.fetchContextRegisters(this.activeContext);
         this.reclaimableContextCount = 0;
     },
-    findGlobals: function() {
+    globalsGetter: function() {
+        // Globals (more specifically the pointers we are interested in) might
+        // change during execution, because a Dictionary needs growing for example.
+        // Therefore answer a getter function to access the actual globals (pointers).
+        // This getter can be used, even if the Dictionary has grown (and thereby the
+        // underlying Array is replaced by a larger one), because it uses the reference
+        // to the 'outer' Dictionary instead of the pointers to the values.
         var smalltalk = this.specialObjects[Squeak.splOb_SmalltalkDictionary],
             smalltalkClass = smalltalk.sqClass.className();
         if (smalltalkClass === "Association") {
@@ -2661,17 +2683,17 @@ Object.subclass('Squeak.Interpreter',
             smalltalkClass = smalltalk.sqClass.className();
         }
         if (smalltalkClass === "SystemDictionary")
-            return smalltalk.pointers[1].pointers;
+            return function() { return smalltalk.pointers[1].pointers; };
         if (smalltalkClass === "SmalltalkImage") {
             var globals = smalltalk.pointers[0],
                 globalsClass = globals.sqClass.className();
             if (globalsClass === "SystemDictionary")
-                return globals.pointers[1].pointers;
+                return function() { return globals.pointers[1].pointers; };
             if (globalsClass === "Environment")
-                return globals.pointers[2].pointers[1].pointers
+                return function() { return globals.pointers[2].pointers[1].pointers; };
         }
         console.warn("cannot find global dict");
-        return [];
+        return function() { return []; };
     },
     initCompiler: function() {
         if (!Squeak.Compiler)
@@ -3215,10 +3237,11 @@ Object.subclass('Squeak.Interpreter',
         }
         this.interruptCheckCounter = this.interruptCheckCounterFeedBackReset; //reset the interrupt check counter
         this.lastTick = now; //used to detect wraparound of millisecond clock
-        //  if(signalLowSpace) {
-        //            signalLowSpace= false; //reset flag
-        //            sema= getSpecialObject(Squeak.splOb_TheLowSpaceSemaphore);
-        //            if(sema != nilObj) synchronousSignal(sema); }
+        if (this.signalLowSpace) {
+            this.signalLowSpace = false; // reset flag
+            var sema = this.specialObjects[Squeak.splOb_TheLowSpaceSemaphore];
+            if (!sema.isNil) this.primHandler.synchronousSignal(sema);
+        }
         //  if(now >= nextPollTick) {
         //            ioProcessEvents(); //sets interruptPending if interrupt key pressed
         //            nextPollTick= now + 500; } //msecs to wait before next call to ioProcessEvents"
@@ -4033,6 +4056,17 @@ Object.subclass('Squeak.Interpreter',
             for (var i = 0; i < length; i++)
                 dest[destPos + i] = src[srcPos + i];
     },
+    signalLowSpaceIfNecessary: function(bytesLeft) {
+        if (bytesLeft < this.lowSpaceThreshold && this.lowSpaceThreshold > 0) {
+            this.signalLowSpace = true;
+            this.lowSpaceThreshold = 0;
+            var lastSavedProcess = this.specialObjects[Squeak.splOb_ProcessSignalingLowSpace];
+            if (lastSavedProcess.isNil) {
+                this.specialObjects[Squeak.splOb_ProcessSignalingLowSpace] = this.activeProcess;
+            }
+            this.forceInterruptCheck();
+        }
+   },
 },
 'debugging', {
     addMessage: function(message) {
@@ -4080,7 +4114,7 @@ Object.subclass('Squeak.Interpreter',
     },
     allGlobalsDo: function(callback) {
         // callback(globalNameObj, globalObj), truish result breaks out of iteration
-        var globals = this.globals;
+        var globals = this.getGlobals();
         for (var i = 0; i < globals.length; i++) {
             var assn = globals[i];
             if (!assn.isNil) {
@@ -5476,6 +5510,7 @@ Object.subclass('Squeak.Primitives',
             case 216: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketRemotePort', argCount);
             case 217: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectToPort', argCount);
             case 218: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketListenOnPort', argCount);
+                else { this.vm.warnOnce("missing primitive: 218 (tryNamedPrimitiveInForWithArgs"); return false; }
             case 219: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketCloseConnection', argCount);
             case 220: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketAbortConnection', argCount);
                 break;  // fail 212-220 if fell through
@@ -6997,7 +7032,7 @@ Object.subclass('Squeak.Primitives',
             case 1004: value = Squeak.vmVersion + ' ' + Squeak.vmMakerVersion; break;
             case 1005: value = Squeak.windowSystem; break;
             case 1006: value = Squeak.vmBuild; break;
-            case 1007: value = Squeak.vmVersion; break; // Interpreter class
+            case 1007: value = Squeak.vmInterpreterVersion; break; // Interpreter class
             // case 1008: Cogit class
             case 1009: value = Squeak.vmVersion + ' Date: ' + Squeak.vmDate; break; // Platform source version
             default:
@@ -7123,6 +7158,7 @@ Object.subclass('Squeak.Primitives',
             case 65: return 0;
             // 66   the byte size of a stack page in the stack zone  (read-only; Cog VMs only)
             // 67   the maximum allowed size of old space in bytes, 0 implies no internal limit (Spur VMs only).
+            case 67: return this.vm.image.totalMemory;
             // 68 - 69 reserved for more Cog-related info
             // 70   the value of VM_PROXY_MAJOR (the interpreterProxy major version number)
             // 71   the value of VM_PROXY_MINOR (the interpreterProxy minor version number)

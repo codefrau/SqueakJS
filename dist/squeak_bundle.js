@@ -113,12 +113,13 @@
     Object.extend(Squeak,
     "version", {
         // system attributes
-        vmVersion: "SqueakJS 1.0.5",
-        vmDate: "2022-11-19",               // Maybe replace at build time?
+        vmVersion: "SqueakJS 1.0.6",
+        vmDate: "2023-09-30",               // Maybe replace at build time?
         vmBuild: "unknown",                 // or replace at runtime by last-modified?
         vmPath: "unknown",                  // Replace at runtime
         vmFile: "vm.js",
         vmMakerVersion: "[VMMakerJS-bf.17 VMMaker-bf.353]", // for Smalltalk vmVMMakerVersion
+        vmInterpreterVersion: "JSInterpreter VMMaker.js-codefrau.1", // for Smalltalk interpreterVMMakerVersion
         platformName: "JS",
         platformSubtype: "unknown",         // Replace at runtime
         osVersion: "unknown",               // Replace at runtime
@@ -156,7 +157,8 @@
         splOb_ClassCharacter: 19,
         splOb_SelectorDoesNotUnderstand: 20,
         splOb_SelectorCannotReturn: 21,
-        splOb_TheInputSemaphore: 22,
+        // splOb_TheInputSemaphore: 22, // old? unused in SqueakJS
+        splOb_ProcessSignalingLowSpace: 22,
         splOb_SpecialSelectors: 23,
         splOb_CharacterTable: 24,
         splOb_SelectorMustBeBoolean: 25,
@@ -1907,6 +1909,13 @@
             this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
             this.oldSpaceCount += newObjects.length;
             this.gcTenured += newObjects.length;
+            // this is the only place that increases oldSpaceBytes / decreases bytesLeft
+            this.vm.signalLowSpaceIfNecessary(this.bytesLeft());
+            // TODO: keep track of newSpaceBytes and youngSpaceBytes, and signal low space if necessary
+            // basically, add obj.totalBytes() to newSpaceBytes when instantiating,
+            // trigger partial GC if newSpaceBytes + lowSpaceThreshold > totalMemory - (youngSpaceBytes + oldSpaceBytes)
+            // which would set newSpaceBytes to 0 and youngSpaceBytes to the actual survivors.
+            // for efficiency, only compute object size once per object and store? test impact on GC speed
         },
         tenureIfYoung: function(object) {
             if (object.oop < 0) {
@@ -2115,6 +2124,11 @@
                 var fromHash = fromArray[i].hash;
                 fromArray[i].hash = toArray[i].hash;
                 toArray[i].hash = fromHash;
+                // Spur class table is not part of the object memory in SqueakJS
+                // so won't be updated below, we have to update it manually
+                if (this.isSpur && this.classTable[fromHash] === fromArray[i]) {
+                    this.classTable[fromHash] = toArray[i];
+                }
             }
             // temporarily append young objects to old space
             this.lastOldObject.nextObject = firstYoungObject;
@@ -2607,7 +2621,7 @@
             this.falseObj = this.specialObjects[Squeak.splOb_FalseObject];
             this.trueObj = this.specialObjects[Squeak.splOb_TrueObject];
             this.hasClosures = this.image.hasClosures;
-            this.globals = this.findGlobals();
+            this.getGlobals = this.globalsGetter();
             // hack for old image that does not support Unix files
             if (!this.hasClosures && !this.findMethod("UnixFileDirectory class>>pathNameDelimiter"))
                 this.primHandler.emulateMac = true;
@@ -2621,6 +2635,8 @@
             this.interruptCheckCounter = 0;
             this.interruptCheckCounterFeedBackReset = 1000;
             this.interruptChecksEveryNms = 3;
+            this.lowSpaceThreshold = 1000000;
+            this.signalLowSpace = false;
             this.nextPollTick = 0;
             this.nextWakeupTick = 0;
             this.lastTick = 0;
@@ -2656,7 +2672,13 @@
             this.fetchContextRegisters(this.activeContext);
             this.reclaimableContextCount = 0;
         },
-        findGlobals: function() {
+        globalsGetter: function() {
+            // Globals (more specifically the pointers we are interested in) might
+            // change during execution, because a Dictionary needs growing for example.
+            // Therefore answer a getter function to access the actual globals (pointers).
+            // This getter can be used, even if the Dictionary has grown (and thereby the
+            // underlying Array is replaced by a larger one), because it uses the reference
+            // to the 'outer' Dictionary instead of the pointers to the values.
             var smalltalk = this.specialObjects[Squeak.splOb_SmalltalkDictionary],
                 smalltalkClass = smalltalk.sqClass.className();
             if (smalltalkClass === "Association") {
@@ -2664,17 +2686,17 @@
                 smalltalkClass = smalltalk.sqClass.className();
             }
             if (smalltalkClass === "SystemDictionary")
-                return smalltalk.pointers[1].pointers;
+                return function() { return smalltalk.pointers[1].pointers; };
             if (smalltalkClass === "SmalltalkImage") {
                 var globals = smalltalk.pointers[0],
                     globalsClass = globals.sqClass.className();
                 if (globalsClass === "SystemDictionary")
-                    return globals.pointers[1].pointers;
+                    return function() { return globals.pointers[1].pointers; };
                 if (globalsClass === "Environment")
-                    return globals.pointers[2].pointers[1].pointers
+                    return function() { return globals.pointers[2].pointers[1].pointers; };
             }
             console.warn("cannot find global dict");
-            return [];
+            return function() { return []; };
         },
         initCompiler: function() {
             if (!Squeak.Compiler)
@@ -3218,10 +3240,11 @@
             }
             this.interruptCheckCounter = this.interruptCheckCounterFeedBackReset; //reset the interrupt check counter
             this.lastTick = now; //used to detect wraparound of millisecond clock
-            //  if(signalLowSpace) {
-            //            signalLowSpace= false; //reset flag
-            //            sema= getSpecialObject(Squeak.splOb_TheLowSpaceSemaphore);
-            //            if(sema != nilObj) synchronousSignal(sema); }
+            if (this.signalLowSpace) {
+                this.signalLowSpace = false; // reset flag
+                var sema = this.specialObjects[Squeak.splOb_TheLowSpaceSemaphore];
+                if (!sema.isNil) this.primHandler.synchronousSignal(sema);
+            }
             //  if(now >= nextPollTick) {
             //            ioProcessEvents(); //sets interruptPending if interrupt key pressed
             //            nextPollTick= now + 500; } //msecs to wait before next call to ioProcessEvents"
@@ -4036,6 +4059,17 @@
                 for (var i = 0; i < length; i++)
                     dest[destPos + i] = src[srcPos + i];
         },
+        signalLowSpaceIfNecessary: function(bytesLeft) {
+            if (bytesLeft < this.lowSpaceThreshold && this.lowSpaceThreshold > 0) {
+                this.signalLowSpace = true;
+                this.lowSpaceThreshold = 0;
+                var lastSavedProcess = this.specialObjects[Squeak.splOb_ProcessSignalingLowSpace];
+                if (lastSavedProcess.isNil) {
+                    this.specialObjects[Squeak.splOb_ProcessSignalingLowSpace] = this.activeProcess;
+                }
+                this.forceInterruptCheck();
+            }
+       },
     },
     'debugging', {
         addMessage: function(message) {
@@ -4083,7 +4117,7 @@
         },
         allGlobalsDo: function(callback) {
             // callback(globalNameObj, globalObj), truish result breaks out of iteration
-            var globals = this.globals;
+            var globals = this.getGlobals();
             for (var i = 0; i < globals.length; i++) {
                 var assn = globals[i];
                 if (!assn.isNil) {
@@ -5479,6 +5513,7 @@
                 case 216: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketRemotePort', argCount);
                 case 217: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectToPort', argCount);
                 case 218: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketListenOnPort', argCount);
+                    else { this.vm.warnOnce("missing primitive: 218 (tryNamedPrimitiveInForWithArgs"); return false; }
                 case 219: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketCloseConnection', argCount);
                 case 220: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketAbortConnection', argCount);
                     break;  // fail 212-220 if fell through
@@ -7000,7 +7035,7 @@
                 case 1004: value = Squeak.vmVersion + ' ' + Squeak.vmMakerVersion; break;
                 case 1005: value = Squeak.windowSystem; break;
                 case 1006: value = Squeak.vmBuild; break;
-                case 1007: value = Squeak.vmVersion; break; // Interpreter class
+                case 1007: value = Squeak.vmInterpreterVersion; break; // Interpreter class
                 // case 1008: Cogit class
                 case 1009: value = Squeak.vmVersion + ' Date: ' + Squeak.vmDate; break; // Platform source version
                 default:
@@ -7126,6 +7161,7 @@
                 case 65: return 0;
                 // 66   the byte size of a stack page in the stack zone  (read-only; Cog VMs only)
                 // 67   the maximum allowed size of old space in bytes, 0 implies no internal limit (Spur VMs only).
+                case 67: return this.vm.image.totalMemory;
                 // 68 - 69 reserved for more Cog-related info
                 // 70   the value of VM_PROXY_MAJOR (the interpreterProxy major version number)
                 // 71   the value of VM_PROXY_MINOR (the interpreterProxy minor version number)
@@ -9969,16 +10005,16 @@
                 fileNameObj = this.stackNonInteger(0);
             if (!this.success) return false;
             var sqFileName = fileNameObj.bytesAsString();
-            var fileName = this.filenameFromSqueak(fileNameObj.bytesAsString());
+            var fileName = this.filenameFromSqueak(sqFileName);
             var sqDirName = dirNameObj.bytesAsString();
-            var dirName = this.filenameFromSqueak(dirNameObj.bytesAsString());
+            var dirName = this.filenameFromSqueak(sqDirName);
             var entries = Squeak.dirList(dirName, true);
             if (!entries) {
                 var path = Squeak.splitFilePath(dirName);
                 console.log("Directory not found: " + path.fullname);
                 return false;
             }
-            var entry = entries[fileName];
+            var entry = fileName === "." ? [".", 0, 0, true, 0] : entries[fileName];
             this.popNandPushIfOK(argCount+1, this.makeStObject(entry));  // entry or nil
             return true;
         },
@@ -37932,7 +37968,7 @@
     /*
      * This Socket plugin only fulfills http:/https:/ws:/wss: requests by intercepting them
      * and sending as either XMLHttpRequest or Fetch or WebSocket.
-     * To make connections to servers without CORS, it uses the crossorigin.me proxy.
+     * To make connections to servers without CORS, it uses a CORS proxy.
      *
      * When a WebSocket connection is created in the Smalltalk image a low level socket is
      * assumed to be provided by this plugin. Since low level sockets are not supported
@@ -38031,7 +38067,7 @@
               element[field] = element[field].replace(/\.$/, "");
             }
           };
-          var originalQuestion = response.Question[0]; 
+          var originalQuestion = response.Question[0];
           removeTrailingDot(originalQuestion, "name");
           response.Answer.forEach(function(answer) {
             removeTrailingDot(answer, "name");
@@ -38133,7 +38169,7 @@
               var url = '';
               if (isRetry || this._requestNeedsProxy()) {
                 var proxy = typeof SqueakJS === "object" && SqueakJS.options.proxy;
-                url += proxy || 'https://crossorigin.me/';
+                url = proxy || 'https://corsproxy.io/?';
               }
               if (this.port !== 443) {
                 url += 'http://' + this._hostAndPort() + targetURL;
@@ -38185,7 +38221,13 @@
                   var contentLength = parseInt(line.substr(16));
                   var end = this.sendBuffer.byteLength;
                   data = this.sendBuffer.subarray(end - contentLength, end);
-                } else if (line.match(/Connection: Upgrade/i)) {
+                } else if (line.match(/Host:/i)) {
+                  var host = line.substr(6).trim();
+                  if (this.host !== host) {
+                    console.warn('Host for ' + this.hostAddress + ' was ' + this.host + ' but from HTTP request now ' + host);
+                    this.host = host;
+                  }
+                } if (line.match(/Connection: Upgrade/i)) {
                   seenUpgrade = true;
                 } else if (line.match(/Upgrade: WebSocket/i)) {
                   seenWebSocket = true;
@@ -38222,7 +38264,7 @@
 
               fetch(this._getURL(targetURL), init)
               .then(thisHandle._handleFetchAPIResponse.bind(thisHandle))
-              .catch(function (e) { 
+              .catch(function (e) {
                 var url = thisHandle._getURL(targetURL, true);
                 console.warn('Retrying with CORS proxy: ' + url);
                 fetch(url, init)
@@ -38286,7 +38328,7 @@
               if (typeof SqueakJS === "object" && SqueakJS.options.ajax) {
                   httpRequest.setRequestHeader("X-Requested-With", "XMLHttpRequest");
               }
-              
+
               httpRequest.responseType = "arraybuffer";
 
               httpRequest.onload = function (oEvent) {
@@ -38361,7 +38403,7 @@
 
               // Keep track of WebSocket for future send and receive operations
               this.webSocket = new WebSocket(url.replace(/^http/, "ws"), webSocketSubProtocol);
-     
+
               var thisHandle = this;
               this.webSocket.onopen = function() {
                 if (thisHandle.status !== plugin.Socket_Connected) {
@@ -38577,7 +38619,7 @@
                 } else {
                   if (this.response && this.response.length > 0) {
                     this._signalReadSemaphore();
-                    return true; 
+                    return true;
                   }
                   if (this.responseSentCompletly) {
                     // Signal older Socket implementations that they reached the end
@@ -39137,6 +39179,17 @@
             res = 0;
           }
           this.interpreterProxy.popthenPush(argCount + 1, res);
+          return true;
+        },
+
+        primitiveSetStringProperty: function(argCount) {
+          if (argCount !== 3) return false;
+          var handle = this.interpreterProxy.stackObjectValue(2).handle;
+          if (handle === undefined) return false;
+          // We don't actually care
+          // var propID = this.interpreterProxy.stackIntegerValue(1);
+          // var value = this.interpreterProxy.stackObjectValue(0);
+          this.interpreterProxy.pop(argCount);
           return true;
         },
 
@@ -55341,7 +55394,7 @@
                 return alert("Failed to download:\n" + file.url);
             }
             console.warn('Retrying with CORS proxy: ' + file.url);
-            var proxy = 'https://cors-anywhere.herokuapp.com/',
+            var proxy = 'https://corsproxy.io/?',
                 retry = new XMLHttpRequest();
             retry.open('GET', proxy + file.url);
             if (options.ajax) retry.setRequestHeader("X-Requested-With", "XMLHttpRequest");

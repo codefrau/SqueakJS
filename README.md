@@ -110,7 +110,8 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
-    2022-11-19: 1.0.5 fixes, add image format for Squeak 6
+    2023-09-30: 1.0.6 fixes
+    2022-11-19: 1.0.5 fixes, add highdpi mode, add image format for Squeak 6
     2021-05-31: 1.0.4 fixes
     2021-03-21: 1.0.3 headless fixes (Erik Stel); fixes object-as-method
     2021-02-07: 1.0.2 new one-way become prim (Christoph Tiede); JIT-compile Array at:/at:put:

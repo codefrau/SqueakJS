@@ -354,6 +354,7 @@ Object.subclass('Squeak.Primitives',
             case 216: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketRemotePort', argCount);
             case 217: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectToPort', argCount);
             case 218: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketListenOnPort', argCount);
+                else { this.vm.warnOnce("missing primitive: 218 (tryNamedPrimitiveInForWithArgs"); return false; }
             case 219: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketCloseConnection', argCount);
             case 220: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketAbortConnection', argCount);
                 break;  // fail 212-220 if fell through
@@ -1877,7 +1878,7 @@ Object.subclass('Squeak.Primitives',
             case 1004: value = Squeak.vmVersion + ' ' + Squeak.vmMakerVersion; break;
             case 1005: value = Squeak.windowSystem; break;
             case 1006: value = Squeak.vmBuild; break;
-            case 1007: value = Squeak.vmVersion; break; // Interpreter class
+            case 1007: value = Squeak.vmInterpreterVersion; break; // Interpreter class
             // case 1008: Cogit class
             case 1009: value = Squeak.vmVersion + ' Date: ' + Squeak.vmDate; break; // Platform source version
             default:

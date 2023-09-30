@@ -50,16 +50,16 @@ Object.extend(Squeak.Primitives.prototype,
             fileNameObj = this.stackNonInteger(0);
         if (!this.success) return false;
         var sqFileName = fileNameObj.bytesAsString();
-        var fileName = this.filenameFromSqueak(fileNameObj.bytesAsString());
+        var fileName = this.filenameFromSqueak(sqFileName);
         var sqDirName = dirNameObj.bytesAsString();
-        var dirName = this.filenameFromSqueak(dirNameObj.bytesAsString());
+        var dirName = this.filenameFromSqueak(sqDirName);
         var entries = Squeak.dirList(dirName, true);
         if (!entries) {
             var path = Squeak.splitFilePath(dirName);
             console.log("Directory not found: " + path.fullname);
             return false;
         }
-        var entry = entries[fileName];
+        var entry = fileName === "." ? [".", 0, 0, true, 0] : entries[fileName];
         this.popNandPushIfOK(argCount+1, this.makeStObject(entry));  // entry or nil
         return true;
     },

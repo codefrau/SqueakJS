@@ -780,6 +780,11 @@ Object.subclass('Squeak.Image',
             var fromHash = fromArray[i].hash;
             fromArray[i].hash = toArray[i].hash;
             toArray[i].hash = fromHash;
+            // Spur class table is not part of the object memory in SqueakJS
+            // so won't be updated below, we have to update it manually
+            if (this.isSpur && this.classTable[fromHash] === fromArray[i]) {
+                this.classTable[fromHash] = toArray[i];
+            }
         }
         // temporarily append young objects to old space
         this.lastOldObject.nextObject = firstYoungObject;

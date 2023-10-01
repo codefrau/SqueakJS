@@ -24,6 +24,30 @@
             },
         });
     }
+    function importFiles(files) {
+        files = [].slice.call(files);
+        var todo = files.length,
+            imageName = null;
+        files.forEach(function(f) {
+            var reader = new FileReader();
+            reader.onload = function () {
+                var buffer = this.result;
+                console.log("Storing " + f.name + " (" + buffer.byteLength + " bytes)");
+                if (/.*image$/.test(f.name)) imageName = f.name;
+                Squeak.filePut(f.name, buffer, function success() {
+                    if (--todo > 0) return;
+                    setTimeout(() => drop.style.borderColor = "", 500);
+                    if (!imageName) showFiles();
+                    else runSqueak(imageName);
+                });
+            }
+            reader.onerror = function() {
+                alert("Failed to read " + f.name);
+                drop.style.borderColor = "";
+            }
+            reader.readAsArrayBuffer(f);
+        });
+    }
     function exportFile(a) {
         var path = Squeak.splitFilePath(a.innerText);
         Squeak.fileGet(path.fullname, function(buffer) {
@@ -112,29 +136,12 @@
         document.body.ondrop = function(evt) {
             evt.preventDefault();
             drop.style.borderColor = "#080";
-            var files = [].slice.call(evt.dataTransfer.files),
-                todo = files.length,
-                imageName = null;
-            files.forEach(function(f) {
-                var reader = new FileReader();
-                reader.onload = function () {
-                    var buffer = this.result;
-                    console.log("Storing " + f.name + " (" + buffer.byteLength + " bytes)");
-                    if (/.*image$/.test(f.name)) imageName = f.name;
-                    Squeak.filePut(f.name, buffer, function success() {
-                        if (--todo > 0) return;
-                        drop.style.borderColor = "";
-                        if (!imageName) showFiles();
-                        else runSqueak(imageName);
-                    });
-                }
-                reader.onerror = function() {
-                    alert("Failed to read " + f.name);
-                    drop.style.borderColor = "";
-                }
-                reader.readAsArrayBuffer(f);
-            });
+            importFiles(evt.dataTransfer.files);
             return false;
+        };
+        fileInput.onchange = function(evt) {
+            drop.style.borderColor = "#0F0";
+            importFiles(evt.target.files);
         };
     }
 </script>
@@ -156,7 +163,7 @@
         All images and related files are stored persistently in a database inside your browser.
         The box below shows the files that are currently in your database.  Inside Squeak, you can use a FileList
         to manage them.
-        <div id="drop">Drop Squeak images and other files here.
+        <div id="drop">Drop Squeak images and other files here, or <input id="fileInput" type="file" multiple>
             <div id="files" class="filelist"></div>
             <div id="filestats"></div>
         </div>

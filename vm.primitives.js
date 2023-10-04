@@ -185,7 +185,7 @@ Object.subclass('Squeak.Primitives',
             case 95: return this.primitiveInputWord(argCount);
             case 96: return this.namedPrimitive('BitBltPlugin', 'primitiveCopyBits', argCount);
             case 97: return this.primitiveSnapshot(argCount);
-            case 98: this.vm.warnOnce("missing primitive 98 (primitiveStoreImageSegment)"); return false;
+            case 98: return this.primitiveStoreImageSegment(argCount);
             case 99: return this.primitiveLoadImageSegment(argCount);
             case 100: return this.vm.primitivePerformWithArgs(argCount, true); // Object.perform:withArguments:inSuperclass: (Blue Book: primitiveSignalAtTick)
             case 101: return this.primitiveBeCursor(argCount); // Cursor.beCursor
@@ -1435,6 +1435,16 @@ Object.subclass('Squeak.Primitives',
             rcvr.pointers[i] = arg.pointers[i];
         rcvr.dirty = arg.dirty;
         this.vm.popN(argCount);
+        return true;
+    },
+    primitiveStoreImageSegment: function(argCount) {
+        var arrayOfRoots = this.stackNonInteger(2),
+            segmentWordArray = this.stackNonInteger(1),
+            outPointerArray = this.stackNonInteger(0);
+        if (!arrayOfRoots.pointers || !segmentWordArray.words || !outPointerArray.pointers) return false;
+        var success = this.vm.image.storeImageSegment(segmentWordArray, outPointerArray, arrayOfRoots);
+        if (!success) return false;
+        this.vm.popN(argCount); // return self
         return true;
     },
     primitiveLoadImageSegment: function(argCount) {

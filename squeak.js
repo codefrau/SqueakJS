@@ -114,7 +114,7 @@
     "version", {
         // system attributes
         vmVersion: "SqueakJS 1.0.6",
-        vmDate: "2023-09-30",               // Maybe replace at build time?
+        vmDate: "2023-10-03",               // Maybe replace at build time?
         vmBuild: "unknown",                 // or replace at runtime by last-modified?
         vmPath: "unknown",                  // Replace at runtime
         vmFile: "vm.js",
@@ -2259,7 +2259,9 @@
 
             // use a DataView to access the segment as big-endian words
             var segment = new DataView(segmentWordArray.words.buffer),
-                pos = 0;
+                pos = 0, // write position in segment in bytes
+                outPointers = outPointerArray.pointers,
+                outPos = 0; // write position in outPointers in words
 
             // write header
             segment.setUint32(pos, this.segmentVersion()); pos += 4;
@@ -2283,43 +2285,35 @@
                 if (typeof arrayOfRoots.pointers[i] === "object")
                     arrayOfRoots.pointers[i].mark = false;
 
-            // helpers for mapping oops to segment addresses
-            var oopMap = {};
-            var todo = [];
+            // helpers for mapping objects to segment oops
+            var segmentOops = {}, // map from object oop to segment oop
+                todo = []; // objects that were added to the segment but still need to have their oops mapped
 
-            // All external objects, and only they, are now marked.
-    	    // Write the array of roots into the segment, and map its oop
-            oopMap[arrayOfRoots.oop] = pos + 12; // we know it's an Array which has 3 header words
-            pos = arrayOfRoots.writeTo(segment, pos, this);
-            todo.push(arrayOfRoots);
-
-            // Now run through the segment fixing up all the pointers.
-        	// Note that more objects will be added to the segment as we make our way along.
-            var outIndex = 0,
-                outPointers = outPointerArray.pointers;
-
-            function mapObject(object) {
-                var oop = oopMap[object.oop];
+            // if an object does not yet have a segment oop, write it to the segment or outPointers
+            function addToSegment(object) {
+                var oop = segmentOops[object.oop];
                 if (!oop) {
                     if (object.mark) {
                         // object is outside segment, add to outPointers
-                        if (outIndex >= outPointers.length) return 0; // fail if outPointerArray is too small
-                        oop = 0x80000004 + outIndex * 4;
-                        outPointers[outIndex++] = object;
+                        if (outPos >= outPointers.length) return 0; // fail if outPointerArray is too small
+                        oop = 0x80000004 + outPos * 4;
+                        outPointers[outPos++] = object;
                         // no need to mark outPointerArray dirty, all objects are in old space
                     } else {
-                        // add object to segment
+                        // add object to segment.
                         if (pos + object.totalBytes() > segment.byteLength) return 0; // fail if segment is too small
                         oop = pos + (object.snapshotSize().header + 1) * 4; // addr plus extra headers + base header
                         pos = object.writeTo(segment, pos, this);
+                        // the written oops inside the object still need to be mapped to segment oops
                         todo.push(object);
                     }
-                    oopMap[object.oop] = oop;
+                    segmentOops[object.oop] = oop;
                 }
                 return oop;
             }
-            mapObject = mapObject.bind(this);
+            addToSegment = addToSegment.bind(this);
 
+            // if we have to bail out, clean up what we modified
             function cleanUp() {
                 // unmark all objects
                 var obj = this.firstOldObject;
@@ -2334,24 +2328,31 @@
             }
             cleanUp = cleanUp.bind(this);
 
+            // All external objects, and only they, are now marked.
+            // Write the array of roots into the segment
+            addToSegment(arrayOfRoots);
+
+            // Now fix the oops inside written objects.
+            // This will add more objects to the segment (if they are unmarked),
+            // or to outPointers (if they are marked).
             while (todo.length > 0) {
                 var obj = todo.shift(),
-                    oop = oopMap[obj.oop],
-                    objHeader = obj.snapshotSize().header,
-                    doingClass = objHeader > 0,
-                    objBody = obj.pointers;
-                if (doingClass) {
-                    var classOop = mapObject(obj.sqClass);
-                    if (!classOop) return cleanUp();
-                    var headerType = objHeader === 1 ? Squeak.HeaderTypeClass : Squeak.HeaderTypeSizeAndClass;
+                    oop = segmentOops[obj.oop],
+                    headerSize = obj.snapshotSize().header,
+                    objBody = obj.pointers,
+                    hasClass = headerSize > 0;
+                if (hasClass) {
+                    var classOop = addToSegment(obj.sqClass);
+                    if (!classOop) return cleanUp(); // ran out of space
+                    var headerType = headerSize === 1 ? Squeak.HeaderTypeClass : Squeak.HeaderTypeSizeAndClass;
                     segment.setUint32(oop - 8, classOop | headerType);
                 }
                 if (!objBody) continue;
                 for (var i = 0; i < objBody.length; i++) {
                     var child = objBody[i];
                     if (typeof child !== "object") continue;
-                    var childOop = mapObject(child);
-                    if (!childOop) return cleanUp();
+                    var childOop = addToSegment(child);
+                    if (!childOop) return cleanUp(); // ran out of space
                     segment.setUint32(oop + i * 4, childOop);
                 }
             }
@@ -2365,8 +2366,8 @@
                     removedBytes += (obj.words.length * 4) - pos;
                     obj.words = new Uint32Array(obj.words.buffer.slice(0, pos));
                 } else if (obj === outPointerArray) {
-                    removedBytes += (obj.pointers.length - outIndex) * 4;
-                    obj.pointers.length = outIndex;
+                    removedBytes += (obj.pointers.length - outPos) * 4;
+                    obj.pointers.length = outPos;
                 }
                 obj = obj.nextObject;
             }
@@ -2381,14 +2382,14 @@
             // The C VM creates real objects from the segment in-place.
             // We do the same, linking the new objects directly into old-space.
             // The code below is almost the same as readFromBuffer() ... should unify
-            var data = new DataView(segmentWordArray.words.buffer),
+            var segment = new DataView(segmentWordArray.words.buffer),
                 littleEndian = false,
                 nativeFloats = false,
                 pos = 0;
             var readWord = function() {
-                var int = data.getUint32(pos, littleEndian);
+                var word = segment.getUint32(pos, littleEndian);
                 pos += 4;
-                return int;
+                return word;
             };
             var readBits = function(nWords, format) {
                 if (format < 5) { // pointers (do endian conversion)
@@ -2397,7 +2398,7 @@
                         oops.push(readWord());
                     return oops;
                 } else { // words (no endian conversion yet)
-                    var bits = new Uint32Array(data.buffer, pos, nWords);
+                    var bits = new Uint32Array(segment.buffer, pos, nWords);
                     pos += nWords * 4;
                     return bits;
                 }
@@ -2419,7 +2420,7 @@
                 oopOffset = segmentWordArray.oop,
                 oopMap = {},
                 rawBits = {};
-            while (pos < data.byteLength) {
+            while (pos < segment.byteLength) {
                 var nWords = 0,
                     classInt = 0,
                     header = readWord();

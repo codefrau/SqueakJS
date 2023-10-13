@@ -372,8 +372,7 @@ Object.extend(Squeak,
         var directory = this.dirList(path.dirname); if (!directory) return false;
         if (!directory[path.basename]) return false;
         var children = this.dirList(path.fullname);
-        if (!children) return false;
-        for (var child in children) return false; // not empty
+        if (children) for (var child in children) return false; // not empty
         // delete from parent
         delete directory[path.basename];
         Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(directory);

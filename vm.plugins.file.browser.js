@@ -326,19 +326,19 @@ Object.extend(Squeak.Primitives.prototype,
             if (file.contents === false) // failed to get contents before
                 return false;
             this.vm.freeze(function(unfreeze) {
-                Squeak.fileGet(file.name,
-                    function success(contents) {
-                        if (contents == null) return error(file.name);
-                        file.contents = this.asUint8Array(contents);
-                        unfreeze();
-                        func(file);
-                    }.bind(this),
-                    function error(msg) {
-                        console.log("File get failed: " + msg);
-                        file.contents = false;
-                        unfreeze();
-                        func(file);
-                    }.bind(this));
+                var error = (function(msg) {
+                    console.log("File get failed: " + msg);
+                    file.contents = false;
+                    unfreeze();
+                    func(file);
+                }).bind(this),
+                success = (function(contents) {
+                    if (contents == null) return error(file.name);
+                    file.contents = this.asUint8Array(contents);
+                    unfreeze();
+                    func(file);
+                }).bind(this);
+                Squeak.fileGet(file.name, success, error);
             }.bind(this));
         }
         return true;

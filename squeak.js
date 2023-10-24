@@ -113,8 +113,8 @@
     Object.extend(Squeak,
     "version", {
         // system attributes
-        vmVersion: "SqueakJS 1.0.6",
-        vmDate: "2023-10-03",               // Maybe replace at build time?
+        vmVersion: "SqueakJS 1.1.0",
+        vmDate: "2023-10-23",               // Maybe replace at build time?
         vmBuild: "unknown",                 // or replace at runtime by last-modified?
         vmPath: "unknown",                  // Replace at runtime
         vmFile: "vm.js",
@@ -9065,6 +9065,14 @@
             if (!errorDo) errorDo = function(err) { console.log(err); };
             var path = this.splitFilePath(filepath);
             if (!path.basename) return errorDo("Invalid path: " + filepath);
+            if (Squeak.debugFiles) {
+                console.log("Reading " + path.fullname);
+                var realThenDo = thenDo;
+                thenDo = function(data) {
+                    console.log("Read " + data.byteLength + " bytes from " + path.fullname);
+                    realThenDo(data);
+                };
+            }
             // if we have been writing to memory, return that version
             if (window.SqueakDBFake && SqueakDBFake.bigFiles[path.fullname])
                 return thenDo(SqueakDBFake.bigFiles[path.fullname]);
@@ -9099,6 +9107,7 @@
                 directory[path.basename] = entry;
             } else if (entry[3]) // is a directory
                 return null;
+            if (Squeak.debugFiles) console.log("Writing " + path.fullname + " (" + contents.byteLength + " bytes)");
             // update directory entry
             entry[2] = now; // modification time
             entry[4] = contents.byteLength || contents.length || 0;
@@ -9120,6 +9129,7 @@
             // delete entry from directory
             delete directory[path.basename];
             Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(directory);
+            if (Squeak.debugFiles) console.log("Deleting " + path.fullname);
             if (entryOnly) return true;
             // delete file contents (async)
             this.dbTransaction("readwrite", "delete " + filepath, function(fileStore) {
@@ -9135,6 +9145,7 @@
             var samedir = oldpath.dirname == newpath.dirname;
             var newdir = samedir ? olddir : this.dirList(newpath.dirname); if (!newdir) return false;
             if (newdir[newpath.basename]) return false; // exists already
+            if (Squeak.debugFiles) console.log("Renaming " + oldpath.fullname + " to " + newpath.fullname);
             delete olddir[oldpath.basename];            // delete old entry
             entry[0] = newpath.basename;                // rename entry
             newdir[newpath.basename] = entry;           // add new entry
@@ -9164,6 +9175,7 @@
             if (withParents && !Squeak.Settings["squeak:" + path.dirname]) Squeak.dirCreate(path.dirname, true);
             var directory = this.dirList(path.dirname); if (!directory) return false;
             if (directory[path.basename]) return false;
+            if (Squeak.debugFiles) console.log("Creating directory " + path.fullname);
             var now = this.totalSeconds(),
                 entry = [/*name*/ path.basename, /*ctime*/ now, /*mtime*/ now, /*dir*/ true, /*size*/ 0];
             directory[path.basename] = entry;
@@ -9176,8 +9188,8 @@
             var directory = this.dirList(path.dirname); if (!directory) return false;
             if (!directory[path.basename]) return false;
             var children = this.dirList(path.fullname);
-            if (!children) return false;
-            for (var child in children) return false; // not empty
+            if (children) for (var child in children) return false; // not empty
+            if (Squeak.debugFiles) console.log("Deleting directory " + path.fullname);
             // delete from parent
             delete directory[path.basename];
             Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(directory);
@@ -10346,7 +10358,12 @@
                 handle = this.stackNonInteger(3);
             if (!this.success || !handle.file || !handle.fileWrite) return false;
             if (!count) return this.popNandPushIfOK(argCount+1, 0);
-            var array = arrayObj.bytes || arrayObj.wordsAsUint8Array();
+            var array = arrayObj.bytes;
+            if (!array) {
+                array = arrayObj.wordsAsUint8Array();
+                startIndex *= 4;
+                count *= 4;
+            }
             if (!array) return false;
             if (startIndex < 0 || startIndex + count > array.length)
                 return false;

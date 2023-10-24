@@ -240,7 +240,12 @@ Object.extend(Squeak.Primitives.prototype,
             handle = this.stackNonInteger(3);
         if (!this.success || !handle.file || !handle.fileWrite) return false;
         if (!count) return this.popNandPushIfOK(argCount+1, 0);
-        var array = arrayObj.bytes || arrayObj.wordsAsUint8Array();
+        var array = arrayObj.bytes;
+        if (!array) {
+            array = arrayObj.wordsAsUint8Array();
+            startIndex *= 4;
+            count *= 4;
+        }
         if (!array) return false;
         if (startIndex < 0 || startIndex + count > array.length)
             return false;

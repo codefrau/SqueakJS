@@ -1036,7 +1036,9 @@ Object.subclass('Squeak.Image',
     },
     loadImageSegment: function(segmentWordArray, outPointerArray) {
         // The C VM creates real objects from the segment in-place.
-        // We do the same, linking the new objects directly into old-space.
+        // We do the same, inserting the new objects directly into old-space
+        // between segmentWordArray and its following object (endMarker).
+        // This only increases oldSpaceCount but not oldSpaceBytes.
         // The code below is almost the same as readFromBuffer() ... should unify
         var segment = new DataView(segmentWordArray.words.buffer),
             littleEndian = false,

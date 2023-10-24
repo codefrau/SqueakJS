@@ -113,8 +113,8 @@
     Object.extend(Squeak,
     "version", {
         // system attributes
-        vmVersion: "SqueakJS 1.0.6",
-        vmDate: "2023-09-30",               // Maybe replace at build time?
+        vmVersion: "SqueakJS 1.1.0",
+        vmDate: "2023-10-23",               // Maybe replace at build time?
         vmBuild: "unknown",                 // or replace at runtime by last-modified?
         vmPath: "unknown",                  // Replace at runtime
         vmFile: "vm.js",
@@ -2245,22 +2245,151 @@
             return this.isSpur ? 6521 : this.hasClosures ? 6504 : 6502;
         },
         segmentVersion: function() {
-            var dnu = this.specialObjectsArray.pointers[Squeak.splOb_SelectorDoesNotUnderstand],
-                wholeWord = new Uint32Array(dnu.bytes.buffer, 0, 1);
-            return this.formatVersion() | (wholeWord[0] & 0xFF000000);
+            // a more complex version that tells both the word reversal and the endianness
+            // of the machine it came from.  Low half of word is 6502.  Top byte is top byte
+            // of #doesNotUnderstand: ($d on big-endian or $s on little-endian).
+            // In SqueakJS we write non-Spur images and segments as big-endian, Spur as little-endian
+            // (TODO: write non-Spur as little-endian too since that matches all modern platforms)
+            var dnuFirstWord = this.isSpur ? 'seod' : 'does';
+            return this.formatVersion() | (dnuFirstWord.charCodeAt(0) << 24);
+        },
+        storeImageSegment: function(segmentWordArray, outPointerArray, arrayOfRoots) {
+            // This primitive will store a binary image segment (in the same format as the Squeak image file) of the receiver and every object in its proper tree of subParts (ie, that is not refered to from anywhere else outside the tree).  Note: all elements of the receiver are treated as roots determining the extent of the tree.  All pointers from within the tree to objects outside the tree will be copied into the array of outpointers.  In their place in the image segment will be an oop equal to the offset in the outpointer array (the first would be 4). but with the high bit set.
+            // The primitive expects the array and wordArray to be more than adequately long.  In this case it returns normally, and truncates the two arrays to exactly the right size.  If either array is too small, the primitive will fail, but in no other case.
+
+            // use a DataView to access the segment as big-endian words
+            var segment = new DataView(segmentWordArray.words.buffer),
+                pos = 0, // write position in segment in bytes
+                outPointers = outPointerArray.pointers,
+                outPos = 0; // write position in outPointers in words
+
+            // write header
+            segment.setUint32(pos, this.segmentVersion()); pos += 4;
+
+            // we don't want to deal with new space objects
+            this.fullGC("storeImageSegment");
+
+            // First mark the root array and all root objects
+            arrayOfRoots.mark = true;
+            for (var i = 0; i < arrayOfRoots.pointers.length; i++)
+                if (typeof arrayOfRoots.pointers[i] === "object")
+                    arrayOfRoots.pointers[i].mark = true;
+
+            // Then do a mark pass over all objects. This will stop at our marked roots,
+            // thus leaving our segment unmarked in their shadow
+            this.markReachableObjects();
+
+            // Finally unmark the rootArray and all root objects
+            arrayOfRoots.mark = false;
+            for (var i = 0; i < arrayOfRoots.pointers.length; i++)
+                if (typeof arrayOfRoots.pointers[i] === "object")
+                    arrayOfRoots.pointers[i].mark = false;
+
+            // helpers for mapping objects to segment oops
+            var segmentOops = {}, // map from object oop to segment oop
+                todo = []; // objects that were added to the segment but still need to have their oops mapped
+
+            // if an object does not yet have a segment oop, write it to the segment or outPointers
+            function addToSegment(object) {
+                var oop = segmentOops[object.oop];
+                if (!oop) {
+                    if (object.mark) {
+                        // object is outside segment, add to outPointers
+                        if (outPos >= outPointers.length) return 0; // fail if outPointerArray is too small
+                        oop = 0x80000004 + outPos * 4;
+                        outPointers[outPos++] = object;
+                        // no need to mark outPointerArray dirty, all objects are in old space
+                    } else {
+                        // add object to segment.
+                        if (pos + object.totalBytes() > segment.byteLength) return 0; // fail if segment is too small
+                        oop = pos + (object.snapshotSize().header + 1) * 4; // addr plus extra headers + base header
+                        pos = object.writeTo(segment, pos, this);
+                        // the written oops inside the object still need to be mapped to segment oops
+                        todo.push(object);
+                    }
+                    segmentOops[object.oop] = oop;
+                }
+                return oop;
+            }
+            addToSegment = addToSegment.bind(this);
+
+            // if we have to bail out, clean up what we modified
+            function cleanUp() {
+                // unmark all objects
+                var obj = this.firstOldObject;
+                while (obj) {
+                    obj.mark = false;
+                    obj = obj.nextObject;
+                }
+                // forget weak objects collected by markReachableObjects()
+                this.weakObjects = null;
+                // return code for failure
+                return false;
+            }
+            cleanUp = cleanUp.bind(this);
+
+            // All external objects, and only they, are now marked.
+            // Write the array of roots into the segment
+            addToSegment(arrayOfRoots);
+
+            // Now fix the oops inside written objects.
+            // This will add more objects to the segment (if they are unmarked),
+            // or to outPointers (if they are marked).
+            while (todo.length > 0) {
+                var obj = todo.shift(),
+                    oop = segmentOops[obj.oop],
+                    headerSize = obj.snapshotSize().header,
+                    objBody = obj.pointers,
+                    hasClass = headerSize > 0;
+                if (hasClass) {
+                    var classOop = addToSegment(obj.sqClass);
+                    if (!classOop) return cleanUp(); // ran out of space
+                    var headerType = headerSize === 1 ? Squeak.HeaderTypeClass : Squeak.HeaderTypeSizeAndClass;
+                    segment.setUint32(oop - 8, classOop | headerType);
+                }
+                if (!objBody) continue;
+                for (var i = 0; i < objBody.length; i++) {
+                    var child = objBody[i];
+                    if (typeof child !== "object") continue;
+                    var childOop = addToSegment(child);
+                    if (!childOop) return cleanUp(); // ran out of space
+                    segment.setUint32(oop + i * 4, childOop);
+                }
+            }
+
+            // Truncate image segment and outPointerArray to actual size
+            var obj = segmentWordArray.oop < outPointerArray.oop ? segmentWordArray : outPointerArray,
+                removedBytes = 0;
+            while (obj) {
+                obj.oop -= removedBytes;
+                if (obj === segmentWordArray) {
+                    removedBytes += (obj.words.length * 4) - pos;
+                    obj.words = new Uint32Array(obj.words.buffer.slice(0, pos));
+                } else if (obj === outPointerArray) {
+                    removedBytes += (obj.pointers.length - outPos) * 4;
+                    obj.pointers.length = outPos;
+                }
+                obj = obj.nextObject;
+            }
+            this.oldSpaceBytes -= removedBytes;
+
+            // unmark all objects etc
+            cleanUp();
+
+            return true;
         },
         loadImageSegment: function(segmentWordArray, outPointerArray) {
             // The C VM creates real objects from the segment in-place.
             // We do the same, linking the new objects directly into old-space.
             // The code below is almost the same as readFromBuffer() ... should unify
-            var data = new DataView(segmentWordArray.words.buffer),
+            var segment = new DataView(segmentWordArray.words.buffer),
                 littleEndian = false,
                 nativeFloats = false,
                 pos = 0;
             var readWord = function() {
-                var int = data.getUint32(pos, littleEndian);
+                var word = segment.getUint32(pos, littleEndian);
                 pos += 4;
-                return int;
+                return word;
             };
             var readBits = function(nWords, format) {
                 if (format < 5) { // pointers (do endian conversion)
@@ -2269,7 +2398,7 @@
                         oops.push(readWord());
                     return oops;
                 } else { // words (no endian conversion yet)
-                    var bits = new Uint32Array(data.buffer, pos, nWords);
+                    var bits = new Uint32Array(segment.buffer, pos, nWords);
                     pos += nWords * 4;
                     return bits;
                 }
@@ -2291,7 +2420,7 @@
                 oopOffset = segmentWordArray.oop,
                 oopMap = {},
                 rawBits = {};
-            while (pos < data.byteLength) {
+            while (pos < segment.byteLength) {
                 var nWords = 0,
                     classInt = 0,
                     header = readWord();
@@ -2355,6 +2484,8 @@
         initSpurOverrides: function() {
             this.registerObject = this.registerObjectSpur;
             this.writeToBuffer = this.writeToBufferSpur;
+            this.storeImageSegment = this.storeImageSegmentSpur;
+            this.loadImageSegment = this.loadImageSegmentSpur;
         },
         spurClassTable: function(oopMap, rawBits, classPages, splObjs) {
             var classes = {},
@@ -2574,6 +2705,16 @@
             var time = Date.now() - start;
             console.log("Wrote " + n + " objects in " + time + " ms, image size " + pos + " bytes");
             return data.buffer;
+        },
+        storeImageSegmentSpur: function(segmentWordArray, outPointerArray, arrayOfRoots) {
+            // see comment in segmentVersion() if you implement this
+            // also see markReachableObjects() about immediate chars
+            this.vm.warnOnce("not implemented for Spur yet: primitive 98 (primitiveStoreImageSegment)");
+            return false;
+        },
+        loadImageSegmentSpur: function(segmentWordArray, outPointerArray) {
+            this.vm.warnOnce("not implemented for Spur yet: primitive 99 (primitiveLoadImageSegment)");
+            return null;
         },
     });
 
@@ -5344,7 +5485,7 @@
                 case 95: return this.primitiveInputWord(argCount);
                 case 96: return this.namedPrimitive('BitBltPlugin', 'primitiveCopyBits', argCount);
                 case 97: return this.primitiveSnapshot(argCount);
-                case 98: this.vm.warnOnce("missing primitive 98 (primitiveStoreImageSegment)"); return false;
+                case 98: return this.primitiveStoreImageSegment(argCount);
                 case 99: return this.primitiveLoadImageSegment(argCount);
                 case 100: return this.vm.primitivePerformWithArgs(argCount, true); // Object.perform:withArguments:inSuperclass: (Blue Book: primitiveSignalAtTick)
                 case 101: return this.primitiveBeCursor(argCount); // Cursor.beCursor
@@ -6592,6 +6733,16 @@
                 rcvr.pointers[i] = arg.pointers[i];
             rcvr.dirty = arg.dirty;
             this.vm.popN(argCount);
+            return true;
+        },
+        primitiveStoreImageSegment: function(argCount) {
+            var arrayOfRoots = this.stackNonInteger(2),
+                segmentWordArray = this.stackNonInteger(1),
+                outPointerArray = this.stackNonInteger(0);
+            if (!arrayOfRoots.pointers || !segmentWordArray.words || !outPointerArray.pointers) return false;
+            var success = this.vm.image.storeImageSegment(segmentWordArray, outPointerArray, arrayOfRoots);
+            if (!success) return false;
+            this.vm.popN(argCount); // return self
             return true;
         },
         primitiveLoadImageSegment: function(argCount) {
@@ -8914,6 +9065,14 @@
             if (!errorDo) errorDo = function(err) { console.log(err); };
             var path = this.splitFilePath(filepath);
             if (!path.basename) return errorDo("Invalid path: " + filepath);
+            if (Squeak.debugFiles) {
+                console.log("Reading " + path.fullname);
+                var realThenDo = thenDo;
+                thenDo = function(data) {
+                    console.log("Read " + data.byteLength + " bytes from " + path.fullname);
+                    realThenDo(data);
+                };
+            }
             // if we have been writing to memory, return that version
             if (window.SqueakDBFake && SqueakDBFake.bigFiles[path.fullname])
                 return thenDo(SqueakDBFake.bigFiles[path.fullname]);
@@ -8948,6 +9107,7 @@
                 directory[path.basename] = entry;
             } else if (entry[3]) // is a directory
                 return null;
+            if (Squeak.debugFiles) console.log("Writing " + path.fullname + " (" + contents.byteLength + " bytes)");
             // update directory entry
             entry[2] = now; // modification time
             entry[4] = contents.byteLength || contents.length || 0;
@@ -8969,6 +9129,7 @@
             // delete entry from directory
             delete directory[path.basename];
             Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(directory);
+            if (Squeak.debugFiles) console.log("Deleting " + path.fullname);
             if (entryOnly) return true;
             // delete file contents (async)
             this.dbTransaction("readwrite", "delete " + filepath, function(fileStore) {
@@ -8984,6 +9145,7 @@
             var samedir = oldpath.dirname == newpath.dirname;
             var newdir = samedir ? olddir : this.dirList(newpath.dirname); if (!newdir) return false;
             if (newdir[newpath.basename]) return false; // exists already
+            if (Squeak.debugFiles) console.log("Renaming " + oldpath.fullname + " to " + newpath.fullname);
             delete olddir[oldpath.basename];            // delete old entry
             entry[0] = newpath.basename;                // rename entry
             newdir[newpath.basename] = entry;           // add new entry
@@ -9013,6 +9175,7 @@
             if (withParents && !Squeak.Settings["squeak:" + path.dirname]) Squeak.dirCreate(path.dirname, true);
             var directory = this.dirList(path.dirname); if (!directory) return false;
             if (directory[path.basename]) return false;
+            if (Squeak.debugFiles) console.log("Creating directory " + path.fullname);
             var now = this.totalSeconds(),
                 entry = [/*name*/ path.basename, /*ctime*/ now, /*mtime*/ now, /*dir*/ true, /*size*/ 0];
             directory[path.basename] = entry;
@@ -9025,8 +9188,8 @@
             var directory = this.dirList(path.dirname); if (!directory) return false;
             if (!directory[path.basename]) return false;
             var children = this.dirList(path.fullname);
-            if (!children) return false;
-            for (var child in children) return false; // not empty
+            if (children) for (var child in children) return false; // not empty
+            if (Squeak.debugFiles) console.log("Deleting directory " + path.fullname);
             // delete from parent
             delete directory[path.basename];
             Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(directory);
@@ -10195,7 +10358,12 @@
                 handle = this.stackNonInteger(3);
             if (!this.success || !handle.file || !handle.fileWrite) return false;
             if (!count) return this.popNandPushIfOK(argCount+1, 0);
-            var array = arrayObj.bytes || arrayObj.wordsAsUint8Array();
+            var array = arrayObj.bytes;
+            if (!array) {
+                array = arrayObj.wordsAsUint8Array();
+                startIndex *= 4;
+                count *= 4;
+            }
             if (!array) return false;
             if (startIndex < 0 || startIndex + count > array.length)
                 return false;
@@ -55433,6 +55601,9 @@
         if (!imageUrl && options.image) imageUrl = options.image;
         var baseUrl = options.url || (imageUrl && imageUrl.replace(/[^\/]*$/, "")) || "";
         options.url = baseUrl;
+        if (baseUrl[0] === "/" && baseUrl[1] !== "/" && baseUrl.length > 1 && options.root === "/") {
+            options.root = baseUrl;
+        }
         fetchTemplates(options);
         var display = createSqueakDisplay(canvas, options),
             image = {url: null, name: null, image: true, data: null},

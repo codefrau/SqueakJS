@@ -110,6 +110,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2023-10-23: 1.1.0 implement Etoys project saving (image segment export), drop directories
     2023-09-30: 1.0.6 fixes
     2022-11-19: 1.0.5 fixes, add highdpi mode, add image format for Squeak 6
     2021-05-31: 1.0.4 fixes

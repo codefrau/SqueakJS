@@ -389,7 +389,7 @@ Object.extend(Squeak.Primitives.prototype,
         form.pitch = (form.width + (form.pixPerWord - 1)) / form.pixPerWord | 0;
         if (form.bits.length !== (form.pitch * form.height)) {
             if (form.bits.length > (form.pitch * form.height)) {
-                this.vm.warnOnce(`loadForm(): ${form.bits.length} !== ${form.pitch}*${form.height}=${form.pitch*form.height}`);
+                this.vm.warnOnce("loadForm(): " + form.bits.length + " !== " + form.pitch + "*" + form.height + "=" + (form.pitch*form.height));
             } else {
                 return null;
             }

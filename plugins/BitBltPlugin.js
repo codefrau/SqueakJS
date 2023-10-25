@@ -1958,7 +1958,8 @@ function loadBitBltDestForm() {
 		destBitsSize = BYTESIZEOF(destBits);
 		if (!(interpreterProxy.isWordsOrBytes(destBits) && (destBitsSize === (destPitch * destHeight)))) {
 			if (interpreterProxy.isWordsOrBytes(destBits) && (destBitsSize > (destPitch * destHeight))) {
-				interpreterProxy.vm.warnOnce(`BitBlt>>loadBitBltDestForm: destBitsSize != destPitch * destHeight, expected ${destPitch}*${destHeight}=${destPitch * destHeight}, got ${destBitsSize}`);
+				interpreterProxy.vm.warnOnce("BitBlt>>loadBitBltDestForm: destBitsSize != destPitch * destHeight, expected " +
+					destPitch + "*" + destHeight + "=" + (destPitch * destHeight) + ", got " + destBitsSize);
 			} else {
 				return false;
 			}
@@ -2092,7 +2093,8 @@ function loadBitBltSourceForm() {
 		sourceBitsSize = BYTESIZEOF(sourceBits);
 		if (!(interpreterProxy.isWordsOrBytes(sourceBits) && (sourceBitsSize === (sourcePitch * sourceHeight)))) {
 			if (interpreterProxy.isWordsOrBytes(sourceBits) && (sourceBitsSize > (sourcePitch * sourceHeight))) {
-				interpreterProxy.vm.warnOnce(`BitBlt>>loadBitBltSourceForm: sourceBitsSize != sourcePitch * sourceHeight, expected ${sourcePitch}*${sourceHeight}=${sourcePitch * sourceHeight}, got ${sourceBitsSize}`);
+				interpreterProxy.vm.warnOnce("BitBlt>>loadBitBltSourceForm: sourceBitsSize != sourcePitch * sourceHeight, expected " +
+					sourcePitch + "*" + sourceHeight + "=" + (sourcePitch * sourceHeight) + ", got " + sourceBitsSize);
 			} else {
 				return false;
 			}

@@ -312,6 +312,7 @@ function createSqueakDisplay(canvas, options) {
         fullscreen: false,
         width: 0,   // if 0, VM uses canvas.width
         height: 0,  // if 0, VM uses canvas.height
+        highdpi: options.highdpi,
         mouseX: 0,
         mouseY: 0,
         buttons: 0,
@@ -477,7 +478,8 @@ function createSqueakDisplay(canvas, options) {
     function dent(n, l, t, u) { return n < l ? n + t - l : n > u ? n + t - u : t; }
     function adjustDisplay(l, t, w, h) {
         var cursorCanvas = display.cursorCanvas,
-            scale = w / canvas.width;
+            scale = w / canvas.width,
+            ratio = display.highdpi ? window.devicePixelRatio : 1;
         canvas.style.left = (l|0) + "px";
         canvas.style.top = (t|0) + "px";
         canvas.style.width = (w|0) + "px";
@@ -485,8 +487,8 @@ function createSqueakDisplay(canvas, options) {
         if (cursorCanvas) {
             cursorCanvas.style.left = (l + display.cursorOffsetX + display.mouseX * scale|0) + "px";
             cursorCanvas.style.top = (t + display.cursorOffsetY + display.mouseY * scale|0) + "px";
-            cursorCanvas.style.width = (cursorCanvas.width * scale|0) + "px";
-            cursorCanvas.style.height = (cursorCanvas.height * scale|0) + "px";
+            cursorCanvas.style.width = (cursorCanvas.width * ratio * scale|0) + "px";
+            cursorCanvas.style.height = (cursorCanvas.height * ratio * scale|0) + "px";
         }
         if (!options.pixelated) {
             var pixelScale = window.devicePixelRatio * scale;
@@ -833,7 +835,7 @@ function createSqueakDisplay(canvas, options) {
             var scaleW = w < options.minWidth ? options.minWidth / w : 1,
                 scaleH = h < options.minHeight ? options.minHeight / h : 1,
                 scale = Math.max(scaleW, scaleH);
-            if (options.highdpi) scale *= window.devicePixelRatio;
+            if (display.highdpi) scale *= window.devicePixelRatio;
             display.width = Math.floor(w * scale);
             display.height = Math.floor(h * scale);
             display.initialScale = w / display.width;
@@ -865,6 +867,7 @@ function createSqueakDisplay(canvas, options) {
         // set cursor scale
         var cursorCanvas = display.cursorCanvas,
             scale = canvas.offsetWidth / canvas.width;
+        if (display.highdpi) scale *= window.devicePixelRatio;
         if (cursorCanvas && options.fixedWidth) {
             cursorCanvas.style.width = (cursorCanvas.width * scale) + "px";
             cursorCanvas.style.height = (cursorCanvas.height * scale) + "px";

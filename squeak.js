@@ -2380,7 +2380,9 @@
         },
         loadImageSegment: function(segmentWordArray, outPointerArray) {
             // The C VM creates real objects from the segment in-place.
-            // We do the same, linking the new objects directly into old-space.
+            // We do the same, inserting the new objects directly into old-space
+            // between segmentWordArray and its following object (endMarker).
+            // This only increases oldSpaceCount but not oldSpaceBytes.
             // The code below is almost the same as readFromBuffer() ... should unify
             var segment = new DataView(segmentWordArray.words.buffer),
                 littleEndian = false,
@@ -8475,9 +8477,10 @@
                     this.showForm(context, cursorForm, bounds, true);
                 }
                 var canvas = this.display.context.canvas,
-                    scale = canvas.offsetWidth / canvas.width;
-                cursorCanvas.style.width = (cursorCanvas.width * scale|0) + "px";
-                cursorCanvas.style.height = (cursorCanvas.height * scale|0) + "px";
+                    scale = canvas.offsetWidth / canvas.width,
+                    ratio = this.display.highdpi ? window.devicePixelRatio : 1;
+                cursorCanvas.style.width = (cursorCanvas.width * ratio * scale|0) + "px";
+                cursorCanvas.style.height = (cursorCanvas.height * ratio * scale|0) + "px";
                 this.display.cursorOffsetX = cursorForm.offsetX * scale|0;
                 this.display.cursorOffsetY = cursorForm.offsetY * scale|0;
             }
@@ -8776,7 +8779,13 @@
             if (!(form.depth > 0)) return null; // happens if not int
             form.pixPerWord = 32 / form.depth;
             form.pitch = (form.width + (form.pixPerWord - 1)) / form.pixPerWord | 0;
-            if (form.bits.length !== (form.pitch * form.height)) return null;
+            if (form.bits.length !== (form.pitch * form.height)) {
+                if (form.bits.length > (form.pitch * form.height)) {
+                    this.vm.warnOnce("loadForm(): " + form.bits.length + " !== " + form.pitch + "*" + form.height + "=" + (form.pitch*form.height));
+                } else {
+                    return null;
+                }
+            }
             return form;
         },
         theDisplay: function() {
@@ -10444,19 +10453,19 @@
                 if (file.contents === false) // failed to get contents before
                     return false;
                 this.vm.freeze(function(unfreeze) {
-                    Squeak.fileGet(file.name,
-                        function success(contents) {
-                            if (contents == null) return error(file.name);
-                            file.contents = this.asUint8Array(contents);
-                            unfreeze();
-                            func(file);
-                        }.bind(this),
-                        function error(msg) {
-                            console.log("File get failed: " + msg);
-                            file.contents = false;
-                            unfreeze();
-                            func(file);
-                        }.bind(this));
+                    var error = (function(msg) {
+                        console.log("File get failed: " + msg);
+                        file.contents = false;
+                        unfreeze();
+                        func(file);
+                    }).bind(this),
+                    success = (function(contents) {
+                        if (contents == null) return error(file.name);
+                        file.contents = this.asUint8Array(contents);
+                        unfreeze();
+                        func(file);
+                    }).bind(this);
+                    Squeak.fileGet(file.name, success, error);
                 }.bind(this));
             }
             return true;
@@ -21190,7 +21199,12 @@
     		destPitch = (DIV((destWidth + (destPPW - 1)), destPPW)) * 4;
     		destBitsSize = BYTESIZEOF(destBits);
     		if (!(interpreterProxy.isWordsOrBytes(destBits) && (destBitsSize === (destPitch * destHeight)))) {
-    			return false;
+    			if (interpreterProxy.isWordsOrBytes(destBits) && (destBitsSize > (destPitch * destHeight))) {
+    				interpreterProxy.vm.warnOnce("BitBlt>>loadBitBltDestForm: destBitsSize != destPitch * destHeight, expected " +
+    					destPitch + "*" + destHeight + "=" + (destPitch * destHeight) + ", got " + destBitsSize);
+    			} else {
+    				return false;
+    			}
     		}
     		destBits = destBits.wordsOrBytes();
     	}
@@ -21320,7 +21334,12 @@
     		sourcePitch = (DIV((sourceWidth + (sourcePPW - 1)), sourcePPW)) * 4;
     		sourceBitsSize = BYTESIZEOF(sourceBits);
     		if (!(interpreterProxy.isWordsOrBytes(sourceBits) && (sourceBitsSize === (sourcePitch * sourceHeight)))) {
-    			return false;
+    			if (interpreterProxy.isWordsOrBytes(sourceBits) && (sourceBitsSize > (sourcePitch * sourceHeight))) {
+    				interpreterProxy.vm.warnOnce("BitBlt>>loadBitBltSourceForm: sourceBitsSize != sourcePitch * sourceHeight, expected " +
+    					sourcePitch + "*" + sourceHeight + "=" + (sourcePitch * sourceHeight) + ", got " + sourceBitsSize);
+    			} else {
+    				return false;
+    			}
     		}
     		sourceBits = sourceBits.wordsOrBytes();
     	}
@@ -54765,6 +54784,7 @@
             fullscreen: false,
             width: 0,   // if 0, VM uses canvas.width
             height: 0,  // if 0, VM uses canvas.height
+            highdpi: options.highdpi,
             mouseX: 0,
             mouseY: 0,
             buttons: 0,
@@ -54929,7 +54949,8 @@
         function dist(a, b) {return dd(a.pageX, a.pageY, b.pageX, b.pageY);}
         function adjustDisplay(l, t, w, h) {
             var cursorCanvas = display.cursorCanvas,
-                scale = w / canvas.width;
+                scale = w / canvas.width,
+                ratio = display.highdpi ? window.devicePixelRatio : 1;
             canvas.style.left = (l|0) + "px";
             canvas.style.top = (t|0) + "px";
             canvas.style.width = (w|0) + "px";
@@ -54937,8 +54958,8 @@
             if (cursorCanvas) {
                 cursorCanvas.style.left = (l + display.cursorOffsetX + display.mouseX * scale|0) + "px";
                 cursorCanvas.style.top = (t + display.cursorOffsetY + display.mouseY * scale|0) + "px";
-                cursorCanvas.style.width = (cursorCanvas.width * scale|0) + "px";
-                cursorCanvas.style.height = (cursorCanvas.height * scale|0) + "px";
+                cursorCanvas.style.width = (cursorCanvas.width * ratio * scale|0) + "px";
+                cursorCanvas.style.height = (cursorCanvas.height * ratio * scale|0) + "px";
             }
             if (!options.pixelated) {
                 var pixelScale = window.devicePixelRatio * scale;
@@ -55285,7 +55306,7 @@
                 var scaleW = w < options.minWidth ? options.minWidth / w : 1,
                     scaleH = h < options.minHeight ? options.minHeight / h : 1,
                     scale = Math.max(scaleW, scaleH);
-                if (options.highdpi) scale *= window.devicePixelRatio;
+                if (display.highdpi) scale *= window.devicePixelRatio;
                 display.width = Math.floor(w * scale);
                 display.height = Math.floor(h * scale);
                 display.initialScale = w / display.width;
@@ -55317,6 +55338,7 @@
             // set cursor scale
             var cursorCanvas = display.cursorCanvas,
                 scale = canvas.offsetWidth / canvas.width;
+            if (display.highdpi) scale *= window.devicePixelRatio;
             if (cursorCanvas && options.fixedWidth) {
                 cursorCanvas.style.width = (cursorCanvas.width * scale) + "px";
                 cursorCanvas.style.height = (cursorCanvas.height * scale) + "px";

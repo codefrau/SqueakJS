@@ -113,8 +113,8 @@
     Object.extend(Squeak,
     "version", {
         // system attributes
-        vmVersion: "SqueakJS 1.1.0",
-        vmDate: "2023-10-23",               // Maybe replace at build time?
+        vmVersion: "SqueakJS 1.1.1",
+        vmDate: "2023-10-24",               // Maybe replace at build time?
         vmBuild: "unknown",                 // or replace at runtime by last-modified?
         vmPath: "unknown",                  // Replace at runtime
         vmFile: "vm.js",
@@ -54596,9 +54596,10 @@
         // we don't try to enable it again in the next event
         function fullscreenChange(fullscreen) {
             display.fullscreen = fullscreen;
-            box.style.background = fullscreen ? 'black' : '';
-            if (options.header) options.header.style.display = fullscreen ? 'none' : '';
-            if (options.footer) options.footer.style.display = fullscreen ? 'none' : '';
+            var fullwindow = fullscreen || options.fullscreen;
+            box.style.background = fullwindow ? 'black' : '';
+            if (options.header) options.header.style.display = fullwindow ? 'none' : '';
+            if (options.footer) options.footer.style.display = fullwindow ? 'none' : '';
             if (options.fullscreenCheckbox) options.fullscreenCheckbox.checked = fullscreen;
             setTimeout(window.onresize, 0);
         }

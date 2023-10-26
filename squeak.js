@@ -124,9 +124,10 @@ function setupFullscreen(display, canvas, options) {
     // we don't try to enable it again in the next event
     function fullscreenChange(fullscreen) {
         display.fullscreen = fullscreen;
-        box.style.background = fullscreen ? 'black' : '';
-        if (options.header) options.header.style.display = fullscreen ? 'none' : '';
-        if (options.footer) options.footer.style.display = fullscreen ? 'none' : '';
+        var fullwindow = fullscreen || options.fullscreen;
+        box.style.background = fullwindow ? 'black' : '';
+        if (options.header) options.header.style.display = fullwindow ? 'none' : '';
+        if (options.footer) options.footer.style.display = fullwindow ? 'none' : '';
         if (options.fullscreenCheckbox) options.fullscreenCheckbox.checked = fullscreen;
         setTimeout(window.onresize, 0);
     }

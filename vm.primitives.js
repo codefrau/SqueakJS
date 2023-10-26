@@ -300,9 +300,9 @@ Object.subclass('Squeak.Primitives',
             case 182: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'oldprimSampledSoundmixSampleCountintostartingAtleftVolrightVol', argCount);
                 return this.primitiveSizeInBytes(argCount);
             case 183: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveApplyReverb', argCount);
-                break;  // fail
+                else return this.primitiveIsPinned(argCount);
             case 184: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixLoopedSampledSound', argCount);
-                else return this.popNandPushIfOK(argCount+1, this.vm.trueObj); // pin
+                else return this.primitivePin(argCount);
             case 185: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixSampledSound', argCount);
                 else return this.primitiveExitCriticalSection(argCount);
             case 186: if (this.oldPrims) break; // unused
@@ -1167,6 +1167,20 @@ Object.subclass('Squeak.Primitives',
     },
     newObjectHash: function(obj) {
         return Math.floor(Math.random() * 0x3FFFFE) + 1;
+    },
+    primitivePin: function(argCount) {
+        // For us, pinning is a no-op, so we just toggle the pinned flag
+        var rcvr = this.stackNonInteger(1),
+            pin = this.stackBoolean(0);
+        if (!this.success) return false;
+        var wasPinned = rcvr.pinned;
+        rcvr.pinned = pin;
+        return this.popNandPushIfOK(argCount + 1, this.makeStObject(!!wasPinned));
+    },
+    primitiveIsPinned: function(argCount) {
+        var rcvr = this.stackNonInteger(0);
+        if (!this.success) return false;
+        return this.popNandPushIfOK(argCount + 1, this.makeStObject(!!rcvr.pinned));
     },
     primitiveSizeInBytesOfInstance: function(argCount) {
         if (argCount > 1) return false;

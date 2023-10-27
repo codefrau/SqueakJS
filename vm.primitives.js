@@ -299,7 +299,7 @@ Object.subclass('Squeak.Primitives',
             case 183: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveApplyReverb', argCount);
                 break;  // fail
             case 184: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixLoopedSampledSound', argCount);
-                break; // fail
+                else return this.popNandPushIfOK(argCount+1, this.vm.trueObj); // pin
             case 185: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixSampledSound', argCount);
                 else return this.primitiveExitCriticalSection(argCount);
             case 186: if (this.oldPrims) break; // unused

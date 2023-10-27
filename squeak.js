@@ -114,7 +114,7 @@
     "version", {
         // system attributes
         vmVersion: "SqueakJS 1.1.1",
-        vmDate: "2023-10-24",               // Maybe replace at build time?
+        vmDate: "2023-10-26",               // Maybe replace at build time?
         vmBuild: "unknown",                 // or replace at runtime by last-modified?
         vmPath: "unknown",                  // Replace at runtime
         vmFile: "vm.js",
@@ -1415,7 +1415,7 @@
     },
     'initializing', {
         initialize: function(name) {
-            this.headRoom = 32000000; // TODO: pass as option
+            this.headRoom = 100000000; // TODO: pass as option
             this.totalMemory = 0;
             this.name = name;
             this.gcCount = 0;
@@ -1624,6 +1624,7 @@
             }
 
             this.totalMemory = this.oldSpaceBytes + this.headRoom;
+            this.totalMemory = Math.ceil(this.totalMemory / 1000000) * 1000000;
 
             {
                 // For debugging: re-create all objects from named prototypes
@@ -1812,6 +1813,7 @@
             this.gcCount++;
             this.gcMilliseconds += Date.now() - start;
             console.log("Full GC (" + reason + "): " + (Date.now() - start) + " ms");
+            if (reason === "primitive") console.log("  surviving objects: " + this.oldSpaceCount + " (" + this.oldSpaceBytes + " bytes)");
             return newObjects.length > 0 ? newObjects[0] : null;
         },
         gcRoots: function() {
@@ -4204,13 +4206,22 @@
         },
         signalLowSpaceIfNecessary: function(bytesLeft) {
             if (bytesLeft < this.lowSpaceThreshold && this.lowSpaceThreshold > 0) {
-                this.signalLowSpace = true;
-                this.lowSpaceThreshold = 0;
-                var lastSavedProcess = this.specialObjects[Squeak.splOb_ProcessSignalingLowSpace];
-                if (lastSavedProcess.isNil) {
-                    this.specialObjects[Squeak.splOb_ProcessSignalingLowSpace] = this.activeProcess;
+                var increase = prompt && prompt("Out of memory, " + Math.ceil(this.image.totalMemory/1000000)
+                    + " MB used.\nEnter additional MB, or 0 to signal low space in image", "0");
+                if (increase) {
+                    var bytes = parseInt(increase, 10) * 1000000;
+                    this.image.totalMemory += bytes;
+                    this.signalLowSpaceIfNecessary(this.image.bytesLeft());
+                } else {
+                    console.warn("squeak: low memory (" + bytesLeft + "/" + this.image.totalMemory + " bytes left), signaling low space");
+                    this.signalLowSpace = true;
+                    this.lowSpaceThreshold = 0;
+                    var lastSavedProcess = this.specialObjects[Squeak.splOb_ProcessSignalingLowSpace];
+                    if (lastSavedProcess.isNil) {
+                        this.specialObjects[Squeak.splOb_ProcessSignalingLowSpace] = this.primHandler.activeProcess();
+                    }
+                    this.forceInterruptCheck();
                 }
-                this.forceInterruptCheck();
             }
        },
     },
@@ -4359,16 +4370,16 @@
             this.breakOnContextChanged = true;
             this.breakOnContextReturned = null;
         },
-        printActiveContext: function(maxWidth) {
+        printContext: function(ctx, maxWidth) {
+            if (!this.isContext(ctx)) return "NOT A CONTEXT: " + printObj(ctx);
             if (!maxWidth) maxWidth = 72;
             function printObj(obj) {
-                var value = obj.sqInstName ? obj.sqInstName() : obj.toString();
+                var value = typeof obj === 'number' || typeof obj === 'object' ? obj.sqInstName() : "<" + obj + ">";
                 value = JSON.stringify(value).slice(1, -1);
                 if (value.length > maxWidth - 3) value = value.slice(0, maxWidth - 3) + '...';
                 return value;
             }
             // temps and stack in current context
-            var ctx = this.activeContext;
             var isBlock = typeof ctx.pointers[Squeak.BlockContext_argumentCount] === 'number';
             var closure = ctx.pointers[Squeak.Context_closure];
             var isClosure = !isBlock && !closure.isNil;
@@ -4390,10 +4401,11 @@
             }
             if (isBlock) {
                 stack += '\n';
-                var nArgs = ctx.pointers[3];
+                var nArgs = ctx.pointers[Squeak.BlockContext_argumentCount];
                 var firstArg = this.decodeSqueakSP(1);
                 var lastArg = firstArg + nArgs;
-                for (var i = firstArg; i <= this.sp; i++) {
+                var sp = ctx === this.activeContext ? this.sp : ctx.pointers[Squeak.Context_stackPointer];
+                for (var i = firstArg; i <= sp; i++) {
                     var value = printObj(ctx.pointers[i]);
                     var label = '';
                     if (i <= lastArg) label = '=arg' + (i - firstArg);
@@ -4401,6 +4413,9 @@
                 }
             }
             return stack;
+        },
+        printActiveContext: function(maxWidth) {
+            return this.printContext(this.activeContext, maxWidth);
         },
         printAllProcesses: function() {
             var schedAssn = this.specialObjects[Squeak.splOb_SchedulerAssociation],
@@ -4433,8 +4448,9 @@
         printProcess: function(process, active) {
             var context = process.pointers[Squeak.Proc_suspendedContext],
                 priority = process.pointers[Squeak.Proc_priority],
-                stack = this.printStack(active ? null : context);
-            return process.toString() +" at priority " + priority + "\n" + stack;
+                stack = this.printStack(active ? null : context),
+                values = this.printContext(context);
+            return process.toString() +" at priority " + priority + "\n" + stack + values + "\n";
         },
         printByteCodes: function(aMethod, optionalIndent, optionalHighlight, optionalPC) {
             if (!aMethod) aMethod = this.method;
@@ -5601,7 +5617,7 @@
                 case 183: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveApplyReverb', argCount);
                     break;  // fail
                 case 184: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixLoopedSampledSound', argCount);
-                    break; // fail
+                    else return this.popNandPushIfOK(argCount+1, this.vm.trueObj); // pin
                 case 185: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixSampledSound', argCount);
                     else return this.primitiveExitCriticalSection(argCount);
                 case 186: if (this.oldPrims) break; // unused
@@ -6417,7 +6433,7 @@
             if (indexableSize * 4 > this.vm.image.bytesLeft()) {
                 // we're not really out of memory, we have no idea how much memory is available
                 // but we need to stop runaway allocations
-                console.warn("squeak: out of memory");
+                console.warn("squeak: out of memory, failing allocation");
                 this.success = false;
                 this.vm.primFailCode = Squeak.PrimErrNoMemory;
                 return null;

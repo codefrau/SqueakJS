@@ -281,7 +281,10 @@ Object.subclass('Squeak.Primitives',
             case 174: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySamples', argCount);
                 else return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,true)); // slotAt:put:
             case 175: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySilence', argCount);
-                else return this.popNandPushIfOK(argCount+1, this.behaviorHash(this.stackNonInteger(0)));
+                else if (!this.vm.image.isSpur) {
+                    this.vm.warnOnce("primitive 175 called in non-spur image"); // workaround for Cuis
+                    return this.popNandPushIfOK(argCount+1, this.identityHash(this.stackNonInteger(0)));
+                } else return this.popNandPushIfOK(argCount+1, this.behaviorHash(this.stackNonInteger(0)));
             case 176: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primWaveTableSoundmixSampleCountintostartingAtpan', argCount);
                 else return this.popNandPushIfOK(argCount+1, this.vm.image.isSpur ? 0x3FFFFF : 0xFFF); // primitiveMaxIdentityHash
             case 177: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primFMSoundmixSampleCountintostartingAtpan', argCount);

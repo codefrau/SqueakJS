@@ -67,7 +67,7 @@ Object.subclass('Squeak.Image',
 },
 'initializing', {
     initialize: function(name) {
-        this.headRoom = 32000000; // TODO: pass as option
+        this.headRoom = 100000000; // TODO: pass as option
         this.totalMemory = 0;
         this.name = name;
         this.gcCount = 0;
@@ -277,6 +277,7 @@ Object.subclass('Squeak.Image',
         }
 
         this.totalMemory = this.oldSpaceBytes + this.headRoom;
+        this.totalMemory = Math.ceil(this.totalMemory / 1000000) * 1000000;
 
         if (true) {
             // For debugging: re-create all objects from named prototypes
@@ -467,6 +468,7 @@ Object.subclass('Squeak.Image',
         this.gcCount++;
         this.gcMilliseconds += Date.now() - start;
         console.log("Full GC (" + reason + "): " + (Date.now() - start) + " ms");
+        if (reason === "primitive") console.log("  surviving objects: " + this.oldSpaceCount + " (" + this.oldSpaceBytes + " bytes)");
         return newObjects.length > 0 ? newObjects[0] : null;
     },
     gcRoots: function() {

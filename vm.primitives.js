@@ -1117,7 +1117,7 @@ Object.subclass('Squeak.Primitives',
         if (indexableSize * 4 > this.vm.image.bytesLeft()) {
             // we're not really out of memory, we have no idea how much memory is available
             // but we need to stop runaway allocations
-            console.warn("squeak: out of memory");
+            console.warn("squeak: out of memory, failing allocation");
             this.success = false;
             this.vm.primFailCode = Squeak.PrimErrNoMemory;
             return null;

@@ -1487,13 +1487,22 @@ Object.subclass('Squeak.Interpreter',
     },
     signalLowSpaceIfNecessary: function(bytesLeft) {
         if (bytesLeft < this.lowSpaceThreshold && this.lowSpaceThreshold > 0) {
-            this.signalLowSpace = true;
-            this.lowSpaceThreshold = 0;
-            var lastSavedProcess = this.specialObjects[Squeak.splOb_ProcessSignalingLowSpace];
-            if (lastSavedProcess.isNil) {
-                this.specialObjects[Squeak.splOb_ProcessSignalingLowSpace] = this.activeProcess;
+            var increase = prompt && prompt("Out of memory, " + Math.ceil(this.image.totalMemory/1000000)
+                + " MB used.\nEnter additional MB, or 0 to signal low space in image", "0");
+            if (increase) {
+                var bytes = parseInt(increase, 10) * 1000000;
+                this.image.totalMemory += bytes;
+                this.signalLowSpaceIfNecessary(this.image.bytesLeft());
+            } else {
+                console.warn("squeak: low memory (" + bytesLeft + "/" + this.image.totalMemory + " bytes left), signaling low space");
+                this.signalLowSpace = true;
+                this.lowSpaceThreshold = 0;
+                var lastSavedProcess = this.specialObjects[Squeak.splOb_ProcessSignalingLowSpace];
+                if (lastSavedProcess.isNil) {
+                    this.specialObjects[Squeak.splOb_ProcessSignalingLowSpace] = this.primHandler.activeProcess();
+                }
+                this.forceInterruptCheck();
             }
-            this.forceInterruptCheck();
         }
    },
 },

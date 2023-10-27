@@ -1642,16 +1642,16 @@ Object.subclass('Squeak.Interpreter',
         this.breakOnContextChanged = true;
         this.breakOnContextReturned = null;
     },
-    printActiveContext: function(maxWidth) {
+    printContext: function(ctx, maxWidth) {
+        if (!this.isContext(ctx)) return "NOT A CONTEXT: " + printObj(ctx);
         if (!maxWidth) maxWidth = 72;
         function printObj(obj) {
-            var value = obj.sqInstName ? obj.sqInstName() : obj.toString();
+            var value = typeof obj === 'number' || typeof obj === 'object' ? obj.sqInstName() : "<" + obj + ">";
             value = JSON.stringify(value).slice(1, -1);
             if (value.length > maxWidth - 3) value = value.slice(0, maxWidth - 3) + '...';
             return value;
         }
         // temps and stack in current context
-        var ctx = this.activeContext;
         var isBlock = typeof ctx.pointers[Squeak.BlockContext_argumentCount] === 'number';
         var closure = ctx.pointers[Squeak.Context_closure];
         var isClosure = !isBlock && !closure.isNil;
@@ -1673,10 +1673,11 @@ Object.subclass('Squeak.Interpreter',
         }
         if (isBlock) {
             stack += '\n';
-            var nArgs = ctx.pointers[3];
+            var nArgs = ctx.pointers[Squeak.BlockContext_argumentCount];
             var firstArg = this.decodeSqueakSP(1);
             var lastArg = firstArg + nArgs;
-            for (var i = firstArg; i <= this.sp; i++) {
+            var sp = ctx === this.activeContext ? this.sp : ctx.pointers[Squeak.Context_stackPointer];
+            for (var i = firstArg; i <= sp; i++) {
                 var value = printObj(ctx.pointers[i]);
                 var label = '';
                 if (i <= lastArg) label = '=arg' + (i - firstArg);
@@ -1684,6 +1685,9 @@ Object.subclass('Squeak.Interpreter',
             }
         }
         return stack;
+    },
+    printActiveContext: function(maxWidth) {
+        return this.printContext(this.activeContext, maxWidth);
     },
     printAllProcesses: function() {
         var schedAssn = this.specialObjects[Squeak.splOb_SchedulerAssociation],
@@ -1716,8 +1720,9 @@ Object.subclass('Squeak.Interpreter',
     printProcess: function(process, active) {
         var context = process.pointers[Squeak.Proc_suspendedContext],
             priority = process.pointers[Squeak.Proc_priority],
-            stack = this.printStack(active ? null : context);
-        return process.toString() +" at priority " + priority + "\n" + stack;
+            stack = this.printStack(active ? null : context),
+            values = this.printContext(context);
+        return process.toString() +" at priority " + priority + "\n" + stack + values + "\n";
     },
     printByteCodes: function(aMethod, optionalIndent, optionalHighlight, optionalPC) {
         if (!aMethod) aMethod = this.method;

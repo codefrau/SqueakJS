@@ -23,7 +23,7 @@ One detail simplifies that kind of stack organization: pointers. A pointer (e.g.
 
 In SqueakJS, the execution is not performed directly by CPUs, but by a Javascript VM. It is impossible to directly utilize whatever stack-based instructions the host CPU might have. The only available execution semantics are those of Javascript. And Javascript VMs are extremely good at running code fast that uses typical JS execution patterns.
 
-So while we could attempt a tradition Context-to Stack mapping approach to speed up SqueakJS, it may be advantageous to consider a mapping of Smalltalk Contexts to the semantics of Javascript execution, which is temporary variables and function arguments.
+So while we could attempt a traditional Context-to-Stack mapping approach to speed up SqueakJS, it may be advantageous to consider a mapping of Smalltalk Contexts to the semantics of Javascript execution, which is temporary variables and function arguments.
 
 To gauge if this makes a significant difference, let's do a little benchmark. We'll implement the same send-heavy algorithm once with passing arguments on a stack, and once passing them as arguments:
 
@@ -138,7 +138,7 @@ Where this scheme gets _interesting_ is when the execution progressed somewhat d
 
 We need to generate a context for the current method which later needs to be able to be resumed. To suspend JS execution we can either try something coroutine-like via `function*/yield` or via promises and `async/await`.
 
-A different scheme would discard the whole call chain, possibly by `throw`ing an exception and generating real context objects in a `finally` handler in each method. This seems rather expensive.
+A different scheme would discard the whole call chain, possibly by `throw`ing an exception and generating real context objects in a `finally` handler in each method. This sounds rather expensive, but we should measure the impact.
 
 ### Context reads
 
@@ -146,7 +146,7 @@ We create a context acting as proxy into a jitted method call. Somehow this woul
 
 ### Context writes
 
-Now this sounds really hairy. For writing into temp vars we would have to give the context proxy some way of writing into each temp var. The only way to do that would be a function. This "remote introspection" function would have to be an inner function of every jit-compiled method. However, if we have that function, then it could be parameterized to read or write any temp, solving the context-read problem, too.
+Now this sounds really hairy. For writing into temp vars we would have to give the context proxy some way of writing into each temp var. The only way to do that would be a function. This "remote introspection" function would have to be an inner function of every jit-compiled method. However, if we had that function, then it could be parameterized to read or write any temp, solving the context-read problem, too.
 
 ### GC
 
@@ -170,11 +170,11 @@ Another issue slowing down the interpreter, and the current JIT, is method looku
 
 ## Global Caching
 
-In our interpreter, a global method cache is used to store recent lookup results. It's based on the hash of the selector and lookup class, and there are 1024 entries. This cache is also available to the JIT.
+In our interpreter, a global method cache is used to store recent lookup results. It's based on the hash of the selector and lookup class, and there are 1024 entries. This cache is also available to the current JIT, it uses the exact same method for sends as the interpreter.
 
 ## Inline Caching
 
-But the JIT can do much better than the global cache. It can easily store a separate lookup result for every send site. The selector is constant, and send sites often are monomorphic, meaning the receiver class is also constant, especially in performance-optimized code. Eliot [covers the subject in some detail](https://www.mirandabanda.org/cogblog/2011/03/01/build-me-a-jit-as-fast-as-you-can/) and even goes so far to claim that "inline cacheing [is] the main rationale behind the JIT."
+But the JIT can do much better than the global cache. It can easily store a separate lookup result for every send site. The selector is constant, and send sites often are monomorphic, meaning the receiver class is also constant, especially in performance-optimized code. Eliot [covers the subject in some detail](http://www.mirandabanda.org/cogblog/2011/03/01/build-me-a-jit-as-fast-as-you-can/) and even goes so far to claim that "inline cacheing [is] the main rationale behind the JIT."
 
 For our Javascript implementation, closure variables seem like a natural place to store lookup results inline. And if we only cache a single entry, the cache is called _monomorphic_.
 
@@ -286,7 +286,7 @@ t0 = 7;
 
 Our guiding principle will be to keep our own optimizations to a minimum in order to have quick compiles, but structure the generated code in a way so that the host JIT can perform its own optimizations well.
 
-# Sketch: Context Proxies with Introspection and Inline Caching
+# Sketching a JIT
 
 With all that in mind, let's imagine what a jitted method could look like. Maybe for `Integer>>benchFib`:
 
@@ -381,7 +381,7 @@ function Integer_benchFib(vm) {
 }
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-## New JIT Sketch
+## Idea: context proxy and inline caches
 
 Here is the same method with a context proxy and inline caches:
 
@@ -680,7 +680,7 @@ For comparison, Eliot's Cog VM does about 200 MSends/s on the same machine.
 Which is pretty much exactly what the [simple benchmark](#contextmapping/context-to-varmapping) above achieves.
 The question is how to get close to that speed -- which will likely take a wholly different approach, so I'm not too worried about that.
 
-### More realistic estimate: `yield`
+## More realistic approach: `yield`
 
 The scheme above does not actually implement process switching inside of `handleDepthAndInterrupts()`. We need to be able to suspend the current chain of execution and resume another one. One way to do that in JS is via co-routines, using `function*` generators and `yield`.
 
@@ -694,7 +694,7 @@ I implemented a mockup of this here: https://codepen.io/codefrau/pen/RwomBOK
 
 This is significantly slower, because every suspendable function (that is every method) needs to be a generator `function*`, and needs to be invoked using `yield*`. This makes each send significantly slower, so much so that on Firefox this has no benefit over the current JIT at all.
 
-### Exception-based scheme
+## Exception-based scheme
 
 Based on C. Scott's [comments](https://twitter.com/cscottnet/status/1369012854528020488) I also implemented a different scheme.
 Instead of always allocating the `thisProxy` closure and passing it to inner sends, it wraps the whole method in a try/catch block and only reads the context variables on unwind.
@@ -702,7 +702,7 @@ Any context access would trigger this unwinding and context allocation for the w
 This needs the help of an interpreter to be able to continue after unwind.
 Try it at https://codepen.io/codefrau/pen/bGBXpPN
 
-This looks to be at least 2x as efficient (with relativley few unwinds):
+This looks to be at least 2x as efficient (with relatively few unwinds):
 
 |         | Current JIT  | Unwinding JIT | Speedup | vs Cog
 |---------|--------------|---------------|---------|--------
@@ -714,146 +714,340 @@ However, it's hard to guess if this is enough to offset the performance penalty 
 We would at least need to find a way to deal with block closures -- they do refer to thisContext, so in this scheme every iteration would trigger an unwind.
 It does simplify the design quite a bit though, since the nested calling would be strictly temporary, and not affect the rest of the VM at all.
 
-# What about ...
+## Exception-based scheme with Blocks and Non-local Returns
 
-## Blocks / Closures / FullBlockClosures?
+There is a runnable mockup of block contexts (but not yet closures) with non-local returns using the exception-based scheme at https://codepen.io/codefrau/pen/YzNWpxO
 
-Let's use a simple block:
+It implements Array>>do:
 
 ~~~~~~~~~~~~~~~~~~~~
-foo: a
-    | n |
-    [:a | n := a + b] value: 4.
-    ^n
+do: aBlock
+    1 to: self size do:
+        [:index | aBlock value: (self at: index)]
 ~~~~~~~~~~~~~~~~~~~~
 
 Bytecodes:
 
 ~~~~~~~~~~~~~~~~~~~~
- 0 <89> push: thisContext
- 1 <76> pushConst: 1
- 2 <C8> send: #blockCopy:
- 3 <A4 07> jumpTo: 12
- 5 <6A> popIntoTemp: 2
+ 0 <70> self
+ 1 <C2> send: size
+ 2 <6A> popIntoTemp: 2
+ 3 <76> pushConstant: 1
+ 4 <69> popIntoTemp: 1
+ 5 <11> pushTemp: 1
  6 <12> pushTemp: 2
- 7 <10> pushTemp: 0
- 8 <B0> send: #+
- 9 <81 41> storeIntoTemp: 1
-11 <7D> blockReturn
-12 <20> pushConst: 4
-13 <CA> send: #value:
-14 <87> pop
-15 <11> pushTemp: 1
-16 <7C> return: topOfStack
+ 7 <B4> send: <=
+ 8 <AC 0C> jumpFalse: 22
+10 <10> pushTemp: 0
+11 <70> self
+12 <11> pushTemp: 1
+13 <C0> send: at:
+14 <CA> send: value:
+15 <87> pop
+16 <11> pushTemp: 1
+17 <76> pushConstant: 1
+18 <B0> send: +
+19 <69> popIntoTemp: 1
+20 <A3 EF> jumpTo: 5
+22 <78> returnSelf
 ~~~~~~~~~~~~~~~~~~~~
 
-Current JIT:
+Jitted method:
 
 ~~~~~~~~~~~~~~~~~~~~ JS
-function Integer_foo_(vm) {
-    // Integer>>foo:
-    var context = vm.activeContext;
-    var stack = context.pointers;
-    var rcvr = vm.receiver;
-    var temp = vm.homeContext.pointers;
-    var lit = vm.method.pointers;
-    while (true) switch (vm.pc) {
-    case 0:
-        stack[++vm.sp] = vm.exportThisContext();
-        stack[++vm.sp] = 1;
-        vm.pc = 3; if (!vm.primHandler.quickSendOther(rcvr, 8)) {vm.sendSpecial(24); return}
-    case 3:
-        vm.pc = 12; continue;
-    case 5:
-        temp[8] = stack[vm.sp--];
-        stack[++vm.sp] = temp[8];
-        stack[++vm.sp] = temp[6];
-        var a = stack[vm.sp - 1], b = stack[vm.sp];
-        if (typeof a === 'number' && typeof b === 'number') {
-        stack[--vm.sp] = vm.primHandler.signed32BitIntegerFor(a + b);
-        } else { vm.pc = 9; vm.sendSpecial(0); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}
-    case 9:
-        temp[7] = stack[vm.sp];
-        vm.pc = 12; vm.doReturn(stack[vm.sp--], context.pointers[0]); return;
-    case 12:
-        stack[++vm.sp] = lit[1];
-        vm.pc = 14; if (!vm.primHandler.quickSendOther(rcvr, 10)) vm.sendSpecial(26); return;
-    case 14:
-        vm.sp--;
-        stack[++vm.sp] = temp[7];
-        vm.pc = 17; vm.doReturn(stack[vm.sp]); return;
-    default: vm.interpretOne(true); return;
-    }
-}
-~~~~~~~~~~~~~~~~~~~~
-
-Mockup:
-
-~~~~~~~~~~~~~~~~~~~~ JS
-
-var cache = new Array(3*2).fill(null);  // [class, method, function]
-function Integer_foo_(vm, depth, method, closureOrNil, rcvr, t_a) {
-    var pc = 0;
-    var t_b, t_n; // temps
-    var t1, t2; // stack
-    if (--depth <= 0 || --vm.interruptCheckCounter <= 0) throw Error("unwind");
-
-    var thisContext = [];
-    var closure1;
+const cache = new Array(2*7).fill(null);  // [class, function]
+const PCtoSP = [3,4,4,3,4,3,4,5,4,4,3,4,5,6,5,4,3,4,5,4,3,3,3];
+return function Array_do_(rcvr, t0) {
+    let pc = 0;
+    let t1 = vm.nilObj, t2 = vm.nilObj;
+    let s3, s4, s5, s6;
     try {
-        while (true) switch (vm.pc) {
-        case 0:
-            t1 = thisContext;
-            t2 = 1;
-            pc = 3; t1 = closure1 = vm.blockCopy(t1, t2); closure1.block = block1;
-        case 3:
-            pc = 12; continue;
-        function block1(b1_i) {
-            var b1_1, b1_2;
-            pc = 5;
-            try {
-                while (true) switch (pc) {
-                    case 5:
-                        t_i = b1_i;
-                        b1_1 = t_b;
-                        b1_2 = t_a;
-                        if (typeof b1_1 === 'number' && typeof b1_2 === 'number') { b1_1 += b1_2; if (b1_1 < -0x40000000 || b1_1 > 0x3FFFFFFF) b1_1 = vm.makeLarge(b1_1); }
-                        else {
-                            if (cache[3*0] !== b1_1.sqClass) vm.jitCache(cache, 3*0,b1_1.sqClass, vm.specialSendSelector[0], false);  // #+
-                            pc = 9; b1_1 = cache[3*0+2](vm, depth, cache[3*0+1], null, b1_1, t2);
-                        }
-                    case 9:
-                        t_n = b1_1;
-                        pc = 12; return b1_1;
-                }
-            } catch(unwind) {
-                const stackp = [1,0,1,2,1][pc-5];
-                unwind.frame = [unwind.frame, pc, stackp, method, closure1, rcvr, t1, t2];
-                throw unwind;
-            }
+        if (--vm.depth <= 0 || --vm.interruptCheckCounter <= 0) throw { message: "interrupted" };
+        while (true) switch (pc) {
+          case 0: // <70> self
+            s3 = rcvr;
+          case 1: // <C2> send: size
+            if (s3.sqClass === "Array") s3 = s3.pointers.length;
+            else { pc = 1; throw Error("todo: full send of #size"); }
+          case 2: // <6A> popIntoTemp: 2
+            t2 = s3;
+          case 3: // <76> pushConstant: 1
+            s3 = 1;
+          case 4: // <69> popIntoTemp: 1
+            t1 = s3;
+          case 5: // <11> pushTemp: 1
+            s3 = t1;
+          case 6: // <12> pushTemp: 2
+            s4 = t2;
+          case 7: // <B4> send: <=
+            if (typeof s3 === 'number' && typeof s4 === 'number') { s3 = s3 <= s4 ? vm.trueObj : vm.falseObj; }
+            else { pc = 7; throw Error("todo: full send of <="); }
+          case 8: // <AC 0C> jumpFalse: 22
+            if (s3 === vm.falseObj) { pc = 22; continue }
+            else if (s3 !== vm.trueObj) { pc = 8; throw Error("todo: send #mustBeBoolean"); }
+          case 10: // <10> pushTemp: 0
+            s3 = t0;
+          case 11: // <70> self
+            s4 = rcvr;
+          case 12: // <11> pushTemp: 1
+            s5 = t1;
+          case 13: // <C0> send: at:
+            if (s4.sqClass === "Array" && typeof s5 === "number" && s5 > 0 && s5 <= s4.pointers.length) s4 = s4.pointers[s5 - 1];
+            else { pc = 13; throw Error("todo: full send of #at:"); }
+          case 14: // <CA> send: value:
+            if (s3.sqClass === "BlockContext") {
+                pc = 14; if (!s3.compiled) vm.jitBlock(s3); // might throw
+                pc = 15; s3.compiled(s4);
+            } else { pc = 14; throw Error("todo: full send of #value:"); }
+          case 15: // <87> pop
+            // no-op
+          case 16: // <11> pushTemp: 1
+            s3 = t1;
+          case 17: // <76> pushConstant: 1
+            s4 = 1;
+          case 18: // <B0> send: +
+            if (typeof s3 === 'number' && typeof s4 === 'number') { s3 += s4; if (s3 < -0x40000000 || s3 > 0x3FFFFFFF) s3 = vm.makeLarge(t2); }
+            else { pc = 18; throw Error("todo: full send of #+"); }
+          case 19: // <69> popIntoTemp: 1
+            t1 = s3;
+          case 20: // <A3 EF> jumpTo: 5
+            pc = 5; continue;
+          case 22: // <78> returnSelf
+            vm.depth++;
+            return rcvr;
+          default:
+            throw Error("not implemented @" + pc);
         }
-        case 12:
-            t2 = 4;
-            pc = 14; t1 = t1.block(t2);
-        case 14:
-            t1 = t_n;
-            return t1;
-        }
-    } catch(unwind) {
-        const stackp = [0,1,1,1,,,,,,,1,2,1,0,1][pc];
-        thisContext.push(unwind.frame, pc, stackp, method, vm.nilObj, rcvr, t1, t2);
-        unwind.frame = thisContext;
-        throw unwind;
+    } catch (frame) {
+      if ("nonLocalReturnValue" in frame) { vm.depth++; throw frame; }
+      // reify context and unwind all the way out of JIT
+      frame.ctx = {
+        class: "MethodContext",
+        pointers: [frame.ctx, pc, PCtoSP[pc], method, vm.nilObj, rcvr, t0, t1, t2, s3, s4, s5, s6]
+      };
+      throw frame;
     }
+};
+~~~~~~~~~~~~~~~~~~~~
+
+which is used by Array>>has42
+
+~~~~~~~~~~~~~~~~~~~~
+has42
+    self do: [:i | i == 42 ifTrue: [^true] ].
+    ^false
+~~~~~~~~~~~~~~~~~~~~
+
+Bytecodes:
+
+~~~~~~~~~~~~~~~~~~~~
+ 0 <70> self
+ 1 <89> pushThisContext:
+ 2 <76> pushConstant: 1
+ 3 <C8> send: blockCopy:    <== push block instance
+ 4 <A4 08> jumpTo: 14
+ 6 <68> popIntoTemp: 0      <== start of block code
+ 7 <10> pushTemp: 0
+ 8 <20> pushConstant: 42
+ 9 <C6> send: ==
+10 <98> jumpFalse: 12
+11 <79> return: true        <== non-local return
+12 <73> pushConstant: nil
+13 <7D> blockReturn         <== end of block code
+14 <CB> send: do:
+15 <87> pop
+16 <7A> return: false
+~~~~~~~~~~~~~~~~~~~~
+
+JavaScript:
+
+~~~~~~~~~~~~~~~~~~~~ JS
+const cache = new Array(2*7).fill(null);  // [class, function]
+const PCtoSP = [1,2,3,4,3,3,1,0,1,2,1,0,0,1,2,1,0];
+function Array_has42(rcvr) {
+  let pc = 0;
+  let t0 = vm.nilObj;
+  let s1, s2, s3, s4;
+  const thisContext = { sqClass: "MethodContext" };
+  let returnFromThisContext;
+  try {
+    if (--vm.depth <= 0 || --vm.interruptCheckCounter <= 0) throw { message: "interrupted" };
+    while (true) switch (pc) {
+      case 0: // <70> self
+        s1 = rcvr;
+      case 1: // <89> pushThisContext:
+        pc = 1; // in case we have to throw
+        s2 = thisContext;
+      case 2: // <76> pushConstant: 1
+        s3 = 1;
+      case 3: // <C8> send: blockCopy:
+        if (s2 === thisContext && typeof s3 === "number") {
+          s2 = {
+            sqClass: "BlockContext",
+            pointers: [vm.nilObj, 0, 0, s3, 6, s2],
+            compiled: function Array_has42_6(b0) {
+              if (thisContext.pointers) throw Error("method context was unwound, cannot run compiled block");
+              let pc = 6;
+              let b1, b2;
+              try {
+                if (--vm.depth <= 0 || --vm.interruptCheckCounter <= 0) throw { message: "interrupted" };
+                // case 4 <A4 08> jumpTo: 14
+                while (true) switch (pc) {
+                  case 6: // <68> popIntoTemp: 0
+                    t0 = b0;
+                  case 7: // <10> pushTemp: 0
+                    b0 = t0;
+                  case 8: // <20> pushConstant: 42
+                    b1 = 42;
+                  case 9: // <C6> send: ==
+                    b0 = b0 === b1 ? vm.trueObj : vm.falseObj;
+                  case 10: // <98> jumpFalse: 12
+                    if (b0 === vm.falseObj) { pc = 12; continue }
+                    else if (b0 !== vm.trueObj) { pc = 10; throw Error("todo: send #mustBeBoolean"); }
+                  case 11: // <79> return: true        // non-local return
+                    throw returnFromThisContext = {
+                      message: "non-local return",
+                      ctx: this.pointers[BLK_HOME],
+                      nonLocalReturnValue: vm.trueObj,
+                    };
+                  case 12: // <73> pushConstant: nil
+                    b0 = vm.nilObj;
+                  case 13: // <7D> blockReturn
+                    vm.depth++;
+                    return b0;
+                  default: throw Error("block6 unimplemented @" + pc);
+                }
+              } catch (frame) {
+                if ("nonLocalReturnValue" in frame) { vm.depth++; throw frame; }
+                // reify context and unwind all the way out of JIT
+                this.pointers[SENDER] = frame.ctx;
+                this.pointers[PC] = pc;
+                this.pointers[STACKP] = PCtoSP[pc];
+                this.pointers.push(b0, b1, b2);
+                frame.ctx = this;
+                throw frame;
+              }
+            },
+          };
+        } else throw Error("thisContext");
+      case 14: // <CB> send: do:
+        if (cache[2*0] !== s1.sqClass) vm.jitMethod(cache, 2*0, s1.sqClass, vm.specialSelectors[54], false); // #do:
+        pc = 15; s1 = cache[2*0+1](s1, s2);
+      case 15: // <87> pop
+        // noop
+      case 16: // <7A> return: false
+        vm.depth++;
+        return vm.falseObj;
+      default:
+        throw Error("not implemented @" + pc);
+    }
+  } catch (frame) {
+    if ("nonLocalReturnValue" in frame) {
+      vm.depth++;
+      if (frame === returnFromThisContext) return frame.nonLocalReturnValue;
+      throw frame;
+    }
+    // reify context and unwind all the way out of JIT
+    thisContext.pointers = [frame.ctx, pc, PCtoSP[pc], method, vm.nilObj, rcvr, t0, s1, s2, s3, s4];
+    frame.ctx = thisContext;
+    throw frame;
+  }
+}
+return Array_has42;
+~~~~~~~~~~~~~~~~~~~~
+
+which are used in a simple DOIT
+
+~~~~~~~~~~~~~~~~~~~~
+DoIt
+    #(3 4 7 13) has42.
+    #(3 4 42 13) has42.
+~~~~~~~~~~~~~~~~~~~~
+
+Bytecodes:
+
+~~~~~~~~~~~~~~~~~~~~
+0 <21> pushConstant: #(3 4 7 13)
+1 <D0> send: has42
+2 <87> pop
+3 <22> pushConstant: #(3 4 42 13)
+4 <D0> send: has42
+5 <87> pop
+6 <78> returnSelf
+~~~~~~~~~~~~~~~~~~~~
+
+JavaScript:
+
+~~~~~~~~~~~~~~~~~~~~ JS
+const cache = new Array(2*7).fill(null);  // [class, function]
+const PCtoSP = [0,1,1,0,1,1,0];
+function DoIt(rcvr) {
+    let pc = 0;
+    let t0;
+    let s1, s2, s3, s4;
+    try {
+      if (--vm.depth <= 0 || --vm.interruptCheckCounter <= 0) throw { message: "interrupted" };
+      while (true) switch (pc) {
+        // TODO
+        default:
+          pc = 0; throw Error("not implemented @" + pc);
+      }
+    } catch (frame) {
+      if ("nonLocalReturnValue" in frame) { vm.depth++; throw frame; }
+      // reify context and unwind all the way out of JIT
+      frame.ctx = {
+        class: "MethodContext",
+        pointers: [frame.ctx, pc, PCtoSP[pc], method, vm.nilObj, rcvr, t0, s1, s2, s3, s4],
+      };
+      throw frame;
+    }
+}
+return DoIt;
+~~~~~~~~~~~~~~~~~~~~
+
+The the second invocation of `has42` does find a 42, it successfully does a non-local return, proving that the scheme is viable.
+
+## One more idea: Stack capture and restoration
+
+The exception-based scheme lets us capture the stack on unwind, but not restore it. When resuming a process, we have to use the interpreter for all the contexts that were unwound. In the yield-based scheme the call-chain is preserved, but it does not support capturing the stack. In both cases, there's no way to recreate the stack starting from actual context objects.
+
+An idea to do that is inspired by [Stopify](https://arxiv.org/abs/1802.02974). It basically instruments each method in a way that allows "normal" invocations that perform the computation and return a result, but also invocations that only "restore" the call chain based on a global "mode" flag, after capturing it by setting the mode to "capture", which causes an immediate return all the way up the call chain. This scheme can be implemented without exceptions or yield, so potentially is faster than both.
+
+Here is an example function from the Stopify paper:
+
+~~~~~~~~~~~~~~~~~~~~ JS
+function P(f, g, x) { return f(g(x)); }
+~~~~~~~~~~~~~~~~~~~~
+
+This gets instrumented as follows:
+
+~~~~~~~~~~~~~~~~~~~~ JS
+var mode = 'normal';
+var stack = [];
+function P(f, g, x) {
+    var t0, l, k;
+    if (mode === 'restore') {
+        k = stack.pop();
+        [t0] = k.locals;
+        l = k.label;
+        k = stack[stack.length - 1];
+    }
+    function locals() { return [t0]; }
+    function reenter() { return P(f,g,x); }
+    if (mode === 'normal' || (mode === 'restore' && l === 0)) {
+        t0 = mode === 'normal' ? g(x) : k.reenter();
+        if (mode === 'capture') {
+            stack.push({ label: 0, locals: locals(), reenter: reenter });
+            return;
+        }
+    }
+    return f(t0);
 }
 ~~~~~~~~~~~~~~~~~~~~
 
+_TODO: implement this on codepen_
 
-_TODO_
-
-## Non-local returns?
-
-_TODO_
+# What about ...
 
 ## Primitive calls
 
@@ -871,7 +1065,7 @@ Also, all primitives accessing inst vars would need to be changed.
 # What next?
 
 I'll gather feedback from people, ~~and will try to implement a mockup of this. Maybe by hand-coding a version of `benchFib`.~~
-(Update: mockup added above)
+(Update: mockups added above)
 
 For feedback, maybe use this [issue](https://github.com/codefrau/SqueakJS/issues/121) on the bug tracker. Happy to discuss elsewhere, too ([email](http://lists.squeak.org/mailman/listinfo/vm-dev) / [twitter](https://twitter.com/codefrau)).
 

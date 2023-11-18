@@ -84,7 +84,7 @@ Things to work on
 -----------------
 SqueakJS is intended to run any Squeak image. It can already load any image from the original 1996 Squeak release to the latest Cog-Spur release, including 64-bit and Sista variants. But various pieces (primitives in various plugins) are still missing, in particular media support (MIDI, 3D graphics). Also, we should make pre-Spur 64 bit images load, and add a JIT for SISTA bytecodes. And, it would be nice to make it work on as many browsers as possible, especially on mobile touch devices.
 
-As for optimizing I think the way to go is an optimizing JIT compiler. The current JIT is very simple and does not optimize at all. Since we can't access or manipulate the JavaScript stack, we might want that compiler to inline as much as possible, but keep the call sequence flat so we can return to the browser at any time. Even better (but potentially more complicated) is actually using the JavaScript stack, just like Eliot's Stack VM uses the C stack. To make BitBlt fast, we could probably use WebGL.
+As for optimizing I think the way to go is an optimizing JIT compiler. The current JIT is very simple and does not optimize at all. Since we can't access or manipulate the JavaScript stack, we might want that compiler to inline as much as possible, but keep the call sequence flat so we can return to the browser at any time. Even better (but potentially more complicated) is actually using the JavaScript stack, just like Eliot's Stack VM uses the C stack. I have done some [advanced JIT mockups][jit]. To make BitBlt fast, we could probably use WebGL.
 
 To make SqueakJS useful beyond running existing Squeak images, we should use the JavaScript bridge to write a native HTML UI which would certainly be much faster than BitBlt.
 
@@ -102,6 +102,7 @@ There's a gazillion exciting things to do :)
   [mini]:     https://squeak.js.org/demo/simple.html
   [etoys]:    https://squeak.js.org/etoys/
   [scratch]:  https://squeak.js.org/scratch/
+  [jit]:      https://squeak.js.org/docs/jit.md.html
   [ws]:       https://github.com/codefrau/SqueakJS/tree/main/ws
   [dist]:     https://github.com/codefrau/SqueakJS/tree/main/dist
   [zip]:      https://github.com/codefrau/SqueakJS/archive/main.zip

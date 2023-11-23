@@ -260,6 +260,10 @@ function recordKeyboardEvent(key, timestamp, display) {
         ]);
         if (display.signalInputEvent)
             display.signalInputEvent();
+        // There are some old images that use both event-based
+        // and polling primitives. To make those work, keep the
+        // last key event
+        display.keys[0] = code;
     } else {
         // no event queue, queue keys the old-fashioned way
         display.keys.push(code);

@@ -114,7 +114,7 @@
     "version", {
         // system attributes
         vmVersion: "SqueakJS 1.1.1",
-        vmDate: "2023-10-26",               // Maybe replace at build time?
+        vmDate: "2023-11-23",               // Maybe replace at build time?
         vmBuild: "unknown",                 // or replace at runtime by last-modified?
         vmPath: "unknown",                  // Replace at runtime
         vmFile: "vm.js",
@@ -5618,9 +5618,9 @@
                 case 182: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'oldprimSampledSoundmixSampleCountintostartingAtleftVolrightVol', argCount);
                     return this.primitiveSizeInBytes(argCount);
                 case 183: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveApplyReverb', argCount);
-                    break;  // fail
+                    else return this.primitiveIsPinned(argCount);
                 case 184: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixLoopedSampledSound', argCount);
-                    else return this.popNandPushIfOK(argCount+1, this.vm.trueObj); // pin
+                    else return this.primitivePin(argCount);
                 case 185: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixSampledSound', argCount);
                     else return this.primitiveExitCriticalSection(argCount);
                 case 186: if (this.oldPrims) break; // unused
@@ -6483,6 +6483,20 @@
         },
         newObjectHash: function(obj) {
             return Math.floor(Math.random() * 0x3FFFFE) + 1;
+        },
+        primitivePin: function(argCount) {
+            // For us, pinning is a no-op, so we just toggle the pinned flag
+            var rcvr = this.stackNonInteger(1),
+                pin = this.stackBoolean(0);
+            if (!this.success) return false;
+            var wasPinned = rcvr.pinned;
+            rcvr.pinned = pin;
+            return this.popNandPushIfOK(argCount + 1, this.makeStObject(!!wasPinned));
+        },
+        primitiveIsPinned: function(argCount) {
+            var rcvr = this.stackNonInteger(0);
+            if (!this.success) return false;
+            return this.popNandPushIfOK(argCount + 1, this.makeStObject(!!rcvr.pinned));
         },
         primitiveSizeInBytesOfInstance: function(argCount) {
             if (argCount > 1) return false;
@@ -54693,7 +54707,7 @@
         display.mouseY = Math.max(0, Math.min(display.height, y));
     }
 
-    function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
+    function recordMouseEvent(what, evt, canvas, display, options) {
         updateMousePos(evt, canvas, display);
         if (!display.vm) return;
         var buttons = display.buttons & Squeak.Mouse_All;
@@ -54715,8 +54729,8 @@
                 break;
         }
         display.buttons = buttons | recordModifiers(evt, display);
-        if (eventQueue) {
-            eventQueue.push([
+        if (display.eventQueue) {
+            display.eventQueue.push([
                 Squeak.EventTypeMouse,
                 evt.timeStamp,  // converted to Squeak time in makeSqueakEvent()
                 display.mouseX,
@@ -54735,13 +54749,13 @@
         }
     }
 
-    function recordKeyboardEvent(key, timestamp, display, eventQueue) {
+    function recordKeyboardEvent(key, timestamp, display) {
         if (!display.vm) return;
         var code = (display.buttons >> 3) << 8 | key;
         if (code === display.vm.interruptKeycode) {
             display.vm.interruptPending = true;
-        } else if (eventQueue) {
-            eventQueue.push([
+        } else if (display.eventQueue) {
+            display.eventQueue.push([
                 Squeak.EventTypeKeyboard,
                 timestamp,  // converted to Squeak time in makeSqueakEvent()
                 key, // MacRoman
@@ -54751,6 +54765,10 @@
             ]);
             if (display.signalInputEvent)
                 display.signalInputEvent();
+            // There are some old images that use both event-based
+            // and polling primitives. To make those work, keep the
+            // last key event
+            display.keys[0] = code;
         } else {
             // no event queue, queue keys the old-fashioned way
             display.keys.push(code);
@@ -54759,10 +54777,10 @@
         if (display.runNow) display.runNow(); // don't wait for timeout to run
     }
 
-    function recordDragDropEvent(type, evt, canvas, display, eventQueue) {
-        if (!display.vm || !eventQueue) return;
+    function recordDragDropEvent(type, evt, canvas, display) {
+        if (!display.vm || !display.eventQueue) return;
         updateMousePos(evt, canvas, display);
-        eventQueue.push([
+        display.eventQueue.push([
             Squeak.EventTypeDragDropFiles,
             evt.timeStamp,  // converted to Squeak time in makeSqueakEvent()
             type,
@@ -54775,12 +54793,12 @@
             display.signalInputEvent();
     }
 
-    function fakeCmdOrCtrlKey(key, timestamp, display, eventQueue) {
+    function fakeCmdOrCtrlKey(key, timestamp, display) {
         // set both Cmd and Ctrl bit, because we don't know what the image wants
         display.buttons &= ~Squeak.Keyboard_All;  // remove all modifiers
         display.buttons |= Squeak.Keyboard_Cmd | Squeak.Keyboard_Ctrl;
         display.keys = []; //  flush other keys
-        recordKeyboardEvent(key, timestamp, display, eventQueue);
+        recordKeyboardEvent(key, timestamp, display);
     }
 
     function makeSqueakEvent(evt, sqEvtBuf, sqTimeOffset) {
@@ -54809,6 +54827,7 @@
             mouseY: 0,
             buttons: 0,
             keys: [],
+            eventQueue: null, // only used if image uses event primitives
             clipboardString: '',
             clipboardStringChanged: false,
             cursorCanvas: options.cursor !== false && document.createElement("canvas"),
@@ -54824,22 +54843,21 @@
             display.cursorCanvas && display.cursorCanvas.classList.add("pixelated");
         }
 
-        var eventQueue = null;
         display.reset = function() {
-            eventQueue = null;
+            display.eventQueue = null;
             display.signalInputEvent = null;
             display.lastTick = 0;
             display.getNextEvent = function(firstEvtBuf, firstOffset) {
                 // might be called from VM to get queued event
-                eventQueue = []; // create queue on first call
-                eventQueue.push = function(evt) {
-                    eventQueue.offset = Date.now() - evt[1]; // get epoch from first event
-                    delete eventQueue.push;                  // use original push from now on
-                    eventQueue.push(evt);
+                display.eventQueue = []; // create queue on first call
+                display.eventQueue.push = function(evt) {
+                    display.eventQueue.offset = Date.now() - evt[1]; // get epoch from first event
+                    delete display.eventQueue.push;                  // use original push from now on
+                    display.eventQueue.push(evt);
                 };
                 display.getNextEvent = function(evtBuf, timeOffset) {
-                    var evt = eventQueue.shift();
-                    if (evt) makeSqueakEvent(evt, evtBuf, timeOffset - eventQueue.offset);
+                    var evt = display.eventQueue.shift();
+                    if (evt) makeSqueakEvent(evt, evtBuf, timeOffset - display.eventQueue.offset);
                     else evtBuf[0] = Squeak.EventTypeNone;
                 };
                 display.getNextEvent(firstEvtBuf, firstOffset);
@@ -54900,7 +54918,7 @@
             try {
                 display.clipboardString = text;
                 // simulate paste event for Squeak
-                fakeCmdOrCtrlKey('v'.charCodeAt(0), timestamp, display, eventQueue);
+                fakeCmdOrCtrlKey('v'.charCodeAt(0), timestamp, display);
             } catch(err) {
                 console.error("paste error " + err);
             }
@@ -54909,7 +54927,7 @@
             if (!display.vm) return true;
             // simulate copy event for Squeak so it places its text in clipboard
             display.clipboardStringChanged = false;
-            fakeCmdOrCtrlKey((key || 'c').charCodeAt(0), timestamp, display, eventQueue);
+            fakeCmdOrCtrlKey((key || 'c').charCodeAt(0), timestamp, display);
             var start = Date.now();
             // now interpret until Squeak has copied to the clipboard
             while (!display.clipboardStringChanged && Date.now() - start < 500)
@@ -54924,17 +54942,17 @@
         };
         canvas.onmousedown = function(evt) {
             checkFullscreen();
-            recordMouseEvent('mousedown', evt, canvas, display, eventQueue, options);
+            recordMouseEvent('mousedown', evt, canvas, display, options);
             evt.preventDefault();
             return false;
         };
         canvas.onmouseup = function(evt) {
-            recordMouseEvent('mouseup', evt, canvas, display, eventQueue, options);
+            recordMouseEvent('mouseup', evt, canvas, display, options);
             checkFullscreen();
             evt.preventDefault();
         };
         canvas.onmousemove = function(evt) {
-            recordMouseEvent('mousemove', evt, canvas, display, eventQueue, options);
+            recordMouseEvent('mousemove', evt, canvas, display, options);
             evt.preventDefault();
         };
         canvas.oncontextmenu = function() {
@@ -55064,8 +55082,8 @@
                             if (touch.state !== 'got1stFinger') return;
                             touch.state = 'mousing';
                             touch.button = e.button = 0;
-                            recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
-                            recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                            recordMouseEvent('mousemove', e, canvas, display, options);
+                            recordMouseEvent('mousedown', e, canvas, display, options);
                         }, 100);
                         break;
                     case 'got1stFinger':
@@ -55080,8 +55098,8 @@
                             } else {
                                 touch.state = 'mousing';
                                 touch.button = e.button = 2;
-                                recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
-                                recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                                recordMouseEvent('mousemove', e, canvas, display, options);
+                                recordMouseEvent('mousedown', e, canvas, display, options);
                             }
                         }, 200);
                         break;
@@ -55095,11 +55113,11 @@
                 case 'got1stFinger':
                     touch.state = 'mousing';
                     touch.button = e.button = 0;
-                    recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
-                    recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                    recordMouseEvent('mousemove', e, canvas, display, options);
+                    recordMouseEvent('mousedown', e, canvas, display, options);
                     break;
                 case 'mousing':
-                    recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                    recordMouseEvent('mousemove', e, canvas, display, options);
                     return;
                 case 'got2ndFinger':
                     if (evt.touches.length > 1)
@@ -55119,20 +55137,20 @@
                     case 'mousing':
                         if (evt.touches.length > 0) break;
                         touch.state = 'idle';
-                        recordMouseEvent('mouseup', e, canvas, display, eventQueue, options);
+                        recordMouseEvent('mouseup', e, canvas, display, options);
                         return;
                     case 'got1stFinger':
                         touch.state = 'idle';
                         touch.button = e.button = 0;
-                        recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
-                        recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
-                        recordMouseEvent('mouseup', e, canvas, display, eventQueue, options);
+                        recordMouseEvent('mousemove', e, canvas, display, options);
+                        recordMouseEvent('mousedown', e, canvas, display, options);
+                        recordMouseEvent('mouseup', e, canvas, display, options);
                         return;
                     case 'got2ndFinger':
                         touch.state = 'mousing';
                         touch.button = e.button = 2;
-                        recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
-                        recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                        recordMouseEvent('mousemove', e, canvas, display, options);
+                        recordMouseEvent('mousedown', e, canvas, display, options);
                         break;
                     case 'zooming':
                         if (evt.touches.length > 0) break;
@@ -55163,7 +55181,7 @@
             if (/[CXVR]/.test(String.fromCharCode(evt.charCode + 64)))
                 return true;  // let browser handle cut/copy/paste/reload
             recordModifiers(evt, display);
-            recordKeyboardEvent(evt.charCode, evt.timeStamp, display, eventQueue);
+            recordKeyboardEvent(evt.charCode, evt.timeStamp, display);
             evt.preventDefault();
         };
         document.onkeydown = function(evt) {
@@ -55188,7 +55206,7 @@
                 46: 127, // Delete
             })[evt.keyCode];
             if (squeakCode) { // special key pressed
-                recordKeyboardEvent(squeakCode, evt.timeStamp, display, eventQueue);
+                recordKeyboardEvent(squeakCode, evt.timeStamp, display);
                 return evt.preventDefault();
             }
             if ((evt.metaKey || (evt.altKey && !evt.ctrlKey))) {
@@ -55200,7 +55218,7 @@
                         return true;  // let browser handle cut/copy/paste/reload
                     var code = key.charCodeAt(0);
                     if (/[A-Z]/.test(key) && !evt.shiftKey) code += 32;  // make lower-case
-                    recordKeyboardEvent(code, evt.timeStamp, display, eventQueue);
+                    recordKeyboardEvent(code, evt.timeStamp, display);
                     return evt.preventDefault();
                 }
             }
@@ -55254,16 +55272,16 @@
                 evt.dataTransfer.dropEffect = 'none';
             } else {
                 evt.dataTransfer.dropEffect = 'copy';
-                recordDragDropEvent(Squeak.EventDragMove, evt, canvas, display, eventQueue);
+                recordDragDropEvent(Squeak.EventDragMove, evt, canvas, display);
             }
         };
         document.ondragenter = function(evt) {
             if (!dragEventHasFiles(evt)) return;
-            recordDragDropEvent(Squeak.EventDragEnter, evt, canvas, display, eventQueue);
+            recordDragDropEvent(Squeak.EventDragEnter, evt, canvas, display);
         };
         document.ondragleave = function(evt) {
             if (!dragEventHasFiles(evt)) return;
-            recordDragDropEvent(Squeak.EventDragLeave, evt, canvas, display, eventQueue);
+            recordDragDropEvent(Squeak.EventDragLeave, evt, canvas, display);
         };
         document.ondrop = function(evt) {
             evt.preventDefault();
@@ -55288,7 +55306,7 @@
                             SqueakJS.appName = imageName.slice(0, -6);
                             SqueakJS.runImage(image, imageName, display, options);
                         } else {
-                            recordDragDropEvent(Squeak.EventDragDrop, evt, canvas, display, eventQueue);
+                            recordDragDropEvent(Squeak.EventDragDrop, evt, canvas, display);
                         }
                     }
                 };

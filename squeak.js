@@ -21478,7 +21478,8 @@
     		interpreterProxy.primitiveFail();
     		return null;
     	}
-    	return mapOop.words;
+    	// hand-edited generated code: shifts needs to be signed!
+    	return mapOop.wordsAsInt32Array();
     }
 
 

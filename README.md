@@ -111,6 +111,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2023-11-24: 1.1.2 fixed BitBlt bug (symptom reported 9 years ago, thanks to Agustin Martinez for narrowing it down), add object pinning, support keyboard in ancient Scratch images
     2023-10-24: 1.1.1 workarounds for Cuis 6
     2023-10-23: 1.1.0 implement Etoys project saving (image segment export), drag-n-drop directories
     2023-09-30: 1.0.6 fixes

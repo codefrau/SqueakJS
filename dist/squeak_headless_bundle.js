@@ -110,8 +110,8 @@ if (!Function.prototype.subclass) {
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 1.1.1",
-    vmDate: "2023-10-26",               // Maybe replace at build time?
+    vmVersion: "SqueakJS 1.1.2",
+    vmDate: "2023-11-24",               // Maybe replace at build time?
     vmBuild: "unknown",                 // or replace at runtime by last-modified?
     vmPath: "unknown",                  // Replace at runtime
     vmFile: "vm.js",
@@ -5596,7 +5596,10 @@ Object.subclass('Squeak.Primitives',
             case 174: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySamples', argCount);
                 else return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,true)); // slotAt:put:
             case 175: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySilence', argCount);
-                else return this.popNandPushIfOK(argCount+1, this.behaviorHash(this.stackNonInteger(0)));
+                else if (!this.vm.image.isSpur) {
+                    this.vm.warnOnce("primitive 175 called in non-spur image"); // workaround for Cuis
+                    return this.popNandPushIfOK(argCount+1, this.identityHash(this.stackNonInteger(0)));
+                } else return this.popNandPushIfOK(argCount+1, this.behaviorHash(this.stackNonInteger(0)));
             case 176: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primWaveTableSoundmixSampleCountintostartingAtpan', argCount);
                 else return this.popNandPushIfOK(argCount+1, this.vm.image.isSpur ? 0x3FFFFF : 0xFFF); // primitiveMaxIdentityHash
             case 177: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primFMSoundmixSampleCountintostartingAtpan', argCount);
@@ -5612,9 +5615,9 @@ Object.subclass('Squeak.Primitives',
             case 182: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'oldprimSampledSoundmixSampleCountintostartingAtleftVolrightVol', argCount);
                 return this.primitiveSizeInBytes(argCount);
             case 183: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveApplyReverb', argCount);
-                break;  // fail
+                else return this.primitiveIsPinned(argCount);
             case 184: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixLoopedSampledSound', argCount);
-                else return this.popNandPushIfOK(argCount+1, this.vm.trueObj); // pin
+                else return this.primitivePin(argCount);
             case 185: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixSampledSound', argCount);
                 else return this.primitiveExitCriticalSection(argCount);
             case 186: if (this.oldPrims) break; // unused
@@ -6477,6 +6480,20 @@ Object.subclass('Squeak.Primitives',
     },
     newObjectHash: function(obj) {
         return Math.floor(Math.random() * 0x3FFFFE) + 1;
+    },
+    primitivePin: function(argCount) {
+        // For us, pinning is a no-op, so we just toggle the pinned flag
+        var rcvr = this.stackNonInteger(1),
+            pin = this.stackBoolean(0);
+        if (!this.success) return false;
+        var wasPinned = rcvr.pinned;
+        rcvr.pinned = pin;
+        return this.popNandPushIfOK(argCount + 1, this.makeStObject(!!wasPinned));
+    },
+    primitiveIsPinned: function(argCount) {
+        var rcvr = this.stackNonInteger(0);
+        if (!this.success) return false;
+        return this.popNandPushIfOK(argCount + 1, this.makeStObject(!!rcvr.pinned));
     },
     primitiveSizeInBytesOfInstance: function(argCount) {
         if (argCount > 1) return false;

@@ -249,7 +249,8 @@ function recordKeyboardEvent(key, timestamp, display) {
     var code = (display.buttons >> 3) << 8 | key;
     if (code === display.vm.interruptKeycode) {
         display.vm.interruptPending = true;
-    } else if (display.eventQueue) {
+    }
+    if (display.eventQueue) {
         display.eventQueue.push([
             Squeak.EventTypeKeyboard,
             timestamp,  // converted to Squeak time in makeSqueakEvent()

@@ -247,9 +247,6 @@ function recordMouseEvent(what, evt, canvas, display, options) {
 function recordKeyboardEvent(key, timestamp, display) {
     if (!display.vm) return;
     var code = (display.buttons >> 3) << 8 | key;
-    if (code === display.vm.interruptKeycode) {
-        display.vm.interruptPending = true;
-    }
     if (display.eventQueue) {
         display.eventQueue.push([
             Squeak.EventTypeKeyboard,
@@ -265,6 +262,8 @@ function recordKeyboardEvent(key, timestamp, display) {
         // and polling primitives. To make those work, keep the
         // last key event
         display.keys[0] = code;
+    } else if (code === display.vm.interruptKeycode) {
+        display.vm.interruptPending = true;
     } else {
         // no event queue, queue keys the old-fashioned way
         display.keys.push(code);

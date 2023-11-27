@@ -1691,6 +1691,7 @@ Object.subclass('Squeak.Primitives',
         oldProc.dirty = true;
         this.vm.newActiveContext(newProc.pointers[Squeak.Proc_suspendedContext]);
         newProc.pointers[Squeak.Proc_suspendedContext] = this.vm.nilObj;
+        if (!this.oldPrims) newProc.pointers[Squeak.Proc_myList] = this.vm.nilObj;
         this.vm.reclaimableContextCount = 0;
         if (this.vm.breakOnContextChanged) {
             this.vm.breakOnContextChanged = false;
@@ -1754,7 +1755,10 @@ Object.subclass('Squeak.Primitives',
         } else {
             var temp = first;
             while (true) {
-                if (temp.isNil) return this.success = false;
+                if (temp.isNil) {
+                    if (this.oldPrims) this.success = false;
+                    return;
+                }
                 next = temp.pointers[Squeak.Link_nextLink];
                 if (next === process) break;
                 temp = next;

@@ -28,11 +28,11 @@ Object.subclass('Squeak.Interpreter',
         this.Squeak = Squeak;   // store locally to avoid dynamic lookup in Lively
         this.image = image;
         this.image.vm = this;
-        this.primHandler = new Squeak.Primitives(this, display);
         this.loadImageState();
         this.hackImage();
         this.initVMState();
         this.loadInitialContext();
+        this.primHandler = new Squeak.Primitives(this, display);
         this.initCompiler();
         console.log('squeak: ready');
     },

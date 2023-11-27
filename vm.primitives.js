@@ -37,6 +37,7 @@ Object.subclass('Squeak.Primitives',
             this.charFromInt = this.charFromIntSpur;
             this.charToInt = this.charToIntSpur;
             this.identityHash = this.identityHashSpur;
+            this.linkedListClass = this.getScheduler().pointers[Squeak.ProcSched_processLists].pointers[0].sqClass;
         }
     },
     initDisplay: function(display) {
@@ -421,7 +422,7 @@ Object.subclass('Squeak.Primitives',
             case 575: this.vm.warnOnce("missing primitive: 575 (primitiveHighBit)"); return false;
             // this is not really a primitive, see findSelectorInClass()
             case 576: return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod);
-            case 578: this.vm.warnOnce("missing primitive: 578 (primitiveSuspendAndBackupPC)"); return false; // see bit 5 of vmParameterAt: 65
+            case 578: return this.primitiveSuspendAndBackupPC(argCount); // see bit 5 of vmParameterAt: 65
         }
         console.error("primitive " + index + " not implemented yet");
         return false;
@@ -1655,6 +1656,39 @@ Object.subclass('Squeak.Primitives',
             this.vm.popNandPush(1, oldList);
         }
         return true;
+    },
+    primitiveSuspendAndBackupPC: function(argCount) {
+        // cf. bit 5 of vmParameterAt: 65
+        var process = this.vm.top();
+        if (process === this.activeProcess()) {
+            this.vm.popNandPush(argCount+1, this.vm.nilObj);
+            this.transferTo(this.wakeHighestPriority());
+            return true;
+        }
+        var myList = process.pointers[Squeak.Proc_myList];
+        var myContext = process.pointers[Squeak.Proc_suspendedContext];
+        if (!(myList.pointersSize() > Squeak.LinkedList_lastLink
+            && this.vm.isContext(myContext)
+            && this.isResumableContext(myContext)))
+                return false;
+        this.removeProcessFromList(process, myList);
+        if (!this.success) return false;
+        process.pointers[Squeak.Proc_myList] = this.vm.nilObj;
+        if (myList.sqClass !== this.linkedListClass) {
+            // this would be the code once we implement this method
+            //   this.backupContextToBlockingSendTo(myContext, myList);
+            //   myList = this.vm.nilObj;
+            // for now, we warn and fail
+            // however, this should not actually be called, since
+            // our bit 5 of vmParameterAt: 65 is not set
+            this.vm.warnOnce("primitive: 578 (primitiveSuspendAndBackupPC) called with non-list, which is not supported as per bit 5 of vmParameterAt: 65");
+            return false;
+        }
+        this.vm.popNandPush(argCount+1, myList);
+        return true;
+    },
+    isResumableContext: function(aContext) {
+        return typeof aContext.pointers[Squeak.Context_instructionPointer] === "number";
     },
     getScheduler: function() {
         var assn = this.vm.specialObjects[Squeak.splOb_SchedulerAssociation];

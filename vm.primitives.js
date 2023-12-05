@@ -64,7 +64,7 @@ Object.subclass('Squeak.Primitives',
             //case 0x3: return false; // next
             //case 0x4: return false; // nextPut:
             //case 0x5: return false; // atEnd
-            case 0x6: return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
+            case 0x6: return this.popNandPushBoolIfOK(2, this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
             case 0x7: return this.popNandPushIfOK(1,this.vm.getClass(this.vm.top())); // class
             case 0x8: return this.popNandPushIfOK(2,this.doBlockCopy()); // blockCopy:
             case 0x9: return this.primitiveBlockValue(0); // value
@@ -81,23 +81,23 @@ Object.subclass('Squeak.Primitives',
         this.success = true;
         switch (index) {
             // Integer Primitives (0-19)
-            case 1: return this.popNandPushIntIfOK(2,this.stackInteger(1) + this.stackInteger(0));  // Integer.add
-            case 2: return this.popNandPushIntIfOK(2,this.stackInteger(1) - this.stackInteger(0));  // Integer.subtract
-            case 3: return this.pop2andPushBoolIfOK(this.stackInteger(1) < this.stackInteger(0));   // Integer.less
-            case 4: return this.pop2andPushBoolIfOK(this.stackInteger(1) > this.stackInteger(0));   // Integer.greater
-            case 5: return this.pop2andPushBoolIfOK(this.stackInteger(1) <= this.stackInteger(0));  // Integer.leq
-            case 6: return this.pop2andPushBoolIfOK(this.stackInteger(1) >= this.stackInteger(0));  // Integer.geq
-            case 7: return this.pop2andPushBoolIfOK(this.stackInteger(1) === this.stackInteger(0)); // Integer.equal
-            case 8: return this.pop2andPushBoolIfOK(this.stackInteger(1) !== this.stackInteger(0)); // Integer.notequal
-            case 9: return this.popNandPushIntIfOK(2,this.stackInteger(1) * this.stackInteger(0));  // Integer.multiply *
-            case 10: return this.popNandPushIntIfOK(2,this.vm.quickDivide(this.stackInteger(1),this.stackInteger(0)));  // Integer.divide /  (fails unless exact)
-            case 11: return this.popNandPushIntIfOK(2,this.vm.mod(this.stackInteger(1),this.stackInteger(0)));  // Integer.mod \\
-            case 12: return this.popNandPushIntIfOK(2,this.vm.div(this.stackInteger(1),this.stackInteger(0)));  // Integer.div //
-            case 13: return this.popNandPushIntIfOK(2,this.stackInteger(1) / this.stackInteger(0) | 0);  // Integer.quo
-            case 14: return this.popNandPushIfOK(2,this.doBitAnd());  // SmallInt.bitAnd
-            case 15: return this.popNandPushIfOK(2,this.doBitOr());  // SmallInt.bitOr
-            case 16: return this.popNandPushIfOK(2,this.doBitXor());  // SmallInt.bitXor
-            case 17: return this.popNandPushIfOK(2,this.doBitShift());  // SmallInt.bitShift
+            case 1: return this.popNandPushIntIfOK(argCount+1,this.stackInteger(1) + this.stackInteger(0));  // Integer.add
+            case 2: return this.popNandPushIntIfOK(argCount+1,this.stackInteger(1) - this.stackInteger(0));  // Integer.subtract
+            case 3: return this.popNandPushBoolIfOK(argCount+1, this.stackInteger(1) < this.stackInteger(0));   // Integer.less
+            case 4: return this.popNandPushBoolIfOK(argCount+1, this.stackInteger(1) > this.stackInteger(0));   // Integer.greater
+            case 5: return this.popNandPushBoolIfOK(argCount+1, this.stackInteger(1) <= this.stackInteger(0));  // Integer.leq
+            case 6: return this.popNandPushBoolIfOK(argCount+1, this.stackInteger(1) >= this.stackInteger(0));  // Integer.geq
+            case 7: return this.popNandPushBoolIfOK(argCount+1, this.stackInteger(1) === this.stackInteger(0)); // Integer.equal
+            case 8: return this.popNandPushBoolIfOK(argCount+1, this.stackInteger(1) !== this.stackInteger(0)); // Integer.notequal
+            case 9: return this.popNandPushIntIfOK(argCount+1,this.stackInteger(1) * this.stackInteger(0));  // Integer.multiply *
+            case 10: return this.popNandPushIntIfOK(argCount+1,this.vm.quickDivide(this.stackInteger(1),this.stackInteger(0)));  // Integer.divide /  (fails unless exact)
+            case 11: return this.popNandPushIntIfOK(argCount+1,this.vm.mod(this.stackInteger(1),this.stackInteger(0)));  // Integer.mod \\
+            case 12: return this.popNandPushIntIfOK(argCount+1,this.vm.div(this.stackInteger(1),this.stackInteger(0)));  // Integer.div //
+            case 13: return this.popNandPushIntIfOK(argCount+1,this.stackInteger(1) / this.stackInteger(0) | 0);  // Integer.quo
+            case 14: return this.popNandPushIfOK(argCount+1,this.doBitAnd());  // SmallInt.bitAnd
+            case 15: return this.popNandPushIfOK(argCount+1,this.doBitOr());  // SmallInt.bitOr
+            case 16: return this.popNandPushIfOK(argCount+1,this.doBitXor());  // SmallInt.bitXor
+            case 17: return this.popNandPushIfOK(argCount+1,this.doBitShift());  // SmallInt.bitShift
             case 18: return this.primitiveMakePoint(argCount, false);
             case 19: return false;                                 // Guard primitive for simulation -- *must* fail
             // LargeInteger Primitives (20-39)
@@ -105,12 +105,12 @@ Object.subclass('Squeak.Primitives',
             case 20: this.vm.warnOnce("missing primitive: 20 (primitiveRemLargeIntegers)"); return false;
             case 21: this.vm.warnOnce("missing primitive: 21 (primitiveAddLargeIntegers)"); return false;
             case 22: this.vm.warnOnce("missing primitive: 22 (primitiveSubtractLargeIntegers)"); return false;
-            case 23: return this.primitiveLessThanLargeIntegers();
-            case 24: return this.primitiveGreaterThanLargeIntegers();
-            case 25: return this.primitiveLessOrEqualLargeIntegers();
-            case 26: return this.primitiveGreaterOrEqualLargeIntegers();
-            case 27: return this.primitiveEqualLargeIntegers();
-            case 28: return this.primitiveNotEqualLargeIntegers();
+            case 23: return this.primitiveLessThanLargeIntegers(argCount);
+            case 24: return this.primitiveGreaterThanLargeIntegers(argCount);
+            case 25: return this.primitiveLessOrEqualLargeIntegers(argCount);
+            case 26: return this.primitiveGreaterOrEqualLargeIntegers(argCount);
+            case 27: return this.primitiveEqualLargeIntegers(argCount);
+            case 28: return this.primitiveNotEqualLargeIntegers(argCount);
             case 29: this.vm.warnOnce("missing primitive: 29 (primitiveMultiplyLargeIntegers)"); return false;
             case 30: this.vm.warnOnce("missing primitive: 30 (primitiveDivideLargeIntegers)"); return false;
             case 31: this.vm.warnOnce("missing primitive: 31 (primitiveModLargeIntegers)"); return false;
@@ -126,18 +126,18 @@ Object.subclass('Squeak.Primitives',
             case 40: return this.popNandPushFloatIfOK(argCount+1,this.stackInteger(0)); // primitiveAsFloat
             case 41: return this.popNandPushFloatIfOK(argCount+1,this.stackFloat(1)+this.stackFloat(0));  // Float +
             case 42: return this.popNandPushFloatIfOK(argCount+1,this.stackFloat(1)-this.stackFloat(0));  // Float -
-            case 43: return this.pop2andPushBoolIfOK(this.stackFloat(1)<this.stackFloat(0));  // Float <
-            case 44: return this.pop2andPushBoolIfOK(this.stackFloat(1)>this.stackFloat(0));  // Float >
-            case 45: return this.pop2andPushBoolIfOK(this.stackFloat(1)<=this.stackFloat(0));  // Float <=
-            case 46: return this.pop2andPushBoolIfOK(this.stackFloat(1)>=this.stackFloat(0));  // Float >=
-            case 47: return this.pop2andPushBoolIfOK(this.stackFloat(1)===this.stackFloat(0));  // Float =
-            case 48: return this.pop2andPushBoolIfOK(this.stackFloat(1)!==this.stackFloat(0));  // Float !=
+            case 43: return this.popNandPushBoolIfOK(argCount+1, this.stackFloat(1)<this.stackFloat(0));  // Float <
+            case 44: return this.popNandPushBoolIfOK(argCount+1, this.stackFloat(1)>this.stackFloat(0));  // Float >
+            case 45: return this.popNandPushBoolIfOK(argCount+1, this.stackFloat(1)<=this.stackFloat(0));  // Float <=
+            case 46: return this.popNandPushBoolIfOK(argCount+1, this.stackFloat(1)>=this.stackFloat(0));  // Float >=
+            case 47: return this.popNandPushBoolIfOK(argCount+1, this.stackFloat(1)===this.stackFloat(0));  // Float =
+            case 48: return this.popNandPushBoolIfOK(argCount+1, this.stackFloat(1)!==this.stackFloat(0));  // Float !=
             case 49: return this.popNandPushFloatIfOK(argCount+1,this.stackFloat(1)*this.stackFloat(0));  // Float.mul
             case 50: return this.popNandPushFloatIfOK(argCount+1,this.safeFDiv(this.stackFloat(1),this.stackFloat(0)));  // Float.div
             case 51: return this.popNandPushIfOK(argCount+1,this.floatAsSmallInt(this.stackFloat(0)));  // Float.asInteger
             case 52: return this.popNandPushFloatIfOK(argCount+1,this.floatFractionPart(this.stackFloat(0)));
             case 53: return this.popNandPushIntIfOK(argCount+1, this.frexp_exponent(this.stackFloat(0)) - 1); // Float.exponent
-            case 54: return this.popNandPushFloatIfOK(2, this.ldexp(this.stackFloat(1), this.stackFloat(0))); // Float.timesTwoPower
+            case 54: return this.popNandPushFloatIfOK(argCount+1, this.ldexp(this.stackFloat(1), this.stackFloat(0))); // Float.timesTwoPower
             case 55: return this.popNandPushFloatIfOK(argCount+1, Math.sqrt(this.stackFloat(0))); // SquareRoot
             case 56: return this.popNandPushFloatIfOK(argCount+1, Math.sin(this.stackFloat(0))); // Sine
             case 57: return this.popNandPushFloatIfOK(argCount+1, Math.atan(this.stackFloat(0))); // Arctan
@@ -166,7 +166,7 @@ Object.subclass('Squeak.Primitives',
             case 78: return this.popNandPushIfOK(argCount+1, this.nextInstanceAfter(this.stackNonInteger(0))); // Object.nextInstance
             case 79: return this.primitiveNewMethod(argCount); // Compiledmethod.new
             // Control Primitives (80-89)
-            case 80: return this.popNandPushIfOK(2,this.doBlockCopy()); // blockCopy:
+            case 80: return this.popNandPushIfOK(argCount+1,this.doBlockCopy()); // blockCopy:
             case 81: return this.primitiveBlockValue(argCount); // BlockContext.value
             case 82: return this.primitiveBlockValueWithArgs(argCount); // BlockContext.valueWithArguments:
             case 83: return this.vm.primitivePerform(argCount); // Object.perform:(with:)*
@@ -198,7 +198,7 @@ Object.subclass('Squeak.Primitives',
             case 108: return this.primitiveKeyboardNext(argCount); // Sensor kbdNext
             case 109: return this.primitiveKeyboardPeek(argCount); // Sensor kbdPeek
             // System Primitives (110-119)
-            case 110: return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
+            case 110: return this.popNandPushBoolIfOK(argCount+1, this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
             case 111: return this.popNandPushIfOK(argCount+1, this.vm.getClass(this.vm.top())); // Object.class
             case 112: return this.popNandPushIfOK(argCount+1, this.vm.image.bytesLeft()); //primitiveBytesLeft
             case 113: return this.primitiveQuit(argCount);
@@ -213,20 +213,20 @@ Object.subclass('Squeak.Primitives',
             case 121: return this.primitiveImageName(argCount); //get+set imageName
             case 122: return this.primitiveReverseDisplay(argCount); // Blue Book: primitiveImageVolume
             case 123: this.vm.warnOnce("missing primitive: 123 (primitiveValueUninterruptably)"); return false;
-            case 124: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore));
-            case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
+            case 124: return this.popNandPushIfOK(argCount+1, this.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore));
+            case 125: return this.popNandPushIfOK(argCount+1, this.setLowSpaceThreshold());
             case 126: return this.primitiveDeferDisplayUpdates(argCount);
             case 127: return this.primitiveShowDisplayRect(argCount);
             case 128: return this.primitiveArrayBecome(argCount, true, true); // both ways, do copy hash
-            case 129: return this.popNandPushIfOK(1, this.vm.image.specialObjectsArray); //specialObjectsOop
+            case 129: return this.popNandPushIfOK(argCount+1, this.vm.image.specialObjectsArray); //specialObjectsOop
             case 130: return this.primitiveFullGC(argCount);
             case 131: return this.primitivePartialGC(argCount);
-            case 132: return this.pop2andPushBoolIfOK(this.pointsTo(this.stackNonInteger(1), this.vm.top())); //Object.pointsTo
+            case 132: return this.popNandPushBoolIfOK(argCount+1, this.pointsTo(this.stackNonInteger(1), this.vm.top())); //Object.pointsTo
             case 133: return this.popNIfOK(argCount); //TODO primitiveSetInterruptKey
-            case 134: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheInterruptSemaphore));
-            case 135: return this.popNandPushIfOK(1, this.millisecondClockValue());
+            case 134: return this.popNandPushIfOK(argCount+1, this.registerSemaphore(Squeak.splOb_TheInterruptSemaphore));
+            case 135: return this.popNandPushIfOK(argCount+1, this.millisecondClockValue());
             case 136: return this.primitiveSignalAtMilliseconds(argCount); //Delay signal:atMs:();
-            case 137: return this.popNandPushIfOK(1, this.secondClock()); // seconds since Jan 1, 1901
+            case 137: return this.popNandPushIfOK(argCount+1, this.secondClock()); // seconds since Jan 1, 1901
             case 138: return this.popNandPushIfOK(argCount+1, this.someObject()); // Object.someObject
             case 139: return this.popNandPushIfOK(argCount+1, this.nextObject(this.vm.top())); // Object.nextObject
             case 140: return this.primitiveBeep(argCount);
@@ -267,7 +267,7 @@ Object.subclass('Squeak.Primitives',
             case 167: return false; // Processor.yield
             case 168: return this.primitiveCopyObject(argCount);
             case 169: if (this.oldPrims) return this.primitiveDirectorySetMacTypeAndCreator(argCount);
-                else return this.pop2andPushBoolIfOK(this.vm.stackValue(1) !== this.vm.stackValue(0)); //new: primitiveNotIdentical
+                else return this.popNandPushBoolIfOK(argCount+1, this.vm.stackValue(1) !== this.vm.stackValue(0)); //new: primitiveNotIdentical
             // Sound Primitives (170-199)
             case 170: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStart', argCount);
                 else return this.primitiveAsCharacter(argCount);
@@ -346,11 +346,11 @@ Object.subclass('Squeak.Primitives',
             case 209: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketCreate', argCount);
                 else return this.primitiveFullClosureValueNoContextSwitch(argCount);
             case 210: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketDestroy', argCount);
-                else return this.popNandPushIfOK(2, this.objectAt(false,false,false)); // contextAt:
+                else return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,false)); // contextAt:
             case 211: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectionStatus', argCount);
-                else return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); // contextAt:put:
+                else return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,false)); // contextAt:put:
             case 212: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketError', argCount);
-                else return this.popNandPushIfOK(1, this.objectSize(false)); // contextSize
+                else return this.popNandPushIfOK(argCount+1, this.objectSize(false)); // contextSize
             case 213: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketLocalAddress', argCount);
             case 214: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketLocalPort', argCount);
             case 215: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketRemoteAddress', argCount);
@@ -382,9 +382,9 @@ Object.subclass('Squeak.Primitives',
             case 239: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortClose', argCount);
                 break;  // fail 234-239 if fell through
             case 240: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortWrite', argCount);
-                else return this.popNandPushIfOK(1, this.microsecondClockUTC());
+                else return this.popNandPushIfOK(argCount+1, this.microsecondClockUTC());
             case 241: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortRead', argCount);
-                else return this.popNandPushIfOK(1, this.microsecondClockLocal());
+                else return this.popNandPushIfOK(argCount+1, this.microsecondClockLocal());
             case 242: if (this.oldPrims) break; // unused
                 else return this.primitiveSignalAtUTCMicroseconds(argCount);
             case 243: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveTranslateStringWithTable', argCount);
@@ -576,6 +576,11 @@ Object.subclass('Squeak.Primitives',
         this.vm.success = this.success;
         return this.vm.pop2AndPushBoolResult(bool);
     },
+    popNandPushBoolIfOK: function(nToPop, bool) {
+        if (!this.success) return false;
+        this.vm.popNandPush(nToPop, bool ? this.vm.trueObj : this.vm.falseObj);
+        return true;
+    },
     popNandPushIfOK: function(nToPop, returnValue) {
         if (!this.success || returnValue == null) return false;
         this.vm.popNandPush(nToPop, returnValue);
@@ -583,11 +588,13 @@ Object.subclass('Squeak.Primitives',
     },
     popNandPushIntIfOK: function(nToPop, returnValue) {
         if (!this.success || !this.vm.canBeSmallInt(returnValue)) return false;
-        return this.popNandPushIfOK(nToPop, returnValue);
+        this.vm.popNandPush(nToPop, returnValue);
+        return true;
     },
     popNandPushFloatIfOK: function(nToPop, returnValue) {
         if (!this.success) return false;
-        return this.popNandPushIfOK(nToPop, this.makeFloat(returnValue));
+        this.vm.popNandPush(nToPop, this.makeFloat(returnValue));
+        return true;
     },
     stackNonInteger: function(nDeep) {
         return this.checkNonInteger(this.vm.stackValue(nDeep));
@@ -763,23 +770,23 @@ Object.subclass('Squeak.Primitives',
             result *= Math.pow(2, Math.floor((exponent + i) / steps));
         return result;
     },
-    primitiveLessThanLargeIntegers: function() {
-        return this.pop2andPushBoolIfOK(this.stackSigned53BitInt(1) < this.stackSigned53BitInt(0));
+    primitiveLessThanLargeIntegers: function(argCount) {
+        return this.popNandPushBoolIfOK(argCount+1, this.stackSigned53BitInt(1) < this.stackSigned53BitInt(0));
     },
-    primitiveGreaterThanLargeIntegers: function() {
-        return this.pop2andPushBoolIfOK(this.stackSigned53BitInt(1) > this.stackSigned53BitInt(0));
+    primitiveGreaterThanLargeIntegers: function(argCount) {
+        return this.popNandPushBoolIfOK(argCount+1, this.stackSigned53BitInt(1) > this.stackSigned53BitInt(0));
     },
-    primitiveLessOrEqualLargeIntegers: function() {
-        return this.pop2andPushBoolIfOK(this.stackSigned53BitInt(1) <= this.stackSigned53BitInt(0));
+    primitiveLessOrEqualLargeIntegers: function(argCount) {
+        return this.popNandPushBoolIfOK(argCount+1, this.stackSigned53BitInt(1) <= this.stackSigned53BitInt(0));
     },
-    primitiveGreaterOrEqualLargeIntegers: function() {
-        return this.pop2andPushBoolIfOK(this.stackSigned53BitInt(1) >= this.stackSigned53BitInt(0));
+    primitiveGreaterOrEqualLargeIntegers: function(argCount) {
+        return this.popNandPushBoolIfOK(argCount+1, this.stackSigned53BitInt(1) >= this.stackSigned53BitInt(0));
     },
-    primitiveEqualLargeIntegers: function() {
-        return this.pop2andPushBoolIfOK(this.stackSigned53BitInt(1) === this.stackSigned53BitInt(0));
+    primitiveEqualLargeIntegers: function(argCount) {
+        return this.popNandPushBoolIfOK(argCount+1, this.stackSigned53BitInt(1) === this.stackSigned53BitInt(0));
     },
-    primitiveNotEqualLargeIntegers: function() {
-        return this.pop2andPushBoolIfOK(this.stackSigned53BitInt(1) !== this.stackSigned53BitInt(0));
+    primitiveNotEqualLargeIntegers: function(argCount) {
+        return this.popNandPushBoolIfOK(argCount+1, this.stackSigned53BitInt(1) !== this.stackSigned53BitInt(0));
     },
 },
 'utils', {
@@ -1204,12 +1211,12 @@ Object.subclass('Squeak.Primitives',
     primitiveFullGC: function(argCount) {
         this.vm.image.fullGC("primitive");
         var bytes = this.vm.image.bytesLeft();
-        return this.popNandPushIfOK(1, this.makeLargeIfNeeded(bytes));
+        return this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(bytes));
     },
     primitivePartialGC: function(argCount) {
         this.vm.image.partialGC("primitive");
         var bytes = this.vm.image.bytesLeft();
-        return this.popNandPushIfOK(1, this.makeLargeIfNeeded(bytes));
+        return this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(bytes));
     },
     primitiveMakePoint: function(argCount, checkNumbers) {
         var x = this.vm.stackValue(1);

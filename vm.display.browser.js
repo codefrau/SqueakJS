@@ -364,7 +364,7 @@ Object.extend(Squeak.Primitives.prototype,
     },
     primitiveTestDisplayDepth: function(argCount) {
         var supportedDepths =  [1, 2, 4, 8, 16, 32]; // match showForm
-        return this.pop2andPushBoolIfOK(supportedDepths.indexOf(this.stackInteger(0)) >= 0);
+        return this.popNandPushBoolIfOK(argCount+1, supportedDepths.indexOf(this.stackInteger(0)) >= 0);
     },
     loadForm: function(formObj, withOffset) {
         if (formObj.isNil) return null;

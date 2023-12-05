@@ -131,6 +131,10 @@ to single-step.
 
 'initialization', {
     initialize: function(vm) {
+        if (vm.method.methodSignFlag()) {
+            console.warn("Sista bytecode set not (yet) supported by this JIT");
+            return {};
+        }
         this.vm = vm;
         this.comments = !!Squeak.Compiler.comments, // generate comments
         // for debug-printing only

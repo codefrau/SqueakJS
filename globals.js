@@ -61,7 +61,10 @@ if (!Function.prototype.subclass) {
     Function.prototype.subclass = function(classPath /* + more args */ ) {
         // create subclass
         var subclass = function() {
-            if (this.initialize) this.initialize.apply(this, arguments);
+            if (this.initialize) {
+                var result = this.initialize.apply(this, arguments);
+                if (result !== undefined) return result;
+            }
             return this;
         };
         // set up prototype

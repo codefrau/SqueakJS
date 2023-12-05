@@ -137,9 +137,13 @@ Object.subclass('Squeak.Interpreter',
         // compiler might decide to not handle current image
         try {
             console.log("squeak: initializing JIT compiler");
-            this.compiler = new Squeak.Compiler(this);
+            var compiler = new Squeak.Compiler(this);
+            if (compiler.compile) this.compiler = compiler;
         } catch(e) {
-            console.warn("Compiler " + e);
+            console.warn("Compiler: " + e);
+        }
+        if (!this.compiler) {
+            console.warn("SqueakJS will be running in interpreter mode only (slow)");
         }
     },
     hackImage: function() {

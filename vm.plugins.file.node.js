@@ -163,13 +163,15 @@ Object.extend(Squeak.Primitives.prototype,
             startIndex = this.stackInteger(1) - 1, // make zero based
             arrayObj = this.stackNonInteger(2),
             handle = this.stackNonInteger(3);
-        if (!this.success) return false;
+        if (!this.success || !arrayObj.isWordsOrBytes()) return false;
         if (!count) return this.popNandPushIfOK(argCount + 1, 0);
-        if (!arrayObj.bytes) {
-            console.warn("File reading into non-bytes object not implemented yet");
-            return false;
+        var array = arrayObj.bytes;
+        if (!array) {
+            array = arrayObj.wordsAsUint8Array();
+            startIndex *= 4;
+            count *= 4;
         }
-        if (startIndex < 0 || startIndex + count > arrayObj.bytes.length)
+        if (startIndex < 0 || startIndex + count > array.length)
             return false;
         if (handle.fd === 0) {
             console.warn("File reading on stdin not implemented yet");
@@ -177,7 +179,7 @@ Object.extend(Squeak.Primitives.prototype,
         }
         var bytesRead;
         try {
-            bytesRead = fs.readSync(handle.fd, arrayObj.bytes, startIndex, count, handle.filePos);
+            bytesRead = fs.readSync(handle.fd, array, startIndex, count, handle.filePos);
             handle.filePos += bytesRead;
         } catch(e) {
             console.error("Failed to read from file");

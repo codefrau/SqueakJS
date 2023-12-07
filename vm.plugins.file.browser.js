@@ -158,8 +158,13 @@ Object.extend(Squeak.Primitives.prototype,
             handle = this.stackNonInteger(3);
         if (!this.success || !arrayObj.isWordsOrBytes() || !handle.file) return false;
         if (!count) return this.popNandPushIfOK(argCount+1, 0);
-        var size = arrayObj.isWords() ? arrayObj.wordsSize() : arrayObj.bytesSize();
-        if (startIndex < 0 || startIndex + count > size)
+        var array = arrayObj.bytes;
+        if (!array) {
+            array = arrayObj.wordsAsUint8Array();
+            startIndex *= 4;
+            count *= 4;
+        }
+        if (startIndex < 0 || startIndex + count > array.length)
             return false;
         if (typeof handle.file === "string") {
             //this.fileConsoleRead(handle.file, array, startIndex, count);
@@ -169,21 +174,11 @@ Object.extend(Squeak.Primitives.prototype,
         return this.fileContentsDo(handle.file, function(file) {
             if (!file.contents)
                 return this.popNandPushIfOK(argCount+1, 0);
-            var srcArray, dstArray;
-            if (arrayObj.isWords()) {
-                srcArray = new Uint32Array(file.contents.buffer);
-                dstArray = arrayObj.words,
-                count = Math.min(count, (file.size - handle.filePos) >>> 2);
-                for (var i = 0; i < count; i++)
-                    dstArray[startIndex + i] = srcArray[handle.filePos + i];
-                handle.filePos += count << 2;
-            } else {
-                srcArray = file.contents;
-                dstArray = arrayObj.bytes;
-                count = Math.min(count, file.size - handle.filePos);
-                for (var i = 0; i < count; i++)
-                    dstArray[startIndex + i] = srcArray[handle.filePos++];
-            }
+            var srcArray = file.contents,
+                dstArray = array;
+            count = Math.min(count, file.size - handle.filePos);
+            for (var i = 0; i < count; i++)
+                dstArray[startIndex + i] = srcArray[handle.filePos++];
             this.popNandPushIfOK(argCount+1, Math.max(0, count));
         }.bind(this));
     },

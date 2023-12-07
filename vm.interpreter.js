@@ -176,7 +176,7 @@ Object.subclass('Squeak.Interpreter',
                     else if (byte && m.bytes[byte.pc] === byte.hack) hacked = false; // already there
                     else if (lit && m.pointers[lit.index].pointers[1] === lit.old) m.pointers[lit.index].pointers[1] = lit.hack;
                     else if (lit && m.pointers[lit.index].pointers[1] === lit.hack) hacked = false; // already there
-                    else { hacked = false; console.error("Failed to hack " + each.method); }
+                    else { hacked = false; console.warn("Not hacking " + each.method); }
                     if (hacked) console.warn("Hacking " + each.method);
                 }
             } catch (error) {

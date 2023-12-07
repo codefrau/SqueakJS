@@ -370,7 +370,8 @@ Object.extend(Squeak,
         var path = this.splitFilePath(dirpath); if (!path.basename) return false;
         if (withParents && !Squeak.Settings["squeak:" + path.dirname]) Squeak.dirCreate(path.dirname, true);
         var directory = this.dirList(path.dirname); if (!directory) return false;
-        if (directory[path.basename]) return false;
+        var existing = directory[path.basename];
+        if (existing) return existing[3]; // exists and is/is not a directory
         if (Squeak.debugFiles) console.log("Creating directory " + path.fullname);
         var now = this.totalSeconds(),
             entry = [/*name*/ path.basename, /*ctime*/ now, /*mtime*/ now, /*dir*/ true, /*size*/ 0];

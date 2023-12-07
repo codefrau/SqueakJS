@@ -976,36 +976,25 @@ Bytecodes:
 6 <78> returnSelf
 ~~~~~~~~~~~~~~~~~~~~
 
-JavaScript:
+The second invocation of `has42` does find a 42, it successfully does a non-local return, proving that the scheme is viable.
 
-~~~~~~~~~~~~~~~~~~~~ JS
-const cache = new Array(2*7).fill(null);  // [class, function]
-const PCtoSP = [0,1,1,0,1,1,0];
-function DoIt(rcvr) {
-    let pc = 0;
-    let t0;
-    let s1, s2, s3, s4;
-    try {
-      if (--vm.depth <= 0 || --vm.interruptCheckCounter <= 0) throw { message: "interrupted" };
-      while (true) switch (pc) {
-        // TODO
-        default:
-          pc = 0; throw Error("not implemented @" + pc);
-      }
-    } catch (frame) {
-      if ("nonLocalReturnValue" in frame) { vm.depth++; throw frame; }
-      // reify context and unwind all the way out of JIT
-      frame.ctx = {
-        class: "MethodContext",
-        pointers: [frame.ctx, pc, PCtoSP[pc], method, vm.nilObj, rcvr, t0, s1, s2, s3, s4],
-      };
-      throw frame;
-    }
-}
-return DoIt;
-~~~~~~~~~~~~~~~~~~~~
+### Performance estimate
 
-The the second invocation of `has42` does find a 42, it successfully does a non-local return, proving that the scheme is viable.
+_Update Nov 2023:_ To see how this idea (and some more optimizations) would perform, I implemented a [mockup of benchFib](jit-perf.html) (click that link to see it running in this browser). The code is at https://github.com/codefrau/SqueakJS/blob/gh-pages/docs/jit-perf.js
+
+On my machine (this is a newer machine than above, so the numbers are not directly comparable):
+
+| Chrome MSends/s | Safari MSends/s | FireFox MSends/s |
+|--------|--------|--------|---------
+|  3     |   7    |   4    |  current JIT
+| 88     |  48    |  62    |  JIT idea
+| 99     |  49    |  85    |  no array: use locals for inline cache
+|172     |  61    |  70    |  no switch: convert jumps to control flow
+|187     |  64    | 106    |  no switch, no array
+|308     |  76    | 175    |  no switch, no array, no type checks: assume an unsafe bytecode (SISTA) that does not require type checks
+|_339_   | _626_  | _260_  |  _plain JS (not a JIT mockup)_
+
+For comparison, Eliot's Cog VM does about *310 MSends/s* on the same machine. That is pretty much identical to the full Chrome JavaScript performance, only Safari gets 2x that speed (then again, this is an Apple-silicon Mac). For the JIT mockups, Safari does a lot worse, where Chrome comes out way ahead. The numbers are promising, even if they're not entirely realistic, they show that a lot more performance is possible.
 
 ## One more idea: Stack capture and restoration
 

@@ -303,7 +303,12 @@ Object.extend(Squeak,
             directory[path.basename] = entry;
         } else if (entry[3]) // is a directory
             return null;
-        if (Squeak.debugFiles) console.log("Writing " + path.fullname + " (" + contents.byteLength + " bytes)");
+        if (Squeak.debugFiles) {
+            console.log("Writing " + path.fullname + " (" + contents.byteLength + " bytes)");
+            if (contents.byteLength > 0 && filepath.endsWith(".log")) {
+                console.log((new TextDecoder).decode(contents).replace(/\r/g, '\n'));
+            }
+        }
         // update directory entry
         entry[2] = now; // modification time
         entry[4] = contents.byteLength || contents.length || 0;

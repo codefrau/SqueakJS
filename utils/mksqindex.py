@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # walk directory tree and create sqindex.json files
 from __future__ import with_statement
 
@@ -7,7 +7,7 @@ import sys, os, stat, json
 sqindex = "sqindex.json"
 
 def mksqindex(dirpath):
-    print dirpath
+    print(dirpath)
     dir = []
     for name in os.listdir(dirpath):
         if name[0] == '.' or name == sqindex:

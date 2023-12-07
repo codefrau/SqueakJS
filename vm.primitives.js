@@ -209,7 +209,7 @@ Object.subclass('Squeak.Primitives',
             case 118: return this.primitiveDoPrimitiveWithArgs(argCount);
             case 119: return this.vm.flushMethodCacheForSelector(this.vm.top()); // before Squeak 2.3 uses 116
             // Miscellaneous Primitives (120-149)
-            case 120: this.vm.warnOnce("missing primitive:121 (primitiveCalloutToFFI)"); return false;
+            case 120: return this.primitiveCalloutToFFI(argCount, primMethod);
             case 121: return this.primitiveImageName(argCount); //get+set imageName
             case 122: return this.primitiveReverseDisplay(argCount); // Blue Book: primitiveImageVolume
             case 123: this.vm.warnOnce("missing primitive: 123 (primitiveValueUninterruptably)"); return false;

@@ -34,14 +34,34 @@ Object.extend(Squeak,
 
 Object.extend(Squeak.Primitives.prototype,
 'FFI', {
+    primitiveCalloutToFFI: function(argCount, method) {
+        var extLibFunc = method.pointers[1];
+        if (!this.isKindOf(extLibFunc, Squeak.splOb_ClassExternalFunction)) return false;
+        var args = [];
+        for (var i = argCount - 1; i >= 0; i--)
+            args.push(this.vm.stackValue(i));
+        return this.calloutToFFI(argCount, extLibFunc, args);
+    },
     ffi_primitiveCalloutWithArgs: function(argCount) {
         var extLibFunc = this.stackNonInteger(1),
             argsObj = this.stackNonInteger(0);
         if (!this.isKindOf(extLibFunc, Squeak.splOb_ClassExternalFunction)) return false;
+        return this.calloutToFFI(argCount, extLibFunc, argsObj.pointers);
+    },
+    calloutToFFI(argCount, extLibFunc, stArgs) {
         var moduleName = extLibFunc.pointers[Squeak.ExtLibFunc_module].bytesAsString();
         var funcName = extLibFunc.pointers[Squeak.ExtLibFunc_name].bytesAsString();
-        var args = argsObj.pointers.join(', ');
-        this.vm.warnOnce('FFI: ignoring ' + moduleName + ': ' + funcName + '(' + args + ')');
-        return false;
+        var module = Squeak.externalModules[moduleName];
+        if (!module || typeof module[funcName] !== 'function') {
+            this.vm.warnOnce('FFI: function not found: ' + moduleName + '::' + funcName + '()');
+            return false;
+        }
+        var jsArgs = [];
+        for (var i = 0; i < stArgs.length; i++) {
+            jsArgs.push(this.js_fromStObject(stArgs[i])); // from JSBridge
+        }
+        var jsResult = module[funcName].apply(this, jsArgs);
+        var stResult = this.makeStObject(jsResult);
+        return this.popNandPushIfOK(argCount + 1, stResult);
     },
 });

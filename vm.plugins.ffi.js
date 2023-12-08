@@ -48,7 +48,7 @@ Object.extend(Squeak.Primitives.prototype,
         if (!this.isKindOf(extLibFunc, Squeak.splOb_ClassExternalFunction)) return false;
         return this.calloutToFFI(argCount, extLibFunc, argsObj.pointers);
     },
-    calloutToFFI(argCount, extLibFunc, stArgs) {
+    calloutToFFI: function(argCount, extLibFunc, stArgs) {
         var moduleName = extLibFunc.pointers[Squeak.ExtLibFunc_module].bytesAsString();
         var funcName = extLibFunc.pointers[Squeak.ExtLibFunc_name].bytesAsString();
         var module = Squeak.externalModules[moduleName];

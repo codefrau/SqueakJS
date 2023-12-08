@@ -75,6 +75,9 @@ Object.extend(Squeak.Primitives.prototype,
             console.log("Directory not found: " + path.fullname);
             return false;
         }
+        if (Squeak.debugFiles && index === 1) {
+            console.log("Reading directory " + dirName + " with " + Object.keys(entries).length + " entries");
+        }
         var keys = Object.keys(entries).sort(),
             entry = entries[keys[index - 1]];
         if (sqDirName === "/") { // fake top-level dir

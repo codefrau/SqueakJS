@@ -53,6 +53,43 @@ Object.extend(Squeak,
     FFIErrorBadExternalFunction: 17, // external function invalid
     FFIErrorInvalidPointer: 18, // ExternalAddress points to ST memory (don't you dare to do this!)
     FFIErrorCallFrameTooBig: 19, // Stack frame required more than 16k bytes to pass arguments.
+},
+"FFI types", {
+    // type void
+    FFITypeVoid: 0,
+    // type bool
+    FFITypeBool: 1,
+    // basic integer types.
+    // note: (integerType anyMask: 1) = integerType isSigned
+    FFITypeUnsignedInt8: 2,
+    FFITypeSignedInt8: 3,
+    FFITypeUnsignedInt16: 4,
+    FFITypeSignedInt16: 5,
+    FFITypeUnsignedInt32: 6,
+    FFITypeSignedInt32: 7,
+    FFITypeUnsignedInt64: 8,
+    FFITypeSignedInt64: 9,
+    // original character types
+    // note: isCharacterType ^type >> 1 >= 5 and: [(type >> 1) odd]
+    FFITypeUnsignedChar8: 10,
+    FFITypeSignedChar8: 11, // N.B. misnomer!
+    // float types
+    // note: isFloatType ^type >> 1 = 6
+    FFITypeSingleFloat: 12,
+    FFITypeDoubleFloat: 13,
+    // new character types
+    // note: isCharacterType ^type >> 1 >= 5 and: [(type >> 1) odd]
+    FFITypeUnsignedChar16: 14,
+    FFITypeUnsignedChar32: 15,
+    // type flags
+    FFIFlagAtomic: 0x40000, // type is atomic
+    FFIFlagPointer: 0x20000, // type is pointer to base type (a.k.a. array)
+    FFIFlagStructure: 0x10000, // baseType is structure of 64k length
+    FFIFlagAtomicArray: 0x60000, // baseType is atomic and array
+    FFIFlagMask: 0x70000, // mask for flags
+    FFIStructSizeMask: 0xFFFF, // mask for max size of structure
+    FFIAtomicTypeMask: 0x0F000000, // mask for atomic type spec
+    FFIAtomicTypeShift: 24, // shift for atomic type
 });
 
 Object.extend(Squeak.Primitives.prototype,
@@ -66,13 +103,114 @@ Object.extend(Squeak.Primitives.prototype,
             this.vm.warnOnce('FFI: function not found: ' + moduleName + '::' + funcName + '()');
             return false;
         }
+        // types[0] is return type, types[1] is first arg type, etc.
+        var stTypes = extLibFunc.pointers[Squeak.ExtLibFunc_argTypes].pointers;
         var jsArgs = [];
         for (var i = 0; i < stArgs.length; i++) {
-            jsArgs.push(this.js_fromStObject(stArgs[i])); // from JSBridge
+            jsArgs.push(this.ffiArgFromSt(stArgs[i], stTypes[i+1]));
         }
-        var jsResult = module[funcName].apply(this, jsArgs);
-        var stResult = this.makeStObject(jsResult);
+        var jsResult = module[funcName].apply(module, jsArgs);
+        var stResult = this.ffiResultToSt(jsResult, stTypes[0]);
         return this.popNandPushIfOK(argCount + 1, stResult);
+    },
+    ffiArgFromSt: function(stObj, stType) {
+        var typeSpec = stType.pointers[0].words[0];
+        switch (typeSpec & Squeak.FFIFlagMask) {
+            case Squeak.FFIFlagAtomic:
+                // single value
+                var atomicType = (typeSpec & Squeak.FFIAtomicTypeMask) >> Squeak.FFIAtomicTypeShift;
+                switch (atomicType) {
+                    case Squeak.FFITypeVoid:
+                        return null;
+                    case Squeak.FFITypeBool:
+                        return !stObj.isFalse;
+                    case Squeak.FFITypeUnsignedInt8:
+                    case Squeak.FFITypeSignedInt8:
+                    case Squeak.FFITypeUnsignedInt16:
+                    case Squeak.FFITypeSignedInt16:
+                    case Squeak.FFITypeUnsignedInt32:
+                    case Squeak.FFITypeSignedInt32:
+                    case Squeak.FFITypeUnsignedInt64:
+                    case Squeak.FFITypeSignedInt64:
+                    case Squeak.FFITypeUnsignedChar8:
+                    case Squeak.FFITypeSignedChar8:
+                    case Squeak.FFITypeUnsignedChar16:
+                    case Squeak.FFITypeUnsignedChar32:
+                        // we ignore the signedness and size of the integer for now
+                        if (typeof stObj === "number") return stObj;
+                        throw Error("FFI: expected integer, got " + stObj);
+                    case Squeak.FFITypeSingleFloat:
+                    case Squeak.FFITypeDoubleFloat:
+                        if (typeof stObj === "number") return stObj;
+                        if (typeof stObj.isFloat) return stObj.float;
+                        throw Error("FFI: expected float, got " + stObj);
+                    default:
+                        throw Error("FFI: unimplemented atomic arg type: " + atomicType);
+                }
+            case Squeak.FFIFlagAtomicArray:
+                // array of values
+                var atomicType = (typeSpec & Squeak.FFIAtomicTypeMask) >> Squeak.FFIAtomicTypeShift;
+                switch (atomicType) {
+                    case Squeak.FFITypeUnsignedChar8:
+                        if (stObj.bytes) return stObj.bytesAsString();
+                        throw Error("FFI: expected string, got " + stObj);
+                    case Squeak.FFITypeUnsignedInt8:
+                        if (stObj.bytes) return stObj.bytes;
+                        if (stObj.words) return stObj.wordsAsUint8Array();
+                        throw Error("FFI: expected bytes, got " + stObj);
+                    case Squeak.FFITypeSingleFloat:
+                        if (stObj.words) return stObj.wordsAsFloat32Array();
+                        throw Error("FFI: expected float array, got " + stObj);
+                    default:
+                        throw Error("FFI: unimplemented atomic array arg type: " + atomicType);
+                }
+            default:
+                throw Error("FFI: unimplemented arg type flags: " + typeSpec);
+        }
+    },
+    ffiResultToSt: function(jsResult, stType) {
+        var typeSpec = stType.pointers[0].words[0];
+        switch (typeSpec & Squeak.FFIFlagMask) {
+            case Squeak.FFIFlagAtomic:
+                // single value
+                var atomicType = (typeSpec & Squeak.FFIAtomicTypeMask) >> Squeak.FFIAtomicTypeShift;
+                switch (atomicType) {
+                    case Squeak.FFITypeVoid:
+                        return this.vm.nilObj;
+                    case Squeak.FFITypeBool:
+                        return jsResult ? this.vm.trueObj : this.vm.falseObj;
+                    case Squeak.FFITypeUnsignedInt8:
+                    case Squeak.FFITypeSignedInt8:
+                    case Squeak.FFITypeUnsignedInt16:
+                    case Squeak.FFITypeSignedInt16:
+                    case Squeak.FFITypeUnsignedInt32:
+                    case Squeak.FFITypeSignedInt32:
+                    case Squeak.FFITypeUnsignedInt64:
+                    case Squeak.FFITypeSignedInt64:
+                    case Squeak.FFITypeUnsignedChar8:
+                    case Squeak.FFITypeSignedChar8:
+                    case Squeak.FFITypeUnsignedChar16:
+                    case Squeak.FFITypeUnsignedChar32:
+                        // we ignore the signedness and size of the integer for now
+                        return this.makeStInt(jsResult);
+                    case Squeak.FFITypeSingleFloat:
+                    case Squeak.FFITypeDoubleFloat:
+                        return this.makeStFloat(jsResult);
+                    default:
+                        throw Error("FFI: unimplemented atomic return type: " + atomicType);
+                }
+            case Squeak.FFIFlagAtomicArray:
+                // array of values
+                var atomicType = (typeSpec & Squeak.FFIAtomicTypeMask) >> Squeak.FFIAtomicTypeShift;
+                switch (atomicType) {
+                    case Squeak.FFITypeUnsignedChar8:
+                        return this.makeStString(jsResult);
+                    default:
+                        throw Error("FFI: unimplemented atomic array return type: " + atomicType);
+                }
+            default:
+                throw Error("FFI: unimplemented return type flags: " + typeSpec);
+        }
     },
     primitiveCalloutToFFI: function(argCount, method) {
         var extLibFunc = method.pointers[1];

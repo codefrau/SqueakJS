@@ -24,7 +24,7 @@
 Object.subclass('Squeak.InterpreterProxy',
 // provides function names exactly like the C interpreter, for ease of porting
 // but maybe less efficiently because of the indirection
-// only used for plugins translated from Slang (see plugins/*.js)
+// mostly used for plugins translated from Slang (see plugins/*.js)
 // built-in primitives use the interpreter directly
 'initialization', {
     VM_PROXY_MAJOR: 1,
@@ -279,6 +279,9 @@ Object.subclass('Squeak.InterpreterProxy',
 },
 'vm functions',
 {
+    clone: function(object) {
+        return this.vm.image.clone(object);
+    },
     instantiateClassindexableSize: function(aClass, indexableSize) {
         return this.vm.instantiateClass(aClass, indexableSize);
     },

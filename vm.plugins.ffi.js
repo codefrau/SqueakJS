@@ -96,11 +96,19 @@ Object.extend(Squeak.Primitives.prototype,
 'FFI', {
     ffi_lastError: 0,
     calloutToFFI: function(argCount, extLibFunc, stArgs) {
-        var moduleName = extLibFunc.pointers[Squeak.ExtLibFunc_module].bytesAsString();
+        this.ffi_lastError = Squeak.FFIErrorGenericError;
+        var modName = extLibFunc.pointers[Squeak.ExtLibFunc_module].bytesAsString();
         var funcName = extLibFunc.pointers[Squeak.ExtLibFunc_name].bytesAsString();
-        var module = Squeak.externalModules[moduleName];
-        if (!module || typeof module[funcName] !== 'function') {
-            this.vm.warnOnce('FFI: function not found: ' + moduleName + '::' + funcName + '()');
+        var mod = this.loadedModules[modName];
+        if (mod === undefined) { // null if earlier load failed
+            mod = this.loadModule(modName);
+            this.loadedModules[modName] = mod;
+            if (!mod) {
+                this.vm.warnOnce('FFI: module not found: ' + modName);
+            }
+        }
+        if (!mod) {
+            this.ffi_lastError = Squeak.FFIErrorModuleNotFound;
             return false;
         }
         // types[0] is return type, types[1] is first arg type, etc.
@@ -109,7 +117,15 @@ Object.extend(Squeak.Primitives.prototype,
         for (var i = 0; i < stArgs.length; i++) {
             jsArgs.push(this.ffiArgFromSt(stArgs[i], stTypes[i+1]));
         }
-        var jsResult = module[funcName].apply(module, jsArgs);
+        if (!(funcName in mod)) {
+            if (this.vm.warnOnce('FFI: function not found: ' + modName + '::' + funcName)) {
+                console.warn(jsArgs);
+                debugger;
+            }
+            this.ffi_lastError = Squeak.FFIErrorAddressNotFound;
+            return false;
+        }
+        var jsResult = mod[funcName].apply(mod, jsArgs);
         var stResult = this.ffiResultToSt(jsResult, stTypes[0]);
         return this.popNandPushIfOK(argCount + 1, stResult);
     },

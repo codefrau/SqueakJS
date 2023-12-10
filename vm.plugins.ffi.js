@@ -174,9 +174,20 @@ Object.extend(Squeak.Primitives.prototype,
                         if (stObj.bytes) return stObj.bytes;
                         if (stObj.words) return stObj.wordsAsUint8Array();
                         throw Error("FFI: expected bytes, got " + stObj);
+                    case Squeak.FFITypeUnsignedInt32:
+                        if (stObj.words) return stObj.words;
+                        throw Error("FFI: expected words, got " + stObj);
+                    case Squeak.FFITypeSignedInt32:
+                        if (stObj.words) return stObj.wordsAsInt32Array();
+                        throw Error("FFI: expected words, got " + stObj);
                     case Squeak.FFITypeSingleFloat:
                         if (stObj.words) return stObj.wordsAsFloat32Array();
-                        throw Error("FFI: expected float array, got " + stObj);
+                        if (stObj.isFloat) return new Float32Array([stObj.float]);
+                        throw Error("FFI: expected floats, got " + stObj);
+                    case Squeak.FFITypeVoid: // void* is passed as buffer
+                        if (stObj.words) return stObj.words.buffer;
+                        if (stObj.bytes) return stObj.bytes.buffer;
+                        throw Error("FFI: expected words or bytes, got " + stObj);
                     default:
                         throw Error("FFI: unimplemented atomic array arg type: " + atomicType);
                 }
@@ -207,11 +218,10 @@ Object.extend(Squeak.Primitives.prototype,
                     case Squeak.FFITypeSignedChar8:
                     case Squeak.FFITypeUnsignedChar16:
                     case Squeak.FFITypeUnsignedChar32:
-                        // we ignore the signedness and size of the integer for now
-                        return this.makeStInt(jsResult);
                     case Squeak.FFITypeSingleFloat:
                     case Squeak.FFITypeDoubleFloat:
-                        return this.makeStFloat(jsResult);
+                        if (typeof jsResult !== "number") throw Error("FFI: expected number, got " + jsResult);
+                        return this.makeStObject(jsResult);
                     default:
                         throw Error("FFI: unimplemented atomic return type: " + atomicType);
                 }

@@ -1515,8 +1515,10 @@ Object.subclass('Squeak.Interpreter',
         return this.messages[message] ? ++this.messages[message] : this.messages[message] = 1;
     },
     warnOnce: function(message, what) {
-        if (this.addMessage(message) == 1)
+        if (this.addMessage(message) == 1) {
             console[what || "warn"](message);
+            return true;
+        }
     },
     printMethod: function(aMethod, optContext, optSel) {
         // return a 'class>>selector' description for the method

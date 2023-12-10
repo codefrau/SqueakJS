@@ -85,7 +85,7 @@ Object.extend(Squeak,
     FFIFlagAtomic: 0x40000, // type is atomic
     FFIFlagPointer: 0x20000, // type is pointer to base type (a.k.a. array)
     FFIFlagStructure: 0x10000, // baseType is structure of 64k length
-    FFIFlagAtomicArray: 0x60000, // baseType is atomic and array
+    FFIFlagAtomicPointer: 0x60000, // baseType is atomic and pointer (array)
     FFIFlagMask: 0x70000, // mask for flags
     FFIStructSizeMask: 0xFFFF, // mask for max size of structure
     FFIAtomicTypeMask: 0x0F000000, // mask for atomic type spec
@@ -147,7 +147,7 @@ Object.extend(Squeak.Primitives.prototype,
                     default:
                         throw Error("FFI: unimplemented atomic arg type: " + atomicType);
                 }
-            case Squeak.FFIFlagAtomicArray:
+            case Squeak.FFIFlagAtomicPointer:
                 // array of values
                 var atomicType = (typeSpec & Squeak.FFIAtomicTypeMask) >> Squeak.FFIAtomicTypeShift;
                 switch (atomicType) {
@@ -199,18 +199,29 @@ Object.extend(Squeak.Primitives.prototype,
                     default:
                         throw Error("FFI: unimplemented atomic return type: " + atomicType);
                 }
-            case Squeak.FFIFlagAtomicArray:
+            case Squeak.FFIFlagAtomicPointer:
                 // array of values
                 var atomicType = (typeSpec & Squeak.FFIAtomicTypeMask) >> Squeak.FFIAtomicTypeShift;
                 switch (atomicType) {
+                    // char* is returned as string
+                    case Squeak.FFITypeSignedChar8:
                     case Squeak.FFITypeUnsignedChar8:
                         return this.makeStString(jsResult);
+                    // all other arrays are returned as ExternalData
                     default:
-                        throw Error("FFI: unimplemented atomic array return type: " + atomicType);
+                        return this.makeStExternalData(jsResult, stType);
                 }
             default:
                 throw Error("FFI: unimplemented return type flags: " + typeSpec);
         }
+    },
+    makeStExternalData: function(jsData, stType) {
+        var extAddr = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassExternalAddress], 4);
+        extAddr.jsData = jsData; // save for later
+        var extData = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassExternalData], 0);
+        extData.pointers[0] = extAddr;
+        extData.pointers[1] = stType;
+        return extData;
     },
     primitiveCalloutToFFI: function(argCount, method) {
         var extLibFunc = method.pointers[1];
@@ -228,5 +239,40 @@ Object.extend(Squeak.Primitives.prototype,
     },
     ffi_primitiveFFIGetLastError: function(argCount) {
         return this.popNandPushIfOK(argCount + 1, this.ffi_lastError);
+    },
+    ffi_primitiveFFIIntegerAt: function(argCount) {
+        var rcvr = this.stackNonInteger(3),
+            byteOffset = this.stackInteger(2),
+            byteSize = this.stackInteger(1),
+            isSigned = this.stackBoolean(0);
+        if (!this.success) return false;
+        if (byteOffset < 0 || byteSize < 1 || byteSize > 8 ||
+            (byteSize & (byteSize - 1)) !== 0) return false;
+        // if receiver is not an ExternalAddress, fail
+        if (rcvr.sqClass !== this.vm.specialObjects[Squeak.splOb_ClassExternalAddress]) {
+            this.vm.warnOnce("FFI: expected ExternalAddress, got " + rcvr.sqClass.className());
+            return false;
+        }
+        var data = rcvr.jsData;
+        if (data === undefined) {
+            this.vm.warnOnce("FFI: expected ExternalAddress with jsData, got " + rcvr);
+            return false;
+        }
+        var result;
+        if (byteSize === 1 && !isSigned) {
+            debugger;
+            if (typeof data === "string") {
+                result = data.charCodeAt(byteOffset - 1) || 0; // 0 if out of bounds
+            } else if (data instanceof Uint8Array) {
+                result = data[byteOffset] || 0; // 0 if out of bounds
+            } else {
+                this.vm.warnOnce("FFI: expected string or Uint8Array, got " + typeof data);
+                return false;
+            }
+        } else {
+            this.vm.warnOnce("FFI: unimplemented integer type size: " + byteSize + " signed: " + isSigned);
+            return false;
+        }
+        return this.popNandPushIfOK(argCount + 1, result);
     },
 });

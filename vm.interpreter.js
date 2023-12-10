@@ -1742,6 +1742,14 @@ Object.subclass('Squeak.Interpreter',
         var printer = new Squeak.InstructionPrinter(aMethod, this);
         return printer.printInstructions(optionalIndent, optionalHighlight, optionalPC);
     },
+    logStack: function() {
+        // useful for debugging interactively:
+        // SqueakJS.vm.logStack()
+        console.log(this.printStack()
+            + this.printActiveContext() + '\n\n'
+            + this.printByteCodes(this.method, '   ', '=> ', this.pc),
+            this.activeContext.pointers.slice(0, this.sp + 1));
+    },
     willSendOrReturn: function() {
         // Answer whether the next bytecode corresponds to a Smalltalk
         // message send or return

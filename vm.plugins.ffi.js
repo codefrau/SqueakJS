@@ -117,15 +117,21 @@ Object.extend(Squeak.Primitives.prototype,
         for (var i = 0; i < stArgs.length; i++) {
             jsArgs.push(this.ffiArgFromSt(stArgs[i], stTypes[i+1]));
         }
+        var jsResult;
         if (!(funcName in mod)) {
             if (this.vm.warnOnce('FFI: function not found: ' + modName + '::' + funcName)) {
                 console.warn(jsArgs);
                 debugger;
             }
-            this.ffi_lastError = Squeak.FFIErrorAddressNotFound;
-            return false;
+            if (mod.ffiFunctionNotFoundHandler) {
+                jsResult = mod.ffiFunctionNotFoundHandler(funcName, jsArgs);
+            }
+            if (jsResult === undefined) {
+                this.ffi_lastError = Squeak.FFIErrorAddressNotFound;
+                return false;
+            }
         }
-        var jsResult = mod[funcName].apply(mod, jsArgs);
+        jsResult = mod[funcName].apply(mod, jsArgs);
         var stResult = this.ffiResultToSt(jsResult, stTypes[0]);
         return this.popNandPushIfOK(argCount + 1, stResult);
     },

@@ -1704,6 +1704,10 @@ Object.subclass('Squeak.Primitives',
             this.vm.breakOnContextChanged = false;
             this.vm.breakNow();
         }
+        if (this.vm.logProcess) console.log(
+            "\n============= Process Switch ==================\n"
+            + this.vm.printProcess(newProc, true, this.vm.logSends ? '| ' : '')
+            + "===============================================");
     },
     wakeHighestPriority: function() {
         //Return the highest priority process that is ready to run.

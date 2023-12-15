@@ -988,7 +988,8 @@ Object.subclass('Squeak.Interpreter',
             var indent = ' ';
             var ctx = this.activeContext;
             while (!ctx.isNil) { indent += '| '; ctx = ctx.pointers[Squeak.Context_sender]; }
-            console.log(this.sendCount + indent + this.printMethod(newMethod, optClass, optSel));
+            var args = this.activeContext.pointers.slice(this.sp + 1 - argumentCount, this.sp + 1);
+            console.log(this.sendCount + indent + this.printMethod(newMethod, optClass, optSel, args));
         }
         if (this.breakOnContextChanged) {
             this.breakOnContextChanged = false;
@@ -1525,15 +1526,27 @@ Object.subclass('Squeak.Interpreter',
             return true;
         }
     },
-    printMethod: function(aMethod, optContext, optSel) {
+    printMethod: function(aMethod, optContext, optSel, optArgs) {
         // return a 'class>>selector' description for the method
         if (aMethod.sqClass != this.specialObjects[Squeak.splOb_ClassCompiledMethod]) {
-          return this.printMethod(aMethod.blockOuterCode(), optContext, optSel)
+          return this.printMethod(aMethod.blockOuterCode(), optContext, optSel, optArgs)
         }
-        if (optSel) return optContext.className() + '>>' + optSel.bytesAsString();
+        var found;
+        if (optSel) {
+            var printed = optContext.className() + '>>';
+            var selector = optSel.bytesAsString();
+            if (!optArgs || !optArgs.length) printed += selector;
+            else {
+                var parts = selector.split(/(?<=:)/); // keywords
+                for (var i = 0; i < optArgs.length; i++) {
+                    if (i > 0) printed += ' ';
+                    printed += parts[i] + ' ' + optArgs[i];
+                }
+            }
+            return printed;
+        }
         // this is expensive, we have to search all classes
         if (!aMethod) aMethod = this.activeContext.contextMethod();
-        var found;
         this.allMethodsDo(function(classObj, methodObj, selectorObj) {
             if (methodObj === aMethod)
                 return found = classObj.className() + '>>' + selectorObj.bytesAsString();
@@ -1597,7 +1610,7 @@ Object.subclass('Squeak.Interpreter',
             }
         });
     },
-    printStack: function(ctx, limit) {
+    printStack: function(ctx, limit, indent) {
         // both args are optional
         if (typeof ctx == "number") {limit = ctx; ctx = null;}
         if (!ctx) ctx = this.activeContext;
@@ -1614,7 +1627,9 @@ Object.subclass('Squeak.Interpreter',
             contexts = contexts.slice(0, limit).concat(['...']).concat(contexts.slice(-extra));
         }
         var stack = [],
-            i = contexts.length;
+            i = contexts.length,
+            indents = '';
+        if (indent && this.logSends) indents = Array((""+this.sendCount).length + 2).join(' ');
         while (i-- > 0) {
             var ctx = contexts[i];
             if (!ctx.pointers) {
@@ -1628,7 +1643,10 @@ Object.subclass('Squeak.Interpreter',
                 } else if (!ctx.pointers[Squeak.Context_closure].isNil) {
                     block = '[] in '; // it's a closure activation
                 }
-                stack.push(block + this.printMethod(method, ctx) + '\n');
+                var line = block + this.printMethod(method, ctx);
+                if (indent) line = indents + line;
+                stack.push(line + '\n');
+                if (indent) indents += indent;
             }
         }
         return stack.join('');
@@ -1752,7 +1770,7 @@ Object.subclass('Squeak.Interpreter',
         }
         return result;
     },
-    printProcess: function(process, active) {
+    printProcess: function(process, active, indent) {
         if (!process) {
             var schedAssn = this.specialObjects[Squeak.splOb_SchedulerAssociation],
             sched = schedAssn.pointers[Squeak.Assn_value];
@@ -1761,8 +1779,8 @@ Object.subclass('Squeak.Interpreter',
         }
         var context = active ? this.activeContext : process.pointers[Squeak.Proc_suspendedContext],
             priority = process.pointers[Squeak.Proc_priority],
-            stack = this.printStack(context),
-            values = this.printContext(context);
+            stack = this.printStack(context, 20, indent),
+            values = indent && this.logSends ? "" : this.printContext(context) + "\n";
         return process.toString() +" at priority " + priority + "\n" + stack + values;
     },
     printByteCodes: function(aMethod, optionalIndent, optionalHighlight, optionalPC) {

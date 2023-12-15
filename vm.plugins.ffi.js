@@ -292,7 +292,6 @@ Object.extend(Squeak.Primitives.prototype,
         }
         var result;
         if (byteSize === 1 && !isSigned) {
-            debugger;
             if (typeof data === "string") {
                 result = data.charCodeAt(byteOffset - 1) || 0; // 0 if out of bounds
             } else if (data instanceof Uint8Array) {

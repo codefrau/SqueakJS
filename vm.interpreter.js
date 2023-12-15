@@ -984,7 +984,12 @@ Object.subclass('Squeak.Interpreter',
     executeNewMethod: function(newRcvr, newMethod, argumentCount, primitiveIndex, optClass, optSel) {
         this.sendCount++;
         if (newMethod === this.breakOnMethod) this.breakNow("executing method " + this.printMethod(newMethod, optClass, optSel));
-        if (this.logSends) console.log(this.sendCount + ' ' + this.printMethod(newMethod, optClass, optSel));
+        if (this.logSends) {
+            var indent = ' ';
+            var ctx = this.activeContext;
+            while (!ctx.isNil) { indent += '| '; ctx = ctx.pointers[Squeak.Context_sender]; }
+            console.log(this.sendCount + indent + this.printMethod(newMethod, optClass, optSel));
+        }
         if (this.breakOnContextChanged) {
             this.breakOnContextChanged = false;
             this.breakNow();
@@ -1678,12 +1683,17 @@ Object.subclass('Squeak.Interpreter',
         var stackTop = homeCtx.contextSizeWithStack(this) - 1;
         var firstTemp = stackBottom + 1;
         var lastTemp = firstTemp + tempCount - 1;
+        var lastArg = firstTemp + homeCtx.pointers[Squeak.Context_method].methodNumArgs() - 1;
         var stack = '';
         for (var i = stackBottom; i <= stackTop; i++) {
             var value = printObj(homeCtx.pointers[i]);
             var label = '';
-            if (i == stackBottom) label = '=rcvr'; else
-            if (i <= lastTemp) label = '=tmp' + (i - firstTemp);
+            if (i === stackBottom) {
+                label = '=rcvr';
+            } else {
+                if (i <= lastTemp) label = '=tmp' + (i - firstTemp);
+                if (i <= lastArg) label += '/arg' + (i - firstTemp);
+            }
             stack += '\nctx[' + i + ']' + label +': ' + value;
         }
         if (isBlock) {
@@ -1692,10 +1702,11 @@ Object.subclass('Squeak.Interpreter',
             var firstArg = this.decodeSqueakSP(1);
             var lastArg = firstArg + nArgs;
             var sp = ctx === this.activeContext ? this.sp : ctx.pointers[Squeak.Context_stackPointer];
+            if (sp < firstArg) stack += '\nblk <stack empty>';
             for (var i = firstArg; i <= sp; i++) {
                 var value = printObj(ctx.pointers[i]);
                 var label = '';
-                if (i <= lastArg) label = '=arg' + (i - firstArg);
+                if (i < lastArg) label = '=arg' + (i - firstArg);
                 stack += '\nblk[' + i + ']' + label +': ' + value;
             }
         }
@@ -1710,34 +1721,49 @@ Object.subclass('Squeak.Interpreter',
         // print active process
         var activeProc = sched.pointers[Squeak.ProcSched_activeProcess],
             result = "Active: " + this.printProcess(activeProc, true);
-        // print other runnable processes
+        // print other runnable processes in order of priority
         var lists = sched.pointers[Squeak.ProcSched_processLists].pointers;
         for (var priority = lists.length - 1; priority >= 0; priority--) {
             var process = lists[priority].pointers[Squeak.LinkedList_firstLink];
             while (!process.isNil) {
+                result += "\n------------------------------------------";
                 result += "\nRunnable: " + this.printProcess(process);
                 process = process.pointers[Squeak.Link_nextLink];
             }
         }
-        // print all processes waiting on a semaphore
+        // print all processes waiting on a semaphore in order of priority
         var semaClass = this.specialObjects[Squeak.splOb_ClassSemaphore],
-            sema = this.image.someInstanceOf(semaClass);
+            sema = this.image.someInstanceOf(semaClass),
+            waiting = [];
         while (sema) {
             var process = sema.pointers[Squeak.LinkedList_firstLink];
             while (!process.isNil) {
-                result += "\nWaiting: " + this.printProcess(process);
+                waiting.push(process);
                 process = process.pointers[Squeak.Link_nextLink];
             }
             sema = this.image.nextInstanceAfter(sema);
         }
+        waiting.sort(function(a, b){
+            return b.pointers[Squeak.Proc_priority] - a.pointers[Squeak.Proc_priority];
+        });
+        for (var i = 0; i < waiting.length; i++) {
+            result += "\n------------------------------------------";
+            result += "\nWaiting: " + this.printProcess(waiting[i]);
+        }
         return result;
     },
     printProcess: function(process, active) {
-        var context = process.pointers[Squeak.Proc_suspendedContext],
+        if (!process) {
+            var schedAssn = this.specialObjects[Squeak.splOb_SchedulerAssociation],
+            sched = schedAssn.pointers[Squeak.Assn_value];
+            process = sched.pointers[Squeak.ProcSched_activeProcess],
+            active = true;
+        }
+        var context = active ? this.activeContext : process.pointers[Squeak.Proc_suspendedContext],
             priority = process.pointers[Squeak.Proc_priority],
-            stack = this.printStack(active ? null : context),
+            stack = this.printStack(context),
             values = this.printContext(context);
-        return process.toString() +" at priority " + priority + "\n" + stack + values + "\n";
+        return process.toString() +" at priority " + priority + "\n" + stack + values;
     },
     printByteCodes: function(aMethod, optionalIndent, optionalHighlight, optionalPC) {
         if (!aMethod) aMethod = this.method;

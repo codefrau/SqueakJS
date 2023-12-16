@@ -589,7 +589,7 @@ Object.subclass('Squeak.Interpreter',
         if (this.frozen) return 'frozen';
         this.isIdle = false;
         this.breakOutOfInterpreter = false;
-        this.breakOutTick = this.primHandler.millisecondClockValue() + (forMilliseconds || 500);
+        this.breakAfter(forMilliseconds || 500);
         while (this.breakOutOfInterpreter === false)
             if (this.method.compiled) {
                 this.method.compiled(this);
@@ -1663,6 +1663,9 @@ Object.subclass('Squeak.Interpreter',
                     return found = methodObj;
         });
         return found;
+    },
+    breakAfter: function(ms) {
+        this.breakOutTick = this.primHandler.millisecondClockValue() + ms;
     },
     breakNow: function(msg) {
         if (msg) console.log("Break: " + msg);

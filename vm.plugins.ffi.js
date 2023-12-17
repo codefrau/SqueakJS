@@ -94,8 +94,13 @@ Object.extend(Squeak,
 
 Object.extend(Squeak.Primitives.prototype,
 'FFI', {
+    // naming:
+    //   - ffi_* for public methods of SqueakFFIPrims module
+    //     (see vm.plugins.js)
+    //   - other ffi* for private methods of this module
+    //   - primitiveCalloutToFFI: old callout primitive (not in SqueakFFIPrims)
     ffi_lastError: 0,
-    calloutToFFI: function(argCount, extLibFunc, stArgs) {
+    ffiDoCallout: function(argCount, extLibFunc, stArgs) {
         this.ffi_lastError = Squeak.FFIErrorGenericError;
         var modName = extLibFunc.pointers[Squeak.ExtLibFunc_module].bytesAsString();
         var funcName = extLibFunc.pointers[Squeak.ExtLibFunc_name].bytesAsString();
@@ -121,7 +126,6 @@ Object.extend(Squeak.Primitives.prototype,
         if (!(funcName in mod)) {
             if (this.vm.warnOnce('FFI: function not found: ' + modName + '::' + funcName)) {
                 console.warn(jsArgs);
-                debugger;
             }
             if (mod.ffiFunctionNotFoundHandler) {
                 jsResult = mod.ffiFunctionNotFoundHandler(funcName, jsArgs);
@@ -130,8 +134,9 @@ Object.extend(Squeak.Primitives.prototype,
                 this.ffi_lastError = Squeak.FFIErrorAddressNotFound;
                 return false;
             }
+        } else {
+            jsResult = mod[funcName].apply(mod, jsArgs);
         }
-        jsResult = mod[funcName].apply(mod, jsArgs);
         var stResult = this.ffiResultToSt(jsResult, stTypes[0]);
         return this.popNandPushIfOK(argCount + 1, stResult);
     },
@@ -190,6 +195,16 @@ Object.extend(Squeak.Primitives.prototype,
                         if (stObj.words) return stObj.wordsAsFloat32Array();
                         if (stObj.isFloat) return new Float32Array([stObj.float]);
                         throw Error("FFI: expected floats, got " + stObj);
+                    case Squeak.FFITypeDoubleFloat:
+                        if (stObj.words) return stObj.wordsAsFloat64Array();
+                        if (stObj.isFloat) return new Float64Array([stObj.float]);
+                        // must be ExternalData
+                        if (stObj.pointers && stObj.pointers[0].jsData) {
+                            var data = stObj.pointers[0].jsData;
+                            if (data instanceof Float64Array) return data;
+                            if (data instanceof ArrayBuffer) return new Float64Array(data);
+                        }
+                        throw Error("FFI: expected floats, got " + stObj);
                     case Squeak.FFITypeVoid: // void* is passed as buffer
                         if (stObj.words) return stObj.words.buffer;
                         if (stObj.bytes) return stObj.bytes.buffer;
@@ -241,19 +256,50 @@ Object.extend(Squeak.Primitives.prototype,
                         return this.makeStString(jsResult);
                     // all other arrays are returned as ExternalData
                     default:
-                        return this.makeStExternalData(jsResult, stType);
+                        return this.ffiMakeStExternalData(jsResult, stType);
                 }
             default:
                 throw Error("FFI: unimplemented return type flags: " + typeSpec);
         }
     },
-    makeStExternalData: function(jsData, stType) {
+    ffiNextExtAddr: 0, // fake addresses for ExternalAddress objects
+    ffiMakeStExternalAddress: function() {
         var extAddr = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassExternalAddress], 4);
+        new (Uint32Array)(extAddr.bytes.buffer)[0] = ++this.ffiNextExtAddr;
+        return extAddr;
+    },
+    ffiMakeStExternalData: function(jsData, stType) {
+        var extAddr = this.ffiMakeStExternalAddress();
         extAddr.jsData = jsData; // save for later
         var extData = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassExternalData], 0);
         extData.pointers[0] = extAddr;
         extData.pointers[1] = stType;
         return extData;
+    },
+    ffiDataFromStack: function(arg) {
+        var oop = this.stackNonInteger(arg);
+        if (oop.jsData !== undefined) return oop.jsData;
+        if (oop.bytes) return oop.bytes;
+        if (oop.words) return oop.words;
+        this.vm.warnOnce("FFI: expected ExternalAddress with jsData, got " + oop);
+        this.success = false;
+    },
+    ffi_primitiveFFIAllocate: function(argCount) {
+        var size = this.stackInteger(0);
+        if (!this.success) return false;
+        var extAddr = this.ffiMakeStExternalAddress();
+        extAddr.jsData = new ArrayBuffer(size);
+        return this.popNandPushIfOK(argCount + 1, extAddr);
+    },
+    ffi_primitiveFFIFree: function(argCount) {
+        var extAddr = this.stackNonInteger(0);
+        if (!this.success) return false;
+        if (extAddr.jsData === undefined) {
+            this.vm.warnOnce("primitiveFFIFree: expected ExternalAddress with jsData, got " + extAddr);
+            return false;
+        }
+        delete extAddr.jsData;
+        return true;
     },
     primitiveCalloutToFFI: function(argCount, method) {
         var extLibFunc = method.pointers[1];
@@ -261,35 +307,25 @@ Object.extend(Squeak.Primitives.prototype,
         var args = [];
         for (var i = argCount - 1; i >= 0; i--)
             args.push(this.vm.stackValue(i));
-        return this.calloutToFFI(argCount, extLibFunc, args);
+        return this.ffiDoCallout(argCount, extLibFunc, args);
     },
     ffi_primitiveCalloutWithArgs: function(argCount) {
         var extLibFunc = this.stackNonInteger(1),
             argsObj = this.stackNonInteger(0);
         if (!this.isKindOf(extLibFunc, Squeak.splOb_ClassExternalFunction)) return false;
-        return this.calloutToFFI(argCount, extLibFunc, argsObj.pointers);
+        return this.ffiDoCallout(argCount, extLibFunc, argsObj.pointers);
     },
     ffi_primitiveFFIGetLastError: function(argCount) {
         return this.popNandPushIfOK(argCount + 1, this.ffi_lastError);
     },
     ffi_primitiveFFIIntegerAt: function(argCount) {
-        var rcvr = this.stackNonInteger(3),
+        var data = this.ffiDataFromStack(3),
             byteOffset = this.stackInteger(2),
             byteSize = this.stackInteger(1),
             isSigned = this.stackBoolean(0);
         if (!this.success) return false;
         if (byteOffset < 0 || byteSize < 1 || byteSize > 8 ||
             (byteSize & (byteSize - 1)) !== 0) return false;
-        // if receiver is not an ExternalAddress, fail
-        if (rcvr.sqClass !== this.vm.specialObjects[Squeak.splOb_ClassExternalAddress]) {
-            this.vm.warnOnce("FFI: expected ExternalAddress, got " + rcvr.sqClass.className());
-            return false;
-        }
-        var data = rcvr.jsData;
-        if (data === undefined) {
-            this.vm.warnOnce("FFI: expected ExternalAddress with jsData, got " + rcvr);
-            return false;
-        }
         var result;
         if (byteSize === 1 && !isSigned) {
             if (typeof data === "string") {
@@ -305,5 +341,16 @@ Object.extend(Squeak.Primitives.prototype,
             return false;
         }
         return this.popNandPushIfOK(argCount + 1, result);
+    },
+    ffi_primitiveFFIDoubleAtPut: function(argCount) {
+        var data = this.ffiDataFromStack(2),
+            byteOffset = this.stackInteger(1),
+            valueOop = this.vm.stackValue(0),
+            value = valueOop.isFloat ? valueOop.float : valueOop;
+        if (!this.success || typeof value !== "number") return false;
+        byteOffset--; // 1-based indexing
+        if (byteOffset & 7) new DataView(data).setFloat64(byteOffset, value, true);
+        else new Float64Array(data)[byteOffset / 8] = value;
+        return this.popNandPushIfOK(argCount + 1, valueOop);
     },
 });

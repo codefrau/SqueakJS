@@ -325,7 +325,7 @@ function createSqueakDisplay(canvas, options) {
         eventQueue: null, // only used if image uses event primitives
         clipboardString: '',
         clipboardStringChanged: false,
-        cursorCanvas: options.cursor !== false && document.createElement("canvas"),
+        cursorCanvas: options.cursor !== false && document.getElementById("sqCursor") || document.createElement("canvas"),
         cursorOffsetX: 0,
         cursorOffsetY: 0,
         droppedFiles: [],

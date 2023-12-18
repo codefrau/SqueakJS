@@ -208,7 +208,7 @@ Object.extend(Squeak.Primitives.prototype,
                     case Squeak.FFITypeVoid: // void* is passed as buffer
                         if (stObj.words) return stObj.words.buffer;
                         if (stObj.bytes) return stObj.bytes.buffer;
-                        if (stObj.isNil) return new ArrayBuffer(0); // null pointer
+                        if (stObj.isNil || stObj.isWordsOrBytes()) return new ArrayBuffer(0); // null pointer
                         throw Error("FFI: expected words or bytes, got " + stObj);
                     default:
                         throw Error("FFI: unimplemented atomic array arg type: " + atomicType);

@@ -180,25 +180,55 @@ Object.extend(Squeak.Primitives.prototype,
                 switch (atomicType) {
                     case Squeak.FFITypeUnsignedChar8:
                         if (stObj.bytes) return stObj.bytesAsString();
+                        if (stObj.words) return String.fromChar.apply(null, stObj.wordsAsUint8Array());
+                        if (this.interpreterProxy.isWordsOrBytes(stObj)) return '';
+                        if (stObj.pointers && stObj.pointers[0].jsData) {
+                            var data = stObj.pointers[0].jsData;
+                            if (data instanceof "string") return data;
+                        }
                         throw Error("FFI: expected string, got " + stObj);
                     case Squeak.FFITypeUnsignedInt8:
                         if (stObj.bytes) return stObj.bytes;
                         if (stObj.words) return stObj.wordsAsUint8Array();
+                        if (this.interpreterProxy.isWordsOrBytes(stObj)) return new Uint8Array(0);
+                        if (stObj.pointers && stObj.pointers[0].jsData) {
+                            var data = stObj.pointers[0].jsData;
+                            if (data instanceof Uint8Array) return data;
+                            if (data instanceof ArrayBuffer) return new Uint8Array(data);
+                        }
                         throw Error("FFI: expected bytes, got " + stObj);
                     case Squeak.FFITypeUnsignedInt32:
                         if (stObj.words) return stObj.words;
+                        if (this.interpreterProxy.isWords(stObj)) return new Uint32Array(0);
+                        if (stObj.pointers && stObj.pointers[0].jsData) {
+                            var data = stObj.pointers[0].jsData;
+                            if (data instanceof Uint32Array) return data;
+                            if (data instanceof ArrayBuffer) return new Uint32Array(data);
+                        }
                         throw Error("FFI: expected words, got " + stObj);
                     case Squeak.FFITypeSignedInt32:
                         if (stObj.words) return stObj.wordsAsInt32Array();
+                        if (this.interpreterProxy.isWords(stObj)) return new Int32Array(0);
+                        if (stObj.pointers && stObj.pointers[0].jsData) {
+                            var data = stObj.pointers[0].jsData;
+                            if (data instanceof Int32Array) return data;
+                            if (data instanceof ArrayBuffer) return new Int32Array(data);
+                        }
                         throw Error("FFI: expected words, got " + stObj);
                     case Squeak.FFITypeSingleFloat:
                         if (stObj.words) return stObj.wordsAsFloat32Array();
                         if (stObj.isFloat) return new Float32Array([stObj.float]);
+                        if (this.interpreterProxy.isWords(stObj)) return new Float32Array(0);
+                        if (stObj.pointers && stObj.pointers[0].jsData) {
+                            var data = stObj.pointers[0].jsData;
+                            if (data instanceof Float32Array) return data;
+                            if (data instanceof ArrayBuffer) return new Float32Array(data);
+                        }
                         throw Error("FFI: expected floats, got " + stObj);
                     case Squeak.FFITypeDoubleFloat:
                         if (stObj.words) return stObj.wordsAsFloat64Array();
                         if (stObj.isFloat) return new Float64Array([stObj.float]);
-                        // must be ExternalData
+                        if (this.interpreterProxy.isWords(stObj)) return new Float64Array(0);
                         if (stObj.pointers && stObj.pointers[0].jsData) {
                             var data = stObj.pointers[0].jsData;
                             if (data instanceof Float64Array) return data;
@@ -208,7 +238,11 @@ Object.extend(Squeak.Primitives.prototype,
                     case Squeak.FFITypeVoid: // void* is passed as buffer
                         if (stObj.words) return stObj.words.buffer;
                         if (stObj.bytes) return stObj.bytes.buffer;
-                        if (stObj.isNil || stObj.isWordsOrBytes()) return new ArrayBuffer(0); // null pointer
+                        if (stObj.isNil || this.interpreterProxy.isWordsOrBytes(stObj)) return new ArrayBuffer(0); // null pointer
+                        if (stObj.pointers && stObj.pointers[0].jsData) {
+                            var data = stObj.pointers[0].jsData;
+                            if (data instanceof ArrayBuffer) return data;
+                        }
                         throw Error("FFI: expected words or bytes, got " + stObj);
                     default:
                         throw Error("FFI: unimplemented atomic array arg type: " + atomicType);

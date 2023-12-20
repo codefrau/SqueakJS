@@ -1198,7 +1198,7 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     }
     options.image = image;
     fetchFiles(files, display, options, function thenDo() {
-        Squeak.fsck();
+        Squeak.fsck(); // will run async
         var image = options.image;
         if (!image.name) return alert("could not find an image");
         if (!image.data) return alert("could not find image " + image.name);

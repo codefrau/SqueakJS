@@ -256,10 +256,16 @@ function SocketPlugin() {
               var end = this.sendBuffer.byteLength;
               data = this.sendBuffer.subarray(end - contentLength, end);
             } else if (line.match(/Host:/i)) {
-              var host = line.substr(6).trim();
+              var hostAndPort = line.substr(6).trim();
+              var host = hostAndPort.split(':')[0];
+              var port = parseInt(hostAndPort.split(':')[1]) || 80;
               if (this.host !== host) {
                 console.warn('Host for ' + this.hostAddress + ' was ' + this.host + ' but from HTTP request now ' + host);
                 this.host = host;
+              }
+              if (this.port !== port) {
+                console.warn('Port for ' + this.hostAddress + ' was ' + this.port + ' but from HTTP request now ' + port);
+                this.port = port;
               }
             } if (line.match(/Connection: Upgrade/i)) {
               seenUpgrade = true;

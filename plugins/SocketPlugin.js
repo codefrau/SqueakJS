@@ -258,7 +258,7 @@ function SocketPlugin() {
             } else if (line.match(/Host:/i)) {
               var hostAndPort = line.substr(6).trim();
               var host = hostAndPort.split(':')[0];
-              var port = parseInt(hostAndPort.split(':')[1]) || 80;
+              var port = parseInt(hostAndPort.split(':')[1]) || this.port;
               if (this.host !== host) {
                 console.warn('Host for ' + this.hostAddress + ' was ' + this.host + ' but from HTTP request now ' + host);
                 this.host = host;

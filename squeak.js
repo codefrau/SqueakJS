@@ -787,19 +787,20 @@ function createSqueakDisplay(canvas, options) {
             image, imageName = null;
         display.droppedFiles = [];
         files.forEach(function(f) {
-            display.droppedFiles.push(f.name);
+            var path = options.root + f.name;
+            display.droppedFiles.push(path);
             var reader = new FileReader();
             reader.onload = function () {
                 var buffer = this.result;
-                Squeak.filePut(f.name, buffer);
-                loaded.push(f.name);
-                if (!image && /.*image$/.test(f.name) && (!display.vm || confirm("Run " + f.name + " now?\n(cancel to use as file)"))) {
+                Squeak.filePut(path, buffer);
+                loaded.push(path);
+                if (!image && /.*image$/.test(path) && (!display.vm || confirm("Run " + f.name + " now?\n(cancel to use as file)"))) {
                     image = buffer;
-                    imageName = f.name;
+                    imageName = path;
                 }
                 if (loaded.length == files.length) {
                     if (image) {
-                        SqueakJS.appName = imageName.slice(0, -6);
+                        SqueakJS.appName = imageName.replace(/.*\//,'').replace(/\.image$/,'');
                         SqueakJS.runImage(image, imageName, display, options);
                     } else {
                         recordDragDropEvent(Squeak.EventDragDrop, evt, canvas, display);

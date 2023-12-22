@@ -100,16 +100,55 @@ Object.extend(Squeak.Primitives.prototype,
     //   - other ffi* for private methods of this module
     //   - primitiveCalloutToFFI: old callout primitive (not in SqueakFFIPrims)
     ffi_lastError: 0,
+
+    ffiModules: {}, // map library name to module name
+
     ffiDoCallout: function(argCount, extLibFunc, stArgs) {
         this.ffi_lastError = Squeak.FFIErrorGenericError;
-        var modName = extLibFunc.pointers[Squeak.ExtLibFunc_module].bytesAsString();
+        var libName = extLibFunc.pointers[Squeak.ExtLibFunc_module].bytesAsString();
         var funcName = extLibFunc.pointers[Squeak.ExtLibFunc_name].bytesAsString();
+
+        if (!libName) libName = "libc"; // default to libc
+
+        var modName = this.ffiModules[libName];
+        if (modName === undefined) {
+            if (!Squeak.externalModules[libName]) {
+                var prefixes = ["", "lib"];
+                var suffixes = ["", ".so",
+                    ".so.9", ".9", ".so.8", ".8", ".so.7", ".7",
+                    ".so.6", ".6", ".so.5", ".5", ".so.4", ".4",
+                    ".so.3", ".3", ".so.2", ".2", ".so.1", ".1"];
+                loop: for (var p = 0; p < prefixes.length; p++) {
+                    var prefix = prefixes[p];
+                    for (var s = 0; s < suffixes.length; s++) {
+                        var suffix = suffixes[s];
+                        if (Squeak.externalModules[prefix + libName + suffix]) {
+                            modName = prefix + libName + suffix;
+                            break loop;
+                        }
+                        if (prefix && libName.startsWith(prefix) && Squeak.externalModules[libName.slice(prefix.length) + suffix]) {
+                            modName = libName.slice(prefix.length) + suffix;
+                            break loop;
+                        }
+                        if (suffix && libName.endsWith(suffix) && Squeak.externalModules[prefix + libName.slice(0, -suffix.length)]) {
+                            modName = prefix + libName.slice(0, -suffix.length);
+                            break loop;
+                        }
+                    }
+                }
+                if (modName) console.log("FFI: found library " + libName + " as module " + modName);
+                // there still is a chance loadModuleDynamically will find it under libName
+            }
+            if (!modName) modName = libName; // default to libName
+            this.ffiModules[libName] = modName;
+        }
+
         var mod = this.loadedModules[modName];
         if (mod === undefined) { // null if earlier load failed
             mod = this.loadModule(modName);
             this.loadedModules[modName] = mod;
             if (!mod) {
-                this.vm.warnOnce('FFI: module not found: ' + modName);
+                this.vm.warnOnce('FFI: library not found: ' + libName);
             }
         }
         if (!mod) {
@@ -124,7 +163,7 @@ Object.extend(Squeak.Primitives.prototype,
         }
         var jsResult;
         if (!(funcName in mod)) {
-            if (this.vm.warnOnce('FFI: function not found: ' + modName + '::' + funcName)) {
+            if (this.vm.warnOnce('FFI: function not found: ' + libName + '::' + funcName)) {
                 console.warn(jsArgs);
             }
             if (mod.ffiFunctionNotFoundHandler) {

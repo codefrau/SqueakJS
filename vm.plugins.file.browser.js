@@ -30,7 +30,7 @@ Object.extend(Squeak.Primitives.prototype,
         this.success = Squeak.dirCreate(dirName);
         if (!this.success) {
             var path = Squeak.splitFilePath(dirName);
-            console.log("Directory not created: " + path.fullname);
+            if (Squeak.debugFiles) console.warn("Directory not created: " + path.fullname);
         }
         return this.popNIfOK(argCount);
     },
@@ -56,7 +56,7 @@ Object.extend(Squeak.Primitives.prototype,
         var entries = Squeak.dirList(dirName, true);
         if (!entries) {
             var path = Squeak.splitFilePath(dirName);
-            console.log("Directory not found: " + path.fullname);
+            if (Squeak.debugFiles) console.log("Directory not found: " + path.fullname);
             return false;
         }
         var entry = fileName === "." ? [".", 0, 0, true, 0] : entries[fileName];
@@ -72,7 +72,7 @@ Object.extend(Squeak.Primitives.prototype,
         var entries = Squeak.dirList(dirName, true);
         if (!entries) {
             var path = Squeak.splitFilePath(dirName);
-            console.log("Directory not found: " + path.fullname);
+            if (Squeak.debugFiles) console.log("Directory not found: " + path.fullname);
             return false;
         }
         if (Squeak.debugFiles && index === 1) {
@@ -291,13 +291,13 @@ Object.extend(Squeak.Primitives.prototype,
             }
         } else {
             if (!writeFlag) {
-                console.log("File not found: " + path.fullname);
+                if (Squeak.debugFiles) console.log("File not found: " + path.fullname);
                 return null;
             }
             contents = new Uint8Array();
             entry = Squeak.filePut(path.fullname, contents.buffer);
             if (!entry) {
-                console.log("Cannot create file: " + path.fullname);
+                if (Squeak.debugFiles) console.log("Cannot create file: " + path.fullname);
                 return null;
             }
         }
@@ -325,7 +325,7 @@ Object.extend(Squeak.Primitives.prototype,
                 return false;
             this.vm.freeze(function(unfreeze) {
                 var error = (function(msg) {
-                    console.log("File get failed: " + msg);
+                    console.warn("File get failed: " + msg);
                     file.contents = false;
                     unfreeze();
                     func(file);

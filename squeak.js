@@ -1017,6 +1017,7 @@ function fetchTemplates(options) {
             var dir = path[0] == "/" ? path : options.root + path,
                 baseUrl = new URL(options.url, document.baseURI).href,
                 url = Squeak.splitUrl(options.templates[path], baseUrl).full;
+            if (url.endsWith("/.")) url = url.slice(0,-2);
             Squeak.fetchTemplateDir(dir, url);
         }
     }

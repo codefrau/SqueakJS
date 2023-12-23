@@ -519,7 +519,7 @@ Object.extend(Squeak,
             rq.open('GET', index, true);
             rq.onload = function(e) {
                 if (rq.status == 200) {
-                    console.log("adding template " + path);
+                    console.log("adding template dir " + path);
                     ensureTemplateParent(path);
                     var entries = JSON.parse(rq.response),
                         template = {url: url, entries: {}};

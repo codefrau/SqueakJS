@@ -636,7 +636,7 @@ Object.subclass('Squeak.Image',
         this.pgcCount++;
         this.pgcMilliseconds += Date.now() - start;
         console.log("Partial GC (" + reason+ "): " + (Date.now() - start) + " ms, " +
-            "scanned " + this.youngRootsCount + " of " + this.oldSpaceCount + " old, " +
+            "found " + this.youngRootsCount + " roots in " + this.oldSpaceCount + " old, " +
             "kept " + this.youngSpaceCount + " young (" + (previous - this.youngSpaceCount) + " gc'ed)");
         return young[0];
     },

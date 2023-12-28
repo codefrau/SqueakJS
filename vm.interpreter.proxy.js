@@ -267,6 +267,9 @@ Object.subclass('Squeak.InterpreterProxy',
     classString: function() {
         return this.vm.specialObjects[Squeak.splOb_ClassString];
     },
+    classByteArray: function() {
+        return this.vm.specialObjects[Squeak.splOb_ClassByteArray];
+    },
     nilObject: function() {
         return this.vm.nilObj;
     },

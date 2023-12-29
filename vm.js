@@ -25,7 +25,7 @@ Object.extend(Squeak,
 "version", {
     // system attributes
     vmVersion: "SqueakJS 1.1.2",
-    vmDate: "2023-12-27",               // Maybe replace at build time?
+    vmDate: "2023-12-28",               // Maybe replace at build time?
     vmBuild: "unknown",                 // or replace at runtime by last-modified?
     vmPath: "unknown",                  // Replace at runtime
     vmFile: "vm.js",

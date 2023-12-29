@@ -498,6 +498,7 @@ Object.subclass('Squeak.Primitives',
             console.log("Module initialization failed: " + modName);
             return null;
         }
+        if (mod.getModuleName) modName = mod.getModuleName();
         console.log("Loaded module: " + modName);
         return mod;
     },

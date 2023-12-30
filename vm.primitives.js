@@ -438,6 +438,7 @@ Object.subclass('Squeak.Primitives',
         var sp = this.vm.sp;
         if (mod) {
             this.interpreterProxy.argCount = argCount;
+            this.interpreterProxy.primitiveName = functionName;
             var primitive = mod[functionName];
             if (typeof primitive === "function") {
                 result = mod[functionName](argCount);

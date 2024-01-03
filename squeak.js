@@ -117,7 +117,7 @@
     "version", {
         // system attributes
         vmVersion: "SqueakJS 1.1.2",
-        vmDate: "2023-12-06",               // Maybe replace at build time?
+        vmDate: "2024-01-03",               // Maybe replace at build time?
         vmBuild: "unknown",                 // or replace at runtime by last-modified?
         vmPath: "unknown",                  // Replace at runtime
         vmFile: "vm.js",
@@ -1805,6 +1805,9 @@
             // sorting them by id, and then linking them into old space.
             this.vm.addMessage("fullGC: " + reason);
             var start = Date.now();
+            var previousNew = this.newSpaceCount;
+            var previousYoung = this.youngSpaceCount;
+            var previousOld = this.oldSpaceCount;
             var newObjects = this.markReachableObjects();
             this.removeUnmarkedOldObjects();
             this.appendToOldObjects(newObjects);
@@ -1815,8 +1818,12 @@
             this.hasNewInstances = {};
             this.gcCount++;
             this.gcMilliseconds += Date.now() - start;
-            console.log("Full GC (" + reason + "): " + (Date.now() - start) + " ms");
-            if (reason === "primitive") console.log("  surviving objects: " + this.oldSpaceCount + " (" + this.oldSpaceBytes + " bytes)");
+            var delta = previousOld - this.oldSpaceCount;
+            console.log("Full GC (" + reason + "): " + (Date.now() - start) + " ms, " +
+                "surviving objects: " + this.oldSpaceCount + " (" + this.oldSpaceBytes + " bytes), " +
+                "tenured " + newObjects.length + " (total " + (delta > 0 ? "+" : "") + delta + "), " +
+                "gc'ed " + previousYoung + " young and " + (previousNew - previousYoung) + " new objects");
+
             return newObjects.length > 0 ? newObjects[0] : null;
         },
         gcRoots: function() {
@@ -1965,6 +1972,7 @@
             // and finalize weak refs
             this.vm.addMessage("partialGC: " + reason);
             var start = Date.now();
+            var previous = this.newSpaceCount;
             var young = this.findYoungObjects();
             this.appendToYoungSpace(young);
             this.finalizeWeakReferences();
@@ -1974,7 +1982,9 @@
             this.newSpaceCount = this.youngSpaceCount;
             this.pgcCount++;
             this.pgcMilliseconds += Date.now() - start;
-            console.log("Partial GC (" + reason+ "): " + (Date.now() - start) + " ms");
+            console.log("Partial GC (" + reason+ "): " + (Date.now() - start) + " ms, " +
+                "found " + this.youngRootsCount + " roots in " + this.oldSpaceCount + " old, " +
+                "kept " + this.youngSpaceCount + " young (" + (previous - this.youngSpaceCount) + " gc'ed)");
             return young[0];
         },
         youngRoots: function() {
@@ -2003,6 +2013,7 @@
             // PartialGC: find new objects transitively reachable from old objects
             var todo = this.youngRoots(),     // direct pointers from old space
                 newObjects = [];
+            this.youngRootsCount = todo.length;
             this.weakObjects = [];
             while (todo.length > 0) {
                 var object = todo.pop();
@@ -3311,7 +3322,7 @@
             if (this.frozen) return 'frozen';
             this.isIdle = false;
             this.breakOutOfInterpreter = false;
-            this.breakOutTick = this.primHandler.millisecondClockValue() + (forMilliseconds || 500);
+            this.breakAfter(forMilliseconds || 500);
             while (this.breakOutOfInterpreter === false)
                 if (this.method.compiled) {
                     this.method.compiled(this);
@@ -3706,7 +3717,13 @@
         executeNewMethod: function(newRcvr, newMethod, argumentCount, primitiveIndex, optClass, optSel) {
             this.sendCount++;
             if (newMethod === this.breakOnMethod) this.breakNow("executing method " + this.printMethod(newMethod, optClass, optSel));
-            if (this.logSends) console.log(this.sendCount + ' ' + this.printMethod(newMethod, optClass, optSel));
+            if (this.logSends) {
+                var indent = ' ';
+                var ctx = this.activeContext;
+                while (!ctx.isNil) { indent += '| '; ctx = ctx.pointers[Squeak.Context_sender]; }
+                var args = this.activeContext.pointers.slice(this.sp + 1 - argumentCount, this.sp + 1);
+                console.log(this.sendCount + indent + this.printMethod(newMethod, optClass, optSel, args));
+            }
             if (this.breakOnContextChanged) {
                 this.breakOnContextChanged = false;
                 this.breakNow();
@@ -4237,18 +4254,32 @@
             return this.messages[message] ? ++this.messages[message] : this.messages[message] = 1;
         },
         warnOnce: function(message, what) {
-            if (this.addMessage(message) == 1)
+            if (this.addMessage(message) == 1) {
                 console[what || "warn"](message);
+                return true;
+            }
         },
-        printMethod: function(aMethod, optContext, optSel) {
+        printMethod: function(aMethod, optContext, optSel, optArgs) {
             // return a 'class>>selector' description for the method
             if (aMethod.sqClass != this.specialObjects[Squeak.splOb_ClassCompiledMethod]) {
-              return this.printMethod(aMethod.blockOuterCode(), optContext, optSel)
+              return this.printMethod(aMethod.blockOuterCode(), optContext, optSel, optArgs)
             }
-            if (optSel) return optContext.className() + '>>' + optSel.bytesAsString();
+            var found;
+            if (optSel) {
+                var printed = optContext.className() + '>>';
+                var selector = optSel.bytesAsString();
+                if (!optArgs || !optArgs.length) printed += selector;
+                else {
+                    var parts = selector.split(/(?<=:)/); // keywords
+                    for (var i = 0; i < optArgs.length; i++) {
+                        if (i > 0) printed += ' ';
+                        printed += parts[i] + ' ' + optArgs[i];
+                    }
+                }
+                return printed;
+            }
             // this is expensive, we have to search all classes
             if (!aMethod) aMethod = this.activeContext.contextMethod();
-            var found;
             this.allMethodsDo(function(classObj, methodObj, selectorObj) {
                 if (methodObj === aMethod)
                     return found = classObj.className() + '>>' + selectorObj.bytesAsString();
@@ -4312,7 +4343,7 @@
                 }
             });
         },
-        printStack: function(ctx, limit) {
+        printStack: function(ctx, limit, indent) {
             // both args are optional
             if (typeof ctx == "number") {limit = ctx; ctx = null;}
             if (!ctx) ctx = this.activeContext;
@@ -4329,7 +4360,9 @@
                 contexts = contexts.slice(0, limit).concat(['...']).concat(contexts.slice(-extra));
             }
             var stack = [],
-                i = contexts.length;
+                i = contexts.length,
+                indents = '';
+            if (indent && this.logSends) indents = Array((""+this.sendCount).length + 2).join(' ');
             while (i-- > 0) {
                 var ctx = contexts[i];
                 if (!ctx.pointers) {
@@ -4343,7 +4376,10 @@
                     } else if (!ctx.pointers[Squeak.Context_closure].isNil) {
                         block = '[] in '; // it's a closure activation
                     }
-                    stack.push(block + this.printMethod(method, ctx) + '\n');
+                    var line = block + this.printMethod(method, ctx);
+                    if (indent) line = indents + line;
+                    stack.push(line + '\n');
+                    if (indent) indents += indent;
                 }
             }
             return stack.join('');
@@ -4360,6 +4396,9 @@
                         return found = methodObj;
             });
             return found;
+        },
+        breakAfter: function(ms) {
+            this.breakOutTick = this.primHandler.millisecondClockValue() + ms;
         },
         breakNow: function(msg) {
             if (msg) console.log("Break: " + msg);
@@ -4398,12 +4437,17 @@
             var stackTop = homeCtx.contextSizeWithStack(this) - 1;
             var firstTemp = stackBottom + 1;
             var lastTemp = firstTemp + tempCount - 1;
+            var lastArg = firstTemp + homeCtx.pointers[Squeak.Context_method].methodNumArgs() - 1;
             var stack = '';
             for (var i = stackBottom; i <= stackTop; i++) {
                 var value = printObj(homeCtx.pointers[i]);
                 var label = '';
-                if (i == stackBottom) label = '=rcvr'; else
-                if (i <= lastTemp) label = '=tmp' + (i - firstTemp);
+                if (i === stackBottom) {
+                    label = '=rcvr';
+                } else {
+                    if (i <= lastTemp) label = '=tmp' + (i - firstTemp);
+                    if (i <= lastArg) label += '/arg' + (i - firstTemp);
+                }
                 stack += '\nctx[' + i + ']' + label +': ' + value;
             }
             if (isBlock) {
@@ -4412,10 +4456,11 @@
                 var firstArg = this.decodeSqueakSP(1);
                 var lastArg = firstArg + nArgs;
                 var sp = ctx === this.activeContext ? this.sp : ctx.pointers[Squeak.Context_stackPointer];
+                if (sp < firstArg) stack += '\nblk <stack empty>';
                 for (var i = firstArg; i <= sp; i++) {
                     var value = printObj(ctx.pointers[i]);
                     var label = '';
-                    if (i <= lastArg) label = '=arg' + (i - firstArg);
+                    if (i < lastArg) label = '=arg' + (i - firstArg);
                     stack += '\nblk[' + i + ']' + label +': ' + value;
                 }
             }
@@ -4430,39 +4475,62 @@
             // print active process
             var activeProc = sched.pointers[Squeak.ProcSched_activeProcess],
                 result = "Active: " + this.printProcess(activeProc, true);
-            // print other runnable processes
+            // print other runnable processes in order of priority
             var lists = sched.pointers[Squeak.ProcSched_processLists].pointers;
             for (var priority = lists.length - 1; priority >= 0; priority--) {
                 var process = lists[priority].pointers[Squeak.LinkedList_firstLink];
                 while (!process.isNil) {
+                    result += "\n------------------------------------------";
                     result += "\nRunnable: " + this.printProcess(process);
                     process = process.pointers[Squeak.Link_nextLink];
                 }
             }
-            // print all processes waiting on a semaphore
+            // print all processes waiting on a semaphore in order of priority
             var semaClass = this.specialObjects[Squeak.splOb_ClassSemaphore],
-                sema = this.image.someInstanceOf(semaClass);
+                sema = this.image.someInstanceOf(semaClass),
+                waiting = [];
             while (sema) {
                 var process = sema.pointers[Squeak.LinkedList_firstLink];
                 while (!process.isNil) {
-                    result += "\nWaiting: " + this.printProcess(process);
+                    waiting.push(process);
                     process = process.pointers[Squeak.Link_nextLink];
                 }
                 sema = this.image.nextInstanceAfter(sema);
             }
+            waiting.sort(function(a, b){
+                return b.pointers[Squeak.Proc_priority] - a.pointers[Squeak.Proc_priority];
+            });
+            for (var i = 0; i < waiting.length; i++) {
+                result += "\n------------------------------------------";
+                result += "\nWaiting: " + this.printProcess(waiting[i]);
+            }
             return result;
         },
-        printProcess: function(process, active) {
-            var context = process.pointers[Squeak.Proc_suspendedContext],
+        printProcess: function(process, active, indent) {
+            if (!process) {
+                var schedAssn = this.specialObjects[Squeak.splOb_SchedulerAssociation],
+                sched = schedAssn.pointers[Squeak.Assn_value];
+                process = sched.pointers[Squeak.ProcSched_activeProcess],
+                active = true;
+            }
+            var context = active ? this.activeContext : process.pointers[Squeak.Proc_suspendedContext],
                 priority = process.pointers[Squeak.Proc_priority],
-                stack = this.printStack(active ? null : context),
-                values = this.printContext(context);
-            return process.toString() +" at priority " + priority + "\n" + stack + values + "\n";
+                stack = this.printStack(context, 20, indent),
+                values = indent && this.logSends ? "" : this.printContext(context) + "\n";
+            return process.toString() +" at priority " + priority + "\n" + stack + values;
         },
         printByteCodes: function(aMethod, optionalIndent, optionalHighlight, optionalPC) {
             if (!aMethod) aMethod = this.method;
             var printer = new Squeak.InstructionPrinter(aMethod, this);
             return printer.printInstructions(optionalIndent, optionalHighlight, optionalPC);
+        },
+        logStack: function() {
+            // useful for debugging interactively:
+            // SqueakJS.vm.logStack()
+            console.log(this.printStack()
+                + this.printActiveContext() + '\n\n'
+                + this.printByteCodes(this.method, '   ', '=> ', this.pc),
+                this.activeContext.pointers.slice(0, this.sp + 1));
         },
         willSendOrReturn: function() {
             // Answer whether the next bytecode corresponds to a Smalltalk
@@ -4560,7 +4628,7 @@
     Object.subclass('Squeak.InterpreterProxy',
     // provides function names exactly like the C interpreter, for ease of porting
     // but maybe less efficiently because of the indirection
-    // only used for plugins translated from Slang (see plugins/*.js)
+    // mostly used for plugins translated from Slang (see plugins/*.js)
     // built-in primitives use the interpreter directly
     'initialization', {
         VM_PROXY_MAJOR: 1,
@@ -4803,6 +4871,9 @@
         classString: function() {
             return this.vm.specialObjects[Squeak.splOb_ClassString];
         },
+        classByteArray: function() {
+            return this.vm.specialObjects[Squeak.splOb_ClassByteArray];
+        },
         nilObject: function() {
             return this.vm.nilObj;
         },
@@ -4815,6 +4886,9 @@
     },
     'vm functions',
     {
+        clone: function(object) {
+            return this.vm.image.clone(object);
+        },
         instantiateClassindexableSize: function(aClass, indexableSize) {
             return this.vm.instantiateClass(aClass, indexableSize);
         },
@@ -5534,7 +5608,7 @@
                 case 118: return this.primitiveDoPrimitiveWithArgs(argCount);
                 case 119: return this.vm.flushMethodCacheForSelector(this.vm.top()); // before Squeak 2.3 uses 116
                 // Miscellaneous Primitives (120-149)
-                case 120: this.vm.warnOnce("missing primitive:121 (primitiveCalloutToFFI)"); return false;
+                case 120: return this.primitiveCalloutToFFI(argCount, primMethod);
                 case 121: return this.primitiveImageName(argCount); //get+set imageName
                 case 122: return this.primitiveReverseDisplay(argCount); // Blue Book: primitiveImageVolume
                 case 123: this.vm.warnOnce("missing primitive: 123 (primitiveValueUninterruptably)"); return false;
@@ -5681,7 +5755,7 @@
                 case 215: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketRemoteAddress', argCount);
                 case 216: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketRemotePort', argCount);
                 case 217: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectToPort', argCount);
-                case 218: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketListenOnPort', argCount);
+                case 218: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketListenWithOrWithoutBacklog', argCount);
                     else { this.vm.warnOnce("missing primitive: 218 (tryNamedPrimitiveInForWithArgs"); return false; }
                 case 219: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketCloseConnection', argCount);
                 case 220: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketAbortConnection', argCount);
@@ -5692,6 +5766,7 @@
                     else return this.primitiveClosureValueNoContextSwitch(argCount);
                 case 223: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketSendDataBufCount', argCount);
                 case 224: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketSendDone', argCount);
+                case 225: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketAccept', argCount);
                     break;  // fail 223-229 if fell through
                 // 225-229: unused
                 // Other Primitives (230-249)
@@ -5762,6 +5837,7 @@
             var sp = this.vm.sp;
             if (mod) {
                 this.interpreterProxy.argCount = argCount;
+                this.interpreterProxy.primitiveName = functionName;
                 var primitive = mod[functionName];
                 if (typeof primitive === "function") {
                     result = mod[functionName](argCount);
@@ -5822,6 +5898,7 @@
                 console.log("Module initialization failed: " + modName);
                 return null;
             }
+            if (mod.getModuleName) modName = mod.getModuleName();
             console.log("Loaded module: " + modName);
             return mod;
         },
@@ -7027,6 +7104,10 @@
                 this.vm.breakOnContextChanged = false;
                 this.vm.breakNow();
             }
+            if (this.vm.logProcess) console.log(
+                "\n============= Process Switch ==================\n"
+                + this.vm.printProcess(newProc, true, this.vm.logSends ? '| ' : '')
+                + "===============================================");
         },
         wakeHighestPriority: function() {
             //Return the highest priority process that is ready to run.
@@ -8385,7 +8466,7 @@
                     this.audioInContext = ctxProto && new ctxProto();
                     this.audioInSource = this.audioInContext.createMediaStreamSource(stream);
                     thenDo(this.audioInContext, this.audioInSource);
-                },
+                }.bind(this),
                 function onError() {
                     errorDo("cannot access microphone");
                 });
@@ -8896,8 +8977,9 @@
 
     Object.extend(Squeak,
     "files", {
-        fsck: function(whenDone, dir, files, stats) {
+        fsck: function(whenDone, dir, files, stale, stats) {
             dir = dir || "";
+            stale = stale || {dirs: [], files: []};
             stats = stats || {dirs: 0, files: 0, bytes: 0, deleted: 0};
             if (!files) {
                 // find existing files
@@ -8917,17 +8999,17 @@
                         cursorReq.onsuccess = function(e) {
                             var cursor = e.target.result;
                             if (cursor) {
-                                files[cursor.key] = true;
+                                files[cursor.key] = cursor.value.byteLength;
                                 cursor.continue();
-                            } else { // done
-                                Squeak.fsck(whenDone, dir, files, stats);
+                            } else { // got all files
+                                Squeak.fsck(whenDone, dir, files, stale, stats);
                             }
                         };
                         cursorReq.onerror = function(e) {
                             console.error("fsck failed");
                         };
                     });
-                }
+                } // otherwise fall through
             }
             // check directories
             var entries = Squeak.dirList(dir);
@@ -8935,47 +9017,60 @@
                 var path = dir + "/" + name,
                     isDir = entries[name][3];
                 if (isDir) {
+                    stats.dirs++;
                     var exists = "squeak:" + path in Squeak.Settings;
                     if (exists) {
-                        Squeak.fsck(null, path, files, stats);
-                        stats.dirs++;
+                        Squeak.fsck(null, path, files, stale, stats);
                     } else {
-                        console.log("Deleting stale directory " + path);
-                        Squeak.dirDelete(path);
-                        stats.deleted++;
+                        stale.dirs.push(path);
                     }
                 } else {
-                    if (!files[path]) {
-                        console.log("Deleting stale file entry " + path);
-                        Squeak.fileDelete(path, true);
-                        stats.deleted++;
-                    } else {
-                        files[path] = false; // mark as visited
-                        stats.files++;
+                    stats.files++;
+                    if (path in files) {
+                        files[path] = null; // mark as visited
                         stats.bytes += entries[name][4];
+                    } else {
+                        stale.files.push(path);
                     }
                 }
             }
-            // check orphaned files
             if (dir === "") {
+                // we're back at the root, almost done
                 console.log("squeak fsck: " + stats.dirs + " directories, " + stats.files + " files, " + (stats.bytes/1000000).toFixed(1) + " MBytes");
+                // check orphaned files
                 var orphaned = [];
                 for (var path in files) {
-                    if (files[path]) orphaned.push(path); // not marked visited
+                    var size = files[path];
+                    if (size !== null) orphaned.push({ path: path, size: size }); // not marked visited
                 }
-                if (orphaned.length > 0) {
-                    for (var i = 0; i < orphaned.length; i++) {
-                        console.log("Deleting orphaned file " + orphaned[i]);
-                        delete Squeak.Settings["squeak-file:" + orphaned[i]];
-                        delete Squeak.Settings["squeak-file.lz:" + orphaned[i]];
-                        stats.deleted++;
-                    }
-                    if (typeof indexedDB !== "undefined") {
-                        this.dbTransaction("readwrite", "fsck delete", function(fileStore) {
-                            for (var i = 0; i < orphaned.length; i++) {
-                                fileStore.delete(orphaned[i]);
-                            }                    });
-                    }
+                // recreate directory entries for orphaned files
+                for (var i = 0; i < orphaned.length; i++) {
+                    var path = Squeak.splitFilePath(orphaned[i].path);
+                    var size = orphaned[i].size;
+                    console.log("squeak fsck: restoring " + path.fullname + " (" + size + " bytes)");
+                    Squeak.dirCreate(path.dirname, true, "force");
+                    var directory = Squeak.dirList(path.dirname);
+                    var now = Squeak.totalSeconds();
+                    var entry = [/*name*/ path.basename, /*ctime*/ now, /*mtime*/ 0, /*dir*/ false, size];
+                    directory[path.basename] = entry;
+                    Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(directory);
+                }
+                for (var i = 0; i < stale.dirs.length; i++) {
+                    var dir = stale.dirs[i];
+                    if (Squeak.Settings["squeak:" + dir]) continue; // now contains orphaned files
+                    console.log("squeak fsck: cleaning up directory " + dir);
+                    Squeak.dirDelete(dir);
+                    stats.dirs--;
+                    stats.deleted++;
+                }
+                for (var i = 0; i < stale.files.length; i++) {
+                    var path = stale.files[i];
+                    if (path in files) continue; // was orphaned
+                    if (Squeak.Settings["squeak:" + path]) continue; // now is a directory
+                    console.log("squeak fsck: cleaning up file entry " + path);
+                    Squeak.fileDelete(path);
+                    stats.files--;
+                    stats.deleted++;
                 }
                 if (whenDone) whenDone(stats);
             }
@@ -9022,7 +9117,7 @@
             }
 
             openReq.onsuccess = function(e) {
-                console.log("Opened files database.");
+                if (Squeak.debugFiles) console.log("Opened files database.");
                 window.SqueakDB = this.result;
                 SqueakDB.onversionchange = function(e) {
                     delete window.SqueakDB;
@@ -9035,7 +9130,7 @@
             };
             openReq.onupgradeneeded = function (e) {
                 // run only first time, or when version changed
-                console.log("Creating files database");
+                if (Squeak.debugFiles) console.log("Creating files database");
                 var db = e.target.result;
                 db.createObjectStore("files");
             };
@@ -9171,7 +9266,12 @@
                 directory[path.basename] = entry;
             } else if (entry[3]) // is a directory
                 return null;
-            if (Squeak.debugFiles) console.log("Writing " + path.fullname + " (" + contents.byteLength + " bytes)");
+            if (Squeak.debugFiles) {
+                console.log("Writing " + path.fullname + " (" + contents.byteLength + " bytes)");
+                if (contents.byteLength > 0 && filepath.endsWith(".log")) {
+                    console.log((new TextDecoder).decode(contents).replace(/\r/g, '\n'));
+                }
+            }
             // update directory entry
             entry[2] = now; // modification time
             entry[4] = contents.byteLength || contents.length || 0;
@@ -9234,17 +9334,28 @@
             var entry = directory[path.basename]; if (!entry || entry[3]) return false; // not found or is a directory
             return true;
         },
-        dirCreate: function(dirpath, withParents) {
+        dirCreate: function(dirpath, withParents, force) {
             var path = this.splitFilePath(dirpath); if (!path.basename) return false;
             if (withParents && !Squeak.Settings["squeak:" + path.dirname]) Squeak.dirCreate(path.dirname, true);
-            var directory = this.dirList(path.dirname); if (!directory) return false;
-            if (directory[path.basename]) return false;
+            var parent = this.dirList(path.dirname); if (!parent) return false;
+            var existing = parent[path.basename];
+            if (existing) {
+                if (!existing[3]) {
+                    // already exists and is not a directory
+                    if (!force) return false;
+                    existing[3] = true; // force it to be a directory
+                    Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(parent);
+                }
+                if (Squeak.Settings["squeak:" + path.fullname]) return true; // already exists
+                // directory exists but is not in localStorage, so create it
+                // (this is not supposed to happen but deal with it anyways)
+            }
             if (Squeak.debugFiles) console.log("Creating directory " + path.fullname);
             var now = this.totalSeconds(),
                 entry = [/*name*/ path.basename, /*ctime*/ now, /*mtime*/ now, /*dir*/ true, /*size*/ 0];
-            directory[path.basename] = entry;
+            parent[path.basename] = entry;
             Squeak.Settings["squeak:" + path.fullname] = JSON.stringify({});
-            Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(directory);
+            Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(parent);
             return true;
         },
         dirDelete: function(dirpath) {
@@ -9357,7 +9468,7 @@
                 rq.open('GET', index, true);
                 rq.onload = function(e) {
                     if (rq.status == 200) {
-                        console.log("adding template " + path);
+                        console.log("adding template dir " + path);
                         ensureTemplateParent(path);
                         var entries = JSON.parse(rq.response),
                             template = {url: url, entries: {}};
@@ -9624,19 +9735,402 @@
         ExtLibFunc_name: 3,
         ExtLibFunc_module: 4,
         ExtLibFunc_errorCodeName: 5,
+    },
+    "FFI error codes", {
+        FFINoCalloutAvailable: -1, // No callout mechanism available
+        FFIErrorGenericError: 0, // generic error
+        FFIErrorNotFunction: 1, // primitive invoked without ExternalFunction
+        FFIErrorBadArgs: 2, // bad arguments to primitive call
+        FFIErrorBadArg: 3, // generic bad argument
+        FFIErrorIntAsPointer: 4, // int passed as pointer
+        FFIErrorBadAtomicType: 5, // bad atomic type (e.g., unknown)
+        FFIErrorCoercionFailed: 6, // argument coercion failed
+        FFIErrorWrongType: 7, // Type check for non-atomic types failed
+        FFIErrorStructSize: 8, // struct size wrong or too large
+        FFIErrorCallType: 9, // unsupported calling convention
+        FFIErrorBadReturn: 10, // cannot return the given type
+        FFIErrorBadAddress: 11, // bad function address
+        FFIErrorNoModule: 12, // no module given but required for finding address
+        FFIErrorAddressNotFound: 13, // function address not found
+        FFIErrorAttemptToPassVoid: 14, // attempt to pass 'void' parameter
+        FFIErrorModuleNotFound: 15, // module not found
+        FFIErrorBadExternalLibrary: 16, // external library invalid
+        FFIErrorBadExternalFunction: 17, // external function invalid
+        FFIErrorInvalidPointer: 18, // ExternalAddress points to ST memory (don't you dare to do this!)
+        FFIErrorCallFrameTooBig: 19, // Stack frame required more than 16k bytes to pass arguments.
+    },
+    "FFI types", {
+        // type void
+        FFITypeVoid: 0,
+        // type bool
+        FFITypeBool: 1,
+        // basic integer types.
+        // note: (integerType anyMask: 1) = integerType isSigned
+        FFITypeUnsignedInt8: 2,
+        FFITypeSignedInt8: 3,
+        FFITypeUnsignedInt16: 4,
+        FFITypeSignedInt16: 5,
+        FFITypeUnsignedInt32: 6,
+        FFITypeSignedInt32: 7,
+        FFITypeUnsignedInt64: 8,
+        FFITypeSignedInt64: 9,
+        // original character types
+        // note: isCharacterType ^type >> 1 >= 5 and: [(type >> 1) odd]
+        FFITypeUnsignedChar8: 10,
+        FFITypeSignedChar8: 11, // N.B. misnomer!
+        // float types
+        // note: isFloatType ^type >> 1 = 6
+        FFITypeSingleFloat: 12,
+        FFITypeDoubleFloat: 13,
+        // new character types
+        // note: isCharacterType ^type >> 1 >= 5 and: [(type >> 1) odd]
+        FFITypeUnsignedChar16: 14,
+        FFITypeUnsignedChar32: 15,
+        // type flags
+        FFIFlagAtomic: 0x40000, // type is atomic
+        FFIFlagPointer: 0x20000, // type is pointer to base type (a.k.a. array)
+        FFIFlagStructure: 0x10000, // baseType is structure of 64k length
+        FFIFlagAtomicPointer: 0x60000, // baseType is atomic and pointer (array)
+        FFIFlagMask: 0x70000, // mask for flags
+        FFIStructSizeMask: 0xFFFF, // mask for max size of structure
+        FFIAtomicTypeMask: 0x0F000000, // mask for atomic type spec
+        FFIAtomicTypeShift: 24, // shift for atomic type
     });
 
     Object.extend(Squeak.Primitives.prototype,
     'FFI', {
+        // naming:
+        //   - ffi_* for public methods of SqueakFFIPrims module
+        //     (see vm.plugins.js)
+        //   - other ffi* for private methods of this module
+        //   - primitiveCalloutToFFI: old callout primitive (not in SqueakFFIPrims)
+        ffi_lastError: 0,
+
+        ffiModules: {}, // map library name to module name
+
+        ffiDoCallout: function(argCount, extLibFunc, stArgs) {
+            this.ffi_lastError = Squeak.FFIErrorGenericError;
+            var libName = extLibFunc.pointers[Squeak.ExtLibFunc_module].bytesAsString();
+            var funcName = extLibFunc.pointers[Squeak.ExtLibFunc_name].bytesAsString();
+
+            if (!libName) libName = "libc"; // default to libc
+
+            var modName = this.ffiModules[libName];
+            if (modName === undefined) {
+                if (!Squeak.externalModules[libName]) {
+                    var prefixes = ["", "lib"];
+                    var suffixes = ["", ".so",
+                        ".so.9", ".9", ".so.8", ".8", ".so.7", ".7",
+                        ".so.6", ".6", ".so.5", ".5", ".so.4", ".4",
+                        ".so.3", ".3", ".so.2", ".2", ".so.1", ".1"];
+                    loop: for (var p = 0; p < prefixes.length; p++) {
+                        var prefix = prefixes[p];
+                        for (var s = 0; s < suffixes.length; s++) {
+                            var suffix = suffixes[s];
+                            if (Squeak.externalModules[prefix + libName + suffix]) {
+                                modName = prefix + libName + suffix;
+                                break loop;
+                            }
+                            if (prefix && libName.startsWith(prefix) && Squeak.externalModules[libName.slice(prefix.length) + suffix]) {
+                                modName = libName.slice(prefix.length) + suffix;
+                                break loop;
+                            }
+                            if (suffix && libName.endsWith(suffix) && Squeak.externalModules[prefix + libName.slice(0, -suffix.length)]) {
+                                modName = prefix + libName.slice(0, -suffix.length);
+                                break loop;
+                            }
+                        }
+                    }
+                    if (modName) console.log("FFI: found library " + libName + " as module " + modName);
+                    // there still is a chance loadModuleDynamically will find it under libName
+                }
+                if (!modName) modName = libName; // default to libName
+                this.ffiModules[libName] = modName;
+            }
+
+            var mod = this.loadedModules[modName];
+            if (mod === undefined) { // null if earlier load failed
+                mod = this.loadModule(modName);
+                this.loadedModules[modName] = mod;
+                if (!mod) {
+                    this.vm.warnOnce('FFI: library not found: ' + libName);
+                }
+            }
+            if (!mod) {
+                this.ffi_lastError = Squeak.FFIErrorModuleNotFound;
+                return false;
+            }
+            // types[0] is return type, types[1] is first arg type, etc.
+            var stTypes = extLibFunc.pointers[Squeak.ExtLibFunc_argTypes].pointers;
+            var jsArgs = [];
+            for (var i = 0; i < stArgs.length; i++) {
+                jsArgs.push(this.ffiArgFromSt(stArgs[i], stTypes[i+1]));
+            }
+            var jsResult;
+            if (!(funcName in mod)) {
+                if (this.vm.warnOnce('FFI: function not found: ' + libName + '::' + funcName)) {
+                    console.warn(jsArgs);
+                }
+                if (mod.ffiFunctionNotFoundHandler) {
+                    jsResult = mod.ffiFunctionNotFoundHandler(funcName, jsArgs);
+                }
+                if (jsResult === undefined) {
+                    this.ffi_lastError = Squeak.FFIErrorAddressNotFound;
+                    return false;
+                }
+            } else {
+                jsResult = mod[funcName].apply(mod, jsArgs);
+            }
+            var stResult = this.ffiResultToSt(jsResult, stTypes[0]);
+            return this.popNandPushIfOK(argCount + 1, stResult);
+        },
+        ffiArgFromSt: function(stObj, stType) {
+            var typeSpec = stType.pointers[0].words[0];
+            switch (typeSpec & Squeak.FFIFlagMask) {
+                case Squeak.FFIFlagAtomic:
+                    // single value
+                    var atomicType = (typeSpec & Squeak.FFIAtomicTypeMask) >> Squeak.FFIAtomicTypeShift;
+                    switch (atomicType) {
+                        case Squeak.FFITypeVoid:
+                            return null;
+                        case Squeak.FFITypeBool:
+                            return !stObj.isFalse;
+                        case Squeak.FFITypeUnsignedInt8:
+                        case Squeak.FFITypeSignedInt8:
+                        case Squeak.FFITypeUnsignedInt16:
+                        case Squeak.FFITypeSignedInt16:
+                        case Squeak.FFITypeUnsignedInt32:
+                        case Squeak.FFITypeSignedInt32:
+                        case Squeak.FFITypeUnsignedInt64:
+                        case Squeak.FFITypeSignedInt64:
+                        case Squeak.FFITypeUnsignedChar8:
+                        case Squeak.FFITypeSignedChar8:
+                        case Squeak.FFITypeUnsignedChar16:
+                        case Squeak.FFITypeUnsignedChar32:
+                            // we ignore the signedness and size of the integer for now
+                            if (typeof stObj === "number") return stObj;
+                            throw Error("FFI: expected integer, got " + stObj);
+                        case Squeak.FFITypeSingleFloat:
+                        case Squeak.FFITypeDoubleFloat:
+                            if (typeof stObj === "number") return stObj;
+                            if (typeof stObj.isFloat) return stObj.float;
+                            throw Error("FFI: expected float, got " + stObj);
+                        default:
+                            throw Error("FFI: unimplemented atomic arg type: " + atomicType);
+                    }
+                case Squeak.FFIFlagAtomicPointer:
+                    // array of values
+                    var atomicType = (typeSpec & Squeak.FFIAtomicTypeMask) >> Squeak.FFIAtomicTypeShift;
+                    switch (atomicType) {
+                        case Squeak.FFITypeUnsignedChar8:
+                            if (stObj.bytes) return stObj.bytesAsString();
+                            if (stObj.words) return String.fromChar.apply(null, stObj.wordsAsUint8Array());
+                            if (this.interpreterProxy.isWordsOrBytes(stObj)) return '';
+                            if (stObj.pointers && stObj.pointers[0].jsData) {
+                                var data = stObj.pointers[0].jsData;
+                                if (data instanceof "string") return data;
+                            }
+                            throw Error("FFI: expected string, got " + stObj);
+                        case Squeak.FFITypeUnsignedInt8:
+                            if (stObj.bytes) return stObj.bytes;
+                            if (stObj.words) return stObj.wordsAsUint8Array();
+                            if (this.interpreterProxy.isWordsOrBytes(stObj)) return new Uint8Array(0);
+                            if (stObj.pointers && stObj.pointers[0].jsData) {
+                                var data = stObj.pointers[0].jsData;
+                                if (data instanceof Uint8Array) return data;
+                                if (data instanceof ArrayBuffer) return new Uint8Array(data);
+                            }
+                            throw Error("FFI: expected bytes, got " + stObj);
+                        case Squeak.FFITypeUnsignedInt32:
+                            if (stObj.words) return stObj.words;
+                            if (this.interpreterProxy.isWords(stObj)) return new Uint32Array(0);
+                            if (stObj.pointers && stObj.pointers[0].jsData) {
+                                var data = stObj.pointers[0].jsData;
+                                if (data instanceof Uint32Array) return data;
+                                if (data instanceof ArrayBuffer) return new Uint32Array(data);
+                            }
+                            throw Error("FFI: expected words, got " + stObj);
+                        case Squeak.FFITypeSignedInt32:
+                            if (stObj.words) return stObj.wordsAsInt32Array();
+                            if (this.interpreterProxy.isWords(stObj)) return new Int32Array(0);
+                            if (stObj.pointers && stObj.pointers[0].jsData) {
+                                var data = stObj.pointers[0].jsData;
+                                if (data instanceof Int32Array) return data;
+                                if (data instanceof ArrayBuffer) return new Int32Array(data);
+                            }
+                            throw Error("FFI: expected words, got " + stObj);
+                        case Squeak.FFITypeSingleFloat:
+                            if (stObj.words) return stObj.wordsAsFloat32Array();
+                            if (stObj.isFloat) return new Float32Array([stObj.float]);
+                            if (this.interpreterProxy.isWords(stObj)) return new Float32Array(0);
+                            if (stObj.pointers && stObj.pointers[0].jsData) {
+                                var data = stObj.pointers[0].jsData;
+                                if (data instanceof Float32Array) return data;
+                                if (data instanceof ArrayBuffer) return new Float32Array(data);
+                            }
+                            throw Error("FFI: expected floats, got " + stObj);
+                        case Squeak.FFITypeDoubleFloat:
+                            if (stObj.words) return stObj.wordsAsFloat64Array();
+                            if (stObj.isFloat) return new Float64Array([stObj.float]);
+                            if (this.interpreterProxy.isWords(stObj)) return new Float64Array(0);
+                            if (stObj.pointers && stObj.pointers[0].jsData) {
+                                var data = stObj.pointers[0].jsData;
+                                if (data instanceof Float64Array) return data;
+                                if (data instanceof ArrayBuffer) return new Float64Array(data);
+                            }
+                            throw Error("FFI: expected floats, got " + stObj);
+                        case Squeak.FFITypeVoid: // void* is passed as buffer
+                            if (stObj.words) return stObj.words.buffer;
+                            if (stObj.bytes) return stObj.bytes.buffer;
+                            if (stObj.isNil || this.interpreterProxy.isWordsOrBytes(stObj)) return new ArrayBuffer(0); // null pointer
+                            if (stObj.pointers && stObj.pointers[0].jsData) {
+                                var data = stObj.pointers[0].jsData;
+                                if (data instanceof ArrayBuffer) return data;
+                            }
+                            throw Error("FFI: expected words or bytes, got " + stObj);
+                        default:
+                            throw Error("FFI: unimplemented atomic array arg type: " + atomicType);
+                    }
+                default:
+                    throw Error("FFI: unimplemented arg type flags: " + typeSpec);
+            }
+        },
+        ffiResultToSt: function(jsResult, stType) {
+            var typeSpec = stType.pointers[0].words[0];
+            switch (typeSpec & Squeak.FFIFlagMask) {
+                case Squeak.FFIFlagAtomic:
+                    // single value
+                    var atomicType = (typeSpec & Squeak.FFIAtomicTypeMask) >> Squeak.FFIAtomicTypeShift;
+                    switch (atomicType) {
+                        case Squeak.FFITypeVoid:
+                            return this.vm.nilObj;
+                        case Squeak.FFITypeBool:
+                            return jsResult ? this.vm.trueObj : this.vm.falseObj;
+                        case Squeak.FFITypeUnsignedInt8:
+                        case Squeak.FFITypeSignedInt8:
+                        case Squeak.FFITypeUnsignedInt16:
+                        case Squeak.FFITypeSignedInt16:
+                        case Squeak.FFITypeUnsignedInt32:
+                        case Squeak.FFITypeSignedInt32:
+                        case Squeak.FFITypeUnsignedInt64:
+                        case Squeak.FFITypeSignedInt64:
+                        case Squeak.FFITypeUnsignedChar8:
+                        case Squeak.FFITypeSignedChar8:
+                        case Squeak.FFITypeUnsignedChar16:
+                        case Squeak.FFITypeUnsignedChar32:
+                        case Squeak.FFITypeSingleFloat:
+                        case Squeak.FFITypeDoubleFloat:
+                            if (typeof jsResult !== "number") throw Error("FFI: expected number, got " + jsResult);
+                            return this.makeStObject(jsResult);
+                        default:
+                            throw Error("FFI: unimplemented atomic return type: " + atomicType);
+                    }
+                case Squeak.FFIFlagAtomicPointer:
+                    // array of values
+                    var atomicType = (typeSpec & Squeak.FFIAtomicTypeMask) >> Squeak.FFIAtomicTypeShift;
+                    switch (atomicType) {
+                        // char* is returned as string
+                        case Squeak.FFITypeSignedChar8:
+                        case Squeak.FFITypeUnsignedChar8:
+                            return this.makeStString(jsResult);
+                        // all other arrays are returned as ExternalData
+                        default:
+                            return this.ffiMakeStExternalData(jsResult, stType);
+                    }
+                default:
+                    throw Error("FFI: unimplemented return type flags: " + typeSpec);
+            }
+        },
+        ffiNextExtAddr: 0, // fake addresses for ExternalAddress objects
+        ffiMakeStExternalAddress: function() {
+            var extAddr = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassExternalAddress], 4);
+            new (Uint32Array)(extAddr.bytes.buffer)[0] = ++this.ffiNextExtAddr;
+            return extAddr;
+        },
+        ffiMakeStExternalData: function(jsData, stType) {
+            var extAddr = this.ffiMakeStExternalAddress();
+            extAddr.jsData = jsData; // save for later
+            var extData = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassExternalData], 0);
+            extData.pointers[0] = extAddr;
+            extData.pointers[1] = stType;
+            return extData;
+        },
+        ffiDataFromStack: function(arg) {
+            var oop = this.stackNonInteger(arg);
+            if (oop.jsData !== undefined) return oop.jsData;
+            if (oop.bytes) return oop.bytes;
+            if (oop.words) return oop.words;
+            this.vm.warnOnce("FFI: expected ExternalAddress with jsData, got " + oop);
+            this.success = false;
+        },
+        ffi_primitiveFFIAllocate: function(argCount) {
+            var size = this.stackInteger(0);
+            if (!this.success) return false;
+            var extAddr = this.ffiMakeStExternalAddress();
+            extAddr.jsData = new ArrayBuffer(size);
+            return this.popNandPushIfOK(argCount + 1, extAddr);
+        },
+        ffi_primitiveFFIFree: function(argCount) {
+            var extAddr = this.stackNonInteger(0);
+            if (!this.success) return false;
+            if (extAddr.jsData === undefined) {
+                this.vm.warnOnce("primitiveFFIFree: expected ExternalAddress with jsData, got " + extAddr);
+                return false;
+            }
+            delete extAddr.jsData;
+            return true;
+        },
+        primitiveCalloutToFFI: function(argCount, method) {
+            var extLibFunc = method.pointers[1];
+            if (!this.isKindOf(extLibFunc, Squeak.splOb_ClassExternalFunction)) return false;
+            var args = [];
+            for (var i = argCount - 1; i >= 0; i--)
+                args.push(this.vm.stackValue(i));
+            return this.ffiDoCallout(argCount, extLibFunc, args);
+        },
         ffi_primitiveCalloutWithArgs: function(argCount) {
             var extLibFunc = this.stackNonInteger(1),
                 argsObj = this.stackNonInteger(0);
             if (!this.isKindOf(extLibFunc, Squeak.splOb_ClassExternalFunction)) return false;
-            var moduleName = extLibFunc.pointers[Squeak.ExtLibFunc_module].bytesAsString();
-            var funcName = extLibFunc.pointers[Squeak.ExtLibFunc_name].bytesAsString();
-            var args = argsObj.pointers.join(', ');
-            this.vm.warnOnce('FFI: ignoring ' + moduleName + ': ' + funcName + '(' + args + ')');
-            return false;
+            return this.ffiDoCallout(argCount, extLibFunc, argsObj.pointers);
+        },
+        ffi_primitiveFFIGetLastError: function(argCount) {
+            return this.popNandPushIfOK(argCount + 1, this.ffi_lastError);
+        },
+        ffi_primitiveFFIIntegerAt: function(argCount) {
+            var data = this.ffiDataFromStack(3),
+                byteOffset = this.stackInteger(2),
+                byteSize = this.stackInteger(1),
+                isSigned = this.stackBoolean(0);
+            if (!this.success) return false;
+            if (byteOffset < 0 || byteSize < 1 || byteSize > 8 ||
+                (byteSize & (byteSize - 1)) !== 0) return false;
+            var result;
+            if (byteSize === 1 && !isSigned) {
+                if (typeof data === "string") {
+                    result = data.charCodeAt(byteOffset - 1) || 0; // 0 if out of bounds
+                } else if (data instanceof Uint8Array) {
+                    result = data[byteOffset] || 0; // 0 if out of bounds
+                } else {
+                    this.vm.warnOnce("FFI: expected string or Uint8Array, got " + typeof data);
+                    return false;
+                }
+            } else {
+                this.vm.warnOnce("FFI: unimplemented integer type size: " + byteSize + " signed: " + isSigned);
+                return false;
+            }
+            return this.popNandPushIfOK(argCount + 1, result);
+        },
+        ffi_primitiveFFIDoubleAtPut: function(argCount) {
+            var data = this.ffiDataFromStack(2),
+                byteOffset = this.stackInteger(1),
+                valueOop = this.vm.stackValue(0),
+                value = valueOop.isFloat ? valueOop.float : valueOop;
+            if (!this.success || typeof value !== "number") return false;
+            byteOffset--; // 1-based indexing
+            if (byteOffset & 7) new DataView(data).setFloat64(byteOffset, value, true);
+            else new Float64Array(data)[byteOffset / 8] = value;
+            return this.popNandPushIfOK(argCount + 1, valueOop);
         },
     });
 
@@ -10212,7 +10706,7 @@
             this.success = Squeak.dirCreate(dirName);
             if (!this.success) {
                 var path = Squeak.splitFilePath(dirName);
-                console.log("Directory not created: " + path.fullname);
+                if (Squeak.debugFiles) console.warn("Directory not created: " + path.fullname);
             }
             return this.popNIfOK(argCount);
         },
@@ -10238,7 +10732,7 @@
             var entries = Squeak.dirList(dirName, true);
             if (!entries) {
                 var path = Squeak.splitFilePath(dirName);
-                console.log("Directory not found: " + path.fullname);
+                if (Squeak.debugFiles) console.log("Directory not found: " + path.fullname);
                 return false;
             }
             var entry = fileName === "." ? [".", 0, 0, true, 0] : entries[fileName];
@@ -10254,8 +10748,11 @@
             var entries = Squeak.dirList(dirName, true);
             if (!entries) {
                 var path = Squeak.splitFilePath(dirName);
-                console.log("Directory not found: " + path.fullname);
+                if (Squeak.debugFiles) console.log("Directory not found: " + path.fullname);
                 return false;
+            }
+            if (Squeak.debugFiles && index === 1) {
+                console.log("Reading directory " + dirName + " with " + Object.keys(entries).length + " entries");
             }
             var keys = Object.keys(entries).sort(),
                 entry = entries[keys[index - 1]];
@@ -10340,8 +10837,13 @@
                 handle = this.stackNonInteger(3);
             if (!this.success || !arrayObj.isWordsOrBytes() || !handle.file) return false;
             if (!count) return this.popNandPushIfOK(argCount+1, 0);
-            var size = arrayObj.isWords() ? arrayObj.wordsSize() : arrayObj.bytesSize();
-            if (startIndex < 0 || startIndex + count > size)
+            var array = arrayObj.bytes;
+            if (!array) {
+                array = arrayObj.wordsAsUint8Array();
+                startIndex *= 4;
+                count *= 4;
+            }
+            if (startIndex < 0 || startIndex + count > array.length)
                 return false;
             if (typeof handle.file === "string") {
                 //this.fileConsoleRead(handle.file, array, startIndex, count);
@@ -10351,21 +10853,11 @@
             return this.fileContentsDo(handle.file, function(file) {
                 if (!file.contents)
                     return this.popNandPushIfOK(argCount+1, 0);
-                var srcArray, dstArray;
-                if (arrayObj.isWords()) {
-                    srcArray = new Uint32Array(file.contents.buffer);
-                    dstArray = arrayObj.words,
-                    count = Math.min(count, (file.size - handle.filePos) >>> 2);
-                    for (var i = 0; i < count; i++)
-                        dstArray[startIndex + i] = srcArray[handle.filePos + i];
-                    handle.filePos += count << 2;
-                } else {
-                    srcArray = file.contents;
-                    dstArray = arrayObj.bytes;
-                    count = Math.min(count, file.size - handle.filePos);
-                    for (var i = 0; i < count; i++)
-                        dstArray[startIndex + i] = srcArray[handle.filePos++];
-                }
+                var srcArray = file.contents,
+                    dstArray = array;
+                count = Math.min(count, file.size - handle.filePos);
+                for (var i = 0; i < count; i++)
+                    dstArray[startIndex + i] = srcArray[handle.filePos++];
                 this.popNandPushIfOK(argCount+1, Math.max(0, count));
             }.bind(this));
         },
@@ -10475,13 +10967,13 @@
                 }
             } else {
                 if (!writeFlag) {
-                    console.log("File not found: " + path.fullname);
+                    if (Squeak.debugFiles) console.log("File not found: " + path.fullname);
                     return null;
                 }
                 contents = new Uint8Array();
                 entry = Squeak.filePut(path.fullname, contents.buffer);
                 if (!entry) {
-                    console.log("Cannot create file: " + path.fullname);
+                    if (Squeak.debugFiles) console.log("Cannot create file: " + path.fullname);
                     return null;
                 }
             }
@@ -10509,7 +11001,7 @@
                     return false;
                 this.vm.freeze(function(unfreeze) {
                     var error = (function(msg) {
-                        console.log("File get failed: " + msg);
+                        console.warn("File get failed: " + msg);
                         file.contents = false;
                         unfreeze();
                         func(file);
@@ -11028,10 +11520,11 @@
                 this.audioInProcessor = null;
                 console.log("sound recording stopped");
             }
-            return true;
+            return this.popNIfOK(argCount);
         },
         snd_primitiveSoundSetRecordLevel: function(argCount) {
-            return true;
+            this.vm.warnOnce("sound set record level not supported");
+            return this.popNIfOK(argCount);
         },
     });
 
@@ -38465,10 +38958,16 @@
                   var end = this.sendBuffer.byteLength;
                   data = this.sendBuffer.subarray(end - contentLength, end);
                 } else if (line.match(/Host:/i)) {
-                  var host = line.substr(6).trim();
+                  var hostAndPort = line.substr(6).trim();
+                  var host = hostAndPort.split(':')[0];
+                  var port = parseInt(hostAndPort.split(':')[1]) || this.port;
                   if (this.host !== host) {
                     console.warn('Host for ' + this.hostAddress + ' was ' + this.host + ' but from HTTP request now ' + host);
                     this.host = host;
+                  }
+                  if (this.port !== port) {
+                    console.warn('Port for ' + this.hostAddress + ' was ' + this.port + ' but from HTTP request now ' + port);
+                    this.port = port;
                   }
                 } if (line.match(/Connection: Upgrade/i)) {
                   seenUpgrade = true;
@@ -54741,6 +55240,8 @@
                     case 1: buttons = Squeak.Mouse_Yellow; break;   // middle
                     case 2: buttons = Squeak.Mouse_Blue; break;     // right
                 }
+                if (buttons === Squeak.Mouse_Red && (evt.altKey || evt.metaKey))
+                    buttons = Squeak.Mouse_Yellow; // emulate middle-click
                 if (options.swapButtons)
                     if (buttons == Squeak.Mouse_Yellow) buttons = Squeak.Mouse_Blue;
                     else if (buttons == Squeak.Mouse_Blue) buttons = Squeak.Mouse_Yellow;
@@ -54853,7 +55354,7 @@
             eventQueue: null, // only used if image uses event primitives
             clipboardString: '',
             clipboardStringChanged: false,
-            cursorCanvas: options.cursor !== false && document.createElement("canvas"),
+            cursorCanvas: options.cursor !== false && document.getElementById("sqCursor") || document.createElement("canvas"),
             cursorOffsetX: 0,
             cursorOffsetY: 0,
             droppedFiles: [],
@@ -55314,19 +55815,20 @@
                 image, imageName = null;
             display.droppedFiles = [];
             files.forEach(function(f) {
-                display.droppedFiles.push(f.name);
+                var path = options.root + f.name;
+                display.droppedFiles.push(path);
                 var reader = new FileReader();
                 reader.onload = function () {
                     var buffer = this.result;
-                    Squeak.filePut(f.name, buffer);
-                    loaded.push(f.name);
-                    if (!image && /.*image$/.test(f.name) && (!display.vm || confirm("Run " + f.name + " now?\n(cancel to use as file)"))) {
+                    Squeak.filePut(path, buffer);
+                    loaded.push(path);
+                    if (!image && /.*image$/.test(path) && (!display.vm || confirm("Run " + f.name + " now?\n(cancel to use as file)"))) {
                         image = buffer;
-                        imageName = f.name;
+                        imageName = path;
                     }
                     if (loaded.length == files.length) {
                         if (image) {
-                            SqueakJS.appName = imageName.slice(0, -6);
+                            SqueakJS.appName = imageName.replace(/.*\//,'').replace(/\.image$/,'');
                             SqueakJS.runImage(image, imageName, display, options);
                         } else {
                             recordDragDropEvent(Squeak.EventDragDrop, evt, canvas, display);
@@ -55541,7 +56043,9 @@
             }
             for (var path in options.templates) {
                 var dir = path[0] == "/" ? path : options.root + path,
-                    url = Squeak.splitUrl(options.templates[path], options.url).full;
+                    baseUrl = new URL(options.url, document.baseURI).href.split(/[?#]/)[0],
+                    url = Squeak.splitUrl(options.templates[path], baseUrl).full;
+                if (url.endsWith("/.")) url = url.slice(0,-2);
                 Squeak.fetchTemplateDir(dir, url);
             }
         }
@@ -55724,7 +56228,7 @@
         }
         options.image = image;
         fetchFiles(files, display, options, function thenDo() {
-            Squeak.fsck();
+            Squeak.fsck(); // will run async
             var image = options.image;
             if (!image.name) return alert("could not find an image");
             if (!image.data) return alert("could not find image " + image.name);

@@ -243,9 +243,10 @@ Object.extend(Squeak.Primitives.prototype,
             this.audioInProcessor = null;
             console.log("sound recording stopped")
         }
-        return true;
+        return this.popNIfOK(argCount);
     },
     snd_primitiveSoundSetRecordLevel: function(argCount) {
-        return true;
+        this.vm.warnOnce("sound set record level not supported");
+        return this.popNIfOK(argCount);
     },
 });

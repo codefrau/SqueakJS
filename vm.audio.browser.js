@@ -46,7 +46,7 @@ Object.extend(Squeak,
                 this.audioInContext = ctxProto && new ctxProto();
                 this.audioInSource = this.audioInContext.createMediaStreamSource(stream);
                 thenDo(this.audioInContext, this.audioInSource);
-            },
+            }.bind(this),
             function onError() {
                 errorDo("cannot access microphone");
             });

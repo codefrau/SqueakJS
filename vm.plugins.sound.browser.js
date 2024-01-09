@@ -137,6 +137,7 @@ Object.extend(Squeak.Primitives.prototype,
             this.audioSema = 0;
             console.log("sound: stopped");
         }
+        Squeak.stopAudioOut();
         return this.popNIfOK(argCount);
     },
     snd_primitiveSoundStartRecording: function(argCount) {
@@ -243,6 +244,7 @@ Object.extend(Squeak.Primitives.prototype,
             this.audioInProcessor = null;
             console.log("sound recording stopped")
         }
+        Squeak.stopAudioIn();
         return this.popNIfOK(argCount);
     },
     snd_primitiveSoundSetRecordLevel: function(argCount) {

@@ -25,34 +25,37 @@ Object.extend(Squeak,
 "audio", {
     startAudioOut: function() {
         if (!this.audioOutContext) {
-            var ctxProto = window.AudioContext || window.webkitAudioContext
-                || window.mozAudioContext || window.msAudioContext;
-            this.audioOutContext = ctxProto && new ctxProto();
+            this.audioOutContext = new AudioContext();
         }
         return this.audioOutContext;
+    },
+    stopAudioOut: function() {
+        if (this.audioOutContext) {
+            this.audioOutContext.close();
+            this.audioOutContext = null;
+        }
     },
     startAudioIn: function(thenDo, errorDo) {
         if (this.audioInContext) {
             this.audioInSource.disconnect();
             return thenDo(this.audioInContext, this.audioInSource);
         }
-        navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia
-            || navigator.mozGetUserMedia || navigator.msGetUserMedia;
-        if (!navigator.getUserMedia) return errorDo("test: audio input not supported");
-        navigator.getUserMedia({audio: true, toString: function() {return "audio"}},
-            function onSuccess(stream) {
-                var ctxProto = window.AudioContext || window.webkitAudioContext
-                    || window.mozAudioContext || window.msAudioContext;
-                this.audioInContext = ctxProto && new ctxProto();
+        if (!navigator.mediaDevices) return errorDo("test: audio input not supported");
+        navigator.mediaDevices.getUserMedia({audio: true})
+            .then(stream => {
+                this.audioInContext = new AudioContext();
                 this.audioInSource = this.audioInContext.createMediaStreamSource(stream);
                 thenDo(this.audioInContext, this.audioInSource);
-            }.bind(this),
-            function onError() {
-                errorDo("cannot access microphone");
-            });
+            })
+            .catch(err => errorDo("cannot access microphone. " + err.name + ": " + err.message));
     },
-    stopAudio: function() {
-        if (this.audioInSource)
+    stopAudioIn: function() {
+        if (this.audioInSource) {
             this.audioInSource.disconnect();
+            this.audioInSource = null;
+            this.audioInContext.close();
+            this.audioInContext = null;
+        }
+
     },
 });

@@ -167,7 +167,7 @@ Object.extend(Squeak,
         }
 
         openReq.onsuccess = function(e) {
-            console.log("Opened files database.");
+            if (Squeak.debugFiles) console.log("Opened files database.");
             window.SqueakDB = this.result;
             SqueakDB.onversionchange = function(e) {
                 delete window.SqueakDB;
@@ -180,7 +180,7 @@ Object.extend(Squeak,
         };
         openReq.onupgradeneeded = function (e) {
             // run only first time, or when version changed
-            console.log("Creating files database");
+            if (Squeak.debugFiles) console.log("Creating files database");
             var db = e.target.result;
             db.createObjectStore("files");
         };

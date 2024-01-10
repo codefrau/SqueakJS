@@ -1,6 +1,7 @@
 (function () {
     'use strict';
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -91,6 +92,7 @@
 
     }
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -117,7 +119,7 @@
     "version", {
         // system attributes
         vmVersion: "SqueakJS 1.1.2",
-        vmDate: "2024-01-03",               // Maybe replace at build time?
+        vmDate: "2024-01-09",               // Maybe replace at build time?
         vmBuild: "unknown",                 // or replace at runtime by last-modified?
         vmPath: "unknown",                  // Replace at runtime
         vmFile: "vm.js",
@@ -329,6 +331,7 @@
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -891,6 +894,7 @@
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -1350,6 +1354,7 @@
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -1476,7 +1481,8 @@
                 if (baseVersions.indexOf(version & baseVersionMask) >= 0) break;
                 if (!littleEndian) fileHeaderSize += 512;
                 if (fileHeaderSize > 512) throw Error("bad image version"); // we tried all combos
-            }        this.version = version;
+            };
+            this.version = version;
             var nativeFloats = (version & 1) !== 0;
             this.hasClosures = !([6501, 6502, 68000].indexOf(version) >= 0);
             this.isSpur = (version & 16) !== 0;
@@ -1629,7 +1635,7 @@
             this.totalMemory = this.oldSpaceBytes + this.headRoom;
             this.totalMemory = Math.ceil(this.totalMemory / 1000000) * 1000000;
 
-            {
+            if (true) {
                 // For debugging: re-create all objects from named prototypes
                 var _splObs = oopMap[specialObjectsOopInt],
                     cc = this.isSpur ? this.spurClassTable(oopMap, rawBits, classPages, _splObs)
@@ -1699,8 +1705,10 @@
                 } else {
                     if (thenDo) thenDo();
                 }
-            }        if (!progressDo) {
-                while (mapSomeObjects()) {}            if (thenDo) thenDo();
+            };
+            if (!progressDo) {
+                while (mapSomeObjects()) {};   // do it synchronously
+                if (thenDo) thenDo();
             } else {
                 self.setTimeout(mapSomeObjectsAsync, 0);
             }
@@ -1961,7 +1969,8 @@
                         }
                     }
                 }
-            }        if (this.vm.pendingFinalizationSignals > 0) {
+            };
+            if (this.vm.pendingFinalizationSignals > 0) {
                 this.vm.forceInterruptCheck();                      // run finalizer asap
             }
         },
@@ -2679,7 +2688,8 @@
             function writeWord(word) {
                 data.setUint32(pos, word, littleEndian);
                 pos += 4;
-            }        function objToOop(obj) {
+            };
+            function objToOop(obj) {
                 if (typeof obj === "number")
                     return obj << 1 | 1; // add tag bit
                 if (obj._format === 7) {
@@ -2690,7 +2700,8 @@
                 if (obj.oop < 0) throw Error("temporary oop");
                 // oops after nil/false/true are shifted by size of hidden objects
                 return obj.oop < 48 ? obj.oop : obj.oop + hiddenSize;
-            }        writeWord(this.formatVersion()); // magic number
+            };
+            writeWord(this.formatVersion()); // magic number
             writeWord(headerSize);
             writeWord(hiddenSize + this.oldSpaceBytes + trailerSize); // end of memory
             writeWord(this.firstOldObject.addr()); // base addr (0)
@@ -2736,6 +2747,7 @@
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -2885,7 +2897,11 @@
         },
         hackImage: function() {
             // hack methods to make work / speed up
-            var opts = typeof location === 'object' ? location.hash : "";
+            var returnSelf  = 256,
+                returnTrue  = 257,
+                returnFalse = 258,
+                returnNil   = 259,
+                opts = typeof location === 'object' ? location.hash : "";
             [
                 // Etoys fallback for missing translation files is hugely inefficient.
                 // This speeds up opening a viewer by 10x (!)
@@ -4603,6 +4619,7 @@
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -4915,6 +4932,7 @@
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -5054,6 +5072,7 @@
         }
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -5219,6 +5238,7 @@
         }
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -5398,6 +5418,7 @@
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -6024,7 +6045,8 @@
                 console.warn("Out of range: pos53BitIntFor(" + longlong + ")");
                 this.success = false;
                 return 0;
-            }        var sz = longlong <= 0xFFFFFFFFFF ? 5 :
+            };
+            var sz = longlong <= 0xFFFFFFFFFF ? 5 :
                      longlong <= 0xFFFFFFFFFFFF ? 6 :
                      7;
             var lgIntClass = this.vm.specialObjects[Squeak.splOb_ClassLargePositiveInteger],
@@ -6483,7 +6505,8 @@
             } else { // basicSize
                 size = this.indexableSize(rcvr);
             }
-            if (size === -1) {this.success = false; return -1}        return this.pos32BitIntFor(size);
+            if (size === -1) {this.success = false; return -1}; //not indexable
+            return this.pos32BitIntFor(size);
         },
         initAtCache: function() {
             // The purpose of the at-cache is to allow fast (bytecode) access to at/atput code
@@ -7359,7 +7382,8 @@
                 case 2:
                     // ignore writes
                     return this.popNandPushIfOK(3, 0);
-            }        return false;
+            };
+            return false;
         },
         vmParameterAt: function(index) {
             switch (index) {
@@ -7568,6 +7592,7 @@
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2014-2020 Vanessa Freudenberg
      *
@@ -8419,6 +8444,7 @@
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -8445,38 +8471,42 @@
     "audio", {
         startAudioOut: function() {
             if (!this.audioOutContext) {
-                var ctxProto = window.AudioContext || window.webkitAudioContext
-                    || window.mozAudioContext || window.msAudioContext;
-                this.audioOutContext = ctxProto && new ctxProto();
+                this.audioOutContext = new AudioContext();
             }
             return this.audioOutContext;
+        },
+        stopAudioOut: function() {
+            if (this.audioOutContext) {
+                this.audioOutContext.close();
+                this.audioOutContext = null;
+            }
         },
         startAudioIn: function(thenDo, errorDo) {
             if (this.audioInContext) {
                 this.audioInSource.disconnect();
                 return thenDo(this.audioInContext, this.audioInSource);
             }
-            navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia
-                || navigator.mozGetUserMedia || navigator.msGetUserMedia;
-            if (!navigator.getUserMedia) return errorDo("test: audio input not supported");
-            navigator.getUserMedia({audio: true, toString: function() {return "audio"}},
-                function onSuccess(stream) {
-                    var ctxProto = window.AudioContext || window.webkitAudioContext
-                        || window.mozAudioContext || window.msAudioContext;
-                    this.audioInContext = ctxProto && new ctxProto();
+            if (!navigator.mediaDevices) return errorDo("test: audio input not supported");
+            navigator.mediaDevices.getUserMedia({audio: true})
+                .then(stream => {
+                    this.audioInContext = new AudioContext();
                     this.audioInSource = this.audioInContext.createMediaStreamSource(stream);
                     thenDo(this.audioInContext, this.audioInSource);
-                }.bind(this),
-                function onError() {
-                    errorDo("cannot access microphone");
-                });
+                })
+                .catch(err => errorDo("cannot access microphone. " + err.name + ": " + err.message));
         },
-        stopAudio: function() {
-            if (this.audioInSource)
+        stopAudioIn: function() {
+            if (this.audioInSource) {
                 this.audioInSource.disconnect();
+                this.audioInSource = null;
+                this.audioInContext.close();
+                this.audioInContext = null;
+            }
+
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -8531,6 +8561,7 @@
         displayDirty: function() {},
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -8742,7 +8773,8 @@
                             }
                         }
                         srcY++;
-                    }                break;
+                    };
+                    break;
                 case 16:
                     var leftSrcShift = srcX % 2 ? 0 : 16;
                     for (var y = 0; y < srcH; y++) {
@@ -8763,7 +8795,8 @@
                             }
                         }
                         srcY++;
-                    }                break;
+                    };
+                    break;
                 case 32:
                     var opaque = cursorColors ? 0 : 0xFF000000;    // keep alpha for cursors
                     for (var y = 0; y < srcH; y++) {
@@ -8778,9 +8811,11 @@
                             dest[dstIndex++] = abgr;
                         }
                         srcY++;
-                    }                break;
+                    };
+                    break;
                 default: throw Error("depth not implemented");
-            }        if (pixels.data !== pixelData) {
+            };
+            if (pixels.data !== pixelData) {
                 pixels.data.set(pixelData);
             }
             ctx.putImageData(pixels, rect.left, rect.top);
@@ -8953,6 +8988,7 @@
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -8987,7 +9023,8 @@
                 // ... in localStorage
                 Object.keys(Squeak.Settings).forEach(function(key) {
                     var match = key.match(/squeak-file(\.lz)?:(.*)$/);
-                    if (match) {files[match[2]] = true;}            });
+                    if (match) {files[match[2]] = true;};
+                });
                 // ... or in memory
                 if (window.SqueakDBFake) Object.keys(SqueakDBFake.bigFiles).forEach(function(path) {
                     files[path] = true;
@@ -9038,8 +9075,10 @@
                 // we're back at the root, almost done
                 console.log("squeak fsck: " + stats.dirs + " directories, " + stats.files + " files, " + (stats.bytes/1000000).toFixed(1) + " MBytes");
                 // check orphaned files
-                var orphaned = [];
+                var orphaned = [],
+                    total = 0;
                 for (var path in files) {
+                    total++;
                     var size = files[path];
                     if (size !== null) orphaned.push({ path: path, size: size }); // not marked visited
                 }
@@ -9099,7 +9138,8 @@
                     if (completionFunc) completionFunc();
                 };
                 transactionFunc(fileStore);
-            }
+            };
+
             // if database connection already opened, just do transaction
             if (window.SqueakDB) return startTransaction();
 
@@ -9459,7 +9499,8 @@
                 for (var key in template.entries) {
                     var entry = template.entries[key];
                     if (entry[3]) Squeak.fetchTemplateDir(path + "/" + entry[0], url + "/" + entry[0]);
-                }        }
+                };
+            }
             if (Squeak.Settings["squeak-template:" + path]) {
                 checkSubTemplates(path, url);
             } else  {
@@ -9516,6 +9557,7 @@
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -9562,6 +9604,7 @@
         EventDragDrop: 4,
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -9647,6 +9690,7 @@
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -9704,6 +9748,7 @@
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -10134,6 +10179,7 @@
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -10391,6 +10437,7 @@
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -10630,6 +10677,7 @@
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -10675,6 +10723,7 @@
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -11041,6 +11090,7 @@
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -11206,13 +11256,19 @@
                         dmv2 = ditherMatrix2[v],
                         di, dmi, dmo;
                     di = (r1 * 496) >> 8, dmi = di & 15, dmo = di >> 4;
-                    if (dmv1 < dmi) { r1 = dmo+1; } else { r1 = dmo; }                di = (g1 * 496) >> 8; dmi = di & 15; dmo = di >> 4;
-                    if (dmv1 < dmi) { g1 = dmo+1; } else { g1 = dmo; }                di = (b1 * 496) >> 8; dmi = di & 15; dmo = di >> 4;
-                    if (dmv1 < dmi) { b1 = dmo+1; } else { b1 = dmo; }
+                    if (dmv1 < dmi) { r1 = dmo+1; } else { r1 = dmo; };
+                    di = (g1 * 496) >> 8; dmi = di & 15; dmo = di >> 4;
+                    if (dmv1 < dmi) { g1 = dmo+1; } else { g1 = dmo; };
+                    di = (b1 * 496) >> 8; dmi = di & 15; dmo = di >> 4;
+                    if (dmv1 < dmi) { b1 = dmo+1; } else { b1 = dmo; };
+
                     di = (r2 * 496) >> 8; dmi = di & 15; dmo = di >> 4;
-                    if (dmv2 < dmi) { r2 = dmo+1; } else { r2 = dmo; }                di = (g2 * 496) >> 8; dmi = di & 15; dmo = di >> 4;
-                    if (dmv2 < dmi) { g2 = dmo+1; } else { g2 = dmo; }                di = (b2 * 496) >> 8; dmi = di & 15; dmo = di >> 4;
-                    if (dmv2 < dmi) { b2 = dmo+1; } else { b2 = dmo; }
+                    if (dmv2 < dmi) { r2 = dmo+1; } else { r2 = dmo; };
+                    di = (g2 * 496) >> 8; dmi = di & 15; dmo = di >> 4;
+                    if (dmv2 < dmi) { g2 = dmo+1; } else { g2 = dmo; };
+                    di = (b2 * 496) >> 8; dmi = di & 15; dmo = di >> 4;
+                    if (dmv2 < dmi) { b2 = dmo+1; } else { b2 = dmo; };
+
                     var formPix = (r1 << 10) | (g1 << 5) | b1;
                     if (formPix === 0) formPix = 1;
                     formPix = (formPix << 16) | (r2 << 10) | (g2 << 5) | b2;
@@ -11222,6 +11278,7 @@
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -11276,6 +11333,7 @@
         },
     });
 
+    "use strict";
     /*
      * Copyright (c) 2013-2020 Vanessa Freudenberg
      *
@@ -11414,6 +11472,7 @@
                 this.audioSema = 0;
                 console.log("sound: stopped");
             }
+            Squeak.stopAudioOut();
             return this.popNIfOK(argCount);
         },
         snd_primitiveSoundStartRecording: function(argCount) {
@@ -11520,6 +11579,7 @@
                 this.audioInProcessor = null;
                 console.log("sound recording stopped");
             }
+            Squeak.stopAudioIn();
             return this.popNIfOK(argCount);
         },
         snd_primitiveSoundSetRecordLevel: function(argCount) {
@@ -11536,11 +11596,20 @@
      */
 
     (function ADPCMCodecPlugin() {
+    "use strict";    
 
     var VM_PROXY_MAJOR = 1;
     var VM_PROXY_MINOR = 11;
+
+    /*** Functions ***/
+    function CLASSOF(obj) { return typeof obj === "number" ? interpreterProxy.classSmallInteger() : obj.sqClass }
+    function SIZEOF(obj) { return obj.pointers ? obj.pointers.length : obj.words ? obj.words.length : obj.bytes ? obj.bytes.length : 0 }
+    function BYTESIZEOF(obj) { return obj.bytes ? obj.bytes.length : obj.words ? obj.words.length * 4 : 0 }
+    function DIV(a, b) { return Math.floor(a / b) | 0; }   // integer division
+    function MOD(a, b) { return a - DIV(a, b) * b | 0; }   // signed modulus
     function SHL(a, b) { return b > 31 ? 0 : a << b; }     // fix JS shift
     function SHR(a, b) { return b > 31 ? 0 : a >>> b; }    // fix JS shift
+    function SHIFT(a, b) { return b < 0 ? (b < -31 ? 0 : a >>> (0-b) ) : (b > 31 ? 0 : a << b); }
 
     /*** Variables ***/
     var bitPosition = 0;
@@ -11552,6 +11621,14 @@
     var stepSizeTable = null;
 
 
+
+    /*	Note: This is coded so that plugins can be run from Squeak. */
+
+    function getInterpreter() {
+    	return interpreterProxy;
+    }
+
+
     /*	Note: This is hardcoded so it can be run from Squeak.
     	The module name is used for validating a module *after*
     	it is loaded to check if it does really contain the module
@@ -11559,6 +11636,10 @@
 
     function getModuleName() {
     	return moduleName;
+    }
+
+    function halt() {
+    	;
     }
 
 
@@ -11584,6 +11665,10 @@
     		}
     	}
     	return bestIndex;
+    }
+
+    function msg(s) {
+    	console.log(moduleName + ": " + s);
     }
 
 
@@ -12102,6 +12187,7 @@
      */
 
     (function B2DPlugin() {
+    "use strict";    
 
     var VM_PROXY_MAJOR = 1;
     var VM_PROXY_MINOR = 11;
@@ -12114,6 +12200,7 @@
     function MOD(a, b) { return a - DIV(a, b) * b | 0; }   // signed modulus
     function SHL(a, b) { return b > 31 ? 0 : a << b; }     // fix JS shift
     function SHR(a, b) { return b > 31 ? 0 : a >>> b; }    // fix JS shift
+    function SHIFT(a, b) { return b < 0 ? (b < -31 ? 0 : a >>> (0-b) ) : (b > 31 ? 0 : a << b); }
     function PTR_ADD(p, n) { return new Int32Array(p.buffer, p.byteOffset + n * 4); }
     function FPTR_ADD(p, n) { return new Float32Array(p.buffer, p.byteOffset + n * 4); }
 
@@ -13607,6 +13694,14 @@
     }
 
 
+    /*	Ignore dispatch errors when translating to C
+    	(since we have no entry point for #error in the VM proxy) */
+
+    function errorWrongIndex() {
+    	;
+    }
+
+
     /*	Fill the span buffer from leftX to rightX with the given fill. */
 
     function fillAllFromto(leftX, rightX) {
@@ -14646,6 +14741,7 @@
     		switch (type) {
     		case 0:
     		case 1:
+    			errorWrongIndex();
     			break;
     		case 2:
     			fillLinearGradient();
@@ -14696,6 +14792,7 @@
     		case 1:
     		case 2:
     		case 3:
+    			errorWrongIndex();
     			break;
     		case 4:
     			stepToFirstLine();
@@ -14801,6 +14898,7 @@
     			case 1:
     			case 2:
     			case 3:
+    				errorWrongIndex();
     				break;
     			case 4:
     				stepToNextLine();
@@ -14900,6 +14998,10 @@
 
     function gradientRampOf(fill) {
     	return PTR_ADD(objBuffer, fill + GFRampOffset);
+    }
+
+    function halt() {
+    	;
     }
 
     function hasColorTransform() {
@@ -16380,7 +16482,7 @@
     		return interpreterProxy.primitiveFailFor(failureCode);
     	}
     	statePut(GEStateCompleted);
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     }
 
 
@@ -16418,7 +16520,7 @@
     		return interpreterProxy.primitiveFailFor(GEFEngineStopped);
     	}
     	statePut(GEStateAddingFromGET);
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(1);
     	if (doProfileStats) {
     		incrementStatby(GWCountAddAETEntry, 1);
@@ -16484,7 +16586,7 @@
     	if (interpreterProxy.failed()) {
     		return interpreterProxy.primitiveFailFor(GEFEntityLoadFailed);
     	}
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(5);
     }
 
@@ -16574,7 +16676,7 @@
     		return interpreterProxy.primitiveFailFor(GEFEntityLoadFailed);
     	}
     	needsFlushPut(1);
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(5);
     }
 
@@ -16629,7 +16731,7 @@
     	if (interpreterProxy.failed()) {
     		return interpreterProxy.primitiveFailFor(GEFEntityLoadFailed);
     	}
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.popthenPush(8, interpreterProxy.positive32BitIntegerFor(fill));
     }
 
@@ -16681,7 +16783,7 @@
     		return interpreterProxy.primitiveFailFor(GEFEntityLoadFailed);
     	}
     	needsFlushPut(1);
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(7);
     }
 
@@ -16727,7 +16829,7 @@
     	if (interpreterProxy.failed()) {
     		return interpreterProxy.primitiveFailFor(GEFEntityLoadFailed);
     	}
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.popthenPush(6, interpreterProxy.positive32BitIntegerFor(fill));
     }
 
@@ -16775,7 +16877,7 @@
     	if (interpreterProxy.failed()) {
     		return interpreterProxy.primitiveFailFor(GEFEntityLoadFailed);
     	}
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(4);
     }
 
@@ -16837,7 +16939,7 @@
     		return interpreterProxy.primitiveFailFor(GEFEntityLoadFailed);
     	}
     	needsFlushPut(1);
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(5);
     }
 
@@ -16924,7 +17026,7 @@
     		return interpreterProxy.primitiveFailFor(GEFEntityLoadFailed);
     	}
     	needsFlushPut(1);
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(5);
     }
 
@@ -16987,7 +17089,7 @@
     		return interpreterProxy.primitiveFailFor(GEFEntityLoadFailed);
     	}
     	needsFlushPut(1);
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(5);
     }
 
@@ -17023,7 +17125,7 @@
     		aetStartPut(aetStartGet() + 1);
     	}
     	statePut(GEStateUpdateEdges);
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(1);
     	if (doProfileStats) {
     		incrementStatby(GWCountChangeAETEntry, 1);
@@ -17107,7 +17209,7 @@
     		currentYPut(currentYGet() + 1);
     		statePut(GEStateUpdateEdges);
     	}
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	if (doProfileStats) {
     		incrementStatby(GWCountDisplaySpan, 1);
     		incrementStatby(GWTimeDisplaySpan, interpreterProxy.ioMicroMSecs() - geProfileTime);
@@ -17145,7 +17247,7 @@
     		return interpreterProxy.primitiveFailFor(failureCode);
     	}
     	finished = finishedProcessing();
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(1);
     	interpreterProxy.pushBool(finished);
     	if (doProfileStats) {
@@ -17396,7 +17498,7 @@
     	}
     	statePut(GEStateAddingFromGET);
     	if (!interpreterProxy.failed()) {
-    		storeEngineStateInto();
+    		storeEngineStateInto(engine);
     	}
     	if (doProfileStats) {
     		incrementStatby(GWCountInitializing, 1);
@@ -17456,7 +17558,7 @@
     	}
     	fillBitmapSpanfromto(bitsOop.wordsAsInt32Array(), lastExportedLeftXGet(), lastExportedRightXGet());
     	statePut(GEStateScanningAET);
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(2);
     	if (doProfileStats) {
     		incrementStatby(GWCountMergeFill, 1);
@@ -17475,7 +17577,7 @@
     		return interpreterProxy.primitiveFailFor(failureCode);
     	}
     	needFlush = needsFlush();
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(1);
     	interpreterProxy.pushBool(needFlush);
     }
@@ -17499,7 +17601,7 @@
     	} else {
     		needsFlushPut(0);
     	}
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(1);
     }
 
@@ -17539,7 +17641,7 @@
     	if (interpreterProxy.failed()) {
     		return null;
     	}
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(2);
     	interpreterProxy.pushBool(!hasEdge);
     	if (doProfileStats) {
@@ -17595,7 +17697,7 @@
     		spanEndAAPut(0);
     		statePut(GEStateBlitBuffer);
     	}
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(2);
     	interpreterProxy.pushBool(!hasFill);
     	if (doProfileStats) {
@@ -17643,7 +17745,7 @@
     		aetStartPut(0);
     		wbStackClear();
     	}
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(2);
     	interpreterProxy.pushBool(!hasEdge);
     	if (doProfileStats) {
@@ -17700,7 +17802,7 @@
     		return interpreterProxy.primitiveFailFor(GEFEngineStopped);
     	}
     	if (!interpreterProxy.failed()) {
-    		storeEngineStateInto();
+    		storeEngineStateInto(engine);
     		interpreterProxy.pop(6);
     	}
     }
@@ -17735,7 +17837,7 @@
     		objectIndexOfput(fill, index);
     	}
     	if (!interpreterProxy.failed()) {
-    		storeEngineStateInto();
+    		storeEngineStateInto(engine);
     		interpreterProxy.pop(2);
     		interpreterProxy.pushInteger(fill);
     	}
@@ -17786,7 +17888,7 @@
     		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
     	}
     	setAALevel(level);
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(1);
     }
 
@@ -17794,6 +17896,7 @@
     /*	Primitive. Set the BitBlt plugin to use. */
 
     function primitiveSetBitBltPlugin() {
+    	var i;
     	var length;
     	var needReload;
     	var pluginName;
@@ -17851,7 +17954,7 @@
     	clipMinYPut(point1Get()[1]);
     	clipMaxXPut(point2Get()[0]);
     	clipMaxYPut(point2Get()[1]);
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(1);
     }
 
@@ -17873,7 +17976,7 @@
     	if (interpreterProxy.failed()) {
     		return interpreterProxy.primitiveFailFor(GEFEntityLoadFailed);
     	}
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(1);
     }
 
@@ -17892,7 +17995,7 @@
     		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
     	}
     	currentZPut(depth);
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(1);
     }
 
@@ -17914,7 +18017,7 @@
     	if (interpreterProxy.failed()) {
     		return interpreterProxy.primitiveFailFor(PrimErrBadArgument);
     	}
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(1);
     }
 
@@ -17938,7 +18041,7 @@
     	}
     	destOffsetXPut(point1Get()[0]);
     	destOffsetYPut(point1Get()[1]);
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(1);
     }
 
@@ -18751,7 +18854,7 @@
     	lineErrorAdjDownOfput(line, deltaY);
     	if (((startY = edgeYValueOf(line))) !== yValue) {
     		for (i = startY; i <= (yValue - 1); i++) {
-    			stepToNextLineInat(line);
+    			stepToNextLineInat(line, i);
     		}
     		edgeNumLinesOfput(line, deltaY - (yValue - startY));
     	}
@@ -18903,7 +19006,7 @@
     	}
     	if (startY !== yValue) {
     		for (i = startY; i <= (yValue - 1); i++) {
-    			stepToNextWideLineInat(line);
+    			stepToNextWideLineInat(line, i);
     		}
     		edgeNumLinesOfput(line, edgeNumLinesOf(line) - (yValue - startY));
     	}
@@ -19061,7 +19164,7 @@
     		edgeFillsInvalidate(line);
     	}
     	lastX = edgeXValueOf(line);
-    	stepToNextLineInat(line);
+    	stepToNextLineInat(line, yValue);
 
     	/* Check for special start/end adjustments */
 
@@ -19130,7 +19233,7 @@
 
     		storeStopStateIntoEdgefill(interpreterProxy.stackObjectValue(1), interpreterProxy.stackObjectValue(0));
     	}
-    	storeEngineStateInto();
+    	storeEngineStateInto(engine);
     	interpreterProxy.pop(3);
     	interpreterProxy.pushInteger(stopReasonGet());
     }
@@ -19362,6 +19465,7 @@
     	switch (type) {
     	case 0:
     	case 1:
+    		errorWrongIndex();
     		break;
     	case 2:
     		returnWideLineWidth();
@@ -19374,6 +19478,7 @@
     	switch (type) {
     	case 0:
     	case 1:
+    		errorWrongIndex();
     		break;
     	case 2:
     		returnWideLineFill();
@@ -19823,6 +19928,7 @@
      */
 
     (function BitBltPlugin() {
+    "use strict";
 
     var VM_PROXY_MAJOR = 1;
     var VM_PROXY_MINOR = 11;
@@ -19856,6 +19962,7 @@
     var BBSourceYIndex = 9;
     var BBWarpBase = 15;
     var BBWidthIndex = 6;
+    var BinaryPoint = 14;
     var BlueIndex = 2;
     var ColorMapFixedPart = 2;
     var ColorMapIndexedPart = 4;
@@ -20742,6 +20849,23 @@
     }
 
 
+    /*	Recover from the fast path specialised code saying Help-I-cant-cope */
+
+    function copyBitsFallback(op, flags) {
+    	var done;
+
+    	// skipping ifdef ENABLE_FAST_BLT
+    }
+
+
+    /*	Perform the actual copyBits operation using the fast path specialised code; fail some cases by falling back to normal code.
+    	Assume: Surfaces have been locked and clipping was performed. */
+
+    function copyBitsFastPathSpecialised() {
+    	// skipping ifdef ENABLE_FAST_BLT
+    }
+
+
     /*	Support for the balloon engine. */
 
     function copyBitsFromtoat(startX, stopX, yValue) {
@@ -20875,6 +20999,7 @@
     	var notSkewMask;
 
     	mergeFnwith = opTable[combinationRule + 1];
+    	mergeFnwith;
 
     	/* Byte delta */
     	/* degenerate skew fixed for Sparc. 10/20/96 ikp */
@@ -21041,6 +21166,7 @@
     	var i;
 
     	mergeFnwith = opTable[combinationRule + 1];
+    	mergeFnwith;
     	for (i = 1; i <= bbH; i++) {
 
     		/* here is the vertical loop */
@@ -21131,6 +21257,7 @@
     	var scrStartBits;
 
     	mergeFnwith = opTable[combinationRule + 1];
+    	mergeFnwith;
     	sourcePPW = DIV(32, sourceDepth);
     	sourcePixMask = maskTable[sourceDepth];
     	destPixMask = maskTable[destDepth];
@@ -21278,7 +21405,8 @@
     0xFFFFCC00, 0xFFFFFF00, 0xFFFF0033, 0xFFFF3333, 0xFFFF6633, 0xFFFF9933, 0xFFFFCC33, 0xFFFFFF33, 
     0xFFFF0066, 0xFFFF3366, 0xFFFF6666, 0xFFFF9966, 0xFFFFCC66, 0xFFFFFF66, 0xFFFF0099, 0xFFFF3399, 
     0xFFFF6699, 0xFFFF9999, 0xFFFFCC99, 0xFFFFFF99, 0xFFFF00CC, 0xFFFF33CC, 0xFFFF66CC, 0xFFFF99CC, 
-    0xFFFFCCCC, 0xFFFFFFCC, 0xFFFF00FF, 0xFFFF33FF, 0xFFFF66FF, 0xFFFF99FF, 0xFFFFCCFF, 0xFFFFFFFF];
+    0xFFFFCCCC, 0xFFFFFFCC, 0xFFFF00FF, 0xFFFF33FF, 0xFFFF66FF, 0xFFFF99FF, 0xFFFFCCFF, 0xFFFFFFFF];;
+
     	return theTable;
     }
 
@@ -21619,6 +21747,10 @@
     	return halftoneBase[MOD(idx, halftoneHeight)];
     }
 
+    function halt() {
+    	;
+    }
+
     function ignoreSourceOrHalftone(formPointer) {
     	if (formPointer.isNil) {
     		return true;
@@ -21925,6 +22057,7 @@
     		cmSize = SIZEOF(cmOop);
     		cmLookupTable = cmOop.words;
     		oldStyle = true;
+    		;
     	} else {
 
     		/* A new-style color map (fully qualified) */
@@ -21945,6 +22078,7 @@
     			cmLookupTable = oop.words;
     		}
     		cmFlags = cmFlags | ColorMapNewStyle;
+    		;
     	}
     	if ((cmSize & (cmSize - 1)) !== 0) {
     		return false;
@@ -22168,7 +22302,7 @@
 
     			/* avoid introducing transparency by color reduction */
 
-    			pv = rgbMapPixelflags(sourcePixel);
+    			pv = rgbMapPixelflags(sourcePixel, mapperFlags);
     			if ((pv === 0) && (sourcePixel !== 0)) {
     				pv = 1;
     			}
@@ -23727,6 +23861,8 @@
     	var masks = [0, 0, 0, 0];
     	var deltaBits;
     	var mask;
+
+    	;
     	deltaBits = targetBits - srcBits;
     	if (deltaBits === 0) {
     		return 0;
@@ -24064,6 +24200,7 @@
     	var smoothingCount;
 
     	mergeFnwith = opTable[combinationRule + 1];
+    	mergeFnwith;
     	if (!(SIZEOF(bitBltOop) >= (BBWarpBase + 12))) {
     		return interpreterProxy.primitiveFail();
     	}
@@ -24507,6 +24644,7 @@
     })(); // Register module/plugin
 
     function CroquetPlugin() {
+      "use strict";
 
       return {
         getModuleName: function() { return "CroquetPlugin"; },
@@ -24536,7 +24674,8 @@
         if (typeof Squeak === "object" && Squeak.registerExternalModule) {
             Squeak.registerExternalModule("CroquetPlugin", CroquetPlugin());
         } else self.setTimeout(registerCroquetPlugin, 100);
-    }
+    };
+
     registerCroquetPlugin();
 
     /* Smalltalk from Squeak4.5 with VMMaker 4.13.6 translated as JS source on 3 November 2014 1:52:20 pm */
@@ -24547,12 +24686,20 @@
      */
 
     (function FFTPlugin() {
+    "use strict";
 
     var VM_PROXY_MAJOR = 1;
     var VM_PROXY_MINOR = 11;
+
+    /*** Functions ***/
+    function CLASSOF(obj) { return typeof obj === "number" ? interpreterProxy.classSmallInteger() : obj.sqClass }
     function SIZEOF(obj) { return obj.pointers ? obj.pointers.length : obj.words ? obj.words.length : obj.bytes ? obj.bytes.length : 0 }
+    function BYTESIZEOF(obj) { return obj.bytes ? obj.bytes.length : obj.words ? obj.words.length * 4 : 0 }
     function DIV(a, b) { return Math.floor(a / b) | 0; }   // integer division
+    function MOD(a, b) { return a - DIV(a, b) * b | 0; }   // signed modulus
     function SHL(a, b) { return b > 31 ? 0 : a << b; }     // fix JS shift
+    function SHR(a, b) { return b > 31 ? 0 : a >>> b; }    // fix JS shift
+    function SHIFT(a, b) { return b < 0 ? (b < -31 ? 0 : a >>> (0-b) ) : (b > 31 ? 0 : a << b); }
 
     /*** Variables ***/
     var fftSize = 0;
@@ -24596,6 +24743,10 @@
 
     function getModuleName() {
     	return moduleName;
+    }
+
+    function halt() {
+    	;
     }
 
     function loadFFTFrom(fftOop) {
@@ -24821,10 +24972,20 @@
      */
 
     (function FloatArrayPlugin() {
+    "use strict";
 
     var VM_PROXY_MAJOR = 1;
     var VM_PROXY_MINOR = 11;
+
+    /*** Functions ***/
+    function CLASSOF(obj) { return typeof obj === "number" ? interpreterProxy.classSmallInteger() : obj.sqClass }
     function SIZEOF(obj) { return obj.pointers ? obj.pointers.length : obj.words ? obj.words.length : obj.bytes ? obj.bytes.length : 0 }
+    function BYTESIZEOF(obj) { return obj.bytes ? obj.bytes.length : obj.words ? obj.words.length * 4 : 0 }
+    function DIV(a, b) { return Math.floor(a / b) | 0; }   // integer division
+    function MOD(a, b) { return a - DIV(a, b) * b | 0; }   // signed modulus
+    function SHL(a, b) { return b > 31 ? 0 : a << b; }     // fix JS shift
+    function SHR(a, b) { return b > 31 ? 0 : a >>> b; }    // fix JS shift
+    function SHIFT(a, b) { return b < 0 ? (b < -31 ? 0 : a >>> (0-b) ) : (b > 31 ? 0 : a << b); }
 
     /*** Variables ***/
     var interpreterProxy = null;
@@ -24839,6 +25000,10 @@
 
     function getModuleName() {
     	return moduleName;
+    }
+
+    function halt() {
+    	;
     }
 
 
@@ -25390,11 +25555,22 @@
      */
 
     (function GeniePlugin() {
+    "use strict";
 
     var VM_PROXY_MAJOR = 1;
     var VM_PROXY_MINOR = 11;
+
+    /*** Functions ***/
+    function CLASSOF(obj) { return typeof obj === "number" ? interpreterProxy.classSmallInteger() : obj.sqClass }
     function SIZEOF(obj) { return obj.pointers ? obj.pointers.length : obj.words ? obj.words.length : obj.bytes ? obj.bytes.length : 0 }
+    function BYTESIZEOF(obj) { return obj.bytes ? obj.bytes.length : obj.words ? obj.words.length * 4 : 0 }
+    function DIV(a, b) { return Math.floor(a / b) | 0; }   // integer division
+    function MOD(a, b) { return a - DIV(a, b) * b | 0; }   // signed modulus
+    function SHL(a, b) { return b > 31 ? 0 : a << b; }     // fix JS shift
+    function SHR(a, b) { return b > 31 ? 0 : a >>> b; }    // fix JS shift
+    function SHIFT(a, b) { return b < 0 ? (b < -31 ? 0 : a >>> (0-b) ) : (b > 31 ? 0 : a << b); }
     function PTR_ADD(p, n) { return new Int32Array(p.buffer, p.byteOffset + n * 4); }
+    function FPTR_ADD(p, n) { return new Float32Array(p.buffer, p.byteOffset + n * 4); }
 
     /*** Variables ***/
     var interpreterProxy = null;
@@ -25439,6 +25615,10 @@
 
     function getModuleName() {
     	return moduleName;
+    }
+
+    function halt() {
+    	;
     }
 
     function majorNO() {
@@ -25711,18 +25891,25 @@
      */
 
     (function JPEGReaderPlugin() {
+    "use strict";
 
     var VM_PROXY_MAJOR = 1;
     var VM_PROXY_MINOR = 11;
+
+    /*** Functions ***/
+    function CLASSOF(obj) { return typeof obj === "number" ? interpreterProxy.classSmallInteger() : obj.sqClass }
     function SIZEOF(obj) { return obj.pointers ? obj.pointers.length : obj.words ? obj.words.length : obj.bytes ? obj.bytes.length : 0 }
     function BYTESIZEOF(obj) { return obj.bytes ? obj.bytes.length : obj.words ? obj.words.length * 4 : 0 }
     function DIV(a, b) { return Math.floor(a / b) | 0; }   // integer division
+    function MOD(a, b) { return a - DIV(a, b) * b | 0; }   // signed modulus
     function SHL(a, b) { return b > 31 ? 0 : a << b; }     // fix JS shift
     function SHR(a, b) { return b > 31 ? 0 : a >>> b; }    // fix JS shift
+    function SHIFT(a, b) { return b < 0 ? (b < -31 ? 0 : a >>> (0-b) ) : (b > 31 ? 0 : a << b); }
 
     /*** Constants ***/
     var BlockWidthIndex = 5;
     var BlueIndex = 2;
+    var ConstBits = 13;
     var CurrentXIndex = 0;
     var CurrentYIndex = 1;
     var DCTSize = 8;
@@ -25751,6 +25938,9 @@
     var MaxMCUBlocks = 128;
     var MaxSample = 255;
     var MinComponentSize = 11;
+    var Pass1Bits = 2;
+    var Pass1Div = 2048;
+    var Pass2Div = 262144;
     var PriorDCValueIndex = 10;
     var RedIndex = 0;
     var SampleOffset = 127;
@@ -25761,8 +25951,10 @@
     var acTableSize = 0;
     var cbBlocks = new Array(128);
     var cbComponent = new Array(11);
+    var cbSampleStream = 0;
     var crBlocks = new Array(128);
     var crComponent = new Array(11);
+    var crSampleStream = 0;
     var dcTable = null;
     var dcTableSize = 0;
     var ditherMask = 0;
@@ -25788,6 +25980,7 @@
     var residuals = null;
     var yBlocks = new Array(128);
     var yComponent = new Array(11);
+    var ySampleStream = 0;
 
 
     function cbColorComponentFrom(oop) {
@@ -26017,6 +26210,10 @@
     	return moduleName;
     }
 
+    function halt() {
+    	;
+    }
+
     function idctBlockIntqt(anArray, qt) {
     	var anACTerm;
     	var dcval;
@@ -26038,6 +26235,8 @@
     	var z3;
     	var z4;
     	var z5;
+
+    	;
     	for (i = 0; i <= (DCTSize - 1); i++) {
     		anACTerm = -1;
     		for (row = 1; row <= (DCTSize - 1); row++) {
@@ -26362,6 +26561,8 @@
 
     function primitiveColorConvertGrayscaleMCU() {
     	var arrayOop;
+
+    	stInit();
     	if (interpreterProxy.methodArgumentCount() !== 4) {
     		return interpreterProxy.primitiveFail();
     	}
@@ -26404,6 +26605,8 @@
 
     function primitiveColorConvertMCU() {
     	var arrayOop;
+
+    	stInit();
     	if (interpreterProxy.methodArgumentCount() !== 4) {
     		return interpreterProxy.primitiveFail();
     	}
@@ -26458,6 +26661,8 @@
     	var anArray;
     	var arrayOop;
     	var oop;
+
+    	;
     	if (interpreterProxy.methodArgumentCount() !== 5) {
     		return interpreterProxy.primitiveFail();
     	}
@@ -26526,6 +26731,8 @@
     	var anArray;
     	var arrayOop;
     	var qt;
+
+    	;
     	if (interpreterProxy.methodArgumentCount() !== 2) {
     		return interpreterProxy.primitiveFail();
     	}
@@ -26572,6 +26779,10 @@
     	return ok;
     }
 
+    function stInit() {
+    	;
+    }
+
     function storeJPEGStreamOn(streamOop) {
     	interpreterProxy.storeIntegerofObjectwithValue(1, streamOop, jsPosition);
     	interpreterProxy.storeIntegerofObjectwithValue(3, streamOop, jsBitBuffer);
@@ -26608,12 +26819,19 @@
      */
 
     (function KedamaPlugin() {
+    "use strict";
 
     var VM_PROXY_MAJOR = 1;
     var VM_PROXY_MINOR = 11;
+
+    /*** Functions ***/
+    function CLASSOF(obj) { return typeof obj === "number" ? interpreterProxy.classSmallInteger() : obj.sqClass }
     function SIZEOF(obj) { return obj.pointers ? obj.pointers.length : obj.words ? obj.words.length : obj.bytes ? obj.bytes.length : 0 }
+    function BYTESIZEOF(obj) { return obj.bytes ? obj.bytes.length : obj.words ? obj.words.length * 4 : 0 }
     function DIV(a, b) { return Math.floor(a / b) | 0; }   // integer division
     function MOD(a, b) { return a - DIV(a, b) * b | 0; }   // signed modulus
+    function SHL(a, b) { return b > 31 ? 0 : a << b; }     // fix JS shift
+    function SHR(a, b) { return b > 31 ? 0 : a >>> b; }    // fix JS shift
     function SHIFT(a, b) { return b < 0 ? (b < -31 ? 0 : a >>> (0-b) ) : (b > 31 ? 0 : a << b); }
 
     /*** Variables ***/
@@ -26629,6 +26847,8 @@
     function degreesFromXy(x, y) {
     	var tanVal;
     	var theta;
+
+    	/* inline: true */;
     	if (x === 0.0) {
     		if (y >= 0.0) {
     			return 90.0;
@@ -26648,12 +26868,15 @@
     			return 180.0 + (theta / 0.0174532925199433);
     		}
     	}
+    	return 0.0;
     }
 
     function degreesToRadians(degrees) {
     	var deg;
     	var headingRadians;
     	var q;
+
+    	/* inline: true */;
     	deg = 90.0 - degrees;
     	q = deg / 360.0|0;
     	if (deg < 0.0) {
@@ -26682,6 +26905,8 @@
     	var y;
     	var yArray;
     	var yOop;
+
+    	/* inline: true */;
     	visibleOop = interpreterProxy.stackValue(0);
     	colorOop = interpreterProxy.stackValue(1);
     	yOop = interpreterProxy.stackValue(2);
@@ -26736,7 +26961,9 @@
     	destBits = destOop.words;
     	for (i = 0; i <= (size - 1); i++) {
     		x = (xArray[i]|0);
+    		;
     		y = (yArray[i]|0);
+    		;
     		visible = visibleArray[i];
     		if ((visible !== 0) && (((x >= 0) && (y >= 0)) && ((x < destWidth) && (y < destHeight)))) {
     			bitsIndex = (y * destWidth) + x;
@@ -26757,6 +26984,8 @@
     	var resultArray;
     	var resultOop;
     	var size;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackValue(0);
     	headingOop = interpreterProxy.stackValue(1);
     	if (interpreterProxy.failed()) {
@@ -26807,6 +27036,8 @@
     	var headingArray;
     	var headingOop;
     	var index;
+
+    	/* inline: true */;
     	headingOop = interpreterProxy.stackValue(0);
     	index = interpreterProxy.stackIntegerValue(1);
     	if (interpreterProxy.failed()) {
@@ -26830,6 +27061,10 @@
     	interpreterProxy.pushFloat(heading);
     }
 
+    function halt() {
+    	;
+    }
+
     function initialiseModule() {
     	kedamaRandomSeed = 17;
 
@@ -26850,6 +27085,8 @@
     	var r;
     	var v;
     	var val;
+
+    	/* inline: true */;
     	if (range < 0) {
     		r = 0 - range;
     	} else {
@@ -26869,6 +27106,8 @@
 
     function kedamaSetRandomSeed() {
     	var seed;
+
+    	/* inline: true */;
     	seed = interpreterProxy.stackIntegerValue(0);
     	if (interpreterProxy.failed()) {
     		return null;
@@ -26890,6 +27129,8 @@
     	var maskSize;
     	var pixel;
     	var shiftAmount;
+
+    	/* inline: true */;
     	shiftAmount = interpreterProxy.stackIntegerValue(0);
     	pixel = interpreterProxy.stackIntegerValue(1);
     	maskBits = interpreterProxy.stackValue(2);
@@ -26944,6 +27185,8 @@
     	var maxLog;
     	var maxOop;
     	var pixel;
+
+    	/* inline: true */;
     	maxOop = interpreterProxy.stackValue(0);
     	pixel = interpreterProxy.stackIntegerValue(1);
     	maskBits = interpreterProxy.stackValue(2);
@@ -26997,6 +27240,8 @@
     	var y;
     	var yArray;
     	var yOop;
+
+    	/* inline: true */;
     	height = interpreterProxy.stackIntegerValue(0);
     	width = interpreterProxy.stackIntegerValue(1);
     	yOop = interpreterProxy.stackValue(2);
@@ -27064,6 +27309,8 @@
     	var xPos;
     	var y;
     	var yPos;
+
+    	/* inline: true */;
     	height = interpreterProxy.stackIntegerValue(0);
     	width = interpreterProxy.stackIntegerValue(1);
     	yPos = interpreterProxy.stackFloatValue(2);
@@ -27108,6 +27355,8 @@
     	var xPos;
     	var y;
     	var yPos;
+
+    	/* inline: true */;
     	height = interpreterProxy.stackIntegerValue(0);
     	width = interpreterProxy.stackIntegerValue(1);
     	value = interpreterProxy.stackIntegerValue(2);
@@ -27161,6 +27410,8 @@
     	var y;
     	var yArray;
     	var yArrayOop;
+
+    	/* inline: true */;
     	destWordsOop = interpreterProxy.stackValue(0);
     	bitsHeight = interpreterProxy.stackIntegerValue(1);
     	bitsWidth = interpreterProxy.stackIntegerValue(2);
@@ -27205,7 +27456,9 @@
     	bits = bitsOop.words;
     	for (i = 0; i <= (size - 1); i++) {
     		x = (xArray[i]|0);
+    		;
     		y = (yArray[i]|0);
+    		;
     		if (((x >= 0) && (y >= 0)) && ((x < bitsWidth) && (y < bitsHeight))) {
     			bitsIndex = (y * bitsWidth) + x;
     			destWords[i] = bits[bitsIndex];
@@ -27237,6 +27490,8 @@
     	var xOop;
     	var yArray;
     	var yOop;
+
+    	/* inline: true */;
     	bottomEdgeMode = interpreterProxy.stackIntegerValue(0);
     	topEdgeMode = interpreterProxy.stackIntegerValue(1);
     	rightEdgeMode = interpreterProxy.stackIntegerValue(2);
@@ -27306,6 +27561,8 @@
     	var y;
     	var yArray;
     	var yArrayOop;
+
+    	/* inline: true */;
     	valueOop = interpreterProxy.stackValue(0);
     	bitsHeight = interpreterProxy.stackIntegerValue(1);
     	bitsWidth = interpreterProxy.stackIntegerValue(2);
@@ -27361,7 +27618,9 @@
     	}
     	for (i = 0; i <= (size - 1); i++) {
     		x = (xArray[i]|0);
+    		;
     		y = (yArray[i]|0);
+    		;
     		if (((x >= 0) && (y >= 0)) && ((x < bitsWidth) && (y < bitsHeight))) {
     			bitsIndex = (y * bitsWidth) + x;
     			if (!isValueInt) {
@@ -27398,6 +27657,8 @@
     	var xOop;
     	var yArray;
     	var yOop;
+
+    	/* inline: true */;
     	bottomEdgeMode = interpreterProxy.stackIntegerValue(0);
     	topEdgeMode = interpreterProxy.stackIntegerValue(1);
     	rightEdgeMode = interpreterProxy.stackIntegerValue(2);
@@ -27496,6 +27757,8 @@
     	var width;
     	var x;
     	var y;
+
+    	/* inline: true */;
     	sniffRange = interpreterProxy.stackIntegerValue(0);
     	height = interpreterProxy.stackIntegerValue(1);
     	width = interpreterProxy.stackIntegerValue(2);
@@ -27564,6 +27827,8 @@
     	var wordsArg;
     	var wordsRcvr;
     	var wordsResult;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackObjectValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -27646,6 +27911,8 @@
     	var resultOop;
     	var wordsRcvr;
     	var wordsResult;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -27726,6 +27993,8 @@
     	var wordsArg;
     	var wordsRcvr;
     	var wordsResult;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackObjectValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -27808,6 +28077,8 @@
     	var resultOop;
     	var wordsRcvr;
     	var wordsResult;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -27888,6 +28159,8 @@
     	var wordsArg;
     	var wordsRcvr;
     	var wordsResult;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackObjectValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -27970,6 +28243,8 @@
     	var resultOop;
     	var wordsRcvr;
     	var wordsResult;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -28050,6 +28325,8 @@
     	var wordsArg;
     	var wordsRcvr;
     	var wordsResult;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackObjectValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -28132,6 +28409,8 @@
     	var resultOop;
     	var wordsRcvr;
     	var wordsResult;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -28201,6 +28480,8 @@
     function radiansToDegrees(radians) {
     	var deg;
     	var degrees;
+
+    	/* inline: true */;
     	degrees = radians / 0.0174532925199433;
     	deg = 90.0 - degrees;
     	if (!(deg > 0.0)) {
@@ -28218,6 +28499,8 @@
     	var range;
     	var size;
     	var to;
+
+    	/* inline: true */;
     	factor = interpreterProxy.stackFloatValue(0);
     	floatArrayOop = interpreterProxy.stackValue(1);
     	to = interpreterProxy.stackIntegerValue(2);
@@ -28254,6 +28537,8 @@
     	var range;
     	var size;
     	var to;
+
+    	/* inline: true */;
     	factor = interpreterProxy.stackFloatValue(0);
     	integerArrayOop = interpreterProxy.stackValue(1);
     	to = interpreterProxy.stackIntegerValue(2);
@@ -28284,6 +28569,8 @@
     function randomRange() {
     	var range;
     	var ret;
+
+    	/* inline: true */;
     	range = interpreterProxy.stackIntegerValue(0);
     	if (interpreterProxy.failed()) {
     		return null;
@@ -28304,6 +28591,8 @@
     	var toY;
     	var x;
     	var y;
+
+    	/* inline: true */;
     	fromY = interpreterProxy.stackFloatValue(0);
     	fromX = interpreterProxy.stackFloatValue(1);
     	toY = interpreterProxy.stackFloatValue(2);
@@ -28333,6 +28622,8 @@
     	var toY;
     	var x;
     	var y;
+
+    	/* inline: true */;
     	fromY = interpreterProxy.stackFloatValue(0);
     	fromX = interpreterProxy.stackFloatValue(1);
     	toY = interpreterProxy.stackFloatValue(2);
@@ -28353,6 +28644,8 @@
     function scalarXAtxArrayheadingArrayvaluedestWidthleftEdgeModerightEdgeMode(index, xArray, headingArray, val, destWidth, leftEdgeMode, rightEdgeMode) {
     	var headingRadians;
     	var newX;
+
+    	/* inline: true */;
     	newX = val;
     	if (newX < 0.0) {
     		if (leftEdgeMode === 1) {
@@ -28402,6 +28695,8 @@
 
     function scalarYAtyArrayheadingArrayvaluedestHeighttopEdgeModebottomEdgeMode(index, yArray, headingArray, val, destHeight, topEdgeMode, bottomEdgeMode) {
     	var newY;
+
+    	/* inline: true */;
     	newY = val;
     	if (newY < 0.0) {
     		if (topEdgeMode === 1) {
@@ -28448,6 +28743,8 @@
     	var resultArray;
     	var resultOop;
     	var size;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackValue(0);
     	headingOop = interpreterProxy.stackValue(1);
     	if (interpreterProxy.failed()) {
@@ -28512,6 +28809,8 @@
     	var headingArray;
     	var headingOop;
     	var index;
+
+    	/* inline: true */;
     	heading = interpreterProxy.stackFloatValue(0);
     	headingOop = interpreterProxy.stackValue(1);
     	index = interpreterProxy.stackIntegerValue(2);
@@ -28549,6 +28848,8 @@
     	var xArray;
     	var xIndex;
     	var xOop;
+
+    	/* inline: true */;
     	rightEdgeMode = interpreterProxy.stackIntegerValue(0);
     	leftEdgeMode = interpreterProxy.stackIntegerValue(1);
     	destWidth = interpreterProxy.stackFloatValue(2);
@@ -28592,6 +28893,8 @@
     	var yArray;
     	var yIndex;
     	var yOop;
+
+    	/* inline: true */;
     	bottomEdgeMode = interpreterProxy.stackIntegerValue(0);
     	topEdgeMode = interpreterProxy.stackIntegerValue(1);
     	destHeight = interpreterProxy.stackFloatValue(2);
@@ -28639,6 +28942,8 @@
     	var valOop;
     	var xArray;
     	var xOop;
+
+    	/* inline: true */;
     	rightEdgeMode = interpreterProxy.stackIntegerValue(0);
     	leftEdgeMode = interpreterProxy.stackIntegerValue(1);
     	destWidth = interpreterProxy.stackFloatValue(2);
@@ -28713,6 +29018,8 @@
     	var valOop;
     	var yArray;
     	var yOop;
+
+    	/* inline: true */;
     	bottomEdgeMode = interpreterProxy.stackIntegerValue(0);
     	topEdgeMode = interpreterProxy.stackIntegerValue(1);
     	destHeight = interpreterProxy.stackFloatValue(2);
@@ -28791,6 +29098,8 @@
     	var y;
     	var yArray;
     	var yArrayOop;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackValue(0);
     	yArrayOop = interpreterProxy.stackValue(1);
     	xArrayOop = interpreterProxy.stackValue(2);
@@ -28899,6 +29208,8 @@
     	var y;
     	var yArray;
     	var yArrayOop;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackValue(0);
     	yArrayOop = interpreterProxy.stackValue(1);
     	xArrayOop = interpreterProxy.stackValue(2);
@@ -29003,6 +29314,8 @@
     	var xFactor;
     	var y;
     	var yFactor;
+
+    	/* inline: true */;
     	yFactor = interpreterProxy.stackIntegerValue(0);
     	xFactor = interpreterProxy.stackIntegerValue(1);
     	sHeight = interpreterProxy.stackIntegerValue(2);
@@ -29105,12 +29418,19 @@
      */
 
     (function KedamaPlugin2() {
+    "use strict";
 
     var VM_PROXY_MAJOR = 1;
     var VM_PROXY_MINOR = 11;
+
+    /*** Functions ***/
+    function CLASSOF(obj) { return typeof obj === "number" ? interpreterProxy.classSmallInteger() : obj.sqClass }
     function SIZEOF(obj) { return obj.pointers ? obj.pointers.length : obj.words ? obj.words.length : obj.bytes ? obj.bytes.length : 0 }
+    function BYTESIZEOF(obj) { return obj.bytes ? obj.bytes.length : obj.words ? obj.words.length * 4 : 0 }
     function DIV(a, b) { return Math.floor(a / b) | 0; }   // integer division
     function MOD(a, b) { return a - DIV(a, b) * b | 0; }   // signed modulus
+    function SHL(a, b) { return b > 31 ? 0 : a << b; }     // fix JS shift
+    function SHR(a, b) { return b > 31 ? 0 : a >>> b; }    // fix JS shift
     function SHIFT(a, b) { return b < 0 ? (b < -31 ? 0 : a >>> (0-b) ) : (b > 31 ? 0 : a << b); }
 
     /*** Variables ***/
@@ -29126,6 +29446,8 @@
     function degreesFromXy(x, y) {
     	var tanVal;
     	var theta;
+
+    	/* inline: true */;
     	if (x === 0.0) {
     		if (y >= 0.0) {
     			return 90.0;
@@ -29145,12 +29467,15 @@
     			return 180.0 + (theta / 0.0174532925199433);
     		}
     	}
+    	return 0.0;
     }
 
     function degreesToRadians(degrees) {
     	var deg;
     	var headingRadians;
     	var q;
+
+    	/* inline: true */;
     	deg = 90.0 - degrees;
     	q = deg / 360.0|0;
     	if (deg < 0.0) {
@@ -29179,6 +29504,8 @@
     	var y;
     	var yArray;
     	var yOop;
+
+    	/* inline: true */;
     	visibleOop = interpreterProxy.stackValue(0);
     	colorOop = interpreterProxy.stackValue(1);
     	yOop = interpreterProxy.stackValue(2);
@@ -29233,7 +29560,9 @@
     	destBits = destOop.words;
     	for (i = 0; i <= (size - 1); i++) {
     		x = (xArray[i]|0);
+    		;
     		y = (yArray[i]|0);
+    		;
     		visible = visibleArray[i];
     		if ((visible !== 0) && (((x >= 0) && (y >= 0)) && ((x < destWidth) && (y < destHeight)))) {
     			bitsIndex = (y * destWidth) + x;
@@ -29254,6 +29583,8 @@
     	var resultArray;
     	var resultOop;
     	var size;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackValue(0);
     	headingOop = interpreterProxy.stackValue(1);
     	if (interpreterProxy.failed()) {
@@ -29304,6 +29635,8 @@
     	var headingArray;
     	var headingOop;
     	var index;
+
+    	/* inline: true */;
     	headingOop = interpreterProxy.stackValue(0);
     	index = interpreterProxy.stackIntegerValue(1);
     	if (interpreterProxy.failed()) {
@@ -29327,6 +29660,10 @@
     	interpreterProxy.pushFloat(heading);
     }
 
+    function halt() {
+    	;
+    }
+
     function initialiseModule() {
     	kedamaRandomSeed = 17;
 
@@ -29347,6 +29684,8 @@
     	var r;
     	var v;
     	var val;
+
+    	/* inline: true */;
     	if (range < 0) {
     		r = 0 - range;
     	} else {
@@ -29366,6 +29705,8 @@
 
     function kedamaSetRandomSeed() {
     	var seed;
+
+    	/* inline: true */;
     	seed = interpreterProxy.stackIntegerValue(0);
     	if (interpreterProxy.failed()) {
     		return null;
@@ -29387,6 +29728,8 @@
     	var maskSize;
     	var pixel;
     	var shiftAmount;
+
+    	/* inline: true */;
     	shiftAmount = interpreterProxy.stackIntegerValue(0);
     	pixel = interpreterProxy.stackIntegerValue(1);
     	maskBits = interpreterProxy.stackValue(2);
@@ -29441,6 +29784,8 @@
     	var maxLog;
     	var maxOop;
     	var pixel;
+
+    	/* inline: true */;
     	maxOop = interpreterProxy.stackValue(0);
     	pixel = interpreterProxy.stackIntegerValue(1);
     	maskBits = interpreterProxy.stackValue(2);
@@ -29494,6 +29839,8 @@
     	var y;
     	var yArray;
     	var yOop;
+
+    	/* inline: true */;
     	height = interpreterProxy.stackIntegerValue(0);
     	width = interpreterProxy.stackIntegerValue(1);
     	yOop = interpreterProxy.stackValue(2);
@@ -29561,6 +29908,8 @@
     	var xPos;
     	var y;
     	var yPos;
+
+    	/* inline: true */;
     	height = interpreterProxy.stackIntegerValue(0);
     	width = interpreterProxy.stackIntegerValue(1);
     	yPos = interpreterProxy.stackFloatValue(2);
@@ -29605,6 +29954,8 @@
     	var xPos;
     	var y;
     	var yPos;
+
+    	/* inline: true */;
     	height = interpreterProxy.stackIntegerValue(0);
     	width = interpreterProxy.stackIntegerValue(1);
     	value = interpreterProxy.stackIntegerValue(2);
@@ -29658,6 +30009,8 @@
     	var y;
     	var yArray;
     	var yArrayOop;
+
+    	/* inline: true */;
     	destWordsOop = interpreterProxy.stackValue(0);
     	bitsHeight = interpreterProxy.stackIntegerValue(1);
     	bitsWidth = interpreterProxy.stackIntegerValue(2);
@@ -29702,7 +30055,9 @@
     	bits = bitsOop.words;
     	for (i = 0; i <= (size - 1); i++) {
     		x = (xArray[i]|0);
+    		;
     		y = (yArray[i]|0);
+    		;
     		if (((x >= 0) && (y >= 0)) && ((x < bitsWidth) && (y < bitsHeight))) {
     			bitsIndex = (y * bitsWidth) + x;
     			destWords[i] = bits[bitsIndex];
@@ -29734,6 +30089,8 @@
     	var xOop;
     	var yArray;
     	var yOop;
+
+    	/* inline: true */;
     	bottomEdgeMode = interpreterProxy.stackIntegerValue(0);
     	topEdgeMode = interpreterProxy.stackIntegerValue(1);
     	rightEdgeMode = interpreterProxy.stackIntegerValue(2);
@@ -29808,6 +30165,8 @@
     	var y;
     	var yArray;
     	var yArrayOop;
+
+    	/* inline: true */;
     	valueOop = interpreterProxy.stackValue(0);
     	bitsHeight = interpreterProxy.stackIntegerValue(1);
     	bitsWidth = interpreterProxy.stackIntegerValue(2);
@@ -29870,7 +30229,9 @@
     	for (i = 0; i <= (size - 1); i++) {
     		if (pArray[i] === 1) {
     			x = (xArray[i]|0);
+    			;
     			y = (yArray[i]|0);
+    			;
     			if (((x >= 0) && (y >= 0)) && ((x < bitsWidth) && (y < bitsHeight))) {
     				bitsIndex = (y * bitsWidth) + x;
     				if (isValueInt) {
@@ -29880,6 +30241,7 @@
     						bits[bitsIndex] = wordsValue[i];
     					} else {
     						fv = floatsValue[i];
+    						;
     						bits[bitsIndex] = fv;
     					}
     				}
@@ -29916,6 +30278,8 @@
     	var xOop;
     	var yArray;
     	var yOop;
+
+    	/* inline: true */;
     	bottomEdgeMode = interpreterProxy.stackIntegerValue(0);
     	topEdgeMode = interpreterProxy.stackIntegerValue(1);
     	rightEdgeMode = interpreterProxy.stackIntegerValue(2);
@@ -30026,6 +30390,8 @@
     	var width;
     	var x;
     	var y;
+
+    	/* inline: true */;
     	sniffRange = interpreterProxy.stackIntegerValue(0);
     	height = interpreterProxy.stackIntegerValue(1);
     	width = interpreterProxy.stackIntegerValue(2);
@@ -30094,6 +30460,8 @@
     	var wordsArg;
     	var wordsRcvr;
     	var wordsResult;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackObjectValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -30176,6 +30544,8 @@
     	var resultOop;
     	var wordsRcvr;
     	var wordsResult;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -30251,6 +30621,8 @@
     	var otherOop;
     	var rcvrArray;
     	var rcvrOop;
+
+    	/* inline: true */;
     	otherOop = interpreterProxy.stackObjectValue(0);
     	rcvrOop = interpreterProxy.stackValue(1);
     	if (interpreterProxy.failed()) {
@@ -30292,6 +30664,8 @@
     	var wordsArg;
     	var wordsRcvr;
     	var wordsResult;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackObjectValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -30374,6 +30748,8 @@
     	var resultOop;
     	var wordsRcvr;
     	var wordsResult;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -30453,6 +30829,8 @@
     	var resultOop;
     	var wordsArg;
     	var wordsRcvr;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackObjectValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -30523,6 +30901,8 @@
     	var rcvrOop;
     	var resultOop;
     	var wordsRcvr;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -30591,6 +30971,8 @@
     	var resultOop;
     	var wordsArg;
     	var wordsRcvr;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackObjectValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -30661,6 +31043,8 @@
     	var rcvrOop;
     	var resultOop;
     	var wordsRcvr;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -30729,6 +31113,8 @@
     	var resultOop;
     	var wordsArg;
     	var wordsRcvr;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackObjectValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -30799,6 +31185,8 @@
     	var rcvrOop;
     	var resultOop;
     	var wordsRcvr;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -30867,6 +31255,8 @@
     	var resultOop;
     	var wordsArg;
     	var wordsRcvr;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackObjectValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -30937,6 +31327,8 @@
     	var rcvrOop;
     	var resultOop;
     	var wordsRcvr;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -31005,6 +31397,8 @@
     	var resultOop;
     	var wordsArg;
     	var wordsRcvr;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackObjectValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -31075,6 +31469,8 @@
     	var rcvrOop;
     	var resultOop;
     	var wordsRcvr;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -31144,6 +31540,8 @@
     	var wordsArg;
     	var wordsRcvr;
     	var wordsResult;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackObjectValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -31226,6 +31624,8 @@
     	var resultOop;
     	var wordsRcvr;
     	var wordsResult;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -31305,6 +31705,8 @@
     	var resultOop;
     	var wordsArg;
     	var wordsRcvr;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackObjectValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -31375,6 +31777,8 @@
     	var rcvrOop;
     	var resultOop;
     	var wordsRcvr;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -31435,6 +31839,8 @@
     	var length;
     	var rcvrArray;
     	var rcvrOop;
+
+    	/* inline: true */;
     	rcvrOop = interpreterProxy.stackValue(0);
     	if (interpreterProxy.failed()) {
     		return null;
@@ -31466,6 +31872,8 @@
     	var otherOop;
     	var rcvrArray;
     	var rcvrOop;
+
+    	/* inline: true */;
     	otherOop = interpreterProxy.stackObjectValue(0);
     	rcvrOop = interpreterProxy.stackValue(1);
     	if (interpreterProxy.failed()) {
@@ -31502,6 +31910,8 @@
     	var valOop;
     	var values;
     	var valuesOop;
+
+    	/* inline: true */;
     	valOop = interpreterProxy.stackValue(0);
     	rcvrOop = interpreterProxy.stackObjectValue(1);
     	if (interpreterProxy.failed()) {
@@ -31543,6 +31953,8 @@
     	var val;
     	var values;
     	var valuesOop;
+
+    	/* inline: true */;
     	val = interpreterProxy.stackIntegerValue(0);
     	rcvrOop = interpreterProxy.stackObjectValue(1);
     	if (interpreterProxy.failed()) {
@@ -31580,6 +31992,8 @@
     	var val;
     	var values;
     	var valuesOop;
+
+    	/* inline: true */;
     	val = interpreterProxy.stackFloatValue(0);
     	rcvrOop = interpreterProxy.stackObjectValue(1);
     	if (interpreterProxy.failed()) {
@@ -31616,6 +32030,8 @@
     	var valOop;
     	var values;
     	var valuesOop;
+
+    	/* inline: true */;
     	valOop = interpreterProxy.stackValue(0);
     	rcvrOop = interpreterProxy.stackObjectValue(1);
     	if (interpreterProxy.failed()) {
@@ -31659,6 +32075,8 @@
     	var values;
     	var valuesOop;
     	var valuesSize;
+
+    	/* inline: true */;
     	repStart = interpreterProxy.stackIntegerValue(0);
     	repOop = interpreterProxy.stackObjectValue(1);
     	stop = interpreterProxy.stackIntegerValue(2);
@@ -31750,6 +32168,8 @@
     	var values;
     	var valuesOop;
     	var valuesSize;
+
+    	/* inline: true */;
     	repStart = interpreterProxy.stackIntegerValue(0);
     	repOop = interpreterProxy.stackObjectValue(1);
     	stop = interpreterProxy.stackIntegerValue(2);
@@ -31837,6 +32257,7 @@
     		for (i = (start - 1); i <= (stop - 1); i++) {
     			if (predicates[i] === 1) {
     				fv = (floatReplacement[(repStart + i) - start]>>>0);
+    				;
     				values[i] = fv;
     			}
     		}
@@ -31873,6 +32294,8 @@
     	var wordsArg;
     	var wordsRcvr;
     	var wordsResult;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackObjectValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -31976,6 +32399,8 @@
     	var wordRcvr;
     	var wordsRcvr;
     	var wordsResult;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -32065,6 +32490,8 @@
     	var wordsArg;
     	var wordsRcvr;
     	var wordsResult;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackObjectValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -32147,6 +32574,8 @@
     	var resultOop;
     	var wordsRcvr;
     	var wordsResult;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackObjectValue(0);
     	argOop = interpreterProxy.stackValue(1);
     	rcvrOop = interpreterProxy.stackObjectValue(2);
@@ -32216,6 +32645,8 @@
     function radiansToDegrees(radians) {
     	var deg;
     	var degrees;
+
+    	/* inline: true */;
     	degrees = radians / 0.0174532925199433;
     	deg = 90.0 - degrees;
     	if (!(deg > 0.0)) {
@@ -32233,6 +32664,8 @@
     	var range;
     	var size;
     	var to;
+
+    	/* inline: true */;
     	factor = interpreterProxy.stackFloatValue(0);
     	floatArrayOop = interpreterProxy.stackValue(1);
     	to = interpreterProxy.stackIntegerValue(2);
@@ -32269,6 +32702,8 @@
     	var range;
     	var size;
     	var to;
+
+    	/* inline: true */;
     	factor = interpreterProxy.stackFloatValue(0);
     	integerArrayOop = interpreterProxy.stackValue(1);
     	to = interpreterProxy.stackIntegerValue(2);
@@ -32299,6 +32734,8 @@
     function randomRange() {
     	var range;
     	var ret;
+
+    	/* inline: true */;
     	range = interpreterProxy.stackIntegerValue(0);
     	if (interpreterProxy.failed()) {
     		return null;
@@ -32319,6 +32756,8 @@
     	var toY;
     	var x;
     	var y;
+
+    	/* inline: true */;
     	fromY = interpreterProxy.stackFloatValue(0);
     	fromX = interpreterProxy.stackFloatValue(1);
     	toY = interpreterProxy.stackFloatValue(2);
@@ -32348,6 +32787,8 @@
     	var toY;
     	var x;
     	var y;
+
+    	/* inline: true */;
     	fromY = interpreterProxy.stackFloatValue(0);
     	fromX = interpreterProxy.stackFloatValue(1);
     	toY = interpreterProxy.stackFloatValue(2);
@@ -32368,6 +32809,8 @@
     function scalarXAtxArrayheadingArrayvaluedestWidthleftEdgeModerightEdgeMode(index, xArray, headingArray, val, destWidth, leftEdgeMode, rightEdgeMode) {
     	var headingRadians;
     	var newX;
+
+    	/* inline: true */;
     	newX = val;
     	if (newX < 0.0) {
     		if (leftEdgeMode === 1) {
@@ -32417,6 +32860,8 @@
 
     function scalarYAtyArrayheadingArrayvaluedestHeighttopEdgeModebottomEdgeMode(index, yArray, headingArray, val, destHeight, topEdgeMode, bottomEdgeMode) {
     	var newY;
+
+    	/* inline: true */;
     	newY = val;
     	if (newY < 0.0) {
     		if (topEdgeMode === 1) {
@@ -32465,6 +32910,8 @@
     	var resultArray;
     	var resultOop;
     	var size;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackValue(0);
     	headingOop = interpreterProxy.stackValue(1);
     	pOop = interpreterProxy.stackValue(2);
@@ -32537,6 +32984,8 @@
     	var headingArray;
     	var headingOop;
     	var index;
+
+    	/* inline: true */;
     	heading = interpreterProxy.stackFloatValue(0);
     	headingOop = interpreterProxy.stackValue(1);
     	index = interpreterProxy.stackIntegerValue(2);
@@ -32574,6 +33023,8 @@
     	var xArray;
     	var xIndex;
     	var xOop;
+
+    	/* inline: true */;
     	rightEdgeMode = interpreterProxy.stackIntegerValue(0);
     	leftEdgeMode = interpreterProxy.stackIntegerValue(1);
     	destWidth = interpreterProxy.stackFloatValue(2);
@@ -32617,6 +33068,8 @@
     	var yArray;
     	var yIndex;
     	var yOop;
+
+    	/* inline: true */;
     	bottomEdgeMode = interpreterProxy.stackIntegerValue(0);
     	topEdgeMode = interpreterProxy.stackIntegerValue(1);
     	destHeight = interpreterProxy.stackFloatValue(2);
@@ -32668,6 +33121,8 @@
     	var wordValArray;
     	var xArray;
     	var xOop;
+
+    	/* inline: true */;
     	rightEdgeMode = interpreterProxy.stackIntegerValue(0);
     	leftEdgeMode = interpreterProxy.stackIntegerValue(1);
     	destWidth = interpreterProxy.stackFloatValue(2);
@@ -32733,6 +33188,7 @@
     			if (isValVector) {
     				if (isWordVector) {
     					newX = wordValArray[i];
+    					;
     				} else {
     					newX = valArray[i];
     				}
@@ -32767,6 +33223,8 @@
     	var wordValArray;
     	var yArray;
     	var yOop;
+
+    	/* inline: true */;
     	bottomEdgeMode = interpreterProxy.stackIntegerValue(0);
     	topEdgeMode = interpreterProxy.stackIntegerValue(1);
     	destHeight = interpreterProxy.stackFloatValue(2);
@@ -32832,6 +33290,7 @@
     			if (isValVector) {
     				if (isWordVector) {
     					newY = wordValArray[i];
+    					;
     				} else {
     					newY = valArray[i];
     				}
@@ -32866,6 +33325,8 @@
     	var y;
     	var yArray;
     	var yArrayOop;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackValue(0);
     	yArrayOop = interpreterProxy.stackValue(1);
     	xArrayOop = interpreterProxy.stackValue(2);
@@ -32974,6 +33435,8 @@
     	var y;
     	var yArray;
     	var yArrayOop;
+
+    	/* inline: true */;
     	resultOop = interpreterProxy.stackValue(0);
     	yArrayOop = interpreterProxy.stackValue(1);
     	xArrayOop = interpreterProxy.stackValue(2);
@@ -33078,6 +33541,8 @@
     	var xFactor;
     	var y;
     	var yFactor;
+
+    	/* inline: true */;
     	yFactor = interpreterProxy.stackIntegerValue(0);
     	xFactor = interpreterProxy.stackIntegerValue(1);
     	sHeight = interpreterProxy.stackIntegerValue(2);
@@ -33203,12 +33668,20 @@
      */
 
     (function Klatt() {
+    "use strict";
 
     var VM_PROXY_MAJOR = 1;
     var VM_PROXY_MINOR = 11;
+
+    /*** Functions ***/
+    function CLASSOF(obj) { return typeof obj === "number" ? interpreterProxy.classSmallInteger() : obj.sqClass }
     function SIZEOF(obj) { return obj.pointers ? obj.pointers.length : obj.words ? obj.words.length : obj.bytes ? obj.bytes.length : 0 }
+    function BYTESIZEOF(obj) { return obj.bytes ? obj.bytes.length : obj.words ? obj.words.length * 4 : 0 }
     function DIV(a, b) { return Math.floor(a / b) | 0; }   // integer division
     function MOD(a, b) { return a - DIV(a, b) * b | 0; }   // signed modulus
+    function SHL(a, b) { return b > 31 ? 0 : a << b; }     // fix JS shift
+    function SHR(a, b) { return b > 31 ? 0 : a >>> b; }    // fix JS shift
+    function SHIFT(a, b) { return b < 0 ? (b < -31 ? 0 : a >>> (0-b) ) : (b > 31 ? 0 : a << b); }
 
     /*** Constants ***/
     var A1v = 46;
@@ -33514,6 +33987,10 @@
     	}
     	++nper;
     	return x0;
+    }
+
+    function halt() {
+    	;
     }
 
     function linearFromdB(aNumber) {
@@ -34179,17 +34656,20 @@
      */
 
     (function LargeIntegers() {
+    "use strict";
 
     var VM_PROXY_MAJOR = 1;
     var VM_PROXY_MINOR = 11;
 
     /*** Functions ***/
     function CLASSOF(obj) { return typeof obj === "number" ? interpreterProxy.classSmallInteger() : obj.sqClass }
+    function SIZEOF(obj) { return obj.pointers ? obj.pointers.length : obj.words ? obj.words.length : obj.bytes ? obj.bytes.length : 0 }
     function BYTESIZEOF(obj) { return obj.bytes ? obj.bytes.length : obj.words ? obj.words.length * 4 : 0 }
     function DIV(a, b) { return Math.floor(a / b) | 0; }   // integer division
     function MOD(a, b) { return a - DIV(a, b) * b | 0; }   // signed modulus
     function SHL(a, b) { return b > 31 ? 0 : a << b; }     // fix JS shift
     function SHR(a, b) { return b > 31 ? 0 : a >>> b; }    // fix JS shift
+    function SHIFT(a, b) { return b < 0 ? (b < -31 ? 0 : a >>> (0-b) ) : (b > 31 ? 0 : a << b); }
 
     /*** Variables ***/
     var andOpIndex = 0;
@@ -34247,6 +34727,15 @@
     }
 
 
+    /*	Precondition: bytesOop is not anInteger and a bytes object. */
+    /*	Function #byteSizeOf: is used by the interpreter, be careful with name
+    	clashes... */
+
+    function byteSizeOfBytes(bytesOop) {
+    	return SIZEOF(bytesOop);
+    }
+
+
     /*	Attention: this method invalidates all oop's! Only newBytes is valid at return. */
     /*	Does not normalize. */
 
@@ -34256,6 +34745,7 @@
     	var newBytes;
 
     	newBytes = interpreterProxy.instantiateClassindexableSize(CLASSOF(aBytesObject), newLen);
+    ;
     	oldLen = BYTESIZEOF(aBytesObject);
     	if (oldLen < newLen) {
     		copyLen = oldLen;
@@ -34347,6 +34837,8 @@
     function cDigitCopyFromtolen(pFrom, pTo, len) {
     	var limit;
     	var i;
+
+    	;
     	limit = len - 1;
     	for (i = 0; i <= limit; i++) {
     		pTo[i] = pFrom[i];
@@ -34659,6 +35151,7 @@
     		return 0;
     	}
     	if (csi < 0) {
+    		;
     		return (SHR((0 - csi), ((ix - 1) * 8))) & 255;
     	} else {
     		return (SHR(csi, ((ix - 1) * 8))) & 255;
@@ -34718,6 +35211,7 @@
     		}
     		return 0;
     	}();
+    ;
     }
 
     function cDigitRshiftfromlentolen(shiftCount, pFrom, fromLen, pTo, toLen) {
@@ -34850,6 +35344,7 @@
     	}
     	newLen = ((highBit + shiftCount) + 7) >> 3;
     	newBytes = interpreterProxy.instantiateClassindexableSize(CLASSOF(aBytesOop), newLen);
+    ;
     	cDigitLshiftfromlentolen(shiftCount, aBytesOop.bytes, oldLen, newBytes.bytes, newLen);
     	return newBytes;
     }
@@ -34878,6 +35373,7 @@
     	}
     	newByteLen = (newBitLen + 7) >> 3;
     	newOop = interpreterProxy.instantiateClassindexableSize(CLASSOF(aBytesOop), newByteLen);
+    ;
     	cDigitRshiftfromlentolen(shiftCount, aBytesOop.bytes, oldDigitLen, newOop.bytes, newByteLen);
     	return newOop;
     }
@@ -34912,12 +35408,14 @@
     		longLen = firstLen;
     	}
     	sum = interpreterProxy.instantiateClassindexableSize(resClass, longLen);
+    ;
     	over = cDigitAddlenwithleninto(shortInt.bytes, shortLen, longInt.bytes, longLen, sum.bytes);
     	if (over > 0) {
 
     		/* sum := sum growby: 1. */
 
     			newSum = interpreterProxy.instantiateClassindexableSize(resClass, longLen + 1);
+    ;
     		cDigitCopyFromtolen(sum.bytes, newSum.bytes, longLen);
 
     		/* C index! */
@@ -34948,6 +35446,7 @@
     			return interpreterProxy.primitiveFail();
     		}
     			firstLarge = createLargeFromSmallInteger(firstInteger);
+    ;
     	} else {
     		if (CLASSOF(firstInteger) === interpreterProxy.classLargeNegativeInteger()) {
     			return interpreterProxy.primitiveFail();
@@ -34959,6 +35458,7 @@
     			return interpreterProxy.primitiveFail();
     		}
     			secondLarge = createLargeFromSmallInteger(secondInteger);
+    ;
     	} else {
     		if (CLASSOF(secondInteger) === interpreterProxy.classLargeNegativeInteger()) {
     			return interpreterProxy.primitiveFail();
@@ -34979,6 +35479,7 @@
     		longLarge = firstLarge;
     	}
     	result = interpreterProxy.instantiateClassindexableSize(interpreterProxy.classLargePositiveInteger(), longLen);
+    ;
     	cDigitOpshortlenlongleninto(opIx, shortLarge.bytes, shortLen, longLarge.bytes, longLen, result.bytes);
     	if (interpreterProxy.failed()) {
     		return 0;
@@ -35031,6 +35532,7 @@
     	l = (firstLen - secondLen) + 1;
     	if (l <= 0) {
     			result = interpreterProxy.instantiateClassindexableSize(interpreterProxy.classArray(), 2);
+    ;
     		interpreterProxy.stObjectatput(result,1,0);
     		interpreterProxy.stObjectatput(result,2,firstInteger);
     		return result;
@@ -35038,14 +35540,19 @@
     	d = 8 - cHighBit(unsafeByteOfat(secondInteger, secondLen));
     	div = digitLshift(secondInteger, d);
     div = bytesOrIntgrowTo(div, digitLength(div) + 1);
+    ;
     	rem = digitLshift(firstInteger, d);
     if (digitLength(rem) === firstLen) {
     	rem = bytesOrIntgrowTo(rem, firstLen + 1);
     }
+    ;
     	quo = interpreterProxy.instantiateClassindexableSize(resultClass, l);
+    ;
     	cDigitDivlenremlenquolen(div.bytes, digitLength(div), rem.bytes, digitLength(rem), quo.bytes, digitLength(quo));
     	rem = digitRshiftlookfirst(rem, d, digitLength(div) - 1);
+    ;
     	result = interpreterProxy.instantiateClassindexableSize(interpreterProxy.classArray(), 2);
+    ;
     	interpreterProxy.stObjectatput(result,1,quo);
     	interpreterProxy.stObjectatput(result,2,rem);
     	return result;
@@ -35078,6 +35585,7 @@
     		return interpreterProxy.primitiveFail();
     	}
     	prod = interpreterProxy.instantiateClassindexableSize(interpreterProxy.classLargePositiveInteger(), thirdLen);
+    ;
     	cDigitMontgomerylentimeslenmodulolenmInvModBinto(firstLarge.bytes, firstLen, secondLarge.bytes, secondLen, thirdLarge.bytes, thirdLen, mInv, prod.bytes);
     	return normalizePositive(prod);
     }
@@ -35114,6 +35622,7 @@
     		resultClass = interpreterProxy.classLargePositiveInteger();
     	}
     	prod = interpreterProxy.instantiateClassindexableSize(resultClass, longLen + shortLen);
+    ;
     	cDigitMultiplylenwithleninto(shortInt.bytes, shortLen, longInt.bytes, longLen, prod.bytes);
     	return normalize(prod);
     }
@@ -35170,6 +35679,7 @@
     	res = interpreterProxy.instantiateClassindexableSize((neg
     	? interpreterProxy.classLargeNegativeInteger()
     	: interpreterProxy.classLargePositiveInteger()), resLen);
+    ;
     	cDigitSublenwithleninto(smaller.bytes, smallerLen, larger.bytes, largerLen, res.bytes);
     	return (neg
     		? normalizeNegative(res)
@@ -35184,6 +35694,10 @@
 
     function getModuleName() {
     	return moduleName;
+    }
+
+    function halt() {
+    	;
     }
 
     function highBitOfBytes(aBytesOop) {
@@ -35245,6 +35759,10 @@
     		}
     	}
     	return false;
+    }
+
+    function msg(s) {
+    	console.log(moduleName + ": " + s);
     }
 
 
@@ -35439,7 +35957,7 @@
     function primCheckIfCModuleExists() {
     	var _return_value;
 
-    	_return_value = ( interpreterProxy.trueObject() );
+    	_return_value = (true? interpreterProxy.trueObject() : interpreterProxy.falseObject());
     	if (interpreterProxy.failed()) {
     		return null;
     	}
@@ -35507,6 +36025,7 @@
     		/* convert it to a not normalized LargeInteger */
 
     			firstLarge = createLargeFromSmallInteger(firstInteger);
+    ;
     	} else {
     		firstLarge = firstInteger;
     	}
@@ -35515,6 +36034,7 @@
     		/* convert it to a not normalized LargeInteger */
 
     			secondLarge = createLargeFromSmallInteger(secondInteger);
+    ;
     	} else {
     		secondLarge = secondInteger;
     	}
@@ -35546,6 +36066,7 @@
     		/* convert it to a not normalized LargeInteger */
 
     			firstLarge = createLargeFromSmallInteger(firstInteger);
+    ;
     	} else {
     		firstLarge = firstInteger;
     	}
@@ -35554,6 +36075,7 @@
     		/* convert it to a not normalized LargeInteger */
 
     			secondLarge = createLargeFromSmallInteger(secondInteger);
+    ;
     	} else {
     		secondLarge = secondInteger;
     	}
@@ -35955,6 +36477,7 @@
     		/* convert to LargeInteger */
 
     			firstAsLargeInteger = createLargeFromSmallInteger(firstInteger);
+    ;
     	} else {
     		firstAsLargeInteger = firstInteger;
     	}
@@ -35967,6 +36490,7 @@
     			return null;
     		}
     			secondAsLargeInteger = createLargeFromSmallInteger(secondInteger);
+    ;
     	} else {
     		secondAsLargeInteger = secondInteger;
     	}
@@ -36004,6 +36528,7 @@
     		/* convert to LargeInteger */
 
     			firstAsLargeInteger = createLargeFromSmallInteger(firstInteger);
+    ;
     	} else {
     		firstAsLargeInteger = firstInteger;
     	}
@@ -36016,6 +36541,7 @@
     			return null;
     		}
     			secondAsLargeInteger = createLargeFromSmallInteger(secondInteger);
+    ;
     	} else {
     		secondAsLargeInteger = secondInteger;
     	}
@@ -36049,6 +36575,7 @@
     		/* convert it to a not normalized LargeInteger */
 
     			firstLarge = createLargeFromSmallInteger(firstInteger);
+    ;
     	} else {
     		firstLarge = firstInteger;
     	}
@@ -36057,6 +36584,7 @@
     		/* convert it to a not normalized LargeInteger */
 
     			secondLarge = createLargeFromSmallInteger(secondInteger);
+    ;
     	} else {
     		secondLarge = secondInteger;
     	}
@@ -36090,6 +36618,7 @@
     		/* convert it to a not normalized LargeInteger */
 
     			firstLarge = createLargeFromSmallInteger(firstInteger);
+    ;
     	} else {
     		firstLarge = firstInteger;
     	}
@@ -36098,6 +36627,7 @@
     		/* convert it to a not normalized LargeInteger */
 
     			secondLarge = createLargeFromSmallInteger(secondInteger);
+    ;
     	} else {
     		secondLarge = secondInteger;
     	}
@@ -36129,6 +36659,7 @@
     		/* convert it to a not normalized LargeInteger */
 
     			firstLarge = createLargeFromSmallInteger(firstInteger);
+    ;
     	} else {
     		firstLarge = firstInteger;
     	}
@@ -36137,6 +36668,7 @@
     		/* convert it to a not normalized LargeInteger */
 
     			secondLarge = createLargeFromSmallInteger(secondInteger);
+    ;
     	} else {
     		secondLarge = secondInteger;
     	}
@@ -36168,6 +36700,7 @@
     		/* convert it to a not normalized LargeInteger */
 
     			firstLarge = createLargeFromSmallInteger(firstInteger);
+    ;
     	} else {
     		firstLarge = firstInteger;
     	}
@@ -36176,6 +36709,7 @@
     		/* convert it to a not normalized LargeInteger */
 
     			secondLarge = createLargeFromSmallInteger(secondInteger);
+    ;
     	} else {
     		secondLarge = secondInteger;
     	}
@@ -36236,6 +36770,7 @@
     		/* convert it to a not normalized LargeInteger */
 
     			firstLarge = createLargeFromSmallInteger(firstInteger);
+    ;
     	} else {
     		firstLarge = firstInteger;
     	}
@@ -36244,6 +36779,7 @@
     		/* convert it to a not normalized LargeInteger */
 
     			secondLarge = createLargeFromSmallInteger(secondOperandInteger);
+    ;
     	} else {
     		secondLarge = secondOperandInteger;
     	}
@@ -36252,6 +36788,7 @@
     		/* convert it to a not normalized LargeInteger */
 
     			thirdLarge = createLargeFromSmallInteger(thirdModuloInteger);
+    ;
     	} else {
     		thirdLarge = thirdModuloInteger;
     	}
@@ -36398,6 +36935,7 @@
      */
 
     (function Matrix2x3Plugin() {
+    "use strict";
 
     var VM_PROXY_MAJOR = 1;
     var VM_PROXY_MINOR = 11;
@@ -36405,6 +36943,12 @@
     /*** Functions ***/
     function CLASSOF(obj) { return typeof obj === "number" ? interpreterProxy.classSmallInteger() : obj.sqClass }
     function SIZEOF(obj) { return obj.pointers ? obj.pointers.length : obj.words ? obj.words.length : obj.bytes ? obj.bytes.length : 0 }
+    function BYTESIZEOF(obj) { return obj.bytes ? obj.bytes.length : obj.words ? obj.words.length * 4 : 0 }
+    function DIV(a, b) { return Math.floor(a / b) | 0; }   // integer division
+    function MOD(a, b) { return a - DIV(a, b) * b | 0; }   // signed modulus
+    function SHL(a, b) { return b > 31 ? 0 : a << b; }     // fix JS shift
+    function SHR(a, b) { return b > 31 ? 0 : a >>> b; }    // fix JS shift
+    function SHIFT(a, b) { return b < 0 ? (b < -31 ? 0 : a >>> (0-b) ) : (b > 31 ? 0 : a << b); }
 
     /*** Variables ***/
     var interpreterProxy = null;
@@ -36423,6 +36967,10 @@
 
     function getModuleName() {
     	return moduleName;
+    }
+
+    function halt() {
+    	;
     }
 
 
@@ -36539,6 +37087,8 @@
     	var m2;
     	var m3;
     	var result;
+
+    	;
     	m3 = loadArgumentMatrix((result = interpreterProxy.stackObjectValue(0)));
     	m2 = loadArgumentMatrix(interpreterProxy.stackObjectValue(1));
     	m1 = loadArgumentMatrix(interpreterProxy.stackObjectValue(2));
@@ -36852,12 +37402,20 @@
      */
 
     (function MiscPrimitivePlugin() {
+    "use strict";
 
     var VM_PROXY_MAJOR = 1;
     var VM_PROXY_MINOR = 11;
+
+    /*** Functions ***/
+    function CLASSOF(obj) { return typeof obj === "number" ? interpreterProxy.classSmallInteger() : obj.sqClass }
+    function SIZEOF(obj) { return obj.pointers ? obj.pointers.length : obj.words ? obj.words.length : obj.bytes ? obj.bytes.length : 0 }
+    function BYTESIZEOF(obj) { return obj.bytes ? obj.bytes.length : obj.words ? obj.words.length * 4 : 0 }
     function DIV(a, b) { return Math.floor(a / b) | 0; }   // integer division
     function MOD(a, b) { return a - DIV(a, b) * b | 0; }   // signed modulus
+    function SHL(a, b) { return b > 31 ? 0 : a << b; }     // fix JS shift
     function SHR(a, b) { return b > 31 ? 0 : a >>> b; }    // fix JS shift
+    function SHIFT(a, b) { return b < 0 ? (b < -31 ? 0 : a >>> (0-b) ) : (b > 31 ? 0 : a << b); }
 
     /*** Variables ***/
     var interpreterProxy = null;
@@ -36898,6 +37456,13 @@
     }
 
 
+    /*	Note: This is coded so that plugins can be run from Squeak. */
+
+    function getInterpreter() {
+    	return interpreterProxy;
+    }
+
+
     /*	Note: This is hardcoded so it can be run from Squeak.
     	The module name is used for validating a module *after*
     	it is loaded to check if it does really contain the module
@@ -36905,6 +37470,14 @@
 
     function getModuleName() {
     	return moduleName;
+    }
+
+    function halt() {
+    	;
+    }
+
+    function msg(s) {
+    	console.log(moduleName + ": " + s);
     }
 
 
@@ -36969,6 +37542,10 @@
     		interpreterProxy.popthenPush(argCount + 1, 3);
     		return null;
     	}
+    	if (interpreterProxy.failed()) {
+    		return null;
+    	}
+    	interpreterProxy.pop(argCount);
     }
 
 
@@ -37176,6 +37753,12 @@
     			return null;
     		}
     		code = anInt & 3;
+    		if (code === 0) {
+
+    			/* skip */
+
+    			null;
+    		}
     		if (code === 1) {
 
     			/* n consecutive words of 4 bytes = the following byte */
@@ -37460,12 +38043,20 @@
      */
 
     (function ScratchPlugin() {
+    "use strict";
 
     var VM_PROXY_MAJOR = 1;
     var VM_PROXY_MINOR = 11;
+
+    /*** Functions ***/
+    function CLASSOF(obj) { return typeof obj === "number" ? interpreterProxy.classSmallInteger() : obj.sqClass }
     function SIZEOF(obj) { return obj.pointers ? obj.pointers.length : obj.words ? obj.words.length : obj.bytes ? obj.bytes.length : 0 }
+    function BYTESIZEOF(obj) { return obj.bytes ? obj.bytes.length : obj.words ? obj.words.length * 4 : 0 }
     function DIV(a, b) { return Math.floor(a / b) | 0; }   // integer division
     function MOD(a, b) { return a - DIV(a, b) * b | 0; }   // signed modulus
+    function SHL(a, b) { return b > 31 ? 0 : a << b; }     // fix JS shift
+    function SHR(a, b) { return b > 31 ? 0 : a >>> b; }    // fix JS shift
+    function SHIFT(a, b) { return b < 0 ? (b < -31 ? 0 : a >>> (0-b) ) : (b > 31 ? 0 : a << b); }
 
     /*** Variables ***/
     var interpreterProxy = null;
@@ -37551,6 +38142,10 @@
 
     function getModuleName() {
     	return moduleName;
+    }
+
+    function halt() {
+    	;
     }
 
 
@@ -38726,6 +39321,7 @@
      */
 
     function SocketPlugin() {
+      "use strict";
 
       return {
         getModuleName: function() { return 'SocketPlugin (http-only)'; },
@@ -39248,6 +39844,7 @@
 
               // Read frame header fields
               var firstByte = this.sendBuffer[0];
+              var finalBit = firstByte >>> 7;
               var opcode = firstByte & 0x0f;
               var dataIsBinary;
               if (opcode === 0x00) {
@@ -39716,10 +40313,12 @@
         if (typeof Squeak === "object" && Squeak.registerExternalModule) {
             Squeak.registerExternalModule('SocketPlugin', SocketPlugin());
         } else self.setTimeout(registerSocketPlugin, 100);
-    }
+    };
+
     registerSocketPlugin();
 
     function SpeechPlugin() {
+      'use strict';
 
       return {
         getModuleName: function() { return 'SpeechPlugin'; },
@@ -39818,6 +40417,7 @@
             var sqResult = [result.isFinal, []];
             for (var j = 0; j < result.length; j++) {
               var transcript = result[j].transcript;
+              var now = Date.now();
               sqResult[1].push([transcript, result[j].confidence]);
             }
             if (sqResult[1].length > 0) {
@@ -39847,7 +40447,8 @@
               console.warn('SpeechPlugin: Web Speech API is not supported by this browser.');
             }
         } else self.setTimeout(registerSpeechPlugin, 100);
-    }
+    };
+
     registerSpeechPlugin();
 
     /*
@@ -39856,6 +40457,7 @@
      */
 
     function SqueakSSL() {
+      "use strict";
 
       return {
         getModuleName: function() { return 'SqueakSSL (fake)'; },
@@ -39983,7 +40585,8 @@
         if (typeof Squeak === "object" && Squeak.registerExternalModule) {
             Squeak.registerExternalModule('SqueakSSL', SqueakSSL());
         } else self.setTimeout(registerSqueakSSL, 100);
-    }
+    };
+
     registerSqueakSSL();
 
     /* Smalltalk from Squeak4.5 with VMMaker 4.13.6 translated as JS source on 3 November 2014 1:52:26 pm */
@@ -39994,11 +40597,23 @@
      */
 
     (function SoundGenerationPlugin() {
+    "use strict";
 
     var VM_PROXY_MAJOR = 1;
     var VM_PROXY_MINOR = 11;
+
+    /*** Functions ***/
+    function CLASSOF(obj) { return typeof obj === "number" ? interpreterProxy.classSmallInteger() : obj.sqClass }
+    function SIZEOF(obj) { return obj.pointers ? obj.pointers.length : obj.words ? obj.words.length : obj.bytes ? obj.bytes.length : 0 }
+    function BYTESIZEOF(obj) { return obj.bytes ? obj.bytes.length : obj.words ? obj.words.length * 4 : 0 }
     function DIV(a, b) { return Math.floor(a / b) | 0; }   // integer division
     function MOD(a, b) { return a - DIV(a, b) * b | 0; }   // signed modulus
+    function SHL(a, b) { return b > 31 ? 0 : a << b; }     // fix JS shift
+    function SHR(a, b) { return b > 31 ? 0 : a >>> b; }    // fix JS shift
+    function SHIFT(a, b) { return b < 0 ? (b < -31 ? 0 : a >>> (0-b) ) : (b > 31 ? 0 : a << b); }
+
+    /*** Constants ***/
+    var IncrementFractionBits = 16;
     var LoopIndexFractionMask = 511;
     var LoopIndexScaleFactor = 512;
     var ScaleFactor = 32768;
@@ -40009,6 +40624,14 @@
     var moduleName = "SoundGenerationPlugin 3 November 2014 (e)";
 
 
+
+    /*	Note: This is coded so that plugins can be run from Squeak. */
+
+    function getInterpreter() {
+    	return interpreterProxy;
+    }
+
+
     /*	Note: This is hardcoded so it can be run from Squeak.
     	The module name is used for validating a module *after*
     	it is loaded to check if it does really contain the module
@@ -40016,6 +40639,14 @@
 
     function getModuleName() {
     	return moduleName;
+    }
+
+    function halt() {
+    	;
+    }
+
+    function msg(s) {
+    	console.log(moduleName + ": " + s);
     }
 
     function primitiveApplyReverb() {
@@ -40601,11 +41232,19 @@
      */
 
     (function StarSqueakPlugin() {
+    "use strict";
 
     var VM_PROXY_MAJOR = 1;
     var VM_PROXY_MINOR = 11;
+
+    /*** Functions ***/
+    function CLASSOF(obj) { return typeof obj === "number" ? interpreterProxy.classSmallInteger() : obj.sqClass }
     function SIZEOF(obj) { return obj.pointers ? obj.pointers.length : obj.words ? obj.words.length : obj.bytes ? obj.bytes.length : 0 }
+    function BYTESIZEOF(obj) { return obj.bytes ? obj.bytes.length : obj.words ? obj.words.length * 4 : 0 }
     function DIV(a, b) { return Math.floor(a / b) | 0; }   // integer division
+    function MOD(a, b) { return a - DIV(a, b) * b | 0; }   // signed modulus
+    function SHL(a, b) { return b > 31 ? 0 : a << b; }     // fix JS shift
+    function SHR(a, b) { return b > 31 ? 0 : a >>> b; }    // fix JS shift
     function SHIFT(a, b) { return b < 0 ? (b < -31 ? 0 : a >>> (0-b) ) : (b > 31 ? 0 : a << b); }
 
     /*** Variables ***/
@@ -40632,6 +41271,10 @@
 
     function getModuleName() {
     	return moduleName;
+    }
+
+    function halt() {
+    	;
     }
 
 
@@ -40838,6 +41481,7 @@
     */
 
     (function ZipPlugin() {
+    "use strict";
 
     var VM_PROXY_MAJOR = 1;
     var VM_PROXY_MINOR = 11;
@@ -40850,9 +41494,11 @@
     function MOD(a, b) { return a - DIV(a, b) * b | 0; }   // signed modulus
     function SHL(a, b) { return b > 31 ? 0 : a << b; }     // fix JS shift
     function SHR(a, b) { return b > 31 ? 0 : a >>> b; }    // fix JS shift
+    function SHIFT(a, b) { return b < 0 ? (b < -31 ? 0 : a >>> (0-b) ) : (b > 31 ? 0 : a << b); }
 
     /*** Constants ***/
     var DeflateHashMask = 32767;
+    var DeflateHashShift = 5;
     var DeflateHashTableSize = 32768;
     var DeflateMaxDistance = 32768;
     var DeflateMaxDistanceCodes = 30;
@@ -40878,6 +41524,7 @@
     var zipBitBuf = 0;
     var zipBitPos = 0;
     var zipBlockPos = 0;
+    var zipBlockStart = 0;
     var zipCollection = null;
     var zipCollectionSize = 0;
     var zipCrcTable = [
@@ -41256,6 +41903,10 @@
     	return moduleName;
     }
 
+    function halt() {
+    	;
+    }
+
 
     /*	Insert the string at the given start position into the hash table.
     	Note: The hash value is updated starting at MinMatch-1 since
@@ -41409,6 +42060,7 @@
     	if (interpreterProxy.failed()) {
     		return null;
     	}
+    	;
     	if (!loadDeflateStreamFrom(rcvr)) {
     		return interpreterProxy.primitiveFail();
     	}
@@ -41629,6 +42281,7 @@
     		return interpreterProxy.primitiveFail();
     	}
     	bytePtr = collection.bytes;
+    	;
     	--startIndex;
     	--stopIndex;
     	for (i = startIndex; i <= stopIndex; i++) {
@@ -41671,6 +42324,7 @@
     	if (!(interpreterProxy.isPointers(distStream) && (SIZEOF(distStream) >= 3))) {
     		return interpreterProxy.primitiveFail();
     	}
+    	;
     	result = sendBlockwithwithwith(litStream, distStream, litTree, distTree);
     	if (!interpreterProxy.failed()) {
     		interpreterProxy.storeIntegerofObjectwithValue(1, rcvr, zipPosition);
@@ -42693,7 +43347,8 @@
     https://github.com/nodeca/pako/blob/master/LICENSE
     */
 
-    (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f();}else if(typeof define==="function"&&define.amd){define([],f);}else{var g;if(typeof window!=="undefined"){g=window;}else if(typeof global!=="undefined"){g=global;}else if(typeof self!=="undefined"){g=self;}else{g=this;}g.JSZip = f();}})(function(){return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r);}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+    (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f();}else if(typeof define==="function"&&define.amd){define([],f);}else {var g;if(typeof window!=="undefined"){g=window;}else if(typeof global!=="undefined"){g=global;}else if(typeof self!=="undefined"){g=self;}else {g=this;}g.JSZip = f();}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r);}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+    'use strict';
     var utils = require('./utils');
     var support = require('./support');
     // private property
@@ -42780,6 +43435,7 @@
     };
 
     },{"./support":27,"./utils":29}],2:[function(require,module,exports){
+    'use strict';
 
     var external = require("./external");
     var DataWorker = require('./stream/DataWorker');
@@ -42856,6 +43512,7 @@
     module.exports = CompressedObject;
 
     },{"./external":6,"./stream/Crc32Probe":22,"./stream/DataLengthProbe":23,"./stream/DataWorker":24}],3:[function(require,module,exports){
+    'use strict';
 
     var GenericWorker = require("./stream/GenericWorker");
 
@@ -42871,6 +43528,7 @@
     exports.DEFLATE = require('./flate');
 
     },{"./flate":7,"./stream/GenericWorker":25}],4:[function(require,module,exports){
+    'use strict';
 
     var utils = require('./utils');
 
@@ -42950,6 +43608,7 @@
     // vim: set shiftwidth=4 softtabstop=4:
 
     },{"./utils":29}],5:[function(require,module,exports){
+    'use strict';
     exports.base64 = false;
     exports.binary = false;
     exports.dir = false;
@@ -42962,6 +43621,7 @@
     exports.dosPermissions = null;
 
     },{}],6:[function(require,module,exports){
+    'use strict';
 
     var ES6Promise = require("es6-promise").Promise;
 
@@ -42973,6 +43633,7 @@
     };
 
     },{"es6-promise":37}],7:[function(require,module,exports){
+    'use strict';
     var USE_TYPEDARRAY = (typeof Uint8Array !== 'undefined') && (typeof Uint16Array !== 'undefined') && (typeof Uint32Array !== 'undefined');
 
     var pako = require("pako");
@@ -43042,6 +43703,7 @@
     };
 
     },{"./stream/GenericWorker":25,"./utils":29,"pako":38}],8:[function(require,module,exports){
+    'use strict';
 
     var utils = require('../utils');
     var GenericWorker = require('../stream/GenericWorker');
@@ -43175,7 +43837,7 @@
             extFileAttr |= generateUnixExternalFileAttr(file.unixPermissions, dir);
         } else { // DOS or other, fallback to DOS
             versionMadeBy = 0x0014; // DOS, version 2.0
-            extFileAttr |= generateDosExternalFileAttr(file.dosPermissions);
+            extFileAttr |= generateDosExternalFileAttr(file.dosPermissions, dir);
         }
 
         // date
@@ -43577,6 +44239,7 @@
     module.exports = ZipFileWorker;
 
     },{"../crc32":4,"../signature":20,"../stream/GenericWorker":25,"../utf8":28,"../utils":29}],9:[function(require,module,exports){
+    'use strict';
 
     var compressions = require('../compressions');
     var ZipFileWorker = require('./ZipFileWorker');
@@ -43635,6 +44298,7 @@
     };
 
     },{"../compressions":3,"./ZipFileWorker":8}],10:[function(require,module,exports){
+    'use strict';
 
     /**
      * Representation a of zip file in js
@@ -43684,6 +44348,7 @@
     module.exports = JSZip;
 
     },{"./defaults":5,"./external":6,"./load":11,"./object":13,"./support":27}],11:[function(require,module,exports){
+    'use strict';
     var utils = require('./utils');
     var external = require("./external");
     var utf8 = require('./utf8');
@@ -43768,6 +44433,7 @@
 
     },{"./external":6,"./nodejsUtils":12,"./stream/Crc32Probe":22,"./utf8":28,"./utils":29,"./zipEntries":30}],12:[function(require,module,exports){
     (function (Buffer){
+    'use strict';
 
     module.exports = {
         /**
@@ -43804,6 +44470,7 @@
 
     }).call(this,(typeof Buffer !== "undefined" ? Buffer : undefined));
     },{}],13:[function(require,module,exports){
+    'use strict';
     var utf8 = require('./utf8');
     var utils = require('./utils');
     var GenericWorker = require('./stream/GenericWorker');
@@ -44192,6 +44859,7 @@
     module.exports = out;
 
     },{"./compressedObject":2,"./defaults":5,"./generate":9,"./nodejs/NodejsStreamInputAdapter":35,"./nodejsUtils":12,"./stream/GenericWorker":25,"./stream/StreamHelper":26,"./utf8":28,"./utils":29,"./zipObject":32}],14:[function(require,module,exports){
+    'use strict';
     var DataReader = require('./DataReader');
     var utils = require('../utils');
 
@@ -44250,6 +44918,7 @@
     module.exports = ArrayReader;
 
     },{"../utils":29,"./DataReader":15}],15:[function(require,module,exports){
+    'use strict';
     var utils = require('../utils');
 
     function DataReader(data) {
@@ -44367,6 +45036,7 @@
     module.exports = DataReader;
 
     },{"../utils":29}],16:[function(require,module,exports){
+    'use strict';
     var Uint8ArrayReader = require('./Uint8ArrayReader');
     var utils = require('../utils');
 
@@ -44387,6 +45057,7 @@
     module.exports = NodeBufferReader;
 
     },{"../utils":29,"./Uint8ArrayReader":18}],17:[function(require,module,exports){
+    'use strict';
     var DataReader = require('./DataReader');
     var utils = require('../utils');
 
@@ -44426,6 +45097,7 @@
     module.exports = StringReader;
 
     },{"../utils":29,"./DataReader":15}],18:[function(require,module,exports){
+    'use strict';
     var ArrayReader = require('./ArrayReader');
     var utils = require('../utils');
 
@@ -44449,6 +45121,7 @@
     module.exports = Uint8ArrayReader;
 
     },{"../utils":29,"./ArrayReader":14}],19:[function(require,module,exports){
+    'use strict';
 
     var utils = require('../utils');
     var support = require('../support');
@@ -44480,6 +45153,7 @@
     // vim: set shiftwidth=4 softtabstop=4:
 
     },{"../support":27,"../utils":29,"./ArrayReader":14,"./NodeBufferReader":16,"./StringReader":17,"./Uint8ArrayReader":18}],20:[function(require,module,exports){
+    'use strict';
     exports.LOCAL_FILE_HEADER = "PK\x03\x04";
     exports.CENTRAL_FILE_HEADER = "PK\x01\x02";
     exports.CENTRAL_DIRECTORY_END = "PK\x05\x06";
@@ -44488,6 +45162,7 @@
     exports.DATA_DESCRIPTOR = "PK\x07\x08";
 
     },{}],21:[function(require,module,exports){
+    'use strict';
 
     var GenericWorker = require('./GenericWorker');
     var utils = require('../utils');
@@ -44515,6 +45190,7 @@
     module.exports = ConvertWorker;
 
     },{"../utils":29,"./GenericWorker":25}],22:[function(require,module,exports){
+    'use strict';
 
     var GenericWorker = require('./GenericWorker');
     var crc32 = require('../crc32');
@@ -44539,6 +45215,7 @@
     module.exports = Crc32Probe;
 
     },{"../crc32":4,"../utils":29,"./GenericWorker":25}],23:[function(require,module,exports){
+    'use strict';
 
     var utils = require('../utils');
     var GenericWorker = require('./GenericWorker');
@@ -44569,6 +45246,7 @@
 
 
     },{"../utils":29,"./GenericWorker":25}],24:[function(require,module,exports){
+    'use strict';
 
     var utils = require('../utils');
     var GenericWorker = require('./GenericWorker');
@@ -44686,6 +45364,7 @@
     module.exports = DataWorker;
 
     },{"../utils":29,"./GenericWorker":25}],25:[function(require,module,exports){
+    'use strict';
 
     /**
      * A worker that does nothing but passing chunks to the next one. This is like
@@ -44951,6 +45630,7 @@
 
     },{}],26:[function(require,module,exports){
     (function (Buffer){
+    'use strict';
 
     var utils = require('../utils');
     var ConvertWorker = require('./ConvertWorker');
@@ -45159,6 +45839,7 @@
     }).call(this,(typeof Buffer !== "undefined" ? Buffer : undefined));
     },{"../base64":1,"../external":6,"../nodejs/NodejsStreamOutputAdapter":35,"../utils":29,"./ConvertWorker":21,"./GenericWorker":25}],27:[function(require,module,exports){
     (function (Buffer){
+    'use strict';
 
     exports.base64 = true;
     exports.array = true;
@@ -45195,6 +45876,7 @@
 
     }).call(this,(typeof Buffer !== "undefined" ? Buffer : undefined));
     },{"./nodejs/NodejsStreamOutputAdapter":35}],28:[function(require,module,exports){
+    'use strict';
 
     var utils = require('./utils');
     var support = require('./support');
@@ -45302,7 +45984,7 @@
 
     // convert array to string
     var buf2string = function (buf) {
-        var i, out, c, c_len;
+        var str, i, out, c, c_len;
         var len = buf.length;
 
         // Reserve max possible length (2 words per char)
@@ -45471,6 +46153,7 @@
     exports.Utf8EncodeWorker = Utf8EncodeWorker;
 
     },{"./nodejsUtils":12,"./stream/GenericWorker":25,"./support":27,"./utils":29}],29:[function(require,module,exports){
+    'use strict';
 
     var support = require('./support');
     var base64 = require('./base64');
@@ -45937,6 +46620,7 @@
     };
 
     },{"./base64":1,"./external":6,"./nodejsUtils":12,"./support":27,"asap":33}],30:[function(require,module,exports){
+    'use strict';
     var readerFor = require('./reader/readerFor');
     var utils = require('./utils');
     var sig = require('./signature');
@@ -46082,6 +46766,10 @@
                     // We expected some records but couldn't find ANY.
                     // This is really suspicious, as if something went wrong.
                     throw new Error("Corrupted zip or bug: expected " + this.centralDirRecords + " records in central dir, got " + this.files.length);
+                } else {
+                    // We found some records but not all.
+                    // Something is wrong but we got something for the user: no error here.
+                    // console.warn("expected", this.centralDirRecords, "records in central dir, got", this.files.length);
                 }
             }
         },
@@ -46166,7 +46854,10 @@
 
             if (extraBytes > 0) {
                 // console.warn(extraBytes, "extra bytes at beginning or within zipfile");
-                if (this.isSignature(endOfCentralDirOffset, sig.CENTRAL_FILE_HEADER)) ; else {
+                if (this.isSignature(endOfCentralDirOffset, sig.CENTRAL_FILE_HEADER)) {
+                    // The offsets seem wrong, but we have something at the specified offset.
+                    // So… we keep it.
+                } else {
                     // the offset is wrong, update the "zero" of the reader
                     // this happens if data has been prepended (crx files for example)
                     this.reader.zero = extraBytes;
@@ -46193,6 +46884,7 @@
     module.exports = ZipEntries;
 
     },{"./reader/readerFor":19,"./signature":20,"./support":27,"./utf8":28,"./utils":29,"./zipEntry":31}],31:[function(require,module,exports){
+    'use strict';
     var readerFor = require('./reader/readerFor');
     var utils = require('./utils');
     var CompressedObject = require('./compressedObject');
@@ -46486,6 +47178,7 @@
     module.exports = ZipEntry;
 
     },{"./compressedObject":2,"./compressions":3,"./crc32":4,"./reader/readerFor":19,"./support":27,"./utf8":28,"./utils":29}],32:[function(require,module,exports){
+    'use strict';
 
     var StreamHelper = require('./stream/StreamHelper');
     var DataWorker = require('./stream/DataWorker');
@@ -46611,6 +47304,7 @@
     module.exports = ZipObject;
 
     },{"./compressedObject":2,"./stream/DataWorker":24,"./stream/GenericWorker":25,"./stream/StreamHelper":26,"./utf8":28}],33:[function(require,module,exports){
+    "use strict";
 
     // rawAsap provides everything we need except exception management.
     var rawAsap = require("./raw");
@@ -46679,6 +47373,7 @@
 
     },{"./raw":34}],34:[function(require,module,exports){
     (function (global){
+    "use strict";
 
     // Use the fastest means possible to execute a task in its own turn, with
     // priority over other events including IO, animation, reflow, and redraw
@@ -46694,12 +47389,16 @@
     function rawAsap(task) {
         if (!queue.length) {
             requestFlush();
+            flushing = true;
         }
         // Equivalent to push, but avoids a function call.
         queue[queue.length] = task;
     }
 
     var queue = [];
+    // Once a flush has been requested, no further calls to `requestFlush` are
+    // necessary until the next `flush` completes.
+    var flushing = false;
     // `requestFlush` is an implementation-specific method that attempts to kick
     // off a `flush` event as quickly as possible. `flush` will attempt to exhaust
     // the event queue before yielding to the browser's own event loop.
@@ -46743,6 +47442,7 @@
         }
         queue.length = 0;
         index = 0;
+        flushing = false;
     }
 
     // `requestFlush` is implemented using a strategy based on data collected from
@@ -47001,6 +47701,7 @@
      */
 
     (function() {
+        "use strict";
         function lib$es6$promise$utils$$objectOrFunction(x) {
           return typeof x === 'function' || (typeof x === 'object' && x !== null);
         }
@@ -47024,6 +47725,7 @@
 
         var lib$es6$promise$utils$$isArray = lib$es6$promise$utils$$_isArray;
         var lib$es6$promise$asap$$len = 0;
+        var lib$es6$promise$asap$$toString = {}.toString;
         var lib$es6$promise$asap$$vertxNext;
         var lib$es6$promise$asap$$customSchedulerFn;
 
@@ -47347,7 +48049,9 @@
             succeeded = true;
           }
 
-          if (promise._state !== lib$es6$promise$$internal$$PENDING) ; else if (hasCallback && succeeded) {
+          if (promise._state !== lib$es6$promise$$internal$$PENDING) {
+            // noop
+          } else if (hasCallback && succeeded) {
             lib$es6$promise$$internal$$resolve(promise, value);
           } else if (failed) {
             lib$es6$promise$$internal$$reject(promise, error);
@@ -47944,7 +48648,9 @@
         };
 
         /* global define:true module:true window: true */
-        if (typeof module !== 'undefined' && module['exports']) {
+        if (typeof define === 'function' && define['amd']) {
+          define(function() { return lib$es6$promise$umd$$ES6Promise; });
+        } else if (typeof module !== 'undefined' && module['exports']) {
           module['exports'] = lib$es6$promise$umd$$ES6Promise;
         } else if (typeof this !== 'undefined') {
           this['ES6Promise'] = lib$es6$promise$umd$$ES6Promise;
@@ -47956,6 +48662,8 @@
 
     }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {});
     },{"_process":36}],38:[function(require,module,exports){
+    // Top level file is just a mixin of submodules & constants
+    'use strict';
 
     var assign    = require('./lib/utils/common').assign;
 
@@ -47970,6 +48678,7 @@
     module.exports = pako;
 
     },{"./lib/deflate":39,"./lib/inflate":40,"./lib/utils/common":41,"./lib/zlib/constants":44}],39:[function(require,module,exports){
+    'use strict';
 
 
     var zlib_deflate = require('./zlib/deflate');
@@ -48371,6 +49080,7 @@
     exports.gzip = gzip;
 
     },{"./utils/common":41,"./utils/strings":42,"./zlib/deflate":46,"./zlib/messages":51,"./zlib/zstream":53}],40:[function(require,module,exports){
+    'use strict';
 
 
     var zlib_inflate = require('./zlib/inflate');
@@ -48790,6 +49500,7 @@
     exports.ungzip  = inflate;
 
     },{"./utils/common":41,"./utils/strings":42,"./zlib/constants":44,"./zlib/gzheader":47,"./zlib/inflate":49,"./zlib/messages":51,"./zlib/zstream":53}],41:[function(require,module,exports){
+    'use strict';
 
 
     var TYPED_OK =  (typeof Uint8Array !== 'undefined') &&
@@ -48893,6 +49604,8 @@
     exports.setTyped(TYPED_OK);
 
     },{}],42:[function(require,module,exports){
+    // String encode/decode helpers
+    'use strict';
 
 
     var utils = require('./common');
@@ -49078,6 +49791,7 @@
     };
 
     },{"./common":41}],43:[function(require,module,exports){
+    'use strict';
 
     // Note: adler32 takes 12% for level 0 and 2% for level 6.
     // It doesn't worth to make additional optimizationa as in original.
@@ -49111,6 +49825,7 @@
     module.exports = adler32;
 
     },{}],44:[function(require,module,exports){
+    'use strict';
 
 
     module.exports = {
@@ -49162,6 +49877,7 @@
     };
 
     },{}],45:[function(require,module,exports){
+    'use strict';
 
     // Note: we can't get significant speed boost here.
     // So write code to minimize size - no pregenerated tables
@@ -49204,6 +49920,7 @@
     module.exports = crc32;
 
     },{}],46:[function(require,module,exports){
+    'use strict';
 
     var utils   = require('../utils/common');
     var trees   = require('./trees');
@@ -51053,6 +51770,7 @@
     */
 
     },{"../utils/common":41,"./adler32":43,"./crc32":45,"./messages":51,"./trees":52}],47:[function(require,module,exports){
+    'use strict';
 
 
     function GZheader() {
@@ -51094,6 +51812,7 @@
     module.exports = GZheader;
 
     },{}],48:[function(require,module,exports){
+    'use strict';
 
     // See state defs from inflate.js
     var BAD = 30;       /* got a data error -- remain here until reset */
@@ -51421,6 +52140,7 @@
     };
 
     },{}],49:[function(require,module,exports){
+    'use strict';
 
 
     var utils         = require('../utils/common');
@@ -52851,7 +53571,10 @@
 
       if (state.wsize || (_out !== strm.avail_out && state.mode < BAD &&
                           (state.mode < CHECK || flush !== Z_FINISH))) {
-        if (updatewindow(strm, strm.output, strm.next_out, _out - strm.avail_out)) ;
+        if (updatewindow(strm, strm.output, strm.next_out, _out - strm.avail_out)) {
+          state.mode = MEM;
+          return Z_MEM_ERROR;
+        }
       }
       _in -= strm.avail_in;
       _out -= strm.avail_out;
@@ -52957,6 +53680,7 @@
     */
 
     },{"../utils/common":41,"./adler32":43,"./crc32":45,"./inffast":48,"./inftrees":50}],50:[function(require,module,exports){
+    'use strict';
 
 
     var utils = require('../utils/common');
@@ -53184,8 +53908,11 @@
         (type === DISTS && used > ENOUGH_DISTS)) {
         return 1;
       }
+
+      var i = 0;
       /* process all codes and make table entries */
       for (;;) {
+        i++;
         /* create table entry */
         here_bits = len - drop;
         if (work[sym] < end) {
@@ -53282,6 +54009,7 @@
     };
 
     },{"../utils/common":41}],51:[function(require,module,exports){
+    'use strict';
 
     module.exports = {
       2:      'need dictionary',     /* Z_NEED_DICT       2  */
@@ -53296,6 +54024,7 @@
     };
 
     },{}],52:[function(require,module,exports){
+    'use strict';
 
 
     var utils = require('../utils/common');
@@ -54499,6 +55228,7 @@
     exports._tr_align = _tr_align;
 
     },{"../utils/common":41}],53:[function(require,module,exports){
+    'use strict';
 
 
     function ZStream() {
@@ -54547,6 +55277,7 @@
     /*! @source http://purl.eligrey.com/github/FileSaver.js/blob/master/src/FileSaver.js */
 
     (function(view) {
+    	"use strict";
     	// IE <10 is explicitly unsupported
     	if (typeof view === "undefined" || typeof navigator !== "undefined" && /MSIE [1-9]\./.test(navigator.userAgent)) {
     		return;
@@ -54723,6 +55454,7 @@
      */
     /*jslint bitwise: true */
     (function() {
+      'use strict';
 
       var root = typeof window === 'object' ? window : {};
       var NODE_JS = !root.JS_SHA1_NO_NODE_JS && typeof process === 'object' && process.versions && process.versions.node;
@@ -55105,6 +55837,8 @@
      * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
      * THE SOFTWARE.
      */
+
+    "use strict";
 
     Object.extend(Squeak, {
         vmPath: "/",
@@ -55509,6 +56243,7 @@
         }
         function dd(ax, ay, bx, by) {var x = ax - bx, y = ay - by; return Math.sqrt(x*x + y*y);}
         function dist(a, b) {return dd(a.pageX, a.pageY, b.pageX, b.pageY);}
+        function dent(n, l, t, u) { return n < l ? n + t - l : n > u ? n + t - u : t; }
         function adjustDisplay(l, t, w, h) {
             var cursorCanvas = display.cursorCanvas,
                 scale = w / canvas.width,
@@ -55679,7 +56414,7 @@
                     case 'zooming':
                         if (evt.touches.length > 0) break;
                         touch.state = 'idle';
-                        zoomEnd();
+                        zoomEnd(evt);
                         return;
                 }
             }
@@ -56204,7 +56939,7 @@
         if (options.files) {
             options.files.forEach(function(f) {
                 var url = Squeak.splitUrl(f, baseUrl);
-                if (image.name === url.filename) ;
+                if (image.name === url.filename) {/* pushed after other files */}
                 else if (!image.url && f.match(/\.image$/)) {
                     image.name = url.filename;
                     image.url = url.full;
@@ -56265,4 +57000,4 @@
         });
     }
 
-}());
+})();

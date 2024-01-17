@@ -24,7 +24,7 @@
 Object.subclass('Squeak.Interpreter',
 'initialization', {
     initialize: function(image, display) {
-        console.log('squeak: initializing interpreter ' + Squeak.vmVersion);
+        console.log('squeak: initializing interpreter ' + Squeak.vmVersion + ' (' + Squeak.vmDate + ')');
         this.Squeak = Squeak;   // store locally to avoid dynamic lookup in Lively
         this.image = image;
         this.image.vm = this;

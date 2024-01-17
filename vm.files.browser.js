@@ -472,10 +472,6 @@ Object.extend(Squeak,
                 (new Uint8Array(buffer)).set(file.contents.subarray(0, file.size));
             }
             Squeak.filePut(file.name, buffer);
-            // if (/SqueakDebug.log/.test(file.name)) {
-            //     var chars = Squeak.bytesAsString(new Uint8Array(buffer));
-            //     console.warn(chars.replace(/\r/g, '\n'));
-            // }
             file.modified = false;
         }
     },

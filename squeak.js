@@ -802,8 +802,17 @@ function createSqueakDisplay(canvas, options) {
                 }
                 if (loaded.length == files.length) {
                     if (image) {
-                        SqueakJS.appName = imageName.replace(/.*\//,'').replace(/\.image$/,'');
-                        SqueakJS.runImage(image, imageName, display, options);
+                        if (display.vm) {
+                            display.quitFlag = true;
+                            options.onQuit = function(vm, display, options) {
+                                options.onQuit = null;
+                                SqueakJS.appName = imageName.replace(/.*\//,'').replace(/\.image$/,'');
+                                SqueakJS.runImage(image, imageName, display, options);
+                            }
+                        } else {
+                            SqueakJS.appName = imageName.replace(/.*\//,'').replace(/\.image$/,'');
+                            SqueakJS.runImage(image, imageName, display, options);
+                        }
                     } else {
                         recordDragDropEvent(Squeak.EventDragDrop, evt, canvas, display);
                     }

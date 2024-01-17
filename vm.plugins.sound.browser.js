@@ -44,7 +44,7 @@ Object.extend(Squeak.Primitives.prototype,
             this.audioContext.createBuffer(stereoFlag ? 2 : 1, bufFrames, samplesPerSec),
             this.audioContext.createBuffer(stereoFlag ? 2 : 1, bufFrames, samplesPerSec),
         ];
-        console.log("sound: started");
+        // console.log("sound: started");
         return this.popNIfOK(argCount);
     },
     snd_playNextBuffer: function() {
@@ -78,7 +78,7 @@ Object.extend(Squeak.Primitives.prototype,
     },
     snd_primitiveSoundAvailableSpace: function(argCount) {
         if (!this.audioContext) {
-            console.log("sound: no audio context");
+            console.warn("sound: no audio context");
             return false;
         }
         var available = 0;
@@ -90,7 +90,7 @@ Object.extend(Squeak.Primitives.prototype,
     },
     snd_primitiveSoundPlaySamples: function(argCount) {
         if (!this.audioContext || this.audioBuffersUnused.length === 0) {
-            console.log("sound: play but no free buffers");
+            console.warn("sound: play but no free buffers");
             return false;
         }
         var count = this.stackInteger(2),
@@ -113,7 +113,7 @@ Object.extend(Squeak.Primitives.prototype,
     },
     snd_primitiveSoundPlaySilence: function(argCount) {
         if (!this.audioContext || this.audioBuffersUnused.length === 0) {
-            console.log("sound: play but no free buffers");
+            console.warn("sound: play but no free buffers");
             return false;
         }
         var buffer = this.audioBuffersUnused.shift(),
@@ -135,9 +135,8 @@ Object.extend(Squeak.Primitives.prototype,
             this.audioBuffersUnused = null;
             this.audioNextTimeSlot = 0;
             this.audioSema = 0;
-            console.log("sound: stopped");
+            // console.log("sound: stopped");
         }
-        Squeak.stopAudioOut();
         return this.popNIfOK(argCount);
     },
     snd_primitiveSoundStartRecording: function(argCount) {
@@ -152,7 +151,7 @@ Object.extend(Squeak.Primitives.prototype,
             self = this;
         Squeak.startAudioIn(
             function onSuccess(audioContext, source) {
-                console.log("sound: recording started")
+                // console.log("sound: recording started")
                 self.audioInContext = audioContext;
                 self.audioInSource = source;
                 self.audioInSema = semaIndex;
@@ -195,7 +194,7 @@ Object.extend(Squeak.Primitives.prototype,
     snd_primitiveSoundGetRecordingSampleRate: function(argCount) {
        if (!this.audioInContext) return false;
        var actualRate = this.audioInContext.sampleRate / this.audioInOverSample | 0;
-       console.log("sound: actual recording rate " + actualRate + "x" + this.audioInOverSample);
+    //    console.log("sound: actual recording rate " + actualRate + "x" + this.audioInOverSample);
        return this.popNandPushIfOK(argCount + 1, actualRate);
     },
     snd_primitiveSoundRecordSamples: function(argCount) {

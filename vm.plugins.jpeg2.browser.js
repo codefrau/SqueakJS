@@ -91,8 +91,51 @@ Object.extend(Squeak.Primitives.prototype,
         return this.popNIfOK(argCount);
     },
     jpeg2_primJPEGWriteImageonByteArrayformqualityprogressiveJPEGerrorMgr: function(argCount) {
-        this.vm.warnOnce("JPEGReadWritePlugin2: writing not implemented yet");
-        return false;
+        if (argCount < 6) return false;
+        var destination = this.stackNonInteger(4).bytes,
+            form = this.stackNonInteger(3).pointers,
+            quality = this.stackInteger(2);
+            // rest ignored
+        if (!this.success || !destination || !form) return false;
+        var formWidth = form[Squeak.Form_width],
+            formHeight = form[Squeak.Form_height],
+            formDepth = form[Squeak.Form_depth],
+            formBits = form[Squeak.Form_bits].words;
+        if (formDepth !== 32) {
+            this.vm.warnOnce("JPEG2WriteImage: only 32 bit depth supported");
+            return false;
+        }
+        var bytesCount = this.jpeg2_writeFormToBytes(formBits, formWidth, formHeight, quality, destination);
+        return this.popNandPushIfOK(argCount + 1, bytesCount);
+    },
+    jpeg2_writeFormToBytes: function(formBits, width, height, quality, destination) {
+        var canvas = document.createElement("canvas"),
+            context = canvas.getContext("2d");
+        canvas.width = width;
+        canvas.height = height;
+        var imageData = context.createImageData(width, height),
+            pixels = imageData.data;
+        for (var i = 0; i < formBits.length; i++) {
+            var pix = formBits[i];
+            pixels[i*4 + 0] = (pix >> 16) & 255;
+            pixels[i*4 + 1] = (pix >> 8) & 255;
+            pixels[i*4 + 2] = pix & 255;
+            pixels[i*4 + 3] = 255;
+        }
+        context.putImageData(imageData, 0, 0);
+        var jpeg = canvas.toDataURL("image/jpeg", quality / 100);
+        return this.jpeg2_dataURLToBytes(jpeg, destination);
+    },
+    jpeg2_dataURLToBytes: function(dataURL, destination) {
+        var base64 = dataURL.split(',')[1];
+        if (!base64) return 0;
+        var needed = base64.length * 3 / 4;
+        if (needed - 3 > destination.length) return 0;
+        var bytes = atob(base64);
+        if (bytes.length > destination.length) return 0;
+        for (var i = 0; i < bytes.length; i++)
+            destination[i] = bytes.charCodeAt(i);
+        return bytes.length;
     },
     jpeg2_readImageFromBytes: function(bytes, thenDo, errorDo) {
         var blob = new Blob([bytes], {type: "image/jpeg"}),

@@ -1028,7 +1028,8 @@ function fetchTemplates(options) {
             var dir = path[0] == "/" ? path : options.root + path,
                 baseUrl = new URL(options.url, document.baseURI).href.split(/[?#]/)[0],
                 url = Squeak.splitUrl(options.templates[path], baseUrl).full;
-            if (url.endsWith("/.")) url = url.slice(0,-2);
+                if (url.endsWith("/")) url = url.slice(0,-1);
+                if (url.endsWith("/.")) url = url.slice(0,-2);
             Squeak.fetchTemplateDir(dir, url);
         }
     }
@@ -1169,7 +1170,11 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
     // we need to fetch all files first, then run the image
     processOptions(options);
     if (!imageUrl && options.image) imageUrl = options.image;
-    var baseUrl = options.url || (imageUrl && imageUrl.replace(/[^\/]*$/, "")) || "";
+    var baseUrl = options.url || "";
+    if (!baseUrl && imageUrl && imageUrl.replace(/[^\/]*$/, "")) {
+        baseUrl = imageUrl.replace(/[^\/]*$/, "");
+        imageUrl = imageUrl.replace(/^.*\//, "");
+    }
     options.url = baseUrl;
     if (baseUrl[0] === "/" && baseUrl[1] !== "/" && baseUrl.length > 1 && options.root === "/") {
         options.root = baseUrl;

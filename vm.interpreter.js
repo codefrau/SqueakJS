@@ -80,6 +80,7 @@ Object.subclass('Squeak.Interpreter',
         this.breakOutTick = 0;
         this.breakOnMethod = null; // method to break on
         this.breakOnNewMethod = false;
+        this.breakOnMessageNotUnderstood = false;
         this.breakOnContextChanged = false;
         this.breakOnContextReturned = null; // context to break on
         this.messages = {};
@@ -957,6 +958,10 @@ Object.subclass('Squeak.Interpreter',
         if (selector === dnuSel) // Cannot find #doesNotUnderstand: -- unrecoverable error.
             throw Error("Recursive not understood error encountered");
         var dnuMsg = this.createActualMessage(selector, argCount, startingClass); //The argument to doesNotUnderstand:
+        if (this.breakOnMessageNotUnderstood) {
+            var receiver = this.stackValue(argCount);
+            this.breakNow("Message not understood: " + receiver + " " + startingClass.className() + ">>" + selector.bytesAsString());
+        }
         this.popNandPush(argCount, dnuMsg);
         return this.findSelectorInClass(dnuSel, 1, startingClass);
     },

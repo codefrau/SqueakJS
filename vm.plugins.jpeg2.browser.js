@@ -142,12 +142,14 @@ Object.extend(Squeak.Primitives.prototype,
             image = new Image();
         image.onload = function() {
             thenDo(image);
+            URL.revokeObjectURL(image.src);
         };
         image.onerror = function() {
             console.warn("could not render JPEG");
             errorDo();
+            URL.revokeObjectURL(image.src);
         };
-        image.src = (window.URL || window.webkitURL).createObjectURL(blob);
+        image.src = URL.createObjectURL(blob);
     },
     jpeg2_getPixelsFromImage: function(image) {
         var canvas = document.createElement("canvas"),

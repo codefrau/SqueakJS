@@ -129,7 +129,7 @@ function setupFullscreen(display, canvas, options) {
         if (options.header) options.header.style.display = fullwindow ? 'none' : '';
         if (options.footer) options.footer.style.display = fullwindow ? 'none' : '';
         if (options.fullscreenCheckbox) options.fullscreenCheckbox.checked = fullscreen;
-        setTimeout(window.onresize, 0);
+        setTimeout(onresize, 0);
     }
 
     var checkFullscreen;
@@ -571,7 +571,7 @@ function createSqueakDisplay(canvas, options) {
         var scale = adjustCanvas(l, t, w, h);
         if ((scale - display.scale) < 0.0001) {
             touch.orig = null;
-            window.onresize();
+            onresize();
         }
     }
     // State machine to distinguish between 1st/2nd mouse button and zoom/pan:
@@ -835,14 +835,19 @@ function createSqueakDisplay(canvas, options) {
         });
         return false;
     };
-    window.onresize = function() {
+
+    var debounceTimeout;
+    function onresize() {
         if (touch.orig) return; // manually resized
         // call resizeDone only if window size didn't change for 300ms
         var debounceWidth = window.innerWidth,
             debounceHeight = window.innerHeight;
-        setTimeout(function() {
+        clearTimeout(debounceTimeout);
+        debounceTimeout = setTimeout(function() {
             if (debounceWidth == window.innerWidth && debounceHeight == window.innerHeight)
                 display.resizeDone();
+            else
+                onresize();
         }, 300);
         // if no fancy layout, don't bother
         if ((!options.header || !options.footer) && !options.fullscreen) {
@@ -897,7 +902,10 @@ function createSqueakDisplay(canvas, options) {
             h - paddingY
         );
     };
-    window.onresize();
+
+    onresize();
+    window.onresize = onresize;
+
     return display;
 }
 

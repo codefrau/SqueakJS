@@ -340,7 +340,7 @@ Object.extend(Squeak.Primitives.prototype,
         return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(w, h));
     },
     primitiveScreenScaleFactor: function(argCount) {
-        var scale = this.display.initialScale || 1.0,
+        var scale = this.display.scale || 1.0,
             scaleFactor = 1.0 / scale;
         return this.popNandPushIfOK(argCount+1, this.makeFloat(scaleFactor));
     },

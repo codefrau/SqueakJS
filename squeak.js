@@ -319,6 +319,7 @@ function createSqueakDisplay(canvas, options) {
         fullscreen: false,
         width: 0,   // if 0, VM uses canvas.width
         height: 0,  // if 0, VM uses canvas.height
+        scale: 1,   // VM will use window.devicePixelRatio if highdpi is enabled, also changes when touch-zooming
         highdpi: options.highdpi,
         mouseX: 0,
         mouseY: 0,
@@ -332,6 +333,7 @@ function createSqueakDisplay(canvas, options) {
         cursorOffsetY: 0,
         droppedFiles: [],
         signalInputEvent: null, // function set by VM
+        changedCallback: null,  // invoked when display size/scale changes
         // additional functions added below
     };
     setupSwapButtons(options);
@@ -483,22 +485,23 @@ function createSqueakDisplay(canvas, options) {
     function dd(ax, ay, bx, by) {var x = ax - bx, y = ay - by; return Math.sqrt(x*x + y*y);}
     function dist(a, b) {return dd(a.pageX, a.pageY, b.pageX, b.pageY);}
     function dent(n, l, t, u) { return n < l ? n + t - l : n > u ? n + t - u : t; }
-    function adjustDisplay(l, t, w, h) {
+    function adjustCanvas(l, t, w, h) {
         var cursorCanvas = display.cursorCanvas,
-            scale = w / canvas.width,
-            ratio = display.highdpi ? window.devicePixelRatio : 1;
+            cssScale = w / canvas.width,
+            ratio = display.highdpi ? window.devicePixelRatio : 1,
+            pixelScale = cssScale * ratio;
         canvas.style.left = (l|0) + "px";
         canvas.style.top = (t|0) + "px";
         canvas.style.width = (w|0) + "px";
         canvas.style.height = (h|0) + "px";
         if (cursorCanvas) {
-            cursorCanvas.style.left = (l + display.cursorOffsetX + display.mouseX * scale|0) + "px";
-            cursorCanvas.style.top = (t + display.cursorOffsetY + display.mouseY * scale|0) + "px";
-            cursorCanvas.style.width = (cursorCanvas.width * ratio * scale|0) + "px";
-            cursorCanvas.style.height = (cursorCanvas.height * ratio * scale|0) + "px";
+            cursorCanvas.style.left = (l + display.cursorOffsetX + display.mouseX * cssScale|0) + "px";
+            cursorCanvas.style.top = (t + display.cursorOffsetY + display.mouseY * cssScale|0) + "px";
+            cursorCanvas.style.width = (cursorCanvas.width * pixelScale|0) + "px";
+            cursorCanvas.style.height = (cursorCanvas.height * pixelScale|0) + "px";
         }
+        // if pixelation is not forced, turn it on for integer scales
         if (!options.pixelated) {
-            var pixelScale = window.devicePixelRatio * scale;
             if (pixelScale % 1 === 0 || pixelScale > 5) {
                 canvas.classList.add("pixelated");
                 cursorCanvas && cursorCanvas.classList.add("pixelated");
@@ -507,7 +510,17 @@ function createSqueakDisplay(canvas, options) {
                 cursorCanvas && display.cursorCanvas.classList.remove("pixelated");
             }
         }
-        return scale;
+        display.css = {
+            left: l,
+            top: t,
+            width: w,
+            height: h,
+            scale: cssScale,
+            pixelScale: pixelScale,
+            ratio: ratio,
+        };
+        if (display.changedCallback) display.changedCallback();
+        return cssScale;
     }
     // zooming/panning with two fingers
     var maxZoom = 5;
@@ -544,7 +557,7 @@ function createSqueakDisplay(canvas, options) {
         // allow to rubber-band by 20px for feedback
         l = Math.max(Math.min(l, touch.orig.left + 20), touch.orig.right - w - 20);
         t = Math.max(Math.min(t, touch.orig.top + 20), touch.orig.bottom - h - 20);
-        adjustDisplay(l, t, w, h);
+        adjustCanvas(l, t, w, h);
     }
     function zoomEnd(evt) {
         var l = canvas.offsetLeft,
@@ -555,8 +568,8 @@ function createSqueakDisplay(canvas, options) {
         h = touch.orig.height * w / touch.orig.width;
         l = Math.max(Math.min(l, touch.orig.left), touch.orig.right - w);
         t = Math.max(Math.min(t, touch.orig.top), touch.orig.bottom - h);
-        var scale = adjustDisplay(l, t, w, h);
-        if ((scale - display.initialScale) < 0.0001) {
+        var scale = adjustCanvas(l, t, w, h);
+        if ((scale - display.scale) < 0.0001) {
             touch.orig = null;
             window.onresize();
         }
@@ -855,7 +868,7 @@ function createSqueakDisplay(canvas, options) {
             if (display.highdpi) scale *= window.devicePixelRatio;
             display.width = Math.floor(w * scale);
             display.height = Math.floor(h * scale);
-            display.initialScale = w / display.width;
+            display.scale = w / display.width;
         } else { // fixed resolution and aspect ratio
             display.width = options.fixedWidth;
             display.height = options.fixedHeight;
@@ -866,13 +879,8 @@ function createSqueakDisplay(canvas, options) {
             } else {
                 paddingY = h - Math.floor(w / wantRatio);
             }
-            display.initialScale = (w - paddingX) / display.width;
+            display.scale = (w - paddingX) / display.width;
         }
-        // set size and position
-        canvas.style.left = (x + Math.floor(paddingX / 2)) + "px";
-        canvas.style.top = (y + Math.floor(paddingY / 2)) + "px";
-        canvas.style.width = (w - paddingX) + "px";
-        canvas.style.height = (h - paddingY) + "px";
         // set resolution
         if (canvas.width != display.width || canvas.height != display.height) {
             var preserveScreen = options.fixedWidth || !display.resizeTodo, // preserve unless changing fullscreen
@@ -881,25 +889,13 @@ function createSqueakDisplay(canvas, options) {
             canvas.height = display.height;
             if (imgData) display.context.putImageData(imgData, 0, 0);
         }
-        // set cursor scale
-        var cursorCanvas = display.cursorCanvas,
-            scale = canvas.offsetWidth / canvas.width;
-        if (display.highdpi) scale *= window.devicePixelRatio;
-        if (cursorCanvas && options.fixedWidth) {
-            cursorCanvas.style.width = (cursorCanvas.width * scale) + "px";
-            cursorCanvas.style.height = (cursorCanvas.height * scale) + "px";
-        }
-        // set pixelation
-        if (!options.pixelated) {
-            var pixelScale = window.devicePixelRatio * scale;
-            if (pixelScale % 1 === 0 || pixelScale > 5) {
-                canvas.classList.add("pixelated");
-                cursorCanvas && cursorCanvas.classList.add("pixelated");
-            } else {
-                canvas.classList.remove("pixelated");
-                cursorCanvas && display.cursorCanvas.classList.remove("pixelated");
-            }
-        }
+        // set canvas and cursor canvas size, position, pixelation
+        adjustCanvas(
+            x + Math.floor(paddingX / 2),
+            y + Math.floor(paddingY / 2),
+            w - paddingX,
+            h - paddingY
+        );
     };
     window.onresize();
     return display;

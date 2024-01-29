@@ -54,9 +54,9 @@ Object.extend(Squeak.Primitives.prototype,
         source.buffer = this.audioBuffersReady.shift();
         source.connect(this.audioContext.destination);
         if (this.audioNextTimeSlot < this.audioContext.currentTime) {
-            if (this.audioNextTimeSlot > 0)
-                console.log("sound " + this.audioContext.currentTime.toFixed(3) +
-                    ": buffer underrun by " + (this.audioContext.currentTime - this.audioNextTimeSlot).toFixed(3) + " s");
+            // if (this.audioNextTimeSlot > 0)
+            //     console.log("sound " + this.audioContext.currentTime.toFixed(3) +
+            //         ": buffer underrun by " + (this.audioContext.currentTime - this.audioNextTimeSlot).toFixed(3) + " s");
             this.audioNextTimeSlot = this.audioContext.currentTime;
         }
         source.start(this.audioNextTimeSlot);

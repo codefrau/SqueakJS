@@ -189,7 +189,11 @@ Object.extend(Squeak.Primitives.prototype,
                     case Squeak.FFITypeVoid:
                         return null;
                     case Squeak.FFITypeBool:
-                        return !stObj.isFalse;
+                        if (stObj.isTrue) return true;
+                        if (stObj.isFalse) return false;
+                        if (typeof stObj === "number") return !!stObj;
+                        if (stObj.isFloat) return !!stObj.float;
+                        throw Error("FFI: expected bool, got " + stObj);
                     case Squeak.FFITypeUnsignedInt8:
                     case Squeak.FFITypeSignedInt8:
                     case Squeak.FFITypeUnsignedInt16:
@@ -208,7 +212,7 @@ Object.extend(Squeak.Primitives.prototype,
                     case Squeak.FFITypeSingleFloat:
                     case Squeak.FFITypeDoubleFloat:
                         if (typeof stObj === "number") return stObj;
-                        if (typeof stObj.isFloat) return stObj.float;
+                        if (stObj.isFloat) return stObj.float;
                         throw Error("FFI: expected float, got " + stObj);
                     default:
                         throw Error("FFI: unimplemented atomic arg type: " + atomicType);

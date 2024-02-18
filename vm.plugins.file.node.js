@@ -185,7 +185,8 @@ Object.extend(Squeak.Primitives.prototype,
             console.error("Failed to read from file");
             return false;
         }
-        this.popNandPushIfOK(argCount + 1, bytesRead);
+        count = arrayObj.bytes ? bytesRead : bytesRead >> 2;  // words
+        this.popNandPushIfOK(argCount + 1, count);
         return true;
     },
     primitiveFileWrite: function(argCount) {

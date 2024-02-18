@@ -182,6 +182,7 @@ Object.extend(Squeak.Primitives.prototype,
             count = Math.min(count, file.size - handle.filePos);
             for (var i = 0; i < count; i++)
                 dstArray[startIndex + i] = srcArray[handle.filePos++];
+            if (!arrayObj.bytes) count >>= 2;  // words
             this.popNandPushIfOK(argCount+1, Math.max(0, count));
         }.bind(this));
     },

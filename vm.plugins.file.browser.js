@@ -267,6 +267,7 @@ Object.extend(Squeak.Primitives.prototype,
                 dstArray[handle.filePos++] = srcArray[startIndex + i];
             if (handle.filePos > file.size) file.size = handle.filePos;
             file.modified = true;
+            if (!arrayObj.bytes) count >>= 2;  // words
             this.popNandPushIfOK(argCount+1, count);
         }.bind(this));
     },

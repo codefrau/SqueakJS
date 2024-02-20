@@ -234,6 +234,7 @@ Object.extend(Squeak.Primitives.prototype,
                 return false;
             }
         }
+        if (!arrayObj.bytes) bytesWritten = bytesWritten >> 2;  // words
         this.popNandPushIfOK(argCount + 1, bytesWritten);
         return true;
     },

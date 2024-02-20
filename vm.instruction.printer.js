@@ -171,7 +171,7 @@ Object.subclass('Squeak.InstructionPrinter',
         if (to > this.endPC) this.endPC = to;
     },
     pushFullClosure: function(literalIndex, numCopied, numArgs) {
-        this.print('pushFullClosure: (self literalAt: ' + literalIndex + ') numCopied: ' + numCopied + ' numArgs: ' + numArgs);
+        this.print('pushFullClosure: (self literalAt: ' + (literalIndex + 1) + ') numCopied: ' + numCopied + ' numArgs: ' + numArgs);
     },
     callPrimitive: function(primitiveIndex) {
         this.print('primitive: ' + primitiveIndex);

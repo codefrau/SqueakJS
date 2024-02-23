@@ -503,7 +503,9 @@ to single-step.
                     this.needsVar['stack'] = true;
                     this.generateInstruction("push thisContext", "stack[++vm.sp] = vm.exportThisContext()");
                     break;
-                case 0x53: this.generatePush("stack[vm.sp]");
+                case 0x53:
+                    this.needsVar['stack'] = true;
+                    this.generateInstruction("dup", "var dup = stack[vm.sp]; stack[++vm.sp] = dup");
                     break;
                 case 0x54: case 0x55: case 0x56: case 0x57:
                     throw Error("unusedBytecode");
@@ -1077,7 +1079,7 @@ to single-step.
             bytecodes.push((this.method.bytes[i] + 0x100).toString(16).slice(-2).toUpperCase());
         this.source.push("// ", this.prevPC, " <", bytecodes.join(" "), "> ", command);
         // append argument to comment
-        if (what) {
+        if (what !== undefined) {
             this.source.push(" ");
             switch (what) {
                 case 'vm.nilObj':    this.source.push('nil'); break;

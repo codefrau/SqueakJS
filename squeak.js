@@ -746,6 +746,26 @@ function createSqueakDisplay(canvas, options) {
             recordKeyboardEvent(squeakCode, evt.timeStamp, display);
             return evt.preventDefault();
         }
+        // copy/paste new-style
+        if (navigator.clipboard && (display.isMac ? evt.metaKey : evt.ctrlKey)) {
+            switch (evt.key) {
+                case "c":
+                case "x":
+                    var text = display.executeClipboardCopy(evt.key, evt.timeStamp);
+                    if (typeof text === 'string') {
+                        navigator.clipboard.writeText(text)
+                            .catch(function(err) { console.error("display: copy error " + err.message); });
+                    }
+                    return evt.preventDefault();
+                case "v":
+                    navigator.clipboard.readText()
+                        .then(function(text) {
+                            display.executeClipboardPaste(text, evt.timeStamp);
+                        })
+                        .catch(function(err) { console.error("display: paste error " + err.message); });
+                    return evt.preventDefault();
+            }
+        }
         if (display.buttons & Squeak.Keyboard_Cmd) {
             var key = evt.key; // only supported in FireFox, others have keyIdentifier
             if (!key && evt.keyIdentifier && evt.keyIdentifier.slice(0,2) == 'U+')
@@ -764,22 +784,25 @@ function createSqueakDisplay(canvas, options) {
         if (!display.vm) return true;
         recordModifiers(evt, display);
     };
-    document.oncopy = function(evt, key) {
-        var text = display.executeClipboardCopy(key, evt.timeStamp);
-        if (typeof text === 'string') {
-            evt.clipboardData.setData("Text", text);
-        }
-        evt.preventDefault();
-    };
-    document.oncut = function(evt) {
-        if (!display.vm) return true;
-        document.oncopy(evt, 'x');
-    };
-    document.onpaste = function(evt) {
-        var text = evt.clipboardData.getData('Text');
-        display.executeClipboardPaste(text, evt.timeStamp);
-        evt.preventDefault();
-    };
+    // copy/paste old-style
+    if (!navigator.clipboard) {
+        document.oncopy = function(evt, key) {
+            var text = display.executeClipboardCopy(key, evt.timeStamp);
+            if (typeof text === 'string') {
+                evt.clipboardData.setData("Text", text);
+            }
+            evt.preventDefault();
+        };
+        document.oncut = function(evt) {
+            if (!display.vm) return true;
+            document.oncopy(evt, 'x');
+        };
+        document.onpaste = function(evt) {
+            var text = evt.clipboardData.getData('Text');
+            display.executeClipboardPaste(text, evt.timeStamp);
+            evt.preventDefault();
+        };
+    }
     // touch keyboard button
     if ('ontouchstart' in document) {
         var keyboardButton = document.createElement('div');

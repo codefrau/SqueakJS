@@ -284,10 +284,14 @@ Object.subclass('Squeak.Interpreter',
                 this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2]);
                 return;
             case 0x8D: b2 = this.nextByte(); // remote store into temp vector
-                this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2] = this.top();
+                var vec = this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()];
+                vec.pointers[b2] = this.top();
+                vec.dirty = true;
                 return;
             case 0x8E: b2 = this.nextByte(); // remote store and pop into temp vector
-                this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2] = this.pop();
+                var vec = this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()];
+                vec.pointers[b2] = this.pop();
+                vec.dirty = true;
                 return;
             case 0x8F: this.pushClosureCopy(); return;
 
@@ -573,10 +577,14 @@ Object.subclass('Squeak.Interpreter',
                 this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2]);
                 return;
             case 0xFC: b2 = this.nextByte(); // remote store into temp vector
-                this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2] = this.top();
+                var vec = this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()];
+                vec.pointers[b2] = this.top();
+                vec.dirty = true;
                 return;
             case 0xFD: b2 = this.nextByte(); // remote store and pop into temp vector
-                this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2] = this.pop();
+                var vec = this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()];
+                vec.pointers[b2] = this.pop();
+                vec.dirty = true;
                 return;
             case 0xFE: case 0xFF: this.nono(); return; // unused
         }

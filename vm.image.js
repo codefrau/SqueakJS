@@ -656,7 +656,7 @@ Object.subclass('Squeak.Image',
                         dirty = true;
                     }
                 }
-                object.dirty = dirty;
+                if (!dirty) object.dirty = false;
             }
             object = object.nextObject;
         }

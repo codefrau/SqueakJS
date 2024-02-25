@@ -746,7 +746,7 @@ to single-step.
             }
         }
         this.source.push(" = stack[vm.sp];\n");
-        this.generateDirty(target, arg1);
+        this.generateDirty(target, arg1, suffix1);
     },
     generatePopInto: function(target, arg1, suffix1, arg2, suffix2) {
         if (this.debug) this.generateDebugCode("pop into", target, arg1, suffix1, arg2, suffix2);
@@ -761,7 +761,7 @@ to single-step.
             }
         }
         this.source.push(" = stack[vm.sp--];\n");
-        this.generateDirty(target, arg1);
+        this.generateDirty(target, arg1, suffix1);
     },
     generateReturn: function(what) {
         if (this.debug) this.generateDebugCode("return", what);
@@ -1072,11 +1072,11 @@ to single-step.
             this.source.push("if (vm.primFailCode) {stack[vm.sp] = vm.getErrorObjectFromPrimFailCode(); vm.primFailCode = 0;}\n");
         }
     },
-    generateDirty: function(target, arg) {
+    generateDirty: function(target, arg, suffix) {
         switch(target) {
             case "inst[": this.source.push("rcvr.dirty = true;\n"); break;
             case "lit[": this.source.push(target, arg, "].dirty = true;\n"); break;
-            case "temp[": break;
+            case "temp[": if (suffix !== "]") this.source.push(target, arg, "].dirty = true;\n"); break;
             default:
                 throw Error("unexpected target " + target);
         }

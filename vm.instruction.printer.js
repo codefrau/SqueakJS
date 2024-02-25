@@ -71,9 +71,11 @@ Object.subclass('Squeak.InstructionPrinter',
 'decoding', {
     blockReturnConstant: function(obj) {
         this.print('blockReturn: ' + obj.toString());
+        this.done = this.scanner.pc > this.endPC; // full block
     },
     blockReturnTop: function() {
         this.print('blockReturn');
+        this.done = this.scanner.pc > this.endPC; // full block
     },
     doDup: function() {
         this.print('dup');

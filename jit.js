@@ -155,9 +155,31 @@ to single-step.
             // 2nd time
             this.singleStep = false;
             this.debug = this.comments;
-            var clsName = optClass && optClass.className(),
-                sel = optSel && optSel.bytesAsString();
-            method.compiled = this.generate(method, clsName, sel);
+            var clsName, sel, instVars;
+            if (this.debug && !optClassObj) {
+                // this is expensive, so only do it when debugging
+                var isMethod = method.sqClass === this.vm.specialObjects[Squeak.splOb_ClassCompiledMethod];
+                this.vm.allMethodsDo(function(classObj, methodObj, selectorObj) {
+                    if (isMethod ? methodObj === method : methodObj.pointers.includes(method)) {
+                        optClassObj = classObj;
+                        optSelObj = selectorObj;
+                        return true;
+                    }
+                });
+            }
+            if (optClassObj) {
+                clsName = optClassObj.className();
+                sel = optSelObj.bytesAsString();
+                if (this.debug) {
+                    // only when debugging
+                    var isMethod = method.sqClass === this.vm.specialObjects[Squeak.splOb_ClassCompiledMethod];
+                    if (!isMethod) {
+                        clsName = "[] in " + clsName;
+                    }
+                    instVars = optClassObj.allInstVarNames();
+                }
+            }
+            method.compiled = this.generate(method, clsName, sel, instVars);
         }
     },
     enableSingleStepping: function(method, optClass, optSel) {
@@ -185,15 +207,16 @@ to single-step.
     },
     functionNameFor: function(cls, sel) {
         if (cls === undefined || cls === '?') return "DOIT_" + ++this.doitCounter;
+        cls = cls.replace(/ /g, "_").replace("[]", "Block");
         if (!/[^a-zA-Z0-9:_]/.test(sel))
-            return (cls + "_" + sel).replace(/[: ]/g, "_");
+            return cls + "_" + sel.replace(/:/g, "ː"); // unicode colon is valid in JS identifiers
         var op = sel.replace(/./g, function(char) {
             var repl = {'|': "OR", '~': "NOT", '<': "LT", '=': "EQ", '>': "GT",
                     '&': "AND", '@': "AT", '*': "TIMES", '+': "PLUS", '\\': "MOD",
                     '-': "MINUS", ',': "COMMA", '/': "DIV", '?': "IF"}[char];
             return repl || 'OPERATOR';
         });
-        return cls.replace(/[ ]/, "_") + "__" + op + "__";
+        return cls + "__" + op + "__";
     },
 },
 'generating', {
@@ -286,7 +309,7 @@ to single-step.
                         case 0x7B: this.generateReturn("vm.nilObj"); break;
                         case 0x7C: this.generateReturn("stack[vm.sp]"); break;
                         case 0x7D: this.generateBlockReturn(); break;
-                        default: throw Error("unusedBytecode");
+                        default: throw Error("unusedBytecode " + byte);
                     }
                     break;
                 // Extended bytecodes
@@ -508,7 +531,7 @@ to single-step.
                     this.generateInstruction("dup", "var dup = stack[vm.sp]; stack[++vm.sp] = dup");
                     break;
                 case 0x54: case 0x55: case 0x56: case 0x57:
-                    throw Error("unusedBytecode");
+                    throw Error("unusedBytecode " + b);
                 case 0x58: this.generateReturn("rcvr");
                     break;
                 case 0x59: this.generateReturn("vm.trueObj");
@@ -564,7 +587,7 @@ to single-step.
                 case 0xD9:
                     throw Error("unumplementedBytecode: 0xD9 (unconditional trap)");
                 case 0xDA: case 0xDB: case 0xDC: case 0xDD: case 0xDE: case 0xDF:
-                    throw Error("unusedBytecode");
+                    throw Error("unusedBytecode " + b);
 
                 // 2 Byte Bytecodes
                 case 0xE0:
@@ -592,7 +615,7 @@ to single-step.
                     this.generatePush("temp[", 6 + b2, "]");
                     break;
                 case 0xE6:
-                    throw Error("unusedBytecode");
+                    throw Error("unusedBytecode 0xE6");
                 case 0xE7:
                     b2 = bytes[this.pc++];
                     var popValues = b2 > 127,
@@ -657,7 +680,7 @@ to single-step.
                     this.generateStoreInto("temp[", 6 + b2, "]");
                     break;
                 case 0xF6: case 0xF7:
-                    throw Error("unusedBytecode");
+                    throw Error("unusedBytecode " + b);
 
                 // 3 Byte Bytecodes
 
@@ -695,7 +718,9 @@ to single-step.
                     this.generatePopInto("temp[", 6 + b3, "].pointers[", b2, "]");
                     break;
                 case 0xFE: case 0xFF:
-                    throw Error("unusedBytecode");
+                    throw Error("unusedBytecode " + b);
+                default:
+                    throw Error("illegal bytecode: " + b);
             }
             extA = 0;
             extB = 0;

@@ -131,10 +131,6 @@ to single-step.
 
 'initialization', {
     initialize: function(vm) {
-        if (vm.method.methodSignFlag() && !Squeak.sistaJIT) {
-            console.warn("Sista bytecode set not (yet) supported by this JIT");
-            return {};
-        }
         this.vm = vm;
         this.comments = !!Squeak.Compiler.comments, // generate comments
         // for debug-printing only
@@ -145,10 +141,8 @@ to single-step.
     },
 },
 'accessing', {
-    compile: function(method, optClass, optSel) {
-        if (method.methodSignFlag() && !Squeak.sistaJIT) {
-            return; // Sista JIT still experimental
-        } else if (method.compiled === undefined) {
+    compile: function(method, optClassObj, optSelObj) {
+        if (method.compiled === undefined) {
             // 1st time
             method.compiled = false;
         } else {
@@ -473,7 +467,6 @@ to single-step.
         }
     },
     generateSista: function() {
-        this.debug = true;
         var bytes = this.method.bytes,
             b,
             b2,
@@ -787,9 +780,11 @@ to single-step.
             retVal = "stack[vm.sp--]";
         }
         // actually stack === context.pointers but that would look weird
+        this.needsVar['context'] = true;
         this.source.push(
             "vm.pc = ", this.pc, "; vm.doReturn(", retVal, ", context.pointers[0]); return;\n");
         this.needsBreak = false; // returning anyway
+        this.done = this.pc > this.endPC;
     },
     generateJump: function(distance) {
         var destination = this.pc + distance;
@@ -1047,11 +1042,13 @@ to single-step.
         this.generateLabel();
         this.needsVar['lit['] = true;
         this.needsVar['rcvr'] = true;
+        this.needsVar['stack'] = true;
         var numCopied = b3 & 63;
-        var outer = "vm.nilObj";
+        var outer;
         if ((b3 >> 6 & 1) === 1) {
+            outer = "vm.nilObj";
+        } else {
             outer = "context";
-            this.needsVar['context'] = true;
         }
         if ((b3 >> 7 & 1) === 1) {
             throw Error("on-stack receiver not yet supported");

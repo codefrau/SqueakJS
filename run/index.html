@@ -15,6 +15,9 @@
             fullscreen: true,
             spinner: sqSpinner,
             appName: imageName && imageName.replace(/.*\//, "").replace(/\.image$/, ""),
+            onStart: function(vm, display, options) {
+                // vm.breakOn("FileDirectory class>>activeDirectoryClass");
+            },
             onQuit: function(vm, display, options) {
                 display.showBanner(SqueakJS.appName + " stopped.");
                 setTimeout(function() {

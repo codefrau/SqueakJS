@@ -110,7 +110,9 @@ Squeak.InstructionStream.subclass('Squeak.InstructionStreamSista',
                 return b2 < 128 ? client.pushNewArray(b2) : client.popIntoNewArray(b2 - 128);
             }
             case 0xE8: return client.pushConstant(b2 + (extB << 8));
-            case 0xE9: return client.pushConstant("$" + b2 + (extB << 8));
+            case 0xE9:
+                var unicode = b2 + (extB << 8);
+                return client.pushConstant("$" + String.fromCodePoint(unicode) + " (" + unicode + ")");
             case 0xEA: return client.send(this.method.methodGetSelector((b2 >> 3) + (extA << 5)), (b2 & 7) + (extB << 3), false);
             case 0xEB:
                 var literal = this.method.methodGetSelector((b2 >> 3) + (extA << 5));

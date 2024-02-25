@@ -71,9 +71,11 @@ Object.subclass('Squeak.InstructionPrinter',
 'decoding', {
     blockReturnConstant: function(obj) {
         this.print('blockReturn: ' + obj.toString());
+        this.done = this.scanner.pc > this.endPC; // full block
     },
     blockReturnTop: function() {
         this.print('blockReturn');
+        this.done = this.scanner.pc > this.endPC; // full block
     },
     doDup: function() {
         this.print('dup');
@@ -171,7 +173,7 @@ Object.subclass('Squeak.InstructionPrinter',
         if (to > this.endPC) this.endPC = to;
     },
     pushFullClosure: function(literalIndex, numCopied, numArgs) {
-        this.print('pushFullClosure: (self literalAt: ' + literalIndex + ') numCopied: ' + numCopied + ' numArgs: ' + numArgs);
+        this.print('pushFullClosure: (self literalAt: ' + (literalIndex + 1) + ') numCopied: ' + numCopied + ' numArgs: ' + numArgs);
     },
     callPrimitive: function(primitiveIndex) {
         this.print('primitive: ' + primitiveIndex);

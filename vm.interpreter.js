@@ -30,9 +30,9 @@ Object.subclass('Squeak.Interpreter',
         this.image.vm = this;
         this.primHandler = new Squeak.Primitives(this, display);
         this.loadImageState();
-        this.hackImage();
         this.initVMState();
         this.loadInitialContext();
+        this.hackImage();
         this.initCompiler();
         console.log('squeak: ready');
     },
@@ -153,7 +153,8 @@ Object.subclass('Squeak.Interpreter',
             returnTrue  = 257,
             returnFalse = 258,
             returnNil   = 259,
-            opts = typeof location === 'object' ? location.hash : "";
+            opts = typeof location === 'object' ? location.hash : "",
+            sista = this.method.methodSignFlag();
         [
             // Etoys fallback for missing translation files is hugely inefficient.
             // This speeds up opening a viewer by 10x (!)
@@ -164,6 +165,9 @@ Object.subclass('Squeak.Interpreter',
             {method: "SmalltalkImage>>wordSize", literal: {index: 1, old: 8, hack: 4}, enabled: true},
             // Squeak 5.3 disable wizard by replacing #open send with pop
             {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: opts.includes("wizard=false")},
+            // Squeak source file should use UTF8 not MacRoman (both V3 and Sista)
+            {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 38, old: 0x16, hack: 0x13}, enabled: sista},
+            {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 50, old: 0x44, hack: 0x48}, enabled: !sista},
         ].forEach(function(each) {
             try {
                 var m = each.enabled && this.findMethod(each.method);

@@ -423,4 +423,12 @@ Object.extend(Squeak.Primitives.prototype,
         }
         return this.popNIfOK(argCount);
     },
+    hostWindow_primitiveHostWindowTitle: function(argCount) {
+        if (this.display.setTitle) {
+            var utf8 = this.stackNonInteger(0).bytes;
+            var title = (new TextDecoder()).decode(utf8);
+            this.display.setTitle(title);
+        }
+        return this.popNIfOK(argCount);
+    }
 });

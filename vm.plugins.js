@@ -31,6 +31,7 @@ Object.extend(Squeak.Primitives.prototype,
             SoundPlugin:            this.findPluginFunctions("snd_"),
             JPEGReadWriter2Plugin:  this.findPluginFunctions("jpeg2_"),
             SqueakFFIPrims:         this.findPluginFunctions("ffi_", "", true),
+            HostWindowPlugin:       this.findPluginFunctions("hostWindow_"),
             SecurityPlugin: {
                 primitiveDisableImageWrite: this.fakePrimitive.bind(this, "SecurityPlugin.primitiveDisableImageWrite", 0),
                 primitiveGetUntrustedUserDirectory: this.fakePrimitive.bind(this, "SecurityPlugin.primitiveGetUntrustedUserDirectory", "/SqueakJS"),

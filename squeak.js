@@ -271,7 +271,7 @@ for (var i = 0; i < MacRomanToUnicode.length; i++)
 
 function recordKeyboardEvent(unicode, timestamp, display) {
     if (!display.vm) return;
-    var macCode = UnicodeToMacRoman[unicode] || unicode;
+    var macCode = UnicodeToMacRoman[unicode] || (unicode < 128 ? unicode : 0);
     var modifiersAndKey = (display.buttons >> 3) << 8 | macCode;
     if (display.eventQueue) {
         display.eventQueue.push([
@@ -408,6 +408,9 @@ function createSqueakDisplay(canvas, options) {
     };
     display.clear = function() {
         canvas.width = canvas.width;
+    };
+    display.setTitle = function(title) {
+        document.title = title;
     };
     display.showBanner = function(msg, style) {
         style = style || {};
@@ -710,20 +713,58 @@ function createSqueakDisplay(canvas, options) {
         canvas.style.cursor = "none";
     }
     // keyboard stuff
+    var input = document.createElement("input");
+    input.setAttribute("autocomplete", "off");
+    input.setAttribute("autocorrect", "off");
+    input.setAttribute("autocapitalize", "off");
+    input.setAttribute("spellcheck", "false");
+    input.style.position = "absolute";
+    input.style.width = "0";
+    input.style.height = "0";
+    input.style.opacity = "0";
+    input.style.pointerEvents = "none";
+    canvas.parentElement.appendChild(input);
+    input.focus();
+    input.onblur = function() { input.focus(); };
     display.isMac = navigator.userAgent.includes("Mac");
-    document.onkeypress = function(evt) {
+    // emulate keypress events
+    var deadKey = false, // true if last keydown was a dead key
+        deadChars = [];
+    input.oninput = function(evt) {
         if (!display.vm) return true;
-        // check for ctrl-x/c/v/r
-        if (!display.isMac && /[CXVR]/.test(String.fromCharCode(evt.charCode + 64)))
-            return true;  // let browser handle cut/copy/paste/reload
-        recordModifiers(evt, display);
-        recordKeyboardEvent(evt.charCode, evt.timeStamp, display);
-        evt.preventDefault();
+        if (evt.inputType === "insertText"                // regular key, or Chrome
+            || evt.inputType === "insertCompositionText"  // Firefox, Chrome
+            || evt.inputType === "insertFromComposition") // Safari
+        {
+            // generate backspace to delete inserted dead chars
+            var hadDeadChars = deadChars.length > 0;
+            if (hadDeadChars) {
+                var oldButtons = display.buttons;
+                display.buttons &= ~Squeak.Keyboard_All;  // remove all modifiers
+                for (var i = 0; i < deadChars.length; i++) {
+                    recordKeyboardEvent(8, evt.timeStamp, display);
+                }
+                display.buttons = oldButtons;
+                deadChars = [];
+            }
+            // generate keyboard events for each character
+            // single input could be many characters, e.g. for emoji
+            var chars = Array.from(evt.data); // split by surrogate pairs
+            for (var i = 0; i < chars.length; i++) {
+                var unicode = chars[i].codePointAt(0); // codePointAt combines pair into unicode
+                recordKeyboardEvent(unicode, evt.timeStamp, display);
+            }
+            if (!hadDeadChars && evt.isComposing && evt.inputType === "insertCompositionText") {
+                deadChars = deadChars.concat(chars);
+            }
+        }
+        if (!deadChars.length) input.value = "";  // clear input
     };
-    document.onkeydown = function(evt) {
+    input.onkeydown = function(evt) {
         checkFullscreen();
         if (!display.vm) return true;
-        if (evt.key === "Dead") return true;  // let browser handle dead keys
+        deadKey = evt.key === "Dead";
+        if (deadKey) return;  // let browser handle dead keys
         recordModifiers(evt, display);
         var squeakCode = ({
             8: 8,   // Backspace
@@ -766,21 +807,15 @@ function createSqueakDisplay(canvas, options) {
                     return evt.preventDefault();
             }
         }
-        if (display.buttons & Squeak.Keyboard_Cmd) {
-            var key = evt.key; // only supported in FireFox, others have keyIdentifier
-            if (!key && evt.keyIdentifier && evt.keyIdentifier.slice(0,2) == 'U+')
-                key = String.fromCharCode(parseInt(evt.keyIdentifier.slice(2), 16));
-            if (key && key.length == 1) {
-                if (display.isMac && /[CXVR]/i.test(key))
-                    return true;  // let browser handle cut/copy/paste/reload
-                var code = key.charCodeAt(0);
-                if (/[A-Z]/.test(key) && !evt.shiftKey) code += 32;  // make lower-case
-                recordKeyboardEvent(code, evt.timeStamp, display);
-                return evt.preventDefault();
-            }
+        if (evt.key.length !== 1) return; // let browser handle other keys
+        if (display.buttons & (Squeak.Keyboard_Cmd | Squeak.Keyboard_Ctrl)) {
+            var code = evt.key.toLowerCase().charCodeAt(0);
+            if ((display.buttons & Squeak.Keyboard_Ctrl) && code >= 96 && code < 127) code &= 0x1F; // ctrl-<key>
+            recordKeyboardEvent(code, evt.timeStamp, display);
+            return evt.preventDefault();
         }
     };
-    document.onkeyup = function(evt) {
+    input.onkeyup = function(evt) {
         if (!display.vm) return true;
         recordModifiers(evt, display);
     };
@@ -815,7 +850,7 @@ function createSqueakDisplay(canvas, options) {
             canvas.setAttribute('autocorrect', 'off');
             canvas.setAttribute('autocapitalize', 'off');
             canvas.setAttribute('spellcheck', 'off');
-            canvas.focus();
+            input.focus();
             evt.preventDefault();
         }
         keyboardButton.ontouchstart = keyboardButton.onmousedown

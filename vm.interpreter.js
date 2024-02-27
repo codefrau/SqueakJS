@@ -323,7 +323,9 @@ Object.subclass('Squeak.Interpreter',
             case 0xBB: this.success = true;
                 if(!this.primHandler.primitiveMakePoint(1, true)) this.sendSpecial(b&0xF); return;  // MakePt int@int
             case 0xBC: this.success = true;
-                if(!this.pop2AndPushIntResult(this.safeShift(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return; // bitShift:
+                var result = this.safeShift(this.stackInteger(1),this.stackInteger(0));
+                if(result === null) this.success = false;
+                if(!this.pop2AndPushIntResult(result)) this.sendSpecial(b&0xF); return; // bitShift:
             case 0xBD: this.success = true;
                 if(!this.pop2AndPushIntResult(this.div(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide //
             case 0xBE: this.success = true;
@@ -437,7 +439,9 @@ Object.subclass('Squeak.Interpreter',
             case 0x6B: this.success = true;
                 if(!this.primHandler.primitiveMakePoint(1, true)) this.sendSpecial(b&0xF); return;  // MakePt int@int
             case 0x6C: this.success = true;
-                if(!this.pop2AndPushIntResult(this.safeShift(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return; // bitShift:
+                var result = this.safeShift(this.stackInteger(1),this.stackInteger(0));
+                if(result === null) this.success = false;
+                if(!this.pop2AndPushIntResult(result)) this.sendSpecial(b&0xF); return; // bitShift:
             case 0x6D: this.success = true;
                 if(!this.pop2AndPushIntResult(this.div(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide //
             case 0x6E: this.success = true;
@@ -1378,7 +1382,7 @@ Object.subclass('Squeak.Interpreter',
                 this.popNandPush(2, this.primHandler.makeFloat(numResult));
                 return true;
             }
-            if (numResult >= Squeak.MinSmallInt && numResult <= Squeak.MaxSmallInt) {
+            if (this.canBeSmallInt(numResult)) {
                 this.popNandPush(2, numResult);
                 return true;
             }
@@ -1446,7 +1450,7 @@ Object.subclass('Squeak.Interpreter',
         // check for lost bits by seeing if computation is reversible
         var shifted = smallInt << shiftCount;
         if  ((shifted>>shiftCount) === smallInt) return shifted;
-        return Squeak.NonSmallInt;  //non-small result will cause failure
+        return null;
     },
 },
 'utils',

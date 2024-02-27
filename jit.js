@@ -685,7 +685,7 @@ to single-step.
                 this.source.push("vm.success = true; if(!vm.primHandler.primitiveMakePoint(1, true)) { vm.pc = ", this.pc, "; vm.sendSpecial(11); return}\n");
                 return;
             case 0xBC: // bitShift:
-                this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.safeShift(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(12); return}\n");
+                this.source.push("var result = vm.safeShift(vm.stackInteger(1),vm.stackInteger(0)); vm.success = result !== null; if(!vm.pop2AndPushIntResult(result)) { vm.pc = ", this.pc, "; vm.sendSpecial(12); return}\n");
                 return;
             case 0xBD: // Divide //
                 this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.div(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(13); return}\n");

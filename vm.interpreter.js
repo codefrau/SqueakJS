@@ -462,8 +462,7 @@ Object.subclass('Squeak.Interpreter',
                 if(!this.primHandler.primitiveMakePoint(1, true)) this.sendSpecial(b&0xF); return;  // MakePt int@int
             case 0x6C: this.success = true;
                 var result = this.safeShift(this.stackInteger(1),this.stackInteger(0));
-                if(result === null) this.success = false;
-                if(!this.pop2AndPushIntResult(result)) this.sendSpecial(b&0xF); return; // bitShift:
+                if(result === null || !this.pop2AndPushIntResult(result)) this.sendSpecial(b&0xF); return; // bitShift:
             case 0x6D: this.success = true;
                 if(!this.pop2AndPushIntResult(this.div(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide //
             case 0x6E: this.success = true;
@@ -1482,7 +1481,7 @@ Object.subclass('Squeak.Interpreter',
             if (shiftCount < -31) return smallInt < 0 ? -1 : 0;
             return smallInt >> -shiftCount; // OK to lose bits shifting right
         }
-        if (shiftCount > 31) return smallInt == 0 ? 0 : Squeak.NonSmallInt;
+        if (shiftCount > 31) return smallInt == 0 ? 0 : null;
         // check for lost bits by seeing if computation is reversible
         var shifted = smallInt << shiftCount;
         if  ((shifted>>shiftCount) === smallInt) return shifted;

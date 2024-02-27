@@ -938,7 +938,11 @@ Object.subclass('Squeak.Interpreter',
     sendAsPrimitiveFailure: function(rcvr, method, argCount) {
         this.executeNewMethod(rcvr, method, argCount, 0);
     },
-    findSelectorInClass: function(selector, argCount, startingClass) {
+    /**
+     * @param {*} trueArgCount The number of arguments for the method to be found
+     * @param {*} argCount The number of arguments currently on the stack (may be different from trueArgCount in the context of primitive 84 etc.)
+     */
+    findSelectorInClass: function(selector, trueArgCount, startingClass, argCount = trueArgCount) {
         this.currentSelector = selector; // for primitiveInvokeObjectAsMethod
         var cacheEntry = this.findMethodCacheEntry(selector, startingClass);
         if (cacheEntry.method) return cacheEntry; // Found it in the method cache
@@ -950,16 +954,21 @@ Object.subclass('Squeak.Interpreter',
                 // MethodDict pointer is nil (hopefully due a swapped out stub)
                 //        -- send #cannotInterpret:
                 var cantInterpSel = this.specialObjects[Squeak.splOb_SelectorCannotInterpret],
-                    cantInterpMsg = this.createActualMessage(selector, argCount, startingClass);
-                this.popNandPush(argCount, cantInterpMsg);
+                    cantInterpMsg = this.createActualMessage(selector, trueArgCount, startingClass);
+                this.popNandPush(argCount + 1, cantInterpMsg);
                 return this.findSelectorInClass(cantInterpSel, 1, currentClass.superclass());
             }
             var newMethod = this.lookupSelectorInDict(mDict, selector);
             if (!newMethod.isNil) {
-                // if method is not actually a CompiledMethod, let primitiveInvokeObjectAsMethod (576) handle it
                 cacheEntry.method = newMethod;
-                cacheEntry.primIndex = newMethod.isMethod() ? newMethod.methodPrimitiveIndex() : 576;
-                cacheEntry.argCount = argCount;
+                if (newMethod.isMethod()) {
+                    cacheEntry.primIndex = newMethod.methodPrimitiveIndex();
+                cacheEntry.argCount = newMethod.methodNumArgs();
+                } else {
+                    // if method is not actually a CompiledMethod, let primitiveInvokeObjectAsMethod (576) handle it
+                    cacheEntry.primIndex = 576;
+                    cacheEntry.argCount = trueArgCount;
+                }
                 cacheEntry.mClass = currentClass;
                 return cacheEntry;
             }
@@ -969,7 +978,7 @@ Object.subclass('Squeak.Interpreter',
         var dnuSel = this.specialObjects[Squeak.splOb_SelectorDoesNotUnderstand];
         if (selector === dnuSel) // Cannot find #doesNotUnderstand: -- unrecoverable error.
             throw Error("Recursive not understood error encountered");
-        var dnuMsg = this.createActualMessage(selector, argCount, startingClass); //The argument to doesNotUnderstand:
+        var dnuMsg = this.createActualMessage(selector, trueArgCount, startingClass); // The argument to doesNotUnderstand:
         if (this.breakOnMessageNotUnderstood) {
             var receiver = this.stackValue(argCount);
             this.breakNow("Message not understood: " + receiver + " " + startingClass.className() + ">>" + selector.bytesAsString());
@@ -1153,14 +1162,20 @@ Object.subclass('Squeak.Interpreter',
     primitivePerform: function(argCount) {
         var selector = this.stackValue(argCount-1);
         var rcvr = this.stackValue(argCount);
-        // NOTE: findNewMethodInClass may fail and be converted to #doesNotUnderstand:,
-        //       (Whoah) so we must slide args down on the stack now, so that would work
         var trueArgCount = argCount - 1;
-        var selectorIndex = this.sp - trueArgCount;
+        var entry = this.findSelectorInClass(selector, trueArgCount, this.getClass(rcvr), argCount);
+        if (entry.selector === selector) {
+            // selector has been found, rearrange stack
+            if (entry.argCount !== trueArgCount)
+                return false;
         var stack = this.activeContext.pointers; // slide eveything down...
+            var selectorIndex = this.sp - trueArgCount;
         this.arrayCopy(stack, selectorIndex+1, stack, selectorIndex, trueArgCount);
         this.sp--; // adjust sp accordingly
-        var entry = this.findSelectorInClass(selector, trueArgCount, this.getClass(rcvr));
+        } else {
+            // stack has already been arranged for #doesNotUnderstand:/#cannotInterpret:
+            rcvr = this.stackValue(entry.argCount);
+        }
         this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
         return true;
     },
@@ -1180,11 +1195,20 @@ Object.subclass('Squeak.Interpreter',
             }
         }
         var trueArgCount = args.pointersSize();
-        var selectorIndex = this.sp - (rcvrPos - 1);
+        var entry = this.findSelectorInClass(selector, trueArgCount, lookupClass, argCount);
+        if (entry.selector === selector) {
+            // selector has been found, rearrange stack
+            if (entry.argCount !== trueArgCount)
+                return false;
         var stack = this.activeContext.pointers;
+            var selectorIndex = this.sp - (argCount - 1);
+            stack[selectorIndex - 1] = rcvr;
         this.arrayCopy(args.pointers, 0, stack, selectorIndex, trueArgCount);
-        this.sp += trueArgCount - argCount; //pop selector and array then push args
-        var entry = this.findSelectorInClass(selector, trueArgCount, lookupClass);
+            this.sp += trueArgCount - argCount; // pop old args then push new args
+        } else {
+            // stack has already been arranged for #doesNotUnderstand: or #cannotInterpret:
+            rcvr = this.stackValue(entry.argCount);
+        }
         this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
         return true;
     },

@@ -1414,7 +1414,7 @@ Object.subclass('Squeak.Interpreter',
                 this.popNandPush(2, this.primHandler.makeFloat(numResult));
                 return true;
             }
-            if (numResult >= Squeak.MinSmallInt && numResult <= Squeak.MaxSmallInt) {
+            if (this.canBeSmallInt(numResult)) {
                 this.popNandPush(2, numResult);
                 return true;
             }
@@ -1447,29 +1447,29 @@ Object.subclass('Squeak.Interpreter',
         return obj.sqClass;
     },
     canBeSmallInt: function(anInt) {
-        return (anInt >= Squeak.MinSmallInt) && (anInt <= Squeak.MaxSmallInt);
+        return (anInt >= this.image.minSmallInt) && (anInt <= this.image.maxSmallInt);
     },
     isSmallInt: function(object) {
-        return typeof object === "number";
+        return typeof object === "number" || typeof object === "bigint";
     },
     checkSmallInt: function(maybeSmallInt) { // returns an int and sets success
-        if (typeof maybeSmallInt === "number")
+        if (typeof maybeSmallInt === "number" || typeof maybeSmallInt === "bigint")
             return maybeSmallInt;
         this.success = false;
         return 1;
     },
     quickDivide: function(rcvr, arg) { // must only handle exact case
-        if (arg === 0) return Squeak.NonSmallInt;  // fail if divide by zero
+        if (arg === 0) return this.image.nonSmallInt;  // fail if divide by zero
         var result = rcvr / arg | 0;
         if (result * arg === rcvr) return result;
-        return Squeak.NonSmallInt;     // fail if result is not exact
+        return this.image.nonSmallInt;     // fail if result is not exact
     },
     div: function(rcvr, arg) {
-        if (arg === 0) return Squeak.NonSmallInt;  // fail if divide by zero
+        if (arg === 0) return this.image.nonSmallInt;  // fail if divide by zero
         return Math.floor(rcvr/arg);
     },
     mod: function(rcvr, arg) {
-        if (arg === 0) return Squeak.NonSmallInt;  // fail if divide by zero
+        if (arg === 0) return this.image.nonSmallInt;  // fail if divide by zero
         return rcvr - Math.floor(rcvr/arg) * arg;
     },
     safeShift: function(smallInt, shiftCount) {
@@ -1478,11 +1478,11 @@ Object.subclass('Squeak.Interpreter',
             if (shiftCount < -31) return smallInt < 0 ? -1 : 0;
             return smallInt >> -shiftCount; // OK to lose bits shifting right
         }
-        if (shiftCount > 31) return smallInt == 0 ? 0 : Squeak.NonSmallInt;
+        if (shiftCount > 31) return smallInt == 0 ? 0 : this.image.nonSmallInt;
         // check for lost bits by seeing if computation is reversible
         var shifted = smallInt << shiftCount;
         if  ((shifted>>shiftCount) === smallInt) return shifted;
-        return Squeak.NonSmallInt;  //non-small result will cause failure
+        return null;
     },
 },
 'utils',

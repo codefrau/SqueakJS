@@ -181,6 +181,9 @@ Object.extend(Squeak,
     MinSmallInt: -0x40000000,
     MaxSmallInt:  0x3FFFFFFF,
     NonSmallInt: -0x50000000,           // non-small and neg (so non pos32 too)
+    MinSmallInt64: -0x1000000000000000n,
+    MaxSmallInt64:  0x0FFFFFFFFFFFFFFFn,
+    NonSmallInt64: -0x2000000000000000n, // non-small and neg (so non pos64 too)
     MillisecondClockMask: 0x1FFFFFFF,
 },
 "error codes", {

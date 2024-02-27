@@ -67,6 +67,7 @@ Object.subclass('Squeak.Image',
 },
 'initializing', {
     initialize: function(name) {
+        this.Squeak = Squeak;   // store locally to avoid dynamic lookup in Lively
         this.headRoom = 100000000; // TODO: pass as option
         this.totalMemory = 0;
         this.name = name;
@@ -131,9 +132,12 @@ Object.subclass('Squeak.Image',
         this.hasClosures = !([6501, 6502, 68000].indexOf(version) >= 0);
         this.isSpur = (version & 16) !== 0;
         // var multipleByteCodeSetsActive = (version & 256) !== 0; // not used
-        var is64Bit = version >= 68000;
-        if (is64Bit && !this.isSpur) throw Error("64 bit non-spur images not supported yet");
-        if (is64Bit)  { readWord = readWord64; wordSize = 8; }
+        this.is64Bit = version >= 68000;
+        this.minSmallInt = this.is64Bit ? Squeak.MinSmallInt64 : Squeak.MinSmallInt;
+        this.maxSmallInt = this.is64Bit ? Squeak.MaxSmallInt64 : Squeak.MaxSmallInt;
+        this.nonSmallInt = this.is64Bit ? Squeak.NonSmallInt64 : Squeak.NonSmallInt;
+        if (this.is64Bit && !this.isSpur) throw Error("64 bit non-spur images not supported yet");
+        if (this.is64Bit)  { readWord = readWord64; wordSize = 8; }
         // parse image header
         var imageHeaderSize = readWord32(); // always 32 bits
         var objectMemorySize = readWord(); //first unused location in heap
@@ -142,7 +146,7 @@ Object.subclass('Squeak.Image',
         this.savedHeaderWords = [];
         for (var i = 0; i < 7; i++) {
             this.savedHeaderWords.push(readWord32());
-            if (is64Bit && i < 3) readWord32(); // skip half
+            if (this.is64Bit && i < 3) readWord32(); // skip half
         }
         var firstSegSize = readWord();
         var prevObj;
@@ -213,7 +217,7 @@ Object.subclass('Squeak.Image',
                     if (size === 255) { // this was the extended size header, read actual header
                         size = formatAndClass;
                         // In 64 bit images the size can actually be 56 bits. LOL. Nope.
-                        // if (is64Bit) size += (sizeAndHash & 0x00FFFFFF) * 0x100000000;
+                        // if (this.is64Bit) size += (sizeAndHash & 0x00FFFFFF) * 0x100000000;
                         formatAndClass = readWord32();
                         sizeAndHash = readWord32();
                     }
@@ -223,7 +227,7 @@ Object.subclass('Squeak.Image',
                         hash = sizeAndHash & 0x003FFFFF;
                     var bits = readBits(size, format < 10 && classID > 0);
                     // align on 8 bytes, min size 16 bytes
-                    pos += is64Bit
+                    pos += this.is64Bit
                       ? (size < 1 ? 1 - size : 0) * 8
                       : (size < 2 ? 2 - size : size & 1) * 4;
                     // low class ids are internal to Spur
@@ -239,7 +243,7 @@ Object.subclass('Squeak.Image',
                         rawBits[oop] = bits;
                         oopAdjust[oop] = skippedBytes;
                         // account for size difference of 32 vs 64 bit oops
-                        if (is64Bit) {
+                        if (this.is64Bit) {
                             var overhead = object.overhead64(bits);
                             skippedBytes += overhead.bytes;
                             // OTOH, in 32 bits we need the extra size header sooner
@@ -316,7 +320,7 @@ Object.subclass('Squeak.Image',
             if (obj) {
                 var stop = done + (this.oldSpaceCount / 20 | 0);    // do it in 20 chunks
                 while (obj && done < stop) {
-                    obj.installFromImage(oopMap, rawBits, compactClasses, floatClass, littleEndian, nativeFloats, is64Bit && {
+                    obj.installFromImage(oopMap, rawBits, compactClasses, floatClass, littleEndian, nativeFloats, this.is64Bit && {
                             makeFloat: function makeFloat(bits) {
                                 return this.instantiateFloat(bits);
                             }.bind(this),
@@ -334,7 +338,7 @@ Object.subclass('Squeak.Image',
                 this.decorateKnownObjects();
                 if (this.isSpur) {
                     this.fixSkippedOops(oopAdjust);
-                    if (is64Bit) this.fixPCs();
+                    if (this.is64Bit) this.fixPCs();
                     this.ensureFullBlockClosureClass(this.specialObjectsArray, compactClasses);
                 } else {
                     this.fixCompiledMethods();

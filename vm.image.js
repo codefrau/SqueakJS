@@ -67,7 +67,8 @@ Object.subclass('Squeak.Image',
 },
 'initializing', {
     initialize: function(name) {
-        this.totalMemory = 100000000;
+        this.headRoom = 100000000; // TODO: pass as option
+        this.totalMemory = 0;
         this.name = name;
         this.gcCount = 0;
         this.gcMilliseconds = 0;
@@ -113,21 +114,23 @@ Object.subclass('Squeak.Image',
             }
         };
         // read version and determine endianness
-        var versions = [6501, 6502, 6504, 6505, 6521, 68000, 68002, 68003, 68021],
+        var baseVersions = [6501, 6502, 6504, 68000, 68002, 68004],
+            baseVersionMask = 0x119EE,
             version = 0,
             fileHeaderSize = 0;
         while (true) {  // try all four endianness + header combos
             littleEndian = !littleEndian;
             pos = fileHeaderSize;
             version = readWord();
-            if (versions.indexOf(version) >= 0) break;
+            if (baseVersions.indexOf(version & baseVersionMask) >= 0) break;
             if (!littleEndian) fileHeaderSize += 512;
-            if (fileHeaderSize > 512) throw Error("bad image version");
+            if (fileHeaderSize > 512) throw Error("bad image version"); // we tried all combos
         };
         this.version = version;
-        var nativeFloats = [6505, 6521, 68003, 68021].indexOf(version) >= 0;
-        this.hasClosures = [6504, 6505, 6521, 68002, 68003, 68021].indexOf(version) >= 0;
-        this.isSpur = [6521, 68021].indexOf(version) >= 0;
+        var nativeFloats = (version & 1) !== 0;
+        this.hasClosures = !([6501, 6502, 68000].indexOf(version) >= 0);
+        this.isSpur = (version & 16) !== 0;
+        // var multipleByteCodeSetsActive = (version & 256) !== 0; // not used
         var is64Bit = version >= 68000;
         if (is64Bit && !this.isSpur) throw Error("64 bit non-spur images not supported yet");
         if (is64Bit)  { readWord = readWord64; wordSize = 8; }
@@ -272,6 +275,9 @@ Object.subclass('Squeak.Image',
             this.lastOldObject = object;
             this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
         }
+
+        this.totalMemory = this.oldSpaceBytes + this.headRoom;
+        this.totalMemory = Math.ceil(this.totalMemory / 1000000) * 1000000;
 
         if (true) {
             // For debugging: re-create all objects from named prototypes
@@ -436,7 +442,7 @@ Object.subclass('Squeak.Image',
     },
     ensureFullBlockClosureClass: function(splObs, compactClasses) {
         // Read FullBlockClosure class from compactClasses if not yet present in specialObjectsArray.
-        if (splObs.pointers[Squeak.splOb_ClassFullBlockClosure].isNil) {
+        if (splObs.pointers[Squeak.splOb_ClassFullBlockClosure].isNil && compactClasses[38]) {
             splObs.pointers[Squeak.splOb_ClassFullBlockClosure] = compactClasses[38];
         }
     },
@@ -451,6 +457,9 @@ Object.subclass('Squeak.Image',
         // sorting them by id, and then linking them into old space.
         this.vm.addMessage("fullGC: " + reason);
         var start = Date.now();
+        var previousNew = this.newSpaceCount;
+        var previousYoung = this.youngSpaceCount;
+        var previousOld = this.oldSpaceCount;
         var newObjects = this.markReachableObjects();
         this.removeUnmarkedOldObjects();
         this.appendToOldObjects(newObjects);
@@ -461,7 +470,12 @@ Object.subclass('Squeak.Image',
         this.hasNewInstances = {};
         this.gcCount++;
         this.gcMilliseconds += Date.now() - start;
-        console.log("Full GC (" + reason + "): " + (Date.now() - start) + " ms");
+        var delta = previousOld - this.oldSpaceCount;
+        console.log("Full GC (" + reason + "): " + (Date.now() - start) + " ms, " +
+            "surviving objects: " + this.oldSpaceCount + " (" + this.oldSpaceBytes + " bytes), " +
+            "tenured " + newObjects.length + " (total " + (delta > 0 ? "+" : "") + delta + "), " +
+            "gc'ed " + previousYoung + " young and " + (previousNew - previousYoung) + " new objects");
+
         return newObjects.length > 0 ? newObjects[0] : null;
     },
     gcRoots: function() {
@@ -559,6 +573,13 @@ Object.subclass('Squeak.Image',
         this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
         this.oldSpaceCount += newObjects.length;
         this.gcTenured += newObjects.length;
+        // this is the only place that increases oldSpaceBytes / decreases bytesLeft
+        this.vm.signalLowSpaceIfNecessary(this.bytesLeft());
+        // TODO: keep track of newSpaceBytes and youngSpaceBytes, and signal low space if necessary
+        // basically, add obj.totalBytes() to newSpaceBytes when instantiating,
+        // trigger partial GC if newSpaceBytes + lowSpaceThreshold > totalMemory - (youngSpaceBytes + oldSpaceBytes)
+        // which would set newSpaceBytes to 0 and youngSpaceBytes to the actual survivors.
+        // for efficiency, only compute object size once per object and store? test impact on GC speed
     },
     tenureIfYoung: function(object) {
         if (object.oop < 0) {
@@ -604,6 +625,7 @@ Object.subclass('Squeak.Image',
         // and finalize weak refs
         this.vm.addMessage("partialGC: " + reason);
         var start = Date.now();
+        var previous = this.newSpaceCount;
         var young = this.findYoungObjects();
         this.appendToYoungSpace(young);
         this.finalizeWeakReferences();
@@ -613,7 +635,9 @@ Object.subclass('Squeak.Image',
         this.newSpaceCount = this.youngSpaceCount;
         this.pgcCount++;
         this.pgcMilliseconds += Date.now() - start;
-        console.log("Partial GC (" + reason+ "): " + (Date.now() - start) + " ms");
+        console.log("Partial GC (" + reason+ "): " + (Date.now() - start) + " ms, " +
+            "found " + this.youngRootsCount + " roots in " + this.oldSpaceCount + " old, " +
+            "kept " + this.youngSpaceCount + " young (" + (previous - this.youngSpaceCount) + " gc'ed)");
         return young[0];
     },
     youngRoots: function() {
@@ -632,7 +656,7 @@ Object.subclass('Squeak.Image',
                         dirty = true;
                     }
                 }
-                object.dirty = dirty;
+                if (!dirty) object.dirty = false;
             }
             object = object.nextObject;
         }
@@ -642,6 +666,7 @@ Object.subclass('Squeak.Image',
         // PartialGC: find new objects transitively reachable from old objects
         var todo = this.youngRoots(),     // direct pointers from old space
             newObjects = [];
+        this.youngRootsCount = todo.length;
         this.weakObjects = [];
         while (todo.length > 0) {
             var object = todo.pop();
@@ -768,6 +793,11 @@ Object.subclass('Squeak.Image',
             var fromHash = fromArray[i].hash;
             fromArray[i].hash = toArray[i].hash;
             toArray[i].hash = fromHash;
+            // Spur class table is not part of the object memory in SqueakJS
+            // so won't be updated below, we have to update it manually
+            if (this.isSpur && this.classTable[fromHash] === fromArray[i]) {
+                this.classTable[fromHash] = toArray[i];
+            }
         }
         // temporarily append young objects to old space
         this.lastOldObject.nextObject = firstYoungObject;
@@ -884,22 +914,157 @@ Object.subclass('Squeak.Image',
         return this.isSpur ? 6521 : this.hasClosures ? 6504 : 6502;
     },
     segmentVersion: function() {
-        var dnu = this.specialObjectsArray.pointers[Squeak.splOb_SelectorDoesNotUnderstand],
-            wholeWord = new Uint32Array(dnu.bytes.buffer, 0, 1);
-        return this.formatVersion() | (wholeWord[0] & 0xFF000000);
+        // a more complex version that tells both the word reversal and the endianness
+        // of the machine it came from.  Low half of word is 6502.  Top byte is top byte
+        // of #doesNotUnderstand: ($d on big-endian or $s on little-endian).
+        // In SqueakJS we write non-Spur images and segments as big-endian, Spur as little-endian
+        // (TODO: write non-Spur as little-endian too since that matches all modern platforms)
+        var dnuFirstWord = this.isSpur ? 'seod' : 'does';
+        return this.formatVersion() | (dnuFirstWord.charCodeAt(0) << 24);
+    },
+    storeImageSegment: function(segmentWordArray, outPointerArray, arrayOfRoots) {
+        // This primitive will store a binary image segment (in the same format as the Squeak image file) of the receiver and every object in its proper tree of subParts (ie, that is not refered to from anywhere else outside the tree).  Note: all elements of the receiver are treated as roots determining the extent of the tree.  All pointers from within the tree to objects outside the tree will be copied into the array of outpointers.  In their place in the image segment will be an oop equal to the offset in the outpointer array (the first would be 4). but with the high bit set.
+        // The primitive expects the array and wordArray to be more than adequately long.  In this case it returns normally, and truncates the two arrays to exactly the right size.  If either array is too small, the primitive will fail, but in no other case.
+
+        // use a DataView to access the segment as big-endian words
+        var segment = new DataView(segmentWordArray.words.buffer),
+            pos = 0, // write position in segment in bytes
+            outPointers = outPointerArray.pointers,
+            outPos = 0; // write position in outPointers in words
+
+        // write header
+        segment.setUint32(pos, this.segmentVersion()); pos += 4;
+
+        // we don't want to deal with new space objects
+        this.fullGC("storeImageSegment");
+
+        // First mark the root array and all root objects
+        arrayOfRoots.mark = true;
+        for (var i = 0; i < arrayOfRoots.pointers.length; i++)
+            if (typeof arrayOfRoots.pointers[i] === "object")
+                arrayOfRoots.pointers[i].mark = true;
+
+        // Then do a mark pass over all objects. This will stop at our marked roots,
+        // thus leaving our segment unmarked in their shadow
+        this.markReachableObjects();
+
+        // Finally unmark the rootArray and all root objects
+        arrayOfRoots.mark = false;
+        for (var i = 0; i < arrayOfRoots.pointers.length; i++)
+            if (typeof arrayOfRoots.pointers[i] === "object")
+                arrayOfRoots.pointers[i].mark = false;
+
+        // helpers for mapping objects to segment oops
+        var segmentOops = {}, // map from object oop to segment oop
+            todo = []; // objects that were added to the segment but still need to have their oops mapped
+
+        // if an object does not yet have a segment oop, write it to the segment or outPointers
+        function addToSegment(object) {
+            var oop = segmentOops[object.oop];
+            if (!oop) {
+                if (object.mark) {
+                    // object is outside segment, add to outPointers
+                    if (outPos >= outPointers.length) return 0; // fail if outPointerArray is too small
+                    oop = 0x80000004 + outPos * 4;
+                    outPointers[outPos++] = object;
+                    // no need to mark outPointerArray dirty, all objects are in old space
+                } else {
+                    // add object to segment.
+                    if (pos + object.totalBytes() > segment.byteLength) return 0; // fail if segment is too small
+                    oop = pos + (object.snapshotSize().header + 1) * 4; // addr plus extra headers + base header
+                    pos = object.writeTo(segment, pos, this);
+                    // the written oops inside the object still need to be mapped to segment oops
+                    todo.push(object);
+                }
+                segmentOops[object.oop] = oop;
+            }
+            return oop;
+        }
+        addToSegment = addToSegment.bind(this);
+
+        // if we have to bail out, clean up what we modified
+        function cleanUp() {
+            // unmark all objects
+            var obj = this.firstOldObject;
+            while (obj) {
+                obj.mark = false;
+                obj = obj.nextObject;
+            }
+            // forget weak objects collected by markReachableObjects()
+            this.weakObjects = null;
+            // return code for failure
+            return false;
+        }
+        cleanUp = cleanUp.bind(this);
+
+        // All external objects, and only they, are now marked.
+        // Write the array of roots into the segment
+        addToSegment(arrayOfRoots);
+
+        // Now fix the oops inside written objects.
+        // This will add more objects to the segment (if they are unmarked),
+        // or to outPointers (if they are marked).
+        while (todo.length > 0) {
+            var obj = todo.shift(),
+                oop = segmentOops[obj.oop],
+                headerSize = obj.snapshotSize().header,
+                objBody = obj.pointers,
+                hasClass = headerSize > 0;
+            if (hasClass) {
+                var classOop = addToSegment(obj.sqClass);
+                if (!classOop) return cleanUp(); // ran out of space
+                var headerType = headerSize === 1 ? Squeak.HeaderTypeClass : Squeak.HeaderTypeSizeAndClass;
+                segment.setUint32(oop - 8, classOop | headerType);
+            }
+            if (!objBody) continue;
+            for (var i = 0; i < objBody.length; i++) {
+                var child = objBody[i];
+                if (typeof child !== "object") continue;
+                var childOop = addToSegment(child);
+                if (!childOop) return cleanUp(); // ran out of space
+                segment.setUint32(oop + i * 4, childOop);
+            }
+        }
+
+        // Truncate image segment and outPointerArray to actual size
+        var obj = segmentWordArray.oop < outPointerArray.oop ? segmentWordArray : outPointerArray,
+            removedBytes = 0;
+        while (obj) {
+            obj.oop -= removedBytes;
+            if (obj === segmentWordArray) {
+                removedBytes += (obj.words.length * 4) - pos;
+                obj.words = new Uint32Array(obj.words.buffer.slice(0, pos));
+            } else if (obj === outPointerArray) {
+                removedBytes += (obj.pointers.length - outPos) * 4;
+                obj.pointers.length = outPos;
+            }
+            obj = obj.nextObject;
+        }
+        this.oldSpaceBytes -= removedBytes;
+
+        // unmark all objects etc
+        cleanUp();
+
+        return true;
     },
     loadImageSegment: function(segmentWordArray, outPointerArray) {
         // The C VM creates real objects from the segment in-place.
-        // We do the same, linking the new objects directly into old-space.
+        // We do the same, inserting the new objects directly into old-space
+        // between segmentWordArray and its following object (endMarker).
+        // This only increases oldSpaceCount but not oldSpaceBytes.
         // The code below is almost the same as readFromBuffer() ... should unify
-        var data = new DataView(segmentWordArray.words.buffer),
+        if (segmentWordArray.words.length === 1) {
+            // segment already loaded
+            return segmentWordArray.nextObject;
+        }
+        var segment = new DataView(segmentWordArray.words.buffer),
             littleEndian = false,
             nativeFloats = false,
             pos = 0;
         var readWord = function() {
-            var int = data.getUint32(pos, littleEndian);
+            var word = segment.getUint32(pos, littleEndian);
             pos += 4;
-            return int;
+            return word;
         };
         var readBits = function(nWords, format) {
             if (format < 5) { // pointers (do endian conversion)
@@ -908,7 +1073,7 @@ Object.subclass('Squeak.Image',
                     oops.push(readWord());
                 return oops;
             } else { // words (no endian conversion yet)
-                var bits = new Uint32Array(data.buffer, pos, nWords);
+                var bits = new Uint32Array(segment.buffer, pos, nWords);
                 pos += nWords * 4;
                 return bits;
             }
@@ -930,7 +1095,7 @@ Object.subclass('Squeak.Image',
             oopOffset = segmentWordArray.oop,
             oopMap = {},
             rawBits = {};
-        while (pos < data.byteLength) {
+        while (pos < segment.byteLength) {
             var nWords = 0,
                 classInt = 0,
                 header = readWord();
@@ -978,6 +1143,7 @@ Object.subclass('Squeak.Image',
                 oopMap[--fakeClsOop] = cls; return fakeClsOop; });
         // truncate segmentWordArray array to one element
         segmentWordArray.words = new Uint32Array([segmentWordArray.words[0]]);
+        delete segmentWordArray.uint8Array; // in case it was a view onto words
         // map objects using oopMap
         var roots = segmentWordArray.nextObject,
             floatClass = this.specialObjectsArray.pointers[Squeak.splOb_ClassFloat],
@@ -994,6 +1160,8 @@ Object.subclass('Squeak.Image',
     initSpurOverrides: function() {
         this.registerObject = this.registerObjectSpur;
         this.writeToBuffer = this.writeToBufferSpur;
+        this.storeImageSegment = this.storeImageSegmentSpur;
+        this.loadImageSegment = this.loadImageSegmentSpur;
     },
     spurClassTable: function(oopMap, rawBits, classPages, splObjs) {
         var classes = {},
@@ -1143,9 +1311,10 @@ Object.subclass('Squeak.Image',
                 var classObj = this.classTable[classID];
                 if (classObj && classObj.pointers) {
                     if (!classObj.hash) throw Error("class without id");
-                    if (classObj.hash !== classID && classID >= 32) {
+                    if (classObj.hash !== classID && classID >= 32 || classObj.oop < 0) {
                         console.warn("freeing class index " + classID + " " + classObj.className());
                         classObj = null;
+                        delete this.classTable[classID];
                     }
                 }
                 if (classObj) data.setUint32(pos, objToOop(classObj), littleEndian);
@@ -1214,5 +1383,15 @@ Object.subclass('Squeak.Image',
         var time = Date.now() - start;
         console.log("Wrote " + n + " objects in " + time + " ms, image size " + pos + " bytes")
         return data.buffer;
+    },
+    storeImageSegmentSpur: function(segmentWordArray, outPointerArray, arrayOfRoots) {
+        // see comment in segmentVersion() if you implement this
+        // also see markReachableObjects() about immediate chars
+        this.vm.warnOnce("not implemented for Spur yet: primitive 98 (primitiveStoreImageSegment)");
+        return false;
+    },
+    loadImageSegmentSpur: function(segmentWordArray, outPointerArray) {
+        this.vm.warnOnce("not implemented for Spur yet: primitive 99 (primitiveLoadImageSegment)");
+        return null;
     },
 });

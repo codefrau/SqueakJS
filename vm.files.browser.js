@@ -23,8 +23,9 @@
 
 Object.extend(Squeak,
 "files", {
-    fsck: function(whenDone, dir, files, stats) {
+    fsck: function(whenDone, dir, files, stale, stats) {
         dir = dir || "";
+        stale = stale || {dirs: [], files: []};
         stats = stats || {dirs: 0, files: 0, bytes: 0, deleted: 0};
         if (!files) {
             // find existing files
@@ -45,17 +46,17 @@ Object.extend(Squeak,
                     cursorReq.onsuccess = function(e) {
                         var cursor = e.target.result;
                         if (cursor) {
-                            files[cursor.key] = true;
+                            files[cursor.key] = cursor.value.byteLength;
                             cursor.continue();
-                        } else { // done
-                            Squeak.fsck(whenDone, dir, files, stats);
+                        } else { // got all files
+                            Squeak.fsck(whenDone, dir, files, stale, stats);
                         }
                     }
                     cursorReq.onerror = function(e) {
                         console.error("fsck failed");
                     }
                 });
-            }
+            } // otherwise fall through
         }
         // check directories
         var entries = Squeak.dirList(dir);
@@ -63,50 +64,62 @@ Object.extend(Squeak,
             var path = dir + "/" + name,
                 isDir = entries[name][3];
             if (isDir) {
+                stats.dirs++;
                 var exists = "squeak:" + path in Squeak.Settings;
                 if (exists) {
-                    Squeak.fsck(null, path, files, stats);
-                    stats.dirs++;
+                    Squeak.fsck(null, path, files, stale, stats);
                 } else {
-                    console.log("Deleting stale directory " + path);
-                    Squeak.dirDelete(path);
-                    stats.deleted++;
+                    stale.dirs.push(path);
                 }
             } else {
-                if (!files[path]) {
-                    console.log("Deleting stale file entry " + path);
-                    Squeak.fileDelete(path, true);
-                    stats.deleted++;
-                } else {
-                    files[path] = false; // mark as visited
-                    stats.files++;
+                stats.files++;
+                if (path in files) {
+                    files[path] = null; // mark as visited
                     stats.bytes += entries[name][4];
+                } else {
+                    stale.files.push(path);
                 }
             }
         }
-        // check orphaned files
         if (dir === "") {
+            // we're back at the root, almost done
             console.log("squeak fsck: " + stats.dirs + " directories, " + stats.files + " files, " + (stats.bytes/1000000).toFixed(1) + " MBytes");
+            // check orphaned files
             var orphaned = [],
                 total = 0;
             for (var path in files) {
                 total++;
-                if (files[path]) orphaned.push(path); // not marked visited
+                var size = files[path];
+                if (size !== null) orphaned.push({ path: path, size: size }); // not marked visited
             }
-            if (orphaned.length > 0) {
-                for (var i = 0; i < orphaned.length; i++) {
-                    console.log("Deleting orphaned file " + orphaned[i]);
-                    delete Squeak.Settings["squeak-file:" + orphaned[i]];
-                    delete Squeak.Settings["squeak-file.lz:" + orphaned[i]];
-                    stats.deleted++;
-                }
-                if (typeof indexedDB !== "undefined") {
-                    this.dbTransaction("readwrite", "fsck delete", function(fileStore) {
-                        for (var i = 0; i < orphaned.length; i++) {
-                            fileStore.delete(orphaned[i]);
-                        };
-                    });
-                }
+            // recreate directory entries for orphaned files
+            for (var i = 0; i < orphaned.length; i++) {
+                var path = Squeak.splitFilePath(orphaned[i].path);
+                var size = orphaned[i].size;
+                console.log("squeak fsck: restoring " + path.fullname + " (" + size + " bytes)");
+                Squeak.dirCreate(path.dirname, true, "force");
+                var directory = Squeak.dirList(path.dirname);
+                var now = Squeak.totalSeconds();
+                var entry = [/*name*/ path.basename, /*ctime*/ now, /*mtime*/ 0, /*dir*/ false, size];
+                directory[path.basename] = entry;
+                Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(directory);
+            }
+            for (var i = 0; i < stale.dirs.length; i++) {
+                var dir = stale.dirs[i];
+                if (Squeak.Settings["squeak:" + dir]) continue; // now contains orphaned files
+                console.log("squeak fsck: cleaning up directory " + dir);
+                Squeak.dirDelete(dir);
+                stats.dirs--;
+                stats.deleted++;
+            }
+            for (var i = 0; i < stale.files.length; i++) {
+                var path = stale.files[i];
+                if (path in files) continue; // was orphaned
+                if (Squeak.Settings["squeak:" + path]) continue; // now is a directory
+                console.log("squeak fsck: cleaning up file entry " + path);
+                Squeak.fileDelete(path);
+                stats.files--;
+                stats.deleted++;
             }
             if (whenDone) whenDone(stats);
         }
@@ -154,7 +167,7 @@ Object.extend(Squeak,
         }
 
         openReq.onsuccess = function(e) {
-            console.log("Opened files database.");
+            if (Squeak.debugFiles) console.log("Opened files database.");
             window.SqueakDB = this.result;
             SqueakDB.onversionchange = function(e) {
                 delete window.SqueakDB;
@@ -167,7 +180,7 @@ Object.extend(Squeak,
         };
         openReq.onupgradeneeded = function (e) {
             // run only first time, or when version changed
-            console.log("Creating files database");
+            if (Squeak.debugFiles) console.log("Creating files database");
             var db = e.target.result;
             db.createObjectStore("files");
         };
@@ -261,6 +274,14 @@ Object.extend(Squeak,
         if (!errorDo) errorDo = function(err) { console.log(err) };
         var path = this.splitFilePath(filepath);
         if (!path.basename) return errorDo("Invalid path: " + filepath);
+        if (Squeak.debugFiles) {
+            console.log("Reading " + path.fullname);
+            var realThenDo = thenDo;
+            thenDo = function(data) {
+                console.log("Read " + data.byteLength + " bytes from " + path.fullname);
+                realThenDo(data);
+            }
+        }
         // if we have been writing to memory, return that version
         if (window.SqueakDBFake && SqueakDBFake.bigFiles[path.fullname])
             return thenDo(SqueakDBFake.bigFiles[path.fullname]);
@@ -295,6 +316,12 @@ Object.extend(Squeak,
             directory[path.basename] = entry;
         } else if (entry[3]) // is a directory
             return null;
+        if (Squeak.debugFiles) {
+            console.log("Writing " + path.fullname + " (" + contents.byteLength + " bytes)");
+            if (contents.byteLength > 0 && filepath.endsWith(".log")) {
+                console.log((new TextDecoder).decode(contents).replace(/\r/g, '\n'));
+            }
+        }
         // update directory entry
         entry[2] = now; // modification time
         entry[4] = contents.byteLength || contents.length || 0;
@@ -316,6 +343,7 @@ Object.extend(Squeak,
         // delete entry from directory
         delete directory[path.basename];
         Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(directory);
+        if (Squeak.debugFiles) console.log("Deleting " + path.fullname);
         if (entryOnly) return true;
         // delete file contents (async)
         this.dbTransaction("readwrite", "delete " + filepath, function(fileStore) {
@@ -331,6 +359,7 @@ Object.extend(Squeak,
         var samedir = oldpath.dirname == newpath.dirname;
         var newdir = samedir ? olddir : this.dirList(newpath.dirname); if (!newdir) return false;
         if (newdir[newpath.basename]) return false; // exists already
+        if (Squeak.debugFiles) console.log("Renaming " + oldpath.fullname + " to " + newpath.fullname);
         delete olddir[oldpath.basename];            // delete old entry
         entry[0] = newpath.basename;                // rename entry
         newdir[newpath.basename] = entry;           // add new entry
@@ -355,16 +384,28 @@ Object.extend(Squeak,
         var entry = directory[path.basename]; if (!entry || entry[3]) return false; // not found or is a directory
         return true;
     },
-    dirCreate: function(dirpath, withParents) {
+    dirCreate: function(dirpath, withParents, force) {
         var path = this.splitFilePath(dirpath); if (!path.basename) return false;
         if (withParents && !Squeak.Settings["squeak:" + path.dirname]) Squeak.dirCreate(path.dirname, true);
-        var directory = this.dirList(path.dirname); if (!directory) return false;
-        if (directory[path.basename]) return false;
+        var parent = this.dirList(path.dirname); if (!parent) return false;
+        var existing = parent[path.basename];
+        if (existing) {
+            if (!existing[3]) {
+                // already exists and is not a directory
+                if (!force) return false;
+                existing[3] = true; // force it to be a directory
+                Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(parent);
+            }
+            if (Squeak.Settings["squeak:" + path.fullname]) return true; // already exists
+            // directory exists but is not in localStorage, so create it
+            // (this is not supposed to happen but deal with it anyways)
+        }
+        if (Squeak.debugFiles) console.log("Creating directory " + path.fullname);
         var now = this.totalSeconds(),
             entry = [/*name*/ path.basename, /*ctime*/ now, /*mtime*/ now, /*dir*/ true, /*size*/ 0];
-        directory[path.basename] = entry;
+        parent[path.basename] = entry;
         Squeak.Settings["squeak:" + path.fullname] = JSON.stringify({});
-        Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(directory);
+        Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(parent);
         return true;
     },
     dirDelete: function(dirpath) {
@@ -372,8 +413,8 @@ Object.extend(Squeak,
         var directory = this.dirList(path.dirname); if (!directory) return false;
         if (!directory[path.basename]) return false;
         var children = this.dirList(path.fullname);
-        if (!children) return false;
-        for (var child in children) return false; // not empty
+        if (children) for (var child in children) return false; // not empty
+        if (Squeak.debugFiles) console.log("Deleting directory " + path.fullname);
         // delete from parent
         delete directory[path.basename];
         Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(directory);
@@ -431,10 +472,6 @@ Object.extend(Squeak,
                 (new Uint8Array(buffer)).set(file.contents.subarray(0, file.size));
             }
             Squeak.filePut(file.name, buffer);
-            // if (/SqueakDebug.log/.test(file.name)) {
-            //     var chars = Squeak.bytesAsString(new Uint8Array(buffer));
-            //     console.warn(chars.replace(/\r/g, '\n'));
-            // }
             file.modified = false;
         }
     },
@@ -478,7 +515,7 @@ Object.extend(Squeak,
             rq.open('GET', index, true);
             rq.onload = function(e) {
                 if (rq.status == 200) {
-                    console.log("adding template " + path);
+                    console.log("adding template dir " + path);
                     ensureTemplateParent(path);
                     var entries = JSON.parse(rq.response),
                         template = {url: url, entries: {}};

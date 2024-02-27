@@ -73,6 +73,17 @@ function SqueakSSL() {
       return true;
     },
 
+    primitiveSetStringProperty: function(argCount) {
+      if (argCount !== 3) return false;
+      var handle = this.interpreterProxy.stackObjectValue(2).handle;
+      if (handle === undefined) return false;
+      // We don't actually care
+      // var propID = this.interpreterProxy.stackIntegerValue(1);
+      // var value = this.interpreterProxy.stackObjectValue(0);
+      this.interpreterProxy.pop(argCount);
+      return true;
+    },
+
     primitiveGetStringProperty: function(argCount) {
       if (argCount !== 2) return false;
       var handle = this.interpreterProxy.stackObjectValue(1).handle;

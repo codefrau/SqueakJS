@@ -1,7 +1,7 @@
 /*
  * This Socket plugin only fulfills http:/https:/ws:/wss: requests by intercepting them
  * and sending as either XMLHttpRequest or Fetch or WebSocket.
- * To make connections to servers without CORS, it uses the crossorigin.me proxy.
+ * To make connections to servers without CORS, it uses a CORS proxy.
  *
  * When a WebSocket connection is created in the Smalltalk image a low level socket is
  * assumed to be provided by this plugin. Since low level sockets are not supported
@@ -101,7 +101,7 @@ function SocketPlugin() {
           element[field] = element[field].replace(/\.$/, "");
         }
       };
-      var originalQuestion = response.Question[0]; 
+      var originalQuestion = response.Question[0];
       removeTrailingDot(originalQuestion, "name");
       response.Answer.forEach(function(answer) {
         removeTrailingDot(answer, "name");
@@ -203,7 +203,7 @@ function SocketPlugin() {
           var url = '';
           if (isRetry || this._requestNeedsProxy()) {
             var proxy = typeof SqueakJS === "object" && SqueakJS.options.proxy;
-            url += proxy || 'https://crossorigin.me/';
+            url = proxy || 'https://corsproxy.io/?';
           }
           if (this.port !== 443) {
             url += 'http://' + this._hostAndPort() + targetURL;
@@ -255,7 +255,19 @@ function SocketPlugin() {
               var contentLength = parseInt(line.substr(16));
               var end = this.sendBuffer.byteLength;
               data = this.sendBuffer.subarray(end - contentLength, end);
-            } else if (line.match(/Connection: Upgrade/i)) {
+            } else if (line.match(/Host:/i)) {
+              var hostAndPort = line.substr(6).trim();
+              var host = hostAndPort.split(':')[0];
+              var port = parseInt(hostAndPort.split(':')[1]) || this.port;
+              if (this.host !== host) {
+                console.warn('Host for ' + this.hostAddress + ' was ' + this.host + ' but from HTTP request now ' + host);
+                this.host = host;
+              }
+              if (this.port !== port) {
+                console.warn('Port for ' + this.hostAddress + ' was ' + this.port + ' but from HTTP request now ' + port);
+                this.port = port;
+              }
+            } if (line.match(/Connection: Upgrade/i)) {
               seenUpgrade = true;
             } else if (line.match(/Upgrade: WebSocket/i)) {
               seenWebSocket = true;
@@ -292,7 +304,7 @@ function SocketPlugin() {
 
           fetch(this._getURL(targetURL), init)
           .then(thisHandle._handleFetchAPIResponse.bind(thisHandle))
-          .catch(function (e) { 
+          .catch(function (e) {
             var url = thisHandle._getURL(targetURL, true);
             console.warn('Retrying with CORS proxy: ' + url);
             fetch(url, init)
@@ -356,7 +368,7 @@ function SocketPlugin() {
           if (typeof SqueakJS === "object" && SqueakJS.options.ajax) {
               httpRequest.setRequestHeader("X-Requested-With", "XMLHttpRequest");
           }
-          
+
           httpRequest.responseType = "arraybuffer";
 
           httpRequest.onload = function (oEvent) {
@@ -431,7 +443,7 @@ function SocketPlugin() {
 
           // Keep track of WebSocket for future send and receive operations
           this.webSocket = new WebSocket(url.replace(/^http/, "ws"), webSocketSubProtocol);
- 
+
           var thisHandle = this;
           this.webSocket.onopen = function() {
             if (thisHandle.status !== plugin.Socket_Connected) {
@@ -648,7 +660,7 @@ function SocketPlugin() {
             } else {
               if (this.response && this.response.length > 0) {
                 this._signalReadSemaphore();
-                return true; 
+                return true;
               }
               if (this.responseSentCompletly) {
                 // Signal older Socket implementations that they reached the end

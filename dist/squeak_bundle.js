@@ -113,11 +113,13 @@
     Object.extend(Squeak,
     "version", {
         // system attributes
-        vmVersion: "SqueakJS 1.0.1",
-        vmDate: "2021-01-05",               // Maybe replace at build time?
+        vmVersion: "SqueakJS 1.1.2",
+        vmDate: "2023-11-24",               // Maybe replace at build time?
         vmBuild: "unknown",                 // or replace at runtime by last-modified?
         vmPath: "unknown",                  // Replace at runtime
         vmFile: "vm.js",
+        vmMakerVersion: "[VMMakerJS-bf.17 VMMaker-bf.353]", // for Smalltalk vmVMMakerVersion
+        vmInterpreterVersion: "JSInterpreter VMMaker.js-codefrau.1", // for Smalltalk interpreterVMMakerVersion
         platformName: "JS",
         platformSubtype: "unknown",         // Replace at runtime
         osVersion: "unknown",               // Replace at runtime
@@ -155,7 +157,8 @@
         splOb_ClassCharacter: 19,
         splOb_SelectorDoesNotUnderstand: 20,
         splOb_SelectorCannotReturn: 21,
-        splOb_TheInputSemaphore: 22,
+        // splOb_TheInputSemaphore: 22, // old? unused in SqueakJS
+        splOb_ProcessSignalingLowSpace: 22,
         splOb_SpecialSelectors: 23,
         splOb_CharacterTable: 24,
         splOb_SelectorMustBeBoolean: 25,
@@ -461,14 +464,6 @@
                 //These words are actually a Float
                 this.isFloat = true;
                 this.float = this.decodeFloat(bits, littleEndian, nativeFloats);
-                if (this.float == 1.3797216632888e-310) {
-                    if (Squeak.noFloatDecodeWorkaround) ; else {
-                        this.constructor.prototype.decodeFloat = this.decodeFloatDeoptimized;
-                        this.float = this.decodeFloat(bits, littleEndian, nativeFloats);
-                        if (this.float == 1.3797216632888e-310)
-                            throw Error("Cannot deoptimize decodeFloat");
-                    }
-                }
             } else {
                 if (nWords > 0)
                     this.words = this.decodeWords(nWords, bits, littleEndian);
@@ -518,23 +513,6 @@
                 swapped = new DataView(buffer);
             swapped.setUint32(0, data.getUint32(4));
             swapped.setUint32(4, data.getUint32(0));
-            return swapped.getFloat64(0, true);
-        },
-        decodeFloatDeoptimized: function(theBits, littleEndian, nativeFloats) {
-            var data = new DataView(theBits.buffer, theBits.byteOffset);
-            // it's either big endian ...
-            if (!littleEndian) return data.getFloat64(0, false);
-            // or real little endian
-            if (nativeFloats) return data.getFloat64(0, true);
-            // or little endian, but with swapped words
-            var buffer = new ArrayBuffer(8),
-                swapped = new DataView(buffer);
-            // wrap in function to defeat Safari's optimizer, which always
-            // answers 1.3797216632888e-310 if called more than 25000 times
-            (function() {
-                swapped.setUint32(0, data.getUint32(4));
-                swapped.setUint32(4, data.getUint32(0));
-            })();
             return swapped.getFloat64(0, true);
         },
         fillArray: function(length, filler) {
@@ -1006,14 +984,6 @@
                         //These words are actually a Float
                         this.isFloat = true;
                         this.float = this.decodeFloat(bits, littleEndian, true);
-                        if (this.float == 1.3797216632888e-310) {
-                            if (Squeak.noFloatDecodeWorkaround) ; else {
-                                this.constructor.prototype.decodeFloat = this.decodeFloatDeoptimized;
-                                this.float = this.decodeFloat(bits, littleEndian, true);
-                                if (this.float == 1.3797216632888e-310)
-                                    throw Error("Cannot deoptimize decodeFloat");
-                            }
-                        }
                     } else if (nWords > 0) {
                         this.words = this.decodeWords(nWords, bits, littleEndian);
                     }
@@ -1023,7 +993,7 @@
                     throw Error("16 bit arrays not supported yet");
                 case 20: // 8 bit array, length-4 (64 bit image)
                 case 21: // ... length-5
-                case 22: // ... length-6 
+                case 22: // ... length-6
                 case 23: // ... length-7
                     nWords--;
                     this._format -= 4;
@@ -1067,7 +1037,7 @@
             // we assume littleEndian for now
             var words = new Array(nWords);
             for (var i = 0; i < nWords; i++) {
-                var lo = theBits[i*2], 
+                var lo = theBits[i*2],
                     hi = theBits[i*2+1];
                 words[i] = Squeak.word64FromUint32(hi, lo);
             }
@@ -1081,7 +1051,7 @@
                 // in 64 bits, oops > 53 bits are read as [hi, lo]
                 if (typeof oop !== "number") {
                     if ((oop[1] & 7) === 4) {
-                        ptrs[i] = this.decodeSmallFloat(oop[0], oop[1], is64Bit); 
+                        ptrs[i] = this.decodeSmallFloat(oop[0], oop[1], is64Bit);
                     } else if ((oop[1] & 7) === 1) {
                         ptrs[i] = is64Bit.makeLargeFromSmall(oop[0], oop[1]);
                     } else if ((oop[1] & 7) === 2) {
@@ -1107,7 +1077,7 @@
                     // garbage beyond its stack pointer, resulting in the oop
                     // not being found in oopMap. We just fill in an arbitrary
                     // SmallInteger - it's never accessed anyway
-                    
+
                     // until 64 bit is working correctly, leave this here as a check ...
                     if (ptrs[i] === 42424242) debugger;
                 }
@@ -1115,7 +1085,7 @@
             return ptrs;
         },
         decodeSmallFloat: function(hi, lo, is64Bit) {
-            // SmallFloats are stored with full 52 bit mantissa, but shortened exponent. 
+            // SmallFloats are stored with full 52 bit mantissa, but shortened exponent.
             // The lowest 3 bits are tags, the next is the sign bit
             var newHi = 0,
                 newLo = 0,
@@ -1161,8 +1131,8 @@
                 words64 = words32 / 2;
             }
             // we need an extra header in 32 bits if we now use more words than before
-            return { 
-                bytes: overhead * 4, 
+            return {
+                bytes: overhead * 4,
                 sizeHeader: words32 >= 255 && words64 < 255,
             }
         },
@@ -1445,7 +1415,8 @@
     },
     'initializing', {
         initialize: function(name) {
-            this.totalMemory = 100000000;
+            this.headRoom = 100000000; // TODO: pass as option
+            this.totalMemory = 0;
             this.name = name;
             this.gcCount = 0;
             this.gcMilliseconds = 0;
@@ -1491,20 +1462,22 @@
                 }
             };
             // read version and determine endianness
-            var versions = [6501, 6502, 6504, 6505, 6521, 68000, 68002, 68003, 68021],
+            var baseVersions = [6501, 6502, 6504, 68000, 68002, 68004],
+                baseVersionMask = 0x119EE,
                 version = 0,
                 fileHeaderSize = 0;
             while (true) {  // try all four endianness + header combos
                 littleEndian = !littleEndian;
                 pos = fileHeaderSize;
                 version = readWord();
-                if (versions.indexOf(version) >= 0) break;
+                if (baseVersions.indexOf(version & baseVersionMask) >= 0) break;
                 if (!littleEndian) fileHeaderSize += 512;
-                if (fileHeaderSize > 512) throw Error("bad image version");
+                if (fileHeaderSize > 512) throw Error("bad image version"); // we tried all combos
             }        this.version = version;
-            var nativeFloats = [6505, 6521, 68003, 68021].indexOf(version) >= 0;
-            this.hasClosures = [6504, 6505, 6521, 68002, 68003, 68021].indexOf(version) >= 0;
-            this.isSpur = [6521, 68021].indexOf(version) >= 0;
+            var nativeFloats = (version & 1) !== 0;
+            this.hasClosures = !([6501, 6502, 68000].indexOf(version) >= 0);
+            this.isSpur = (version & 16) !== 0;
+            // var multipleByteCodeSetsActive = (version & 256) !== 0; // not used
             var is64Bit = version >= 68000;
             if (is64Bit && !this.isSpur) throw Error("64 bit non-spur images not supported yet");
             if (is64Bit)  { readWord = readWord64; wordSize = 8; }
@@ -1613,7 +1586,7 @@
                             rawBits[oop] = bits;
                             oopAdjust[oop] = skippedBytes;
                             // account for size difference of 32 vs 64 bit oops
-                            if (is64Bit) { 
+                            if (is64Bit) {
                                 var overhead = object.overhead64(bits);
                                 skippedBytes += overhead.bytes;
                                 // OTOH, in 32 bits we need the extra size header sooner
@@ -1649,6 +1622,9 @@
                 this.lastOldObject = object;
                 this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
             }
+
+            this.totalMemory = this.oldSpaceBytes + this.headRoom;
+            this.totalMemory = Math.ceil(this.totalMemory / 1000000) * 1000000;
 
             {
                 // For debugging: re-create all objects from named prototypes
@@ -1811,7 +1787,7 @@
         },
         ensureFullBlockClosureClass: function(splObs, compactClasses) {
             // Read FullBlockClosure class from compactClasses if not yet present in specialObjectsArray.
-            if (splObs.pointers[Squeak.splOb_ClassFullBlockClosure].isNil) {
+            if (splObs.pointers[Squeak.splOb_ClassFullBlockClosure].isNil && compactClasses[38]) {
                 splObs.pointers[Squeak.splOb_ClassFullBlockClosure] = compactClasses[38];
             }
         },
@@ -1837,6 +1813,7 @@
             this.gcCount++;
             this.gcMilliseconds += Date.now() - start;
             console.log("Full GC (" + reason + "): " + (Date.now() - start) + " ms");
+            if (reason === "primitive") console.log("  surviving objects: " + this.oldSpaceCount + " (" + this.oldSpaceBytes + " bytes)");
             return newObjects.length > 0 ? newObjects[0] : null;
         },
         gcRoots: function() {
@@ -1934,6 +1911,13 @@
             this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
             this.oldSpaceCount += newObjects.length;
             this.gcTenured += newObjects.length;
+            // this is the only place that increases oldSpaceBytes / decreases bytesLeft
+            this.vm.signalLowSpaceIfNecessary(this.bytesLeft());
+            // TODO: keep track of newSpaceBytes and youngSpaceBytes, and signal low space if necessary
+            // basically, add obj.totalBytes() to newSpaceBytes when instantiating,
+            // trigger partial GC if newSpaceBytes + lowSpaceThreshold > totalMemory - (youngSpaceBytes + oldSpaceBytes)
+            // which would set newSpaceBytes to 0 and youngSpaceBytes to the actual survivors.
+            // for efficiency, only compute object size once per object and store? test impact on GC speed
         },
         tenureIfYoung: function(object) {
             if (object.oop < 0) {
@@ -2142,6 +2126,11 @@
                 var fromHash = fromArray[i].hash;
                 fromArray[i].hash = toArray[i].hash;
                 toArray[i].hash = fromHash;
+                // Spur class table is not part of the object memory in SqueakJS
+                // so won't be updated below, we have to update it manually
+                if (this.isSpur && this.classTable[fromHash] === fromArray[i]) {
+                    this.classTable[fromHash] = toArray[i];
+                }
             }
             // temporarily append young objects to old space
             this.lastOldObject.nextObject = firstYoungObject;
@@ -2258,22 +2247,153 @@
             return this.isSpur ? 6521 : this.hasClosures ? 6504 : 6502;
         },
         segmentVersion: function() {
-            var dnu = this.specialObjectsArray.pointers[Squeak.splOb_SelectorDoesNotUnderstand],
-                wholeWord = new Uint32Array(dnu.bytes.buffer, 0, 1);
-            return this.formatVersion() | (wholeWord[0] & 0xFF000000);
+            // a more complex version that tells both the word reversal and the endianness
+            // of the machine it came from.  Low half of word is 6502.  Top byte is top byte
+            // of #doesNotUnderstand: ($d on big-endian or $s on little-endian).
+            // In SqueakJS we write non-Spur images and segments as big-endian, Spur as little-endian
+            // (TODO: write non-Spur as little-endian too since that matches all modern platforms)
+            var dnuFirstWord = this.isSpur ? 'seod' : 'does';
+            return this.formatVersion() | (dnuFirstWord.charCodeAt(0) << 24);
+        },
+        storeImageSegment: function(segmentWordArray, outPointerArray, arrayOfRoots) {
+            // This primitive will store a binary image segment (in the same format as the Squeak image file) of the receiver and every object in its proper tree of subParts (ie, that is not refered to from anywhere else outside the tree).  Note: all elements of the receiver are treated as roots determining the extent of the tree.  All pointers from within the tree to objects outside the tree will be copied into the array of outpointers.  In their place in the image segment will be an oop equal to the offset in the outpointer array (the first would be 4). but with the high bit set.
+            // The primitive expects the array and wordArray to be more than adequately long.  In this case it returns normally, and truncates the two arrays to exactly the right size.  If either array is too small, the primitive will fail, but in no other case.
+
+            // use a DataView to access the segment as big-endian words
+            var segment = new DataView(segmentWordArray.words.buffer),
+                pos = 0, // write position in segment in bytes
+                outPointers = outPointerArray.pointers,
+                outPos = 0; // write position in outPointers in words
+
+            // write header
+            segment.setUint32(pos, this.segmentVersion()); pos += 4;
+
+            // we don't want to deal with new space objects
+            this.fullGC("storeImageSegment");
+
+            // First mark the root array and all root objects
+            arrayOfRoots.mark = true;
+            for (var i = 0; i < arrayOfRoots.pointers.length; i++)
+                if (typeof arrayOfRoots.pointers[i] === "object")
+                    arrayOfRoots.pointers[i].mark = true;
+
+            // Then do a mark pass over all objects. This will stop at our marked roots,
+            // thus leaving our segment unmarked in their shadow
+            this.markReachableObjects();
+
+            // Finally unmark the rootArray and all root objects
+            arrayOfRoots.mark = false;
+            for (var i = 0; i < arrayOfRoots.pointers.length; i++)
+                if (typeof arrayOfRoots.pointers[i] === "object")
+                    arrayOfRoots.pointers[i].mark = false;
+
+            // helpers for mapping objects to segment oops
+            var segmentOops = {}, // map from object oop to segment oop
+                todo = []; // objects that were added to the segment but still need to have their oops mapped
+
+            // if an object does not yet have a segment oop, write it to the segment or outPointers
+            function addToSegment(object) {
+                var oop = segmentOops[object.oop];
+                if (!oop) {
+                    if (object.mark) {
+                        // object is outside segment, add to outPointers
+                        if (outPos >= outPointers.length) return 0; // fail if outPointerArray is too small
+                        oop = 0x80000004 + outPos * 4;
+                        outPointers[outPos++] = object;
+                        // no need to mark outPointerArray dirty, all objects are in old space
+                    } else {
+                        // add object to segment.
+                        if (pos + object.totalBytes() > segment.byteLength) return 0; // fail if segment is too small
+                        oop = pos + (object.snapshotSize().header + 1) * 4; // addr plus extra headers + base header
+                        pos = object.writeTo(segment, pos, this);
+                        // the written oops inside the object still need to be mapped to segment oops
+                        todo.push(object);
+                    }
+                    segmentOops[object.oop] = oop;
+                }
+                return oop;
+            }
+            addToSegment = addToSegment.bind(this);
+
+            // if we have to bail out, clean up what we modified
+            function cleanUp() {
+                // unmark all objects
+                var obj = this.firstOldObject;
+                while (obj) {
+                    obj.mark = false;
+                    obj = obj.nextObject;
+                }
+                // forget weak objects collected by markReachableObjects()
+                this.weakObjects = null;
+                // return code for failure
+                return false;
+            }
+            cleanUp = cleanUp.bind(this);
+
+            // All external objects, and only they, are now marked.
+            // Write the array of roots into the segment
+            addToSegment(arrayOfRoots);
+
+            // Now fix the oops inside written objects.
+            // This will add more objects to the segment (if they are unmarked),
+            // or to outPointers (if they are marked).
+            while (todo.length > 0) {
+                var obj = todo.shift(),
+                    oop = segmentOops[obj.oop],
+                    headerSize = obj.snapshotSize().header,
+                    objBody = obj.pointers,
+                    hasClass = headerSize > 0;
+                if (hasClass) {
+                    var classOop = addToSegment(obj.sqClass);
+                    if (!classOop) return cleanUp(); // ran out of space
+                    var headerType = headerSize === 1 ? Squeak.HeaderTypeClass : Squeak.HeaderTypeSizeAndClass;
+                    segment.setUint32(oop - 8, classOop | headerType);
+                }
+                if (!objBody) continue;
+                for (var i = 0; i < objBody.length; i++) {
+                    var child = objBody[i];
+                    if (typeof child !== "object") continue;
+                    var childOop = addToSegment(child);
+                    if (!childOop) return cleanUp(); // ran out of space
+                    segment.setUint32(oop + i * 4, childOop);
+                }
+            }
+
+            // Truncate image segment and outPointerArray to actual size
+            var obj = segmentWordArray.oop < outPointerArray.oop ? segmentWordArray : outPointerArray,
+                removedBytes = 0;
+            while (obj) {
+                obj.oop -= removedBytes;
+                if (obj === segmentWordArray) {
+                    removedBytes += (obj.words.length * 4) - pos;
+                    obj.words = new Uint32Array(obj.words.buffer.slice(0, pos));
+                } else if (obj === outPointerArray) {
+                    removedBytes += (obj.pointers.length - outPos) * 4;
+                    obj.pointers.length = outPos;
+                }
+                obj = obj.nextObject;
+            }
+            this.oldSpaceBytes -= removedBytes;
+
+            // unmark all objects etc
+            cleanUp();
+
+            return true;
         },
         loadImageSegment: function(segmentWordArray, outPointerArray) {
             // The C VM creates real objects from the segment in-place.
-            // We do the same, linking the new objects directly into old-space.
+            // We do the same, inserting the new objects directly into old-space
+            // between segmentWordArray and its following object (endMarker).
+            // This only increases oldSpaceCount but not oldSpaceBytes.
             // The code below is almost the same as readFromBuffer() ... should unify
-            var data = new DataView(segmentWordArray.words.buffer),
+            var segment = new DataView(segmentWordArray.words.buffer),
                 littleEndian = false,
                 nativeFloats = false,
                 pos = 0;
             var readWord = function() {
-                var int = data.getUint32(pos, littleEndian);
+                var word = segment.getUint32(pos, littleEndian);
                 pos += 4;
-                return int;
+                return word;
             };
             var readBits = function(nWords, format) {
                 if (format < 5) { // pointers (do endian conversion)
@@ -2282,7 +2402,7 @@
                         oops.push(readWord());
                     return oops;
                 } else { // words (no endian conversion yet)
-                    var bits = new Uint32Array(data.buffer, pos, nWords);
+                    var bits = new Uint32Array(segment.buffer, pos, nWords);
                     pos += nWords * 4;
                     return bits;
                 }
@@ -2304,7 +2424,7 @@
                 oopOffset = segmentWordArray.oop,
                 oopMap = {},
                 rawBits = {};
-            while (pos < data.byteLength) {
+            while (pos < segment.byteLength) {
                 var nWords = 0,
                     classInt = 0,
                     header = readWord();
@@ -2368,6 +2488,8 @@
         initSpurOverrides: function() {
             this.registerObject = this.registerObjectSpur;
             this.writeToBuffer = this.writeToBufferSpur;
+            this.storeImageSegment = this.storeImageSegmentSpur;
+            this.loadImageSegment = this.loadImageSegmentSpur;
         },
         spurClassTable: function(oopMap, rawBits, classPages, splObjs) {
             var classes = {},
@@ -2517,9 +2639,10 @@
                     var classObj = this.classTable[classID];
                     if (classObj && classObj.pointers) {
                         if (!classObj.hash) throw Error("class without id");
-                        if (classObj.hash !== classID && classID >= 32) {
+                        if (classObj.hash !== classID && classID >= 32 || classObj.oop < 0) {
                             console.warn("freeing class index " + classID + " " + classObj.className());
                             classObj = null;
+                            delete this.classTable[classID];
                         }
                     }
                     if (classObj) data.setUint32(pos, objToOop(classObj), littleEndian);
@@ -2587,6 +2710,16 @@
             console.log("Wrote " + n + " objects in " + time + " ms, image size " + pos + " bytes");
             return data.buffer;
         },
+        storeImageSegmentSpur: function(segmentWordArray, outPointerArray, arrayOfRoots) {
+            // see comment in segmentVersion() if you implement this
+            // also see markReachableObjects() about immediate chars
+            this.vm.warnOnce("not implemented for Spur yet: primitive 98 (primitiveStoreImageSegment)");
+            return false;
+        },
+        loadImageSegmentSpur: function(segmentWordArray, outPointerArray) {
+            this.vm.warnOnce("not implemented for Spur yet: primitive 99 (primitiveLoadImageSegment)");
+            return null;
+        },
     });
 
     /*
@@ -2633,7 +2766,7 @@
             this.falseObj = this.specialObjects[Squeak.splOb_FalseObject];
             this.trueObj = this.specialObjects[Squeak.splOb_TrueObject];
             this.hasClosures = this.image.hasClosures;
-            this.globals = this.findGlobals();
+            this.getGlobals = this.globalsGetter();
             // hack for old image that does not support Unix files
             if (!this.hasClosures && !this.findMethod("UnixFileDirectory class>>pathNameDelimiter"))
                 this.primHandler.emulateMac = true;
@@ -2647,6 +2780,8 @@
             this.interruptCheckCounter = 0;
             this.interruptCheckCounterFeedBackReset = 1000;
             this.interruptChecksEveryNms = 3;
+            this.lowSpaceThreshold = 1000000;
+            this.signalLowSpace = false;
             this.nextPollTick = 0;
             this.nextWakeupTick = 0;
             this.lastTick = 0;
@@ -2682,7 +2817,13 @@
             this.fetchContextRegisters(this.activeContext);
             this.reclaimableContextCount = 0;
         },
-        findGlobals: function() {
+        globalsGetter: function() {
+            // Globals (more specifically the pointers we are interested in) might
+            // change during execution, because a Dictionary needs growing for example.
+            // Therefore answer a getter function to access the actual globals (pointers).
+            // This getter can be used, even if the Dictionary has grown (and thereby the
+            // underlying Array is replaced by a larger one), because it uses the reference
+            // to the 'outer' Dictionary instead of the pointers to the values.
             var smalltalk = this.specialObjects[Squeak.splOb_SmalltalkDictionary],
                 smalltalkClass = smalltalk.sqClass.className();
             if (smalltalkClass === "Association") {
@@ -2690,17 +2831,17 @@
                 smalltalkClass = smalltalk.sqClass.className();
             }
             if (smalltalkClass === "SystemDictionary")
-                return smalltalk.pointers[1].pointers;
+                return function() { return smalltalk.pointers[1].pointers; };
             if (smalltalkClass === "SmalltalkImage") {
                 var globals = smalltalk.pointers[0],
                     globalsClass = globals.sqClass.className();
                 if (globalsClass === "SystemDictionary")
-                    return globals.pointers[1].pointers;
+                    return function() { return globals.pointers[1].pointers; };
                 if (globalsClass === "Environment")
-                    return globals.pointers[2].pointers[1].pointers
+                    return function() { return globals.pointers[2].pointers[1].pointers; };
             }
             console.warn("cannot find global dict");
-            return [];
+            return function() { return []; };
         },
         initCompiler: function() {
             if (!Squeak.Compiler)
@@ -2725,6 +2866,8 @@
             }
         },
         hackImage: function() {
+            // hack methods to make work / speed up
+            var opts = typeof location === 'object' ? location.hash : "";
             [
                 // Etoys fallback for missing translation files is hugely inefficient.
                 // This speeds up opening a viewer by 10x (!)
@@ -2734,7 +2877,7 @@
                 // 64 bit Squeak does not flush word size on snapshot
                 {method: "SmalltalkImage>>wordSize", literal: {index: 1, old: 8, hack: 4}, enabled: true},
                 // Squeak 5.3 disable wizard by replacing #open send with pop
-                {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: location.hash.includes("wizard=false")},
+                {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: opts.includes("wizard=false")},
             ].forEach(function(each) {
                 try {
                     var m = each.enabled && this.findMethod(each.method);
@@ -2761,7 +2904,7 @@
     'interpreting', {
         interpretOne: function(singleStep) {
             if (this.method.methodSignFlag()) {
-                return this.interpretOneSista(singleStep);
+                return this.interpretOneSistaWithExtensions(singleStep, 0, 0);
             }
             if (this.method.compiled) {
                 if (singleStep) {
@@ -2934,9 +3077,6 @@
                     this.send(this.method.methodGetSelector(b&0xF), 2, false); return;
             }
             throw Error("not a bytecode: " + b);
-        },
-        interpretOneSista: function(singleStep) {
-            this.interpretOneSistaWithExtensions(singleStep, 0, 0);
         },
         interpretOneSistaWithExtensions: function(singleStep, extA, extB) {
             var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively
@@ -3245,10 +3385,11 @@
             }
             this.interruptCheckCounter = this.interruptCheckCounterFeedBackReset; //reset the interrupt check counter
             this.lastTick = now; //used to detect wraparound of millisecond clock
-            //  if(signalLowSpace) {
-            //            signalLowSpace= false; //reset flag
-            //            sema= getSpecialObject(Squeak.splOb_TheLowSpaceSemaphore);
-            //            if(sema != nilObj) synchronousSignal(sema); }
+            if (this.signalLowSpace) {
+                this.signalLowSpace = false; // reset flag
+                var sema = this.specialObjects[Squeak.splOb_TheLowSpaceSemaphore];
+                if (!sema.isNil) this.primHandler.synchronousSignal(sema);
+            }
             //  if(now >= nextPollTick) {
             //            ioProcessEvents(); //sets interruptPending if interrupt key pressed
             //            nextPollTick= now + 500; } //msecs to wait before next call to ioProcessEvents"
@@ -3500,6 +3641,7 @@
             this.executeNewMethod(rcvr, method, argCount, 0);
         },
         findSelectorInClass: function(selector, argCount, startingClass) {
+            this.currentSelector = selector; // for primitiveInvokeObjectAsMethod
             var cacheEntry = this.findMethodCacheEntry(selector, startingClass);
             if (cacheEntry.method) return cacheEntry; // Found it in the method cache
             var currentClass = startingClass;
@@ -3516,11 +3658,9 @@
                 }
                 var newMethod = this.lookupSelectorInDict(mDict, selector);
                 if (!newMethod.isNil) {
-                    this.currentSelector = selector;
-                    this.currentLookupClass = startingClass;
-                    //if method is not actually a CompiledMethod, invoke primitiveInvokeObjectAsMethod (248) instead
+                    // if method is not actually a CompiledMethod, let primitiveInvokeObjectAsMethod (576) handle it
                     cacheEntry.method = newMethod;
-                    cacheEntry.primIndex = newMethod.isMethod() ? newMethod.methodPrimitiveIndex() : 248;
+                    cacheEntry.primIndex = newMethod.isMethod() ? newMethod.methodPrimitiveIndex() : 576;
                     cacheEntry.argCount = argCount;
                     cacheEntry.mClass = currentClass;
                     return cacheEntry;
@@ -3682,10 +3822,10 @@
             var sp = this.sp;
             var context = this.activeContext;
             var success = this.primHandler.doPrimitive(primIndex, argCount, newMethod);
-            if (success 
+            if (success
                 && this.sp !== sp - argCount
                 && context === this.activeContext
-                && primIndex !== 117    // named prims are checked separately 
+                && primIndex !== 117    // named prims are checked separately
                 && !this.frozen) {
                     this.warnOnce("stack unbalanced after primitive " + primIndex, "error");
                 }
@@ -3820,6 +3960,10 @@
             this.activeContext = newContext; //We're off and running...
             this.activeContext.dirty = true;
             this.fetchContextRegisters(newContext);
+            if (this.breakOnContextChanged) {
+                this.breakOnContextChanged = false;
+                this.breakNow();
+            }
         },
         exportThisContext: function() {
             this.storeContextRegisters();
@@ -4060,6 +4204,26 @@
                 for (var i = 0; i < length; i++)
                     dest[destPos + i] = src[srcPos + i];
         },
+        signalLowSpaceIfNecessary: function(bytesLeft) {
+            if (bytesLeft < this.lowSpaceThreshold && this.lowSpaceThreshold > 0) {
+                var increase = prompt && prompt("Out of memory, " + Math.ceil(this.image.totalMemory/1000000)
+                    + " MB used.\nEnter additional MB, or 0 to signal low space in image", "0");
+                if (increase) {
+                    var bytes = parseInt(increase, 10) * 1000000;
+                    this.image.totalMemory += bytes;
+                    this.signalLowSpaceIfNecessary(this.image.bytesLeft());
+                } else {
+                    console.warn("squeak: low memory (" + bytesLeft + "/" + this.image.totalMemory + " bytes left), signaling low space");
+                    this.signalLowSpace = true;
+                    this.lowSpaceThreshold = 0;
+                    var lastSavedProcess = this.specialObjects[Squeak.splOb_ProcessSignalingLowSpace];
+                    if (lastSavedProcess.isNil) {
+                        this.specialObjects[Squeak.splOb_ProcessSignalingLowSpace] = this.primHandler.activeProcess();
+                    }
+                    this.forceInterruptCheck();
+                }
+            }
+       },
     },
     'debugging', {
         addMessage: function(message) {
@@ -4107,7 +4271,7 @@
         },
         allGlobalsDo: function(callback) {
             // callback(globalNameObj, globalObj), truish result breaks out of iteration
-            var globals = this.globals;
+            var globals = this.getGlobals();
             for (var i = 0; i < globals.length; i++) {
                 var assn = globals[i];
                 if (!assn.isNil) {
@@ -4206,16 +4370,16 @@
             this.breakOnContextChanged = true;
             this.breakOnContextReturned = null;
         },
-        printActiveContext: function(maxWidth) {
+        printContext: function(ctx, maxWidth) {
+            if (!this.isContext(ctx)) return "NOT A CONTEXT: " + printObj(ctx);
             if (!maxWidth) maxWidth = 72;
             function printObj(obj) {
-                var value = obj.sqInstName ? obj.sqInstName() : obj.toString();
+                var value = typeof obj === 'number' || typeof obj === 'object' ? obj.sqInstName() : "<" + obj + ">";
                 value = JSON.stringify(value).slice(1, -1);
                 if (value.length > maxWidth - 3) value = value.slice(0, maxWidth - 3) + '...';
                 return value;
             }
             // temps and stack in current context
-            var ctx = this.activeContext;
             var isBlock = typeof ctx.pointers[Squeak.BlockContext_argumentCount] === 'number';
             var closure = ctx.pointers[Squeak.Context_closure];
             var isClosure = !isBlock && !closure.isNil;
@@ -4237,10 +4401,11 @@
             }
             if (isBlock) {
                 stack += '\n';
-                var nArgs = ctx.pointers[3];
+                var nArgs = ctx.pointers[Squeak.BlockContext_argumentCount];
                 var firstArg = this.decodeSqueakSP(1);
                 var lastArg = firstArg + nArgs;
-                for (var i = firstArg; i <= this.sp; i++) {
+                var sp = ctx === this.activeContext ? this.sp : ctx.pointers[Squeak.Context_stackPointer];
+                for (var i = firstArg; i <= sp; i++) {
                     var value = printObj(ctx.pointers[i]);
                     var label = '';
                     if (i <= lastArg) label = '=arg' + (i - firstArg);
@@ -4248,6 +4413,9 @@
                 }
             }
             return stack;
+        },
+        printActiveContext: function(maxWidth) {
+            return this.printContext(this.activeContext, maxWidth);
         },
         printAllProcesses: function() {
             var schedAssn = this.specialObjects[Squeak.splOb_SchedulerAssociation],
@@ -4280,8 +4448,9 @@
         printProcess: function(process, active) {
             var context = process.pointers[Squeak.Proc_suspendedContext],
                 priority = process.pointers[Squeak.Proc_priority],
-                stack = this.printStack(active ? null : context);
-            return process.toString() +" at priority " + priority + "\n" + stack;
+                stack = this.printStack(active ? null : context),
+                values = this.printContext(context);
+            return process.toString() +" at priority " + priority + "\n" + stack + values + "\n";
         },
         printByteCodes: function(aMethod, optionalIndent, optionalHighlight, optionalPC) {
             if (!aMethod) aMethod = this.method;
@@ -4899,9 +5068,9 @@
                     return client.popIntoTemporaryVariable(b - 0xD0);
                 case 0xD8: return client.doPop();
             }
-            var b2 = this.method.bytes[this.pc++];    
+            var b2 = this.method.bytes[this.pc++];
             switch (b) {
-                case 0xE0: return this.interpretNextInstructionExtFor(client, (extA << 8) + b2, extB); 
+                case 0xE0: return this.interpretNextInstructionExtFor(client, (extA << 8) + b2, extB);
                 case 0xE1: return this.interpretNextInstructionExtFor(client, extA, (extB << 8) + (b2 < 128 ? b2 : b2-256));
                 case 0xE2:
                     return client.pushReceiverVariable(b2 + (extA << 8));
@@ -4943,7 +5112,7 @@
                 case 0xF5:
                     return client.storeIntoTemporaryVariable(b2);
             }
-            var b3 = this.method.bytes[this.pc++];    
+            var b3 = this.method.bytes[this.pc++];
             switch (b) {
                 case 0xF8: return client.callPrimitive(b2 + (b3 << 8));
                 case 0xF9: {
@@ -5306,7 +5475,7 @@
                 case 69: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,true)); // Method.objectAt:put:
                 case 70: return this.popNandPushIfOK(argCount+1, this.instantiateClass(this.stackNonInteger(0), 0)); // Class.new
                 case 71: return this.popNandPushIfOK(argCount+1, this.instantiateClass(this.stackNonInteger(1), this.stackPos32BitInt(0))); // Class.new:
-                case 72: return this.primitiveArrayBecome(argCount, false); // one way
+                case 72: return this.primitiveArrayBecome(argCount, false, true); // one way, do copy hash
                 case 73: return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,true)); // instVarAt:
                 case 74: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,true)); // instVarAt:put:
                 case 75: return this.popNandPushIfOK(argCount+1, this.identityHash(this.stackNonInteger(0))); // Object.identityHash
@@ -5334,7 +5503,7 @@
                 case 95: return this.primitiveInputWord(argCount);
                 case 96: return this.namedPrimitive('BitBltPlugin', 'primitiveCopyBits', argCount);
                 case 97: return this.primitiveSnapshot(argCount);
-                case 98: this.vm.warnOnce("missing primitive 98 (primitiveStoreImageSegment)"); return false;
+                case 98: return this.primitiveStoreImageSegment(argCount);
                 case 99: return this.primitiveLoadImageSegment(argCount);
                 case 100: return this.vm.primitivePerformWithArgs(argCount, true); // Object.perform:withArguments:inSuperclass: (Blue Book: primitiveSignalAtTick)
                 case 101: return this.primitiveBeCursor(argCount); // Cursor.beCursor
@@ -5366,7 +5535,7 @@
                 case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
                 case 126: return this.primitiveDeferDisplayUpdates(argCount);
                 case 127: return this.primitiveShowDisplayRect(argCount);
-                case 128: return this.primitiveArrayBecome(argCount, true); // both ways
+                case 128: return this.primitiveArrayBecome(argCount, true, true); // both ways, do copy hash
                 case 129: return this.popNandPushIfOK(1, this.vm.image.specialObjectsArray); //specialObjectsOop
                 case 130: return this.primitiveFullGC(argCount);
                 case 131: return this.primitivePartialGC(argCount);
@@ -5430,9 +5599,12 @@
                 case 174: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySamples', argCount);
                     else return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,true)); // slotAt:put:
                 case 175: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySilence', argCount);
-                    else return this.popNandPushIfOK(argCount+1, this.behaviorHash(this.stackNonInteger(0)));
+                    else if (!this.vm.image.isSpur) {
+                        this.vm.warnOnce("primitive 175 called in non-spur image"); // workaround for Cuis
+                        return this.popNandPushIfOK(argCount+1, this.identityHash(this.stackNonInteger(0)));
+                    } else return this.popNandPushIfOK(argCount+1, this.behaviorHash(this.stackNonInteger(0)));
                 case 176: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primWaveTableSoundmixSampleCountintostartingAtpan', argCount);
-                    break;  // fail
+                    else return this.popNandPushIfOK(argCount+1, this.vm.image.isSpur ? 0x3FFFFF : 0xFFF); // primitiveMaxIdentityHash
                 case 177: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primFMSoundmixSampleCountintostartingAtpan', argCount);
                     return this.popNandPushIfOK(argCount+1, this.allInstancesOf(this.stackNonInteger(0)));
                 case 178: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primPluckedSoundmixSampleCountintostartingAtpan', argCount);
@@ -5446,9 +5618,9 @@
                 case 182: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'oldprimSampledSoundmixSampleCountintostartingAtleftVolrightVol', argCount);
                     return this.primitiveSizeInBytes(argCount);
                 case 183: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveApplyReverb', argCount);
-                    break;  // fail
+                    else return this.primitiveIsPinned(argCount);
                 case 184: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixLoopedSampledSound', argCount);
-                    break; // fail
+                    else return this.primitivePin(argCount);
                 case 185: if (this.oldPrims) return this.namedPrimitive('SoundGenerationPlugin', 'primitiveMixSampledSound', argCount);
                     else return this.primitiveExitCriticalSection(argCount);
                 case 186: if (this.oldPrims) break; // unused
@@ -5503,6 +5675,7 @@
                 case 216: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketRemotePort', argCount);
                 case 217: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectToPort', argCount);
                 case 218: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketListenOnPort', argCount);
+                    else { this.vm.warnOnce("missing primitive: 218 (tryNamedPrimitiveInForWithArgs"); return false; }
                 case 219: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketCloseConnection', argCount);
                 case 220: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketAbortConnection', argCount);
                     break;  // fail 212-220 if fell through
@@ -5539,8 +5712,8 @@
                 case 246: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount);
                     break;  // fail 243-246 if fell through
                 // 247: unused
-                case 248: return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod); // see findSelectorInClass()
-                case 249: return this.primitiveArrayBecome(argCount, false); // one way, opt. copy hash
+                case 248: return this.primitiveArrayBecome(argCount, false, false); // one way, do not copy hash
+                case 249: return this.primitiveArrayBecome(argCount, false, true); // one way, opt. copy hash
                 case 254: return this.primitiveVMParameter(argCount);
                 //MIDI Primitives (520-539)
                 case 521: return this.namedPrimitive('MIDIPlugin', 'primitiveMIDIClosePort', argCount);
@@ -5564,6 +5737,9 @@
                 case 572: return this.primitiveListBuiltinModule(argCount);
                 case 573: return this.primitiveListLoadedModule(argCount);
                 case 575: this.vm.warnOnce("missing primitive: 575 (primitiveHighBit)"); return false;
+                // this is not really a primitive, see findSelectorInClass()
+                case 576: return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod);
+                case 578: this.vm.warnOnce("missing primitive: 578 (primitiveSuspendAndBackupPC)"); return false; // see bit 5 of vmParameterAt: 65
             }
             console.error("primitive " + index + " not implemented yet");
             return false;
@@ -6196,7 +6372,7 @@
             }
             if (intToPut<0 || intToPut>255) {this.success = false; return objToPut;}
             if (array.isBytes())  // bytes...
-                return array.bytes[index-1] = intToPut;
+                {array.bytes[index-1] = intToPut; return objToPut;}
             // methods must simulate Squeak's method indexing
             var offset = array.pointersSize() * 4;
             if (index-1-offset < 0) {this.success = false; return array;} //writing lits as bytes
@@ -6260,7 +6436,7 @@
             if (indexableSize * 4 > this.vm.image.bytesLeft()) {
                 // we're not really out of memory, we have no idea how much memory is available
                 // but we need to stop runaway allocations
-                console.warn("squeak: out of memory");
+                console.warn("squeak: out of memory, failing allocation");
                 this.success = false;
                 this.vm.primFailCode = Squeak.PrimErrNoMemory;
                 return null;
@@ -6307,6 +6483,20 @@
         },
         newObjectHash: function(obj) {
             return Math.floor(Math.random() * 0x3FFFFE) + 1;
+        },
+        primitivePin: function(argCount) {
+            // For us, pinning is a no-op, so we just toggle the pinned flag
+            var rcvr = this.stackNonInteger(1),
+                pin = this.stackBoolean(0);
+            if (!this.success) return false;
+            var wasPinned = rcvr.pinned;
+            rcvr.pinned = pin;
+            return this.popNandPushIfOK(argCount + 1, this.makeStObject(!!wasPinned));
+        },
+        primitiveIsPinned: function(argCount) {
+            var rcvr = this.stackNonInteger(0);
+            if (!this.success) return false;
+            return this.popNandPushIfOK(argCount + 1, this.makeStObject(!!rcvr.pinned));
         },
         primitiveSizeInBytesOfInstance: function(argCount) {
             if (argCount > 1) return false;
@@ -6508,10 +6698,10 @@
             this.vm.executeNewMethod(receiver, methodObj, numArgs, methodObj.methodPrimitiveIndex(), null, null);
             return true;
         },
-        primitiveArrayBecome: function(argCount, doBothWays) {
+        primitiveArrayBecome: function(argCount, doBothWays, copyHash) {
             var rcvr = this.stackNonInteger(argCount),
-                arg = this.stackNonInteger(argCount-1),
-                copyHash = argCount > 1 ? this.stackBoolean(argCount-2) : true;
+                arg = this.stackNonInteger(argCount-1);
+            if (argCount > 1) copyHash = this.stackBoolean(argCount-2);
             if (!this.success) return false;
             this.success = this.vm.image.bulkBecome(rcvr.pointers, arg.pointers, doBothWays, copyHash);
             return this.popNIfOK(argCount);
@@ -6577,7 +6767,17 @@
             for (var i = 0; i < length; i++)
                 rcvr.pointers[i] = arg.pointers[i];
             rcvr.dirty = arg.dirty;
-            this.vm.pop(argCount);
+            this.vm.popN(argCount);
+            return true;
+        },
+        primitiveStoreImageSegment: function(argCount) {
+            var arrayOfRoots = this.stackNonInteger(2),
+                segmentWordArray = this.stackNonInteger(1),
+                outPointerArray = this.stackNonInteger(0);
+            if (!arrayOfRoots.pointers || !segmentWordArray.words || !outPointerArray.pointers) return false;
+            var success = this.vm.image.storeImageSegment(segmentWordArray, outPointerArray, arrayOfRoots);
+            if (!success) return false;
+            this.vm.popN(argCount); // return self
             return true;
         },
         primitiveLoadImageSegment: function(argCount) {
@@ -6625,6 +6825,7 @@
             block.pointers[Squeak.BlockContext_caller] = this.vm.activeContext;
             this.vm.popN(argCount+1);
             this.vm.newActiveContext(block);
+            if (this.vm.interruptCheckCounter-- <= 0) this.vm.checkForInterrupts();
             return true;
         },
         primitiveBlockValueWithArgs: function(argCount) {
@@ -6643,6 +6844,7 @@
             block.pointers[Squeak.BlockContext_caller] = this.vm.activeContext;
             this.vm.popN(argCount+1);
             this.vm.newActiveContext(block);
+            if (this.vm.interruptCheckCounter-- <= 0) this.vm.checkForInterrupts();
             return true;
         },
         primitiveClosureCopyWithCopiedValues: function(argCount) {
@@ -6654,7 +6856,9 @@
             var blockClosure = this.vm.stackValue(argCount),
                 blockArgCount = blockClosure.pointers[Squeak.Closure_numArgs];
             if (argCount !== blockArgCount) return false;
-            return this.activateNewClosureMethod(blockClosure, argCount);
+            this.activateNewClosureMethod(blockClosure, argCount);
+            if (this.vm.interruptCheckCounter-- <= 0) this.vm.checkForInterrupts();
+            return true;
         },
         primitiveClosureValueWithArgs: function(argCount) {
             var array = this.vm.top(),
@@ -6665,16 +6869,25 @@
             this.vm.pop();
             for (var i = 0; i < arraySize; i++)
                 this.vm.push(array.pointers[i]);
-            return this.activateNewClosureMethod(blockClosure, arraySize);
+            this.activateNewClosureMethod(blockClosure, arraySize);
+            if (this.vm.interruptCheckCounter-- <= 0) this.vm.checkForInterrupts();
+            return true;
         },
         primitiveClosureValueNoContextSwitch: function(argCount) {
-            return this.primitiveClosureValue(argCount);
+            // An exact clone of primitiveClosureValue except that this version will not check for interrupts
+            var blockClosure = this.vm.stackValue(argCount),
+                blockArgCount = blockClosure.pointers[Squeak.Closure_numArgs];
+            if (argCount !== blockArgCount) return false;
+            this.activateNewClosureMethod(blockClosure, argCount);
+            return true;
         },
         primitiveFullClosureValue: function(argCount) {
             var blockClosure = this.vm.stackValue(argCount),
                 blockArgCount = blockClosure.pointers[Squeak.Closure_numArgs];
             if (argCount !== blockArgCount) return false;
-            return this.activateNewFullClosure(blockClosure, argCount);
+            this.activateNewFullClosure(blockClosure, argCount);
+            if (this.vm.interruptCheckCounter-- <= 0) this.vm.checkForInterrupts();
+            return true;
         },
         primitiveFullClosureValueWithArgs: function(argCount) {
             var array = this.vm.top(),
@@ -6685,10 +6898,17 @@
             this.vm.pop();
             for (var i = 0; i < arraySize; i++)
                 this.vm.push(array.pointers[i]);
-            return this.activateNewFullClosure(blockClosure, arraySize);
+            this.activateNewFullClosure(blockClosure, arraySize);
+            if (this.vm.interruptCheckCounter-- <= 0) this.vm.checkForInterrupts();
+            return true;
         },
         primitiveFullClosureValueNoContextSwitch: function(argCount) {
-            return this.primitiveFullClosureValue(argCount);
+            // An exact clone of primitiveFullClosureValue except that this version will not check for interrupts
+            var blockClosure = this.vm.stackValue(argCount),
+                blockArgCount = blockClosure.pointers[Squeak.Closure_numArgs];
+            if (argCount !== blockArgCount) return false;
+            this.activateNewFullClosure(blockClosure, argCount);
+            return true;
         },
         activateNewClosureMethod: function(blockClosure, argCount) {
             var outerContext = blockClosure.pointers[Squeak.Closure_outerContext],
@@ -6710,7 +6930,6 @@
             // The initial instructions in the block nil-out remaining temps.
             this.vm.popN(argCount + 1);
             this.vm.newActiveContext(newContext);
-            return true;
         },
         activateNewFullClosure: function(blockClosure, argCount) {
             var closureMethod = blockClosure.pointers[Squeak.ClosureFull_method],
@@ -6731,7 +6950,6 @@
             // No need to nil-out remaining temps as context pointers are nil-initialized.
             this.vm.popN(argCount + 1);
             this.vm.newActiveContext(newContext);
-            return true;
         },
     },
     'scheduling', {
@@ -7000,10 +7218,10 @@
                 case 1001: value = Squeak.platformName; break;
                 case 1002: value = Squeak.osVersion; break;
                 case 1003: value = Squeak.platformSubtype; break;
-                case 1004: value = Squeak.vmVersion; break;
+                case 1004: value = Squeak.vmVersion + ' ' + Squeak.vmMakerVersion; break;
                 case 1005: value = Squeak.windowSystem; break;
                 case 1006: value = Squeak.vmBuild; break;
-                case 1007: value = Squeak.vmVersion; break; // Interpreter class
+                case 1007: value = Squeak.vmInterpreterVersion; break; // Interpreter class
                 // case 1008: Cogit class
                 case 1009: value = Squeak.vmVersion + ' Date: ' + Squeak.vmDate; break; // Platform source version
                 default:
@@ -7101,6 +7319,8 @@
                 //             to others at the same priority.
                 //      Bit 3: in a muilt-threaded VM, if set, the Window system will only be accessed from the first VM thread
                 //      Bit 4: in a Spur vm, if set, causes weaklings and ephemerons to be queued individually for finalization
+                //      Bit 5: if set, implies wheel events will be delivered as such and not mapped to arrow key events
+                //      Bit 6: if set, implies arithmetic primitives will fail if given arguments of different types (float vs int)
                 // 49   the size of the external semaphore table (read-write; Cog VMs only)
                 // 50-51 reserved for VM parameters that persist in the image (such as eden above)
                 // 52   root (remembered) table maximum size (read-only)
@@ -7118,14 +7338,24 @@
                 // 64   current number of machine code methods (read-only; Cog VMs only)
                 // 65   In newer Cog VMs a set of flags describing VM features,
                 //      if non-zero bit 0 implies multiple bytecode set support;
-                //      if non-zero bit 0 implies read-only object support
+                //      if non-zero bit 1 implies read-only object support;
+                //      if non-zero bit 2 implies the VM suffers from using an ITIMER heartbeat (if 0 it has a thread that provides the heartbeat)
+                //      if non-zero bit 3 implies the VM supports cross-platform BIT_IDENTICAL_FLOATING_POINT arithmetic
+                //      if non-zero bit 4 implies the VM can catch exceptions in FFI calls and answer them as primitive failures
+                //      if non-zero bit 5 implies the VM's suspend primitive backs up the process to before the wait if it was waiting on a condition variable
                 //      (read-only; Cog VMs only; nil in older Cog VMs, a boolean answering multiple bytecode support in not so old Cog VMs)
                 case 65: return 0;
                 // 66   the byte size of a stack page in the stack zone  (read-only; Cog VMs only)
                 // 67   the maximum allowed size of old space in bytes, 0 implies no internal limit (Spur VMs only).
+                case 67: return this.vm.image.totalMemory;
                 // 68 - 69 reserved for more Cog-related info
                 // 70   the value of VM_PROXY_MAJOR (the interpreterProxy major version number)
-                // 71   the value of VM_PROXY_MINOR (the interpreterProxy minor version number)"
+                // 71   the value of VM_PROXY_MINOR (the interpreterProxy minor version number)
+                // 72   total milliseconds in full GCs Mark phase since startup (read-only)
+                // 73   total milliseconds in full GCs Sweep phase since startup (read-only, can be 0 depending on compactors)
+                // 74   maximum pause time due to segment allocation
+                // 75   whether arithmetic primitives will do mixed type arithmetic; if false they fail for different receiver and argument types
+                // 76   the minimum unused headroom in all stack pages; Cog VMs only
             }
             return null;
         },
@@ -7134,6 +7364,7 @@
                 return this.popNandPushIfOK(1, this.makeStString(this.filenameToSqueak(this.vm.image.name)));
             this.vm.image.name = this.filenameFromSqueak(this.vm.top().bytesAsString());
             Squeak.Settings['squeakImageName'] = this.vm.image.name;
+            this.vm.popN(argCount);
             return true;
         },
         primitiveSnapshot: function(argCount) {
@@ -7174,7 +7405,7 @@
     'time', {
         primitiveRelinquishProcessorForMicroseconds: function(argCount) {
             // we ignore the optional arg
-            this.vm.pop(argCount);
+            this.vm.popN(argCount);
             this.vm.goIdle();        // might switch process, so must be after pop
             return true;
         },
@@ -7373,9 +7604,10 @@
             this.vm = vm;
             this.comments = !!Squeak.Compiler.comments, // generate comments
             // for debug-printing only
-            this.specialSelectors = ['+', '-', '<', '>', '<=', '>=', '=', '~=', '*', '/', '\\', '@',
+            this.specialSelectors = ['+', '-', '<', '>', '<=', '>=', '=', '~=', '*', '/', '\\\\', '@',
                 'bitShift:', '//', 'bitAnd:', 'bitOr:', 'at:', 'at:put:', 'size', 'next', 'nextPut:',
                 'atEnd', '==', 'class', 'blockCopy:', 'value', 'value:', 'do:', 'new', 'new:', 'x', 'y'];
+            this.doitCounter = 0;
         },
     },
     'accessing', {
@@ -7418,7 +7650,7 @@
             return true;
         },
         functionNameFor: function(cls, sel) {
-            if (cls === undefined || cls === '?') return "Squeak_DOIT";
+            if (cls === undefined || cls === '?') return "DOIT_" + ++this.doitCounter;
             if (!/[^a-zA-Z0-9:_]/.test(sel))
                 return (cls + "_" + sel).replace(/[: ]/g, "_");
             var op = sel.replace(/./g, function(char) {
@@ -7771,16 +8003,32 @@
             if (destination > this.endPC) this.endPC = destination;
         },
         generateQuickPrim: function(byte) {
-            if (this.debug) this.generateDebugCode("quick prim " + this.specialSelectors[(byte & 0x0F) + 16]);
+            if (this.debug) this.generateDebugCode("quick send #" + this.specialSelectors[(byte & 0x0F) + 16]);
             this.generateLabel();
             switch (byte) {
-                //case 0xC0: return this.popNandPushIfOK(2, this.objectAt(true,true,false)); // at:
-                //case 0xC1: return this.popNandPushIfOK(3, this.objectAtPut(true,true,false)); // at:put:
+                case 0xC0: // at:
+                    this.needsVar['stack'] = true;
+                    this.source.push(
+                        "var a, b; if ((a=stack[vm.sp-1]).sqClass === vm.specialObjects[7] && typeof (b=stack[vm.sp]) === 'number' && b>0 && b<=a.pointers.length) {\n",
+                        "  stack[--vm.sp] = a.pointers[b-1];",
+                        "} else { var c = vm.primHandler.objectAt(true,true,false); if (vm.primHandler.success) stack[--vm.sp] = c; else {\n",
+                        "  vm.pc = ", this.pc, "; vm.sendSpecial(16); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return; }}\n");
+                    this.needsLabel[this.pc] = true;
+                    return;
+                case 0xC1: // at:put:
+                    this.needsVar['stack'] = true;
+                    this.source.push(
+                        "var a, b; if ((a=stack[vm.sp-2]).sqClass === vm.specialObjects[7] && typeof (b=stack[vm.sp-1]) === 'number' && b>0 && b<=a.pointers.length) {\n",
+                        "  var c = stack[vm.sp]; stack[vm.sp-=2] = a.pointers[b-1] = c; a.dirty = true;",
+                        "} else { vm.primHandler.objectAtPut(true,true,false); if (vm.primHandler.success) stack[vm.sp-=2] = c; else {\n",
+                        "  vm.pc = ", this.pc, "; vm.sendSpecial(17); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return; }}\n");
+                    this.needsLabel[this.pc] = true;
+                    return;
                 case 0xC2: // size
                     this.needsVar['stack'] = true;
                     this.source.push(
-                        "if (stack[vm.sp].sqClass === vm.specialObjects[7]) stack[vm.sp] = stack[vm.sp].pointersSize();\n",
-                        "else if (stack[vm.sp].sqClass === vm.specialObjects[6]) stack[vm.sp] = stack[vm.sp].bytesSize();\n",
+                        "if (stack[vm.sp].sqClass === vm.specialObjects[7]) stack[vm.sp] = stack[vm.sp].pointersSize();\n",     // Array
+                        "else if (stack[vm.sp].sqClass === vm.specialObjects[6]) stack[vm.sp] = stack[vm.sp].bytesSize();\n",   // ByteString
                         "else { vm.pc = ", this.pc, "; vm.sendSpecial(18); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return; }\n");
                     this.needsLabel[this.pc] = true;
                     return;
@@ -7828,7 +8076,7 @@
             this.needsLabel[this.pc] = true;
         },
         generateNumericOp: function(byte) {
-            if (this.debug) this.generateDebugCode("numeric op " + this.specialSelectors[byte & 0x0F]);
+            if (this.debug) this.generateDebugCode("quick send #" + this.specialSelectors[byte & 0x0F]);
             this.generateLabel();
             // if the op cannot be executed here, do a full send and return to main loop
             // we need a label for coming back
@@ -8262,9 +8510,10 @@
                     this.showForm(context, cursorForm, bounds, true);
                 }
                 var canvas = this.display.context.canvas,
-                    scale = canvas.offsetWidth / canvas.width;
-                cursorCanvas.style.width = (cursorCanvas.width * scale|0) + "px";
-                cursorCanvas.style.height = (cursorCanvas.height * scale|0) + "px";
+                    scale = canvas.offsetWidth / canvas.width,
+                    ratio = this.display.highdpi ? window.devicePixelRatio : 1;
+                cursorCanvas.style.width = (cursorCanvas.width * ratio * scale|0) + "px";
+                cursorCanvas.style.height = (cursorCanvas.height * ratio * scale|0) + "px";
                 this.display.cursorOffsetX = cursorForm.offsetX * scale|0;
                 this.display.cursorOffsetY = cursorForm.offsetY * scale|0;
             }
@@ -8515,6 +8764,11 @@
                 h = display.height || display.context.canvas.height;
             return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(w, h));
         },
+        primitiveScreenScaleFactor: function(argCount) {
+            var scale = this.display.initialScale || 1.0,
+                scaleFactor = 1.0 / scale;
+            return this.popNandPushIfOK(argCount+1, this.makeFloat(scaleFactor));
+        },
         primitiveSetFullScreen: function(argCount) {
             var flag = this.stackBoolean(0);
             if (!this.success) return false;
@@ -8558,7 +8812,13 @@
             if (!(form.depth > 0)) return null; // happens if not int
             form.pixPerWord = 32 / form.depth;
             form.pitch = (form.width + (form.pixPerWord - 1)) / form.pixPerWord | 0;
-            if (form.bits.length !== (form.pitch * form.height)) return null;
+            if (form.bits.length !== (form.pitch * form.height)) {
+                if (form.bits.length > (form.pitch * form.height)) {
+                    this.vm.warnOnce("loadForm(): " + form.bits.length + " !== " + form.pitch + "*" + form.height + "=" + (form.pitch*form.height));
+                } else {
+                    return null;
+                }
+            }
             return form;
         },
         theDisplay: function() {
@@ -8847,6 +9107,14 @@
             if (!errorDo) errorDo = function(err) { console.log(err); };
             var path = this.splitFilePath(filepath);
             if (!path.basename) return errorDo("Invalid path: " + filepath);
+            if (Squeak.debugFiles) {
+                console.log("Reading " + path.fullname);
+                var realThenDo = thenDo;
+                thenDo = function(data) {
+                    console.log("Read " + data.byteLength + " bytes from " + path.fullname);
+                    realThenDo(data);
+                };
+            }
             // if we have been writing to memory, return that version
             if (window.SqueakDBFake && SqueakDBFake.bigFiles[path.fullname])
                 return thenDo(SqueakDBFake.bigFiles[path.fullname]);
@@ -8881,6 +9149,7 @@
                 directory[path.basename] = entry;
             } else if (entry[3]) // is a directory
                 return null;
+            if (Squeak.debugFiles) console.log("Writing " + path.fullname + " (" + contents.byteLength + " bytes)");
             // update directory entry
             entry[2] = now; // modification time
             entry[4] = contents.byteLength || contents.length || 0;
@@ -8902,6 +9171,7 @@
             // delete entry from directory
             delete directory[path.basename];
             Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(directory);
+            if (Squeak.debugFiles) console.log("Deleting " + path.fullname);
             if (entryOnly) return true;
             // delete file contents (async)
             this.dbTransaction("readwrite", "delete " + filepath, function(fileStore) {
@@ -8917,6 +9187,7 @@
             var samedir = oldpath.dirname == newpath.dirname;
             var newdir = samedir ? olddir : this.dirList(newpath.dirname); if (!newdir) return false;
             if (newdir[newpath.basename]) return false; // exists already
+            if (Squeak.debugFiles) console.log("Renaming " + oldpath.fullname + " to " + newpath.fullname);
             delete olddir[oldpath.basename];            // delete old entry
             entry[0] = newpath.basename;                // rename entry
             newdir[newpath.basename] = entry;           // add new entry
@@ -8946,6 +9217,7 @@
             if (withParents && !Squeak.Settings["squeak:" + path.dirname]) Squeak.dirCreate(path.dirname, true);
             var directory = this.dirList(path.dirname); if (!directory) return false;
             if (directory[path.basename]) return false;
+            if (Squeak.debugFiles) console.log("Creating directory " + path.fullname);
             var now = this.totalSeconds(),
                 entry = [/*name*/ path.basename, /*ctime*/ now, /*mtime*/ now, /*dir*/ true, /*size*/ 0];
             directory[path.basename] = entry;
@@ -8958,8 +9230,8 @@
             var directory = this.dirList(path.dirname); if (!directory) return false;
             if (!directory[path.basename]) return false;
             var children = this.dirList(path.fullname);
-            if (!children) return false;
-            for (var child in children) return false; // not empty
+            if (children) for (var child in children) return false; // not empty
+            if (Squeak.debugFiles) console.log("Deleting directory " + path.fullname);
             // delete from parent
             delete directory[path.basename];
             Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(directory);
@@ -9371,8 +9643,7 @@
     Object.extend(Squeak.Primitives.prototype,
     'JavaScriptPlugin', {
         js_primitiveDoUnderstand: function(argCount) {
-            // This is JS's doesNotUnderstand handler,
-            // as well as JS class's doesNotUnderstand handler.
+            // This is JSObjectProxy's doesNotUnderstand handler.
             // Property name is the selector up to first colon.
             // If it is 'new', create an instance;
             // otherwise if the property is a function, call it;
@@ -9939,16 +10210,16 @@
                 fileNameObj = this.stackNonInteger(0);
             if (!this.success) return false;
             var sqFileName = fileNameObj.bytesAsString();
-            var fileName = this.filenameFromSqueak(fileNameObj.bytesAsString());
+            var fileName = this.filenameFromSqueak(sqFileName);
             var sqDirName = dirNameObj.bytesAsString();
-            var dirName = this.filenameFromSqueak(dirNameObj.bytesAsString());
+            var dirName = this.filenameFromSqueak(sqDirName);
             var entries = Squeak.dirList(dirName, true);
             if (!entries) {
                 var path = Squeak.splitFilePath(dirName);
                 console.log("Directory not found: " + path.fullname);
                 return false;
             }
-            var entry = entries[fileName];
+            var entry = fileName === "." ? [".", 0, 0, true, 0] : entries[fileName];
             this.popNandPushIfOK(argCount+1, this.makeStObject(entry));  // entry or nil
             return true;
         },
@@ -10129,7 +10400,12 @@
                 handle = this.stackNonInteger(3);
             if (!this.success || !handle.file || !handle.fileWrite) return false;
             if (!count) return this.popNandPushIfOK(argCount+1, 0);
-            var array = arrayObj.bytes || arrayObj.wordsAsUint8Array();
+            var array = arrayObj.bytes;
+            if (!array) {
+                array = arrayObj.wordsAsUint8Array();
+                startIndex *= 4;
+                count *= 4;
+            }
             if (!array) return false;
             if (startIndex < 0 || startIndex + count > array.length)
                 return false;
@@ -10210,19 +10486,19 @@
                 if (file.contents === false) // failed to get contents before
                     return false;
                 this.vm.freeze(function(unfreeze) {
-                    Squeak.fileGet(file.name,
-                        function success(contents) {
-                            if (contents == null) return error(file.name);
-                            file.contents = this.asUint8Array(contents);
-                            unfreeze();
-                            func(file);
-                        }.bind(this),
-                        function error(msg) {
-                            console.log("File get failed: " + msg);
-                            file.contents = false;
-                            unfreeze();
-                            func(file);
-                        }.bind(this));
+                    var error = (function(msg) {
+                        console.log("File get failed: " + msg);
+                        file.contents = false;
+                        unfreeze();
+                        func(file);
+                    }).bind(this),
+                    success = (function(contents) {
+                        if (contents == null) return error(file.name);
+                        file.contents = this.asUint8Array(contents);
+                        unfreeze();
+                        func(file);
+                    }).bind(this);
+                    Squeak.fileGet(file.name, success, error);
                 }.bind(this));
             }
             return true;
@@ -20956,7 +21232,12 @@
     		destPitch = (DIV((destWidth + (destPPW - 1)), destPPW)) * 4;
     		destBitsSize = BYTESIZEOF(destBits);
     		if (!(interpreterProxy.isWordsOrBytes(destBits) && (destBitsSize === (destPitch * destHeight)))) {
-    			return false;
+    			if (interpreterProxy.isWordsOrBytes(destBits) && (destBitsSize > (destPitch * destHeight))) {
+    				interpreterProxy.vm.warnOnce("BitBlt>>loadBitBltDestForm: destBitsSize != destPitch * destHeight, expected " +
+    					destPitch + "*" + destHeight + "=" + (destPitch * destHeight) + ", got " + destBitsSize);
+    			} else {
+    				return false;
+    			}
     		}
     		destBits = destBits.wordsOrBytes();
     	}
@@ -21086,7 +21367,12 @@
     		sourcePitch = (DIV((sourceWidth + (sourcePPW - 1)), sourcePPW)) * 4;
     		sourceBitsSize = BYTESIZEOF(sourceBits);
     		if (!(interpreterProxy.isWordsOrBytes(sourceBits) && (sourceBitsSize === (sourcePitch * sourceHeight)))) {
-    			return false;
+    			if (interpreterProxy.isWordsOrBytes(sourceBits) && (sourceBitsSize > (sourcePitch * sourceHeight))) {
+    				interpreterProxy.vm.warnOnce("BitBlt>>loadBitBltSourceForm: sourceBitsSize != sourcePitch * sourceHeight, expected " +
+    					sourcePitch + "*" + sourceHeight + "=" + (sourcePitch * sourceHeight) + ", got " + sourceBitsSize);
+    			} else {
+    				return false;
+    			}
     		}
     		sourceBits = sourceBits.wordsOrBytes();
     	}
@@ -21192,7 +21478,8 @@
     		interpreterProxy.primitiveFail();
     		return null;
     	}
-    	return mapOop.words;
+    	// hand-edited generated code: shifts needs to be signed!
+    	return mapOop.wordsAsInt32Array();
     }
 
 
@@ -37902,7 +38189,7 @@
     /*
      * This Socket plugin only fulfills http:/https:/ws:/wss: requests by intercepting them
      * and sending as either XMLHttpRequest or Fetch or WebSocket.
-     * To make connections to servers without CORS, it uses the crossorigin.me proxy.
+     * To make connections to servers without CORS, it uses a CORS proxy.
      *
      * When a WebSocket connection is created in the Smalltalk image a low level socket is
      * assumed to be provided by this plugin. Since low level sockets are not supported
@@ -38001,7 +38288,7 @@
               element[field] = element[field].replace(/\.$/, "");
             }
           };
-          var originalQuestion = response.Question[0]; 
+          var originalQuestion = response.Question[0];
           removeTrailingDot(originalQuestion, "name");
           response.Answer.forEach(function(answer) {
             removeTrailingDot(answer, "name");
@@ -38103,7 +38390,7 @@
               var url = '';
               if (isRetry || this._requestNeedsProxy()) {
                 var proxy = typeof SqueakJS === "object" && SqueakJS.options.proxy;
-                url += proxy || 'https://crossorigin.me/';
+                url = proxy || 'https://corsproxy.io/?';
               }
               if (this.port !== 443) {
                 url += 'http://' + this._hostAndPort() + targetURL;
@@ -38155,7 +38442,13 @@
                   var contentLength = parseInt(line.substr(16));
                   var end = this.sendBuffer.byteLength;
                   data = this.sendBuffer.subarray(end - contentLength, end);
-                } else if (line.match(/Connection: Upgrade/i)) {
+                } else if (line.match(/Host:/i)) {
+                  var host = line.substr(6).trim();
+                  if (this.host !== host) {
+                    console.warn('Host for ' + this.hostAddress + ' was ' + this.host + ' but from HTTP request now ' + host);
+                    this.host = host;
+                  }
+                } if (line.match(/Connection: Upgrade/i)) {
                   seenUpgrade = true;
                 } else if (line.match(/Upgrade: WebSocket/i)) {
                   seenWebSocket = true;
@@ -38192,7 +38485,7 @@
 
               fetch(this._getURL(targetURL), init)
               .then(thisHandle._handleFetchAPIResponse.bind(thisHandle))
-              .catch(function (e) { 
+              .catch(function (e) {
                 var url = thisHandle._getURL(targetURL, true);
                 console.warn('Retrying with CORS proxy: ' + url);
                 fetch(url, init)
@@ -38256,7 +38549,7 @@
               if (typeof SqueakJS === "object" && SqueakJS.options.ajax) {
                   httpRequest.setRequestHeader("X-Requested-With", "XMLHttpRequest");
               }
-              
+
               httpRequest.responseType = "arraybuffer";
 
               httpRequest.onload = function (oEvent) {
@@ -38331,7 +38624,7 @@
 
               // Keep track of WebSocket for future send and receive operations
               this.webSocket = new WebSocket(url.replace(/^http/, "ws"), webSocketSubProtocol);
-     
+
               var thisHandle = this;
               this.webSocket.onopen = function() {
                 if (thisHandle.status !== plugin.Socket_Connected) {
@@ -38547,7 +38840,7 @@
                 } else {
                   if (this.response && this.response.length > 0) {
                     this._signalReadSemaphore();
-                    return true; 
+                    return true;
                   }
                   if (this.responseSentCompletly) {
                     // Signal older Socket implementations that they reached the end
@@ -39107,6 +39400,17 @@
             res = 0;
           }
           this.interpreterProxy.popthenPush(argCount + 1, res);
+          return true;
+        },
+
+        primitiveSetStringProperty: function(argCount) {
+          if (argCount !== 3) return false;
+          var handle = this.interpreterProxy.stackObjectValue(2).handle;
+          if (handle === undefined) return false;
+          // We don't actually care
+          // var propID = this.interpreterProxy.stackIntegerValue(1);
+          // var value = this.interpreterProxy.stackObjectValue(0);
+          this.interpreterProxy.pop(argCount);
           return true;
         },
 
@@ -40007,6 +40311,10 @@
        from
     	DeflatePlugin VMMaker-bf.353 uuid: 8ae25e7e-8d2c-451e-8277-598b30e9c002
      */
+    /*
+    	Manual fixes:
+    	2022-01-15 VMMaker.oscog-mt.3135 and VMMaker.oscog-mt.3136
+    */
 
     (function ZipPlugin() {
 
@@ -40259,7 +40567,7 @@
     }
 
 
-    /*	Determine the inst size of the class above DeflateStream by
+    /*	Determine the inst size of the class above InflateStream by
     	 looking for the first class whose inst size is less than 13. */
 
     function determineSizeOfReadStream(rcvr) {
@@ -40535,8 +40843,8 @@
     	/* zipWriteLimit := interpreterProxy fetchInteger: 3 ofObject: rcvr. */
 
     	zipReadLimit = interpreterProxy.fetchIntegerofObject(2, rcvr);
-    	zipBitBuf = interpreterProxy.fetchIntegerofObject(writeStreamInstSize + 1, rcvr);
-    	zipBitPos = interpreterProxy.fetchIntegerofObject(writeStreamInstSize + 2, rcvr);
+    	zipBitBuf = interpreterProxy.fetchIntegerofObject(writeStreamInstSize + 0, rcvr);
+    	zipBitPos = interpreterProxy.fetchIntegerofObject(writeStreamInstSize + 1, rcvr);
     	return !interpreterProxy.failed();
     }
 
@@ -40845,8 +41153,8 @@
     	result = sendBlockwithwithwith(litStream, distStream, litTree, distTree);
     	if (!interpreterProxy.failed()) {
     		interpreterProxy.storeIntegerofObjectwithValue(1, rcvr, zipPosition);
-    		interpreterProxy.storeIntegerofObjectwithValue(readStreamInstSize + 1, rcvr, zipBitBuf);
-    		interpreterProxy.storeIntegerofObjectwithValue(readStreamInstSize + 2, rcvr, zipBitPos);
+    		interpreterProxy.storeIntegerofObjectwithValue(writeStreamInstSize + 0, rcvr, zipBitBuf);
+    		interpreterProxy.storeIntegerofObjectwithValue(writeStreamInstSize + 1, rcvr, zipBitPos);
     	}
     	if (!interpreterProxy.failed()) {
     		interpreterProxy.pop(5);
@@ -54322,9 +54630,10 @@
         // we don't try to enable it again in the next event
         function fullscreenChange(fullscreen) {
             display.fullscreen = fullscreen;
-            box.style.background = fullscreen ? 'black' : '';
-            if (options.header) options.header.style.display = fullscreen ? 'none' : '';
-            if (options.footer) options.footer.style.display = fullscreen ? 'none' : '';
+            var fullwindow = fullscreen || options.fullscreen;
+            box.style.background = fullwindow ? 'black' : '';
+            if (options.header) options.header.style.display = fullwindow ? 'none' : '';
+            if (options.footer) options.footer.style.display = fullwindow ? 'none' : '';
             if (options.fullscreenCheckbox) options.fullscreenCheckbox.checked = fullscreen;
             setTimeout(window.onresize, 0);
         }
@@ -54399,7 +54708,7 @@
         display.mouseY = Math.max(0, Math.min(display.height, y));
     }
 
-    function recordMouseEvent(what, evt, canvas, display, eventQueue, options) {
+    function recordMouseEvent(what, evt, canvas, display, options) {
         updateMousePos(evt, canvas, display);
         if (!display.vm) return;
         var buttons = display.buttons & Squeak.Mouse_All;
@@ -54421,8 +54730,8 @@
                 break;
         }
         display.buttons = buttons | recordModifiers(evt, display);
-        if (eventQueue) {
-            eventQueue.push([
+        if (display.eventQueue) {
+            display.eventQueue.push([
                 Squeak.EventTypeMouse,
                 evt.timeStamp,  // converted to Squeak time in makeSqueakEvent()
                 display.mouseX,
@@ -54441,13 +54750,13 @@
         }
     }
 
-    function recordKeyboardEvent(key, timestamp, display, eventQueue) {
+    function recordKeyboardEvent(key, timestamp, display) {
         if (!display.vm) return;
         var code = (display.buttons >> 3) << 8 | key;
         if (code === display.vm.interruptKeycode) {
             display.vm.interruptPending = true;
-        } else if (eventQueue) {
-            eventQueue.push([
+        } else if (display.eventQueue) {
+            display.eventQueue.push([
                 Squeak.EventTypeKeyboard,
                 timestamp,  // converted to Squeak time in makeSqueakEvent()
                 key, // MacRoman
@@ -54457,6 +54766,10 @@
             ]);
             if (display.signalInputEvent)
                 display.signalInputEvent();
+            // There are some old images that use both event-based
+            // and polling primitives. To make those work, keep the
+            // last key event
+            display.keys[0] = code;
         } else {
             // no event queue, queue keys the old-fashioned way
             display.keys.push(code);
@@ -54465,10 +54778,10 @@
         if (display.runNow) display.runNow(); // don't wait for timeout to run
     }
 
-    function recordDragDropEvent(type, evt, canvas, display, eventQueue) {
-        if (!display.vm || !eventQueue) return;
+    function recordDragDropEvent(type, evt, canvas, display) {
+        if (!display.vm || !display.eventQueue) return;
         updateMousePos(evt, canvas, display);
-        eventQueue.push([
+        display.eventQueue.push([
             Squeak.EventTypeDragDropFiles,
             evt.timeStamp,  // converted to Squeak time in makeSqueakEvent()
             type,
@@ -54481,12 +54794,12 @@
             display.signalInputEvent();
     }
 
-    function fakeCmdOrCtrlKey(key, timestamp, display, eventQueue) {
+    function fakeCmdOrCtrlKey(key, timestamp, display) {
         // set both Cmd and Ctrl bit, because we don't know what the image wants
         display.buttons &= ~Squeak.Keyboard_All;  // remove all modifiers
         display.buttons |= Squeak.Keyboard_Cmd | Squeak.Keyboard_Ctrl;
         display.keys = []; //  flush other keys
-        recordKeyboardEvent(key, timestamp, display, eventQueue);
+        recordKeyboardEvent(key, timestamp, display);
     }
 
     function makeSqueakEvent(evt, sqEvtBuf, sqTimeOffset) {
@@ -54510,10 +54823,12 @@
             fullscreen: false,
             width: 0,   // if 0, VM uses canvas.width
             height: 0,  // if 0, VM uses canvas.height
+            highdpi: options.highdpi,
             mouseX: 0,
             mouseY: 0,
             buttons: 0,
             keys: [],
+            eventQueue: null, // only used if image uses event primitives
             clipboardString: '',
             clipboardStringChanged: false,
             cursorCanvas: options.cursor !== false && document.createElement("canvas"),
@@ -54529,22 +54844,21 @@
             display.cursorCanvas && display.cursorCanvas.classList.add("pixelated");
         }
 
-        var eventQueue = null;
         display.reset = function() {
-            eventQueue = null;
+            display.eventQueue = null;
             display.signalInputEvent = null;
             display.lastTick = 0;
             display.getNextEvent = function(firstEvtBuf, firstOffset) {
                 // might be called from VM to get queued event
-                eventQueue = []; // create queue on first call
-                eventQueue.push = function(evt) {
-                    eventQueue.offset = Date.now() - evt[1]; // get epoch from first event
-                    delete eventQueue.push;                  // use original push from now on
-                    eventQueue.push(evt);
+                display.eventQueue = []; // create queue on first call
+                display.eventQueue.push = function(evt) {
+                    display.eventQueue.offset = Date.now() - evt[1]; // get epoch from first event
+                    delete display.eventQueue.push;                  // use original push from now on
+                    display.eventQueue.push(evt);
                 };
                 display.getNextEvent = function(evtBuf, timeOffset) {
-                    var evt = eventQueue.shift();
-                    if (evt) makeSqueakEvent(evt, evtBuf, timeOffset - eventQueue.offset);
+                    var evt = display.eventQueue.shift();
+                    if (evt) makeSqueakEvent(evt, evtBuf, timeOffset - display.eventQueue.offset);
                     else evtBuf[0] = Squeak.EventTypeNone;
                 };
                 display.getNextEvent(firstEvtBuf, firstOffset);
@@ -54605,7 +54919,7 @@
             try {
                 display.clipboardString = text;
                 // simulate paste event for Squeak
-                fakeCmdOrCtrlKey('v'.charCodeAt(0), timestamp, display, eventQueue);
+                fakeCmdOrCtrlKey('v'.charCodeAt(0), timestamp, display);
             } catch(err) {
                 console.error("paste error " + err);
             }
@@ -54614,7 +54928,7 @@
             if (!display.vm) return true;
             // simulate copy event for Squeak so it places its text in clipboard
             display.clipboardStringChanged = false;
-            fakeCmdOrCtrlKey((key || 'c').charCodeAt(0), timestamp, display, eventQueue);
+            fakeCmdOrCtrlKey((key || 'c').charCodeAt(0), timestamp, display);
             var start = Date.now();
             // now interpret until Squeak has copied to the clipboard
             while (!display.clipboardStringChanged && Date.now() - start < 500)
@@ -54629,17 +54943,17 @@
         };
         canvas.onmousedown = function(evt) {
             checkFullscreen();
-            recordMouseEvent('mousedown', evt, canvas, display, eventQueue, options);
+            recordMouseEvent('mousedown', evt, canvas, display, options);
             evt.preventDefault();
             return false;
         };
         canvas.onmouseup = function(evt) {
-            recordMouseEvent('mouseup', evt, canvas, display, eventQueue, options);
+            recordMouseEvent('mouseup', evt, canvas, display, options);
             checkFullscreen();
             evt.preventDefault();
         };
         canvas.onmousemove = function(evt) {
-            recordMouseEvent('mousemove', evt, canvas, display, eventQueue, options);
+            recordMouseEvent('mousemove', evt, canvas, display, options);
             evt.preventDefault();
         };
         canvas.oncontextmenu = function() {
@@ -54674,7 +54988,8 @@
         function dist(a, b) {return dd(a.pageX, a.pageY, b.pageX, b.pageY);}
         function adjustDisplay(l, t, w, h) {
             var cursorCanvas = display.cursorCanvas,
-                scale = w / canvas.width;
+                scale = w / canvas.width,
+                ratio = display.highdpi ? window.devicePixelRatio : 1;
             canvas.style.left = (l|0) + "px";
             canvas.style.top = (t|0) + "px";
             canvas.style.width = (w|0) + "px";
@@ -54682,8 +54997,8 @@
             if (cursorCanvas) {
                 cursorCanvas.style.left = (l + display.cursorOffsetX + display.mouseX * scale|0) + "px";
                 cursorCanvas.style.top = (t + display.cursorOffsetY + display.mouseY * scale|0) + "px";
-                cursorCanvas.style.width = (cursorCanvas.width * scale|0) + "px";
-                cursorCanvas.style.height = (cursorCanvas.height * scale|0) + "px";
+                cursorCanvas.style.width = (cursorCanvas.width * ratio * scale|0) + "px";
+                cursorCanvas.style.height = (cursorCanvas.height * ratio * scale|0) + "px";
             }
             if (!options.pixelated) {
                 var pixelScale = window.devicePixelRatio * scale;
@@ -54768,8 +55083,8 @@
                             if (touch.state !== 'got1stFinger') return;
                             touch.state = 'mousing';
                             touch.button = e.button = 0;
-                            recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
-                            recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                            recordMouseEvent('mousemove', e, canvas, display, options);
+                            recordMouseEvent('mousedown', e, canvas, display, options);
                         }, 100);
                         break;
                     case 'got1stFinger':
@@ -54784,8 +55099,8 @@
                             } else {
                                 touch.state = 'mousing';
                                 touch.button = e.button = 2;
-                                recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
-                                recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                                recordMouseEvent('mousemove', e, canvas, display, options);
+                                recordMouseEvent('mousedown', e, canvas, display, options);
                             }
                         }, 200);
                         break;
@@ -54799,11 +55114,11 @@
                 case 'got1stFinger':
                     touch.state = 'mousing';
                     touch.button = e.button = 0;
-                    recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
-                    recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                    recordMouseEvent('mousemove', e, canvas, display, options);
+                    recordMouseEvent('mousedown', e, canvas, display, options);
                     break;
                 case 'mousing':
-                    recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
+                    recordMouseEvent('mousemove', e, canvas, display, options);
                     return;
                 case 'got2ndFinger':
                     if (evt.touches.length > 1)
@@ -54823,20 +55138,20 @@
                     case 'mousing':
                         if (evt.touches.length > 0) break;
                         touch.state = 'idle';
-                        recordMouseEvent('mouseup', e, canvas, display, eventQueue, options);
+                        recordMouseEvent('mouseup', e, canvas, display, options);
                         return;
                     case 'got1stFinger':
                         touch.state = 'idle';
                         touch.button = e.button = 0;
-                        recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
-                        recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
-                        recordMouseEvent('mouseup', e, canvas, display, eventQueue, options);
+                        recordMouseEvent('mousemove', e, canvas, display, options);
+                        recordMouseEvent('mousedown', e, canvas, display, options);
+                        recordMouseEvent('mouseup', e, canvas, display, options);
                         return;
                     case 'got2ndFinger':
                         touch.state = 'mousing';
                         touch.button = e.button = 2;
-                        recordMouseEvent('mousemove', e, canvas, display, eventQueue, options);
-                        recordMouseEvent('mousedown', e, canvas, display, eventQueue, options);
+                        recordMouseEvent('mousemove', e, canvas, display, options);
+                        recordMouseEvent('mousedown', e, canvas, display, options);
                         break;
                     case 'zooming':
                         if (evt.touches.length > 0) break;
@@ -54867,7 +55182,7 @@
             if (/[CXVR]/.test(String.fromCharCode(evt.charCode + 64)))
                 return true;  // let browser handle cut/copy/paste/reload
             recordModifiers(evt, display);
-            recordKeyboardEvent(evt.charCode, evt.timeStamp, display, eventQueue);
+            recordKeyboardEvent(evt.charCode, evt.timeStamp, display);
             evt.preventDefault();
         };
         document.onkeydown = function(evt) {
@@ -54892,7 +55207,7 @@
                 46: 127, // Delete
             })[evt.keyCode];
             if (squeakCode) { // special key pressed
-                recordKeyboardEvent(squeakCode, evt.timeStamp, display, eventQueue);
+                recordKeyboardEvent(squeakCode, evt.timeStamp, display);
                 return evt.preventDefault();
             }
             if ((evt.metaKey || (evt.altKey && !evt.ctrlKey))) {
@@ -54904,7 +55219,7 @@
                         return true;  // let browser handle cut/copy/paste/reload
                     var code = key.charCodeAt(0);
                     if (/[A-Z]/.test(key) && !evt.shiftKey) code += 32;  // make lower-case
-                    recordKeyboardEvent(code, evt.timeStamp, display, eventQueue);
+                    recordKeyboardEvent(code, evt.timeStamp, display);
                     return evt.preventDefault();
                 }
             }
@@ -54958,16 +55273,16 @@
                 evt.dataTransfer.dropEffect = 'none';
             } else {
                 evt.dataTransfer.dropEffect = 'copy';
-                recordDragDropEvent(Squeak.EventDragMove, evt, canvas, display, eventQueue);
+                recordDragDropEvent(Squeak.EventDragMove, evt, canvas, display);
             }
         };
         document.ondragenter = function(evt) {
             if (!dragEventHasFiles(evt)) return;
-            recordDragDropEvent(Squeak.EventDragEnter, evt, canvas, display, eventQueue);
+            recordDragDropEvent(Squeak.EventDragEnter, evt, canvas, display);
         };
         document.ondragleave = function(evt) {
             if (!dragEventHasFiles(evt)) return;
-            recordDragDropEvent(Squeak.EventDragLeave, evt, canvas, display, eventQueue);
+            recordDragDropEvent(Squeak.EventDragLeave, evt, canvas, display);
         };
         document.ondrop = function(evt) {
             evt.preventDefault();
@@ -54992,7 +55307,7 @@
                             SqueakJS.appName = imageName.slice(0, -6);
                             SqueakJS.runImage(image, imageName, display, options);
                         } else {
-                            recordDragDropEvent(Squeak.EventDragDrop, evt, canvas, display, eventQueue);
+                            recordDragDropEvent(Squeak.EventDragDrop, evt, canvas, display);
                         }
                     }
                 };
@@ -55030,6 +55345,7 @@
                 var scaleW = w < options.minWidth ? options.minWidth / w : 1,
                     scaleH = h < options.minHeight ? options.minHeight / h : 1,
                     scale = Math.max(scaleW, scaleH);
+                if (display.highdpi) scale *= window.devicePixelRatio;
                 display.width = Math.floor(w * scale);
                 display.height = Math.floor(h * scale);
                 display.initialScale = w / display.width;
@@ -55061,6 +55377,7 @@
             // set cursor scale
             var cursorCanvas = display.cursorCanvas,
                 scale = canvas.offsetWidth / canvas.width;
+            if (display.highdpi) scale *= window.devicePixelRatio;
             if (cursorCanvas && options.fixedWidth) {
                 cursorCanvas.style.width = (cursorCanvas.width * scale) + "px";
                 cursorCanvas.style.height = (cursorCanvas.height * scale) + "px";
@@ -55306,7 +55623,7 @@
                 return alert("Failed to download:\n" + file.url);
             }
             console.warn('Retrying with CORS proxy: ' + file.url);
-            var proxy = 'https://cors-anywhere.herokuapp.com/',
+            var proxy = 'https://corsproxy.io/?',
                 retry = new XMLHttpRequest();
             retry.open('GET', proxy + file.url);
             if (options.ajax) retry.setRequestHeader("X-Requested-With", "XMLHttpRequest");
@@ -55345,6 +55662,9 @@
         if (!imageUrl && options.image) imageUrl = options.image;
         var baseUrl = options.url || (imageUrl && imageUrl.replace(/[^\/]*$/, "")) || "";
         options.url = baseUrl;
+        if (baseUrl[0] === "/" && baseUrl[1] !== "/" && baseUrl.length > 1 && options.root === "/") {
+            options.root = baseUrl;
+        }
         fetchTemplates(options);
         var display = createSqueakDisplay(canvas, options),
             image = {url: null, name: null, image: true, data: null},
@@ -55389,7 +55709,6 @@
             SqueakJS.appName = options.appName || image.name.replace(/\.image$/, "");
             SqueakJS.runImage(image.data, options.root + image.name, display, options);
         });
-        Squeak.noFloatDecodeWorkaround = !!options.noFloatDecodeWorkaround;
         return display;
     };
 

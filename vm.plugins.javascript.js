@@ -24,8 +24,7 @@
 Object.extend(Squeak.Primitives.prototype,
 'JavaScriptPlugin', {
     js_primitiveDoUnderstand: function(argCount) {
-        // This is JS's doesNotUnderstand handler,
-        // as well as JS class's doesNotUnderstand handler.
+        // This is JSObjectProxy's doesNotUnderstand handler.
         // Property name is the selector up to first colon.
         // If it is 'new', create an instance;
         // otherwise if the property is a function, call it;
@@ -70,7 +69,7 @@ Object.extend(Squeak.Primitives.prototype,
                 }
             }
         } catch(err) {
-            return this.js_setError(err.message);
+            return this.js_setError(err);
         }
         var stResult = this.makeStObject(jsResult, rcvr.sqClass);
         return this.popNandPushIfOK(argCount + 1, stResult);
@@ -93,7 +92,7 @@ Object.extend(Squeak.Primitives.prototype,
                 jsPropValue = jsRcvr[jsPropName];
             propValue = this.makeStObject(jsPropValue, rcvr.sqClass);
         } catch(err) {
-            return this.js_setError(err.message);
+            return this.js_setError(err);
         }
         return this.popNandPushIfOK(argCount + 1, propValue);
     },
@@ -107,7 +106,7 @@ Object.extend(Squeak.Primitives.prototype,
                 jsPropValue = this.js_fromStObject(propValue);
             jsRcvr[jsPropName] = jsPropValue;
         } catch(err) {
-            return this.js_setError(err.message);
+            return this.js_setError(err);
         }
         return this.popNandPushIfOK(argCount + 1, propValue);
     },
@@ -139,7 +138,7 @@ Object.extend(Squeak.Primitives.prototype,
             var array = this.makeStArray(callback.args, proxyClass);
             return this.popNandPushIfOK(argCount+1, array);
         } catch(err) {
-            return this.js_setError(err.message);
+            return this.js_setError(err);
         }
     },
     js_primitiveReturnFromCallback: function(argCount) {
@@ -152,12 +151,22 @@ Object.extend(Squeak.Primitives.prototype,
         return true;
     },
     js_primitiveGetError: function(argCount) {
-        var error = this.makeStObject(this.js_error);
+        if (this.js_error == null) return false;
+        var msg = this.js_error;
+        if (msg instanceof Error) msg = msg.message;
+        var error = this.makeStString("" + msg);
+        this.js_error = null;
+        return this.popNandPushIfOK(argCount + 1, error);
+    },
+    js_primitiveGetErrorObject: function(argCount) {
+        if (this.js_error == null) return false;
+        var rcvr = this.stackNonInteger(argCount);
+        var error = this.makeStObject(this.js_error, rcvr.sqClass);
         this.js_error = null;
         return this.popNandPushIfOK(argCount + 1, error);
     },
     js_setError: function(err) {
-        this.js_error = String(err);
+        this.js_error = err;
         return false;
     },
     js_fromStObject: function(obj) {
@@ -174,7 +183,7 @@ Object.extend(Squeak.Primitives.prototype,
         if (obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassBlockContext] ||
             obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassBlockClosure])
             return this.js_fromStBlock(obj);
-        throw Error("asJSArgument needed for " + obj);
+        throw Error("asJSArgument needed for " + obj);  // image recognizes error string and will try again
     },
     js_fromStArray: function(objs, maybeDict) {
         if (objs.length > 0 && maybeDict && this.isAssociation(objs[0]))

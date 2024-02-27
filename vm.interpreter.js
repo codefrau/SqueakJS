@@ -24,15 +24,15 @@
 Object.subclass('Squeak.Interpreter',
 'initialization', {
     initialize: function(image, display) {
-        console.log('squeak: initializing interpreter ' + Squeak.vmVersion);
+        console.log('squeak: initializing interpreter ' + Squeak.vmVersion + ' (' + Squeak.vmDate + ')');
         this.Squeak = Squeak;   // store locally to avoid dynamic lookup in Lively
         this.image = image;
         this.image.vm = this;
         this.primHandler = new Squeak.Primitives(this, display);
         this.loadImageState();
-        this.hackImage();
         this.initVMState();
         this.loadInitialContext();
+        this.hackImage();
         this.initCompiler();
         console.log('squeak: ready');
     },
@@ -43,7 +43,7 @@ Object.subclass('Squeak.Interpreter',
         this.falseObj = this.specialObjects[Squeak.splOb_FalseObject];
         this.trueObj = this.specialObjects[Squeak.splOb_TrueObject];
         this.hasClosures = this.image.hasClosures;
-        this.globals = this.findGlobals();
+        this.getGlobals = this.globalsGetter();
         // hack for old image that does not support Unix files
         if (!this.hasClosures && !this.findMethod("UnixFileDirectory class>>pathNameDelimiter"))
             this.primHandler.emulateMac = true;
@@ -57,6 +57,8 @@ Object.subclass('Squeak.Interpreter',
         this.interruptCheckCounter = 0;
         this.interruptCheckCounterFeedBackReset = 1000;
         this.interruptChecksEveryNms = 3;
+        this.lowSpaceThreshold = 1000000;
+        this.signalLowSpace = false;
         this.nextPollTick = 0;
         this.nextWakeupTick = 0;
         this.lastTick = 0;
@@ -78,6 +80,7 @@ Object.subclass('Squeak.Interpreter',
         this.breakOutTick = 0;
         this.breakOnMethod = null; // method to break on
         this.breakOnNewMethod = false;
+        this.breakOnMessageNotUnderstood = false;
         this.breakOnContextChanged = false;
         this.breakOnContextReturned = null; // context to break on
         this.messages = {};
@@ -92,7 +95,13 @@ Object.subclass('Squeak.Interpreter',
         this.fetchContextRegisters(this.activeContext);
         this.reclaimableContextCount = 0;
     },
-    findGlobals: function() {
+    globalsGetter: function() {
+        // Globals (more specifically the pointers we are interested in) might
+        // change during execution, because a Dictionary needs growing for example.
+        // Therefore answer a getter function to access the actual globals (pointers).
+        // This getter can be used, even if the Dictionary has grown (and thereby the
+        // underlying Array is replaced by a larger one), because it uses the reference
+        // to the 'outer' Dictionary instead of the pointers to the values.
         var smalltalk = this.specialObjects[Squeak.splOb_SmalltalkDictionary],
             smalltalkClass = smalltalk.sqClass.className();
         if (smalltalkClass === "Association") {
@@ -100,17 +109,17 @@ Object.subclass('Squeak.Interpreter',
             smalltalkClass = smalltalk.sqClass.className();
         }
         if (smalltalkClass === "SystemDictionary")
-            return smalltalk.pointers[1].pointers;
+            return function() { return smalltalk.pointers[1].pointers; };
         if (smalltalkClass === "SmalltalkImage") {
             var globals = smalltalk.pointers[0],
                 globalsClass = globals.sqClass.className();
             if (globalsClass === "SystemDictionary")
-                return globals.pointers[1].pointers;
+                return function() { return globals.pointers[1].pointers; };
             if (globalsClass === "Environment")
-                return globals.pointers[2].pointers[1].pointers
+                return function() { return globals.pointers[2].pointers[1].pointers; };
         }
         console.warn("cannot find global dict");
-        return [];
+        return function() { return []; };
     },
     initCompiler: function() {
         if (!Squeak.Compiler)
@@ -129,9 +138,13 @@ Object.subclass('Squeak.Interpreter',
         // compiler might decide to not handle current image
         try {
             console.log("squeak: initializing JIT compiler");
-            this.compiler = new Squeak.Compiler(this);
+            var compiler = new Squeak.Compiler(this);
+            if (compiler.compile) this.compiler = compiler;
         } catch(e) {
-            console.warn("Compiler " + e);
+            console.warn("Compiler: " + e);
+        }
+        if (!this.compiler) {
+            console.warn("SqueakJS will be running in interpreter mode only (slow)");
         }
     },
     hackImage: function() {
@@ -139,7 +152,9 @@ Object.subclass('Squeak.Interpreter',
         var returnSelf  = 256,
             returnTrue  = 257,
             returnFalse = 258,
-            returnNil   = 259;
+            returnNil   = 259,
+            opts = typeof location === 'object' ? location.hash : "",
+            sista = this.method.methodSignFlag();
         [
             // Etoys fallback for missing translation files is hugely inefficient.
             // This speeds up opening a viewer by 10x (!)
@@ -149,7 +164,10 @@ Object.subclass('Squeak.Interpreter',
             // 64 bit Squeak does not flush word size on snapshot
             {method: "SmalltalkImage>>wordSize", literal: {index: 1, old: 8, hack: 4}, enabled: true},
             // Squeak 5.3 disable wizard by replacing #open send with pop
-            {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: location.hash.includes("wizard=false")},
+            {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: opts.includes("wizard=false")},
+            // Squeak source file should use UTF8 not MacRoman (both V3 and Sista)
+            {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 38, old: 0x16, hack: 0x13}, enabled: sista},
+            {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 50, old: 0x44, hack: 0x48}, enabled: !sista},
         ].forEach(function(each) {
             try {
                 var m = each.enabled && this.findMethod(each.method);
@@ -163,7 +181,7 @@ Object.subclass('Squeak.Interpreter',
                     else if (byte && m.bytes[byte.pc] === byte.hack) hacked = false; // already there
                     else if (lit && m.pointers[lit.index].pointers[1] === lit.old) m.pointers[lit.index].pointers[1] = lit.hack;
                     else if (lit && m.pointers[lit.index].pointers[1] === lit.hack) hacked = false; // already there
-                    else { hacked = false; console.error("Failed to hack " + each.method); }
+                    else { hacked = false; console.warn("Not hacking " + each.method); }
                     if (hacked) console.warn("Hacking " + each.method);
                 }
             } catch (error) {
@@ -175,9 +193,6 @@ Object.subclass('Squeak.Interpreter',
 },
 'interpreting', {
     interpretOne: function(singleStep) {
-        if (this.method.methodSignFlag()) {
-            return this.interpretOneSistaWithExtensions(singleStep, 0, 0);
-        }
         if (this.method.compiled) {
             if (singleStep) {
                 if (!this.compiler.enableSingleStepping(this.method)) {
@@ -188,6 +203,9 @@ Object.subclass('Squeak.Interpreter',
             }
             this.method.compiled(this);
             return;
+        }
+        if (this.method.methodSignFlag()) {
+            return this.interpretOneSistaWithExtensions(singleStep, 0, 0);
         }
         var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively
         var b, b2;
@@ -270,10 +288,14 @@ Object.subclass('Squeak.Interpreter',
                 this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2]);
                 return;
             case 0x8D: b2 = this.nextByte(); // remote store into temp vector
-                this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2] = this.top();
+                var vec = this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()];
+                vec.pointers[b2] = this.top();
+                vec.dirty = true;
                 return;
             case 0x8E: b2 = this.nextByte(); // remote store and pop into temp vector
-                this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2] = this.pop();
+                var vec = this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()];
+                vec.pointers[b2] = this.pop();
+                vec.dirty = true;
                 return;
             case 0x8F: this.pushClosureCopy(); return;
 
@@ -563,10 +585,14 @@ Object.subclass('Squeak.Interpreter',
                 this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2]);
                 return;
             case 0xFC: b2 = this.nextByte(); // remote store into temp vector
-                this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2] = this.top();
+                var vec = this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()];
+                vec.pointers[b2] = this.top();
+                vec.dirty = true;
                 return;
             case 0xFD: b2 = this.nextByte(); // remote store and pop into temp vector
-                this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2] = this.pop();
+                var vec = this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()];
+                vec.pointers[b2] = this.pop();
+                vec.dirty = true;
                 return;
             case 0xFE: case 0xFF: this.nono(); return; // unused
         }
@@ -580,7 +606,7 @@ Object.subclass('Squeak.Interpreter',
         if (this.frozen) return 'frozen';
         this.isIdle = false;
         this.breakOutOfInterpreter = false;
-        this.breakOutTick = this.primHandler.millisecondClockValue() + (forMilliseconds || 500);
+        this.breakAfter(forMilliseconds || 500);
         while (this.breakOutOfInterpreter === false)
             if (this.method.compiled) {
                 this.method.compiled(this);
@@ -661,10 +687,11 @@ Object.subclass('Squeak.Interpreter',
         }
         this.interruptCheckCounter = this.interruptCheckCounterFeedBackReset; //reset the interrupt check counter
         this.lastTick = now; //used to detect wraparound of millisecond clock
-        //  if(signalLowSpace) {
-        //            signalLowSpace= false; //reset flag
-        //            sema= getSpecialObject(Squeak.splOb_TheLowSpaceSemaphore);
-        //            if(sema != nilObj) synchronousSignal(sema); }
+        if (this.signalLowSpace) {
+            this.signalLowSpace = false; // reset flag
+            var sema = this.specialObjects[Squeak.splOb_TheLowSpaceSemaphore];
+            if (!sema.isNil) this.primHandler.synchronousSignal(sema);
+        }
         //  if(now >= nextPollTick) {
         //            ioProcessEvents(); //sets interruptPending if interrupt key pressed
         //            nextPollTick= now + 500; } //msecs to wait before next call to ioProcessEvents"
@@ -916,6 +943,7 @@ Object.subclass('Squeak.Interpreter',
         this.executeNewMethod(rcvr, method, argCount, 0);
     },
     findSelectorInClass: function(selector, argCount, startingClass) {
+        this.currentSelector = selector; // for primitiveInvokeObjectAsMethod
         var cacheEntry = this.findMethodCacheEntry(selector, startingClass);
         if (cacheEntry.method) return cacheEntry; // Found it in the method cache
         var currentClass = startingClass;
@@ -932,11 +960,9 @@ Object.subclass('Squeak.Interpreter',
             }
             var newMethod = this.lookupSelectorInDict(mDict, selector);
             if (!newMethod.isNil) {
-                this.currentSelector = selector;
-                this.currentLookupClass = startingClass;
-                //if method is not actually a CompiledMethod, invoke primitiveInvokeObjectAsMethod (248) instead
+                // if method is not actually a CompiledMethod, let primitiveInvokeObjectAsMethod (576) handle it
                 cacheEntry.method = newMethod;
-                cacheEntry.primIndex = newMethod.isMethod() ? newMethod.methodPrimitiveIndex() : 248;
+                cacheEntry.primIndex = newMethod.isMethod() ? newMethod.methodPrimitiveIndex() : 576;
                 cacheEntry.argCount = argCount;
                 cacheEntry.mClass = currentClass;
                 return cacheEntry;
@@ -948,6 +974,10 @@ Object.subclass('Squeak.Interpreter',
         if (selector === dnuSel) // Cannot find #doesNotUnderstand: -- unrecoverable error.
             throw Error("Recursive not understood error encountered");
         var dnuMsg = this.createActualMessage(selector, argCount, startingClass); //The argument to doesNotUnderstand:
+        if (this.breakOnMessageNotUnderstood) {
+            var receiver = this.stackValue(argCount);
+            this.breakNow("Message not understood: " + receiver + " " + startingClass.className() + ">>" + selector.bytesAsString());
+        }
         this.popNandPush(argCount, dnuMsg);
         return this.findSelectorInClass(dnuSel, 1, startingClass);
     },
@@ -975,7 +1005,13 @@ Object.subclass('Squeak.Interpreter',
     executeNewMethod: function(newRcvr, newMethod, argumentCount, primitiveIndex, optClass, optSel) {
         this.sendCount++;
         if (newMethod === this.breakOnMethod) this.breakNow("executing method " + this.printMethod(newMethod, optClass, optSel));
-        if (this.logSends) console.log(this.sendCount + ' ' + this.printMethod(newMethod, optClass, optSel));
+        if (this.logSends) {
+            var indent = ' ';
+            var ctx = this.activeContext;
+            while (!ctx.isNil) { indent += '| '; ctx = ctx.pointers[Squeak.Context_sender]; }
+            var args = this.activeContext.pointers.slice(this.sp + 1 - argumentCount, this.sp + 1);
+            console.log(this.sendCount + indent + this.printMethod(newMethod, optClass, optSel, args));
+        }
         if (this.breakOnContextChanged) {
             this.breakOnContextChanged = false;
             this.breakNow();
@@ -1480,24 +1516,58 @@ Object.subclass('Squeak.Interpreter',
             for (var i = 0; i < length; i++)
                 dest[destPos + i] = src[srcPos + i];
     },
+    signalLowSpaceIfNecessary: function(bytesLeft) {
+        if (bytesLeft < this.lowSpaceThreshold && this.lowSpaceThreshold > 0) {
+            var increase = prompt && prompt("Out of memory, " + Math.ceil(this.image.totalMemory/1000000)
+                + " MB used.\nEnter additional MB, or 0 to signal low space in image", "0");
+            if (increase) {
+                var bytes = parseInt(increase, 10) * 1000000;
+                this.image.totalMemory += bytes;
+                this.signalLowSpaceIfNecessary(this.image.bytesLeft());
+            } else {
+                console.warn("squeak: low memory (" + bytesLeft + "/" + this.image.totalMemory + " bytes left), signaling low space");
+                this.signalLowSpace = true;
+                this.lowSpaceThreshold = 0;
+                var lastSavedProcess = this.specialObjects[Squeak.splOb_ProcessSignalingLowSpace];
+                if (lastSavedProcess.isNil) {
+                    this.specialObjects[Squeak.splOb_ProcessSignalingLowSpace] = this.primHandler.activeProcess();
+                }
+                this.forceInterruptCheck();
+            }
+        }
+   },
 },
 'debugging', {
     addMessage: function(message) {
         return this.messages[message] ? ++this.messages[message] : this.messages[message] = 1;
     },
     warnOnce: function(message, what) {
-        if (this.addMessage(message) == 1)
+        if (this.addMessage(message) == 1) {
             console[what || "warn"](message);
+            return true;
+        }
     },
-    printMethod: function(aMethod, optContext, optSel) {
+    printMethod: function(aMethod, optContext, optSel, optArgs) {
         // return a 'class>>selector' description for the method
         if (aMethod.sqClass != this.specialObjects[Squeak.splOb_ClassCompiledMethod]) {
-          return this.printMethod(aMethod.blockOuterCode(), optContext, optSel)
+          return this.printMethod(aMethod.blockOuterCode(), optContext, optSel, optArgs)
         }
-        if (optSel) return optContext.className() + '>>' + optSel.bytesAsString();
+        var found;
+        if (optSel) {
+            var printed = optContext.className() + '>>';
+            var selector = optSel.bytesAsString();
+            if (!optArgs || !optArgs.length) printed += selector;
+            else {
+                var parts = selector.split(/(?<=:)/); // keywords
+                for (var i = 0; i < optArgs.length; i++) {
+                    if (i > 0) printed += ' ';
+                    printed += parts[i] + ' ' + optArgs[i];
+                }
+            }
+            return printed;
+        }
         // this is expensive, we have to search all classes
         if (!aMethod) aMethod = this.activeContext.contextMethod();
-        var found;
         this.allMethodsDo(function(classObj, methodObj, selectorObj) {
             if (methodObj === aMethod)
                 return found = classObj.className() + '>>' + selectorObj.bytesAsString();
@@ -1527,7 +1597,7 @@ Object.subclass('Squeak.Interpreter',
     },
     allGlobalsDo: function(callback) {
         // callback(globalNameObj, globalObj), truish result breaks out of iteration
-        var globals = this.globals;
+        var globals = this.getGlobals();
         for (var i = 0; i < globals.length; i++) {
             var assn = globals[i];
             if (!assn.isNil) {
@@ -1561,7 +1631,7 @@ Object.subclass('Squeak.Interpreter',
             }
         });
     },
-    printStack: function(ctx, limit) {
+    printStack: function(ctx, limit, indent) {
         // both args are optional
         if (typeof ctx == "number") {limit = ctx; ctx = null;}
         if (!ctx) ctx = this.activeContext;
@@ -1578,7 +1648,9 @@ Object.subclass('Squeak.Interpreter',
             contexts = contexts.slice(0, limit).concat(['...']).concat(contexts.slice(-extra));
         }
         var stack = [],
-            i = contexts.length;
+            i = contexts.length,
+            indents = '';
+        if (indent && this.logSends) indents = Array((""+this.sendCount).length + 2).join(' ');
         while (i-- > 0) {
             var ctx = contexts[i];
             if (!ctx.pointers) {
@@ -1592,7 +1664,10 @@ Object.subclass('Squeak.Interpreter',
                 } else if (!ctx.pointers[Squeak.Context_closure].isNil) {
                     block = '[] in '; // it's a closure activation
                 }
-                stack.push(block + this.printMethod(method, ctx) + '\n');
+                var line = block + this.printMethod(method, ctx);
+                if (indent) line = indents + line;
+                stack.push(line + '\n');
+                if (indent) indents += indent;
             }
         }
         return stack.join('');
@@ -1610,6 +1685,9 @@ Object.subclass('Squeak.Interpreter',
         });
         return found;
     },
+    breakAfter: function(ms) {
+        this.breakOutTick = this.primHandler.millisecondClockValue() + ms;
+    },
     breakNow: function(msg) {
         if (msg) console.log("Break: " + msg);
         this.breakOutOfInterpreter = 'break';
@@ -1626,16 +1704,16 @@ Object.subclass('Squeak.Interpreter',
         this.breakOnContextChanged = true;
         this.breakOnContextReturned = null;
     },
-    printActiveContext: function(maxWidth) {
+    printContext: function(ctx, maxWidth) {
+        if (!this.isContext(ctx)) return "NOT A CONTEXT: " + printObj(ctx);
         if (!maxWidth) maxWidth = 72;
         function printObj(obj) {
-            var value = obj.sqInstName ? obj.sqInstName() : obj.toString();
+            var value = typeof obj === 'number' || typeof obj === 'object' ? obj.sqInstName() : "<" + obj + ">";
             value = JSON.stringify(value).slice(1, -1);
             if (value.length > maxWidth - 3) value = value.slice(0, maxWidth - 3) + '...';
             return value;
         }
         // temps and stack in current context
-        var ctx = this.activeContext;
         var isBlock = typeof ctx.pointers[Squeak.BlockContext_argumentCount] === 'number';
         var closure = ctx.pointers[Squeak.Context_closure];
         var isClosure = !isBlock && !closure.isNil;
@@ -1647,27 +1725,37 @@ Object.subclass('Squeak.Interpreter',
         var stackTop = homeCtx.contextSizeWithStack(this) - 1;
         var firstTemp = stackBottom + 1;
         var lastTemp = firstTemp + tempCount - 1;
+        var lastArg = firstTemp + homeCtx.pointers[Squeak.Context_method].methodNumArgs() - 1;
         var stack = '';
         for (var i = stackBottom; i <= stackTop; i++) {
             var value = printObj(homeCtx.pointers[i]);
             var label = '';
-            if (i == stackBottom) label = '=rcvr'; else
-            if (i <= lastTemp) label = '=tmp' + (i - firstTemp);
+            if (i === stackBottom) {
+                label = '=rcvr';
+            } else {
+                if (i <= lastTemp) label = '=tmp' + (i - firstTemp);
+                if (i <= lastArg) label += '/arg' + (i - firstTemp);
+            }
             stack += '\nctx[' + i + ']' + label +': ' + value;
         }
         if (isBlock) {
             stack += '\n';
-            var nArgs = ctx.pointers[3];
+            var nArgs = ctx.pointers[Squeak.BlockContext_argumentCount];
             var firstArg = this.decodeSqueakSP(1);
             var lastArg = firstArg + nArgs;
-            for (var i = firstArg; i <= this.sp; i++) {
+            var sp = ctx === this.activeContext ? this.sp : ctx.pointers[Squeak.Context_stackPointer];
+            if (sp < firstArg) stack += '\nblk <stack empty>';
+            for (var i = firstArg; i <= sp; i++) {
                 var value = printObj(ctx.pointers[i]);
                 var label = '';
-                if (i <= lastArg) label = '=arg' + (i - firstArg);
+                if (i < lastArg) label = '=arg' + (i - firstArg);
                 stack += '\nblk[' + i + ']' + label +': ' + value;
             }
         }
         return stack;
+    },
+    printActiveContext: function(maxWidth) {
+        return this.printContext(this.activeContext, maxWidth);
     },
     printAllProcesses: function() {
         var schedAssn = this.specialObjects[Squeak.splOb_SchedulerAssociation],
@@ -1675,38 +1763,62 @@ Object.subclass('Squeak.Interpreter',
         // print active process
         var activeProc = sched.pointers[Squeak.ProcSched_activeProcess],
             result = "Active: " + this.printProcess(activeProc, true);
-        // print other runnable processes
+        // print other runnable processes in order of priority
         var lists = sched.pointers[Squeak.ProcSched_processLists].pointers;
         for (var priority = lists.length - 1; priority >= 0; priority--) {
             var process = lists[priority].pointers[Squeak.LinkedList_firstLink];
             while (!process.isNil) {
+                result += "\n------------------------------------------";
                 result += "\nRunnable: " + this.printProcess(process);
                 process = process.pointers[Squeak.Link_nextLink];
             }
         }
-        // print all processes waiting on a semaphore
+        // print all processes waiting on a semaphore in order of priority
         var semaClass = this.specialObjects[Squeak.splOb_ClassSemaphore],
-            sema = this.image.someInstanceOf(semaClass);
+            sema = this.image.someInstanceOf(semaClass),
+            waiting = [];
         while (sema) {
             var process = sema.pointers[Squeak.LinkedList_firstLink];
             while (!process.isNil) {
-                result += "\nWaiting: " + this.printProcess(process);
+                waiting.push(process);
                 process = process.pointers[Squeak.Link_nextLink];
             }
             sema = this.image.nextInstanceAfter(sema);
         }
+        waiting.sort(function(a, b){
+            return b.pointers[Squeak.Proc_priority] - a.pointers[Squeak.Proc_priority];
+        });
+        for (var i = 0; i < waiting.length; i++) {
+            result += "\n------------------------------------------";
+            result += "\nWaiting: " + this.printProcess(waiting[i]);
+        }
         return result;
     },
-    printProcess: function(process, active) {
-        var context = process.pointers[Squeak.Proc_suspendedContext],
+    printProcess: function(process, active, indent) {
+        if (!process) {
+            var schedAssn = this.specialObjects[Squeak.splOb_SchedulerAssociation],
+            sched = schedAssn.pointers[Squeak.Assn_value];
+            process = sched.pointers[Squeak.ProcSched_activeProcess],
+            active = true;
+        }
+        var context = active ? this.activeContext : process.pointers[Squeak.Proc_suspendedContext],
             priority = process.pointers[Squeak.Proc_priority],
-            stack = this.printStack(active ? null : context);
-        return process.toString() +" at priority " + priority + "\n" + stack;
+            stack = this.printStack(context, 20, indent),
+            values = indent && this.logSends ? "" : this.printContext(context) + "\n";
+        return process.toString() +" at priority " + priority + "\n" + stack + values;
     },
     printByteCodes: function(aMethod, optionalIndent, optionalHighlight, optionalPC) {
         if (!aMethod) aMethod = this.method;
         var printer = new Squeak.InstructionPrinter(aMethod, this);
         return printer.printInstructions(optionalIndent, optionalHighlight, optionalPC);
+    },
+    logStack: function() {
+        // useful for debugging interactively:
+        // SqueakJS.vm.logStack()
+        console.log(this.printStack()
+            + this.printActiveContext() + '\n\n'
+            + this.printByteCodes(this.method, '   ', '=> ', this.pc),
+            this.activeContext.pointers.slice(0, this.sp + 1));
     },
     willSendOrReturn: function() {
         // Answer whether the next bytecode corresponds to a Smalltalk

@@ -81,9 +81,10 @@ Object.extend(Squeak.Primitives.prototype,
                 this.showForm(context, cursorForm, bounds, true);
             }
             var canvas = this.display.context.canvas,
-                scale = canvas.offsetWidth / canvas.width;
-            cursorCanvas.style.width = (cursorCanvas.width * scale|0) + "px";
-            cursorCanvas.style.height = (cursorCanvas.height * scale|0) + "px";
+                scale = canvas.offsetWidth / canvas.width,
+                ratio = this.display.highdpi ? window.devicePixelRatio : 1;
+            cursorCanvas.style.width = (cursorCanvas.width * ratio * scale|0) + "px";
+            cursorCanvas.style.height = (cursorCanvas.height * ratio * scale|0) + "px";
             this.display.cursorOffsetX = cursorForm.offsetX * scale|0;
             this.display.cursorOffsetY = cursorForm.offsetY * scale|0;
         }
@@ -338,6 +339,11 @@ Object.extend(Squeak.Primitives.prototype,
             h = display.height || display.context.canvas.height;
         return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(w, h));
     },
+    primitiveScreenScaleFactor: function(argCount) {
+        var scale = this.display.scale || 1.0,
+            scaleFactor = 1.0 / scale;
+        return this.popNandPushIfOK(argCount+1, this.makeFloat(scaleFactor));
+    },
     primitiveSetFullScreen: function(argCount) {
         var flag = this.stackBoolean(0);
         if (!this.success) return false;
@@ -358,7 +364,7 @@ Object.extend(Squeak.Primitives.prototype,
     },
     primitiveTestDisplayDepth: function(argCount) {
         var supportedDepths =  [1, 2, 4, 8, 16, 32]; // match showForm
-        return this.pop2andPushBoolIfOK(supportedDepths.indexOf(this.stackInteger(0)) >= 0);
+        return this.popNandPushBoolIfOK(argCount+1, supportedDepths.indexOf(this.stackInteger(0)) >= 0);
     },
     loadForm: function(formObj, withOffset) {
         if (formObj.isNil) return null;
@@ -381,7 +387,13 @@ Object.extend(Squeak.Primitives.prototype,
         if (!(form.depth > 0)) return null; // happens if not int
         form.pixPerWord = 32 / form.depth;
         form.pitch = (form.width + (form.pixPerWord - 1)) / form.pixPerWord | 0;
-        if (form.bits.length !== (form.pitch * form.height)) return null;
+        if (form.bits.length !== (form.pitch * form.height)) {
+            if (form.bits.length > (form.pitch * form.height)) {
+                this.vm.warnOnce("loadForm(): " + form.bits.length + " !== " + form.pitch + "*" + form.height + "=" + (form.pitch*form.height));
+            } else {
+                return null;
+            }
+        }
         return form;
     },
     theDisplay: function() {
@@ -411,4 +423,12 @@ Object.extend(Squeak.Primitives.prototype,
         }
         return this.popNIfOK(argCount);
     },
+    hostWindow_primitiveHostWindowTitle: function(argCount) {
+        if (this.display.setTitle) {
+            var utf8 = this.stackNonInteger(0).bytes;
+            var title = (new TextDecoder()).decode(utf8);
+            this.display.setTitle(title);
+        }
+        return this.popNIfOK(argCount);
+    }
 });

@@ -4,6 +4,10 @@
    from
 	DeflatePlugin VMMaker-bf.353 uuid: 8ae25e7e-8d2c-451e-8277-598b30e9c002
  */
+/*
+	Manual fixes:
+	2022-01-15 VMMaker.oscog-mt.3135 and VMMaker.oscog-mt.3136
+*/
 
 (function ZipPlugin() {
 "use strict";
@@ -260,7 +264,7 @@ function deflateBlockchainLengthgoodMatch(lastIndex, chainLength, goodMatch) {
 }
 
 
-/*	Determine the inst size of the class above DeflateStream by
+/*	Determine the inst size of the class above InflateStream by
 	 looking for the first class whose inst size is less than 13. */
 
 function determineSizeOfReadStream(rcvr) {
@@ -540,8 +544,8 @@ function loadZipEncoderFrom(rcvr) {
 	/* zipWriteLimit := interpreterProxy fetchInteger: 3 ofObject: rcvr. */
 
 	zipReadLimit = interpreterProxy.fetchIntegerofObject(2, rcvr);
-	zipBitBuf = interpreterProxy.fetchIntegerofObject(writeStreamInstSize + 1, rcvr);
-	zipBitPos = interpreterProxy.fetchIntegerofObject(writeStreamInstSize + 2, rcvr);
+	zipBitBuf = interpreterProxy.fetchIntegerofObject(writeStreamInstSize + 0, rcvr);
+	zipBitPos = interpreterProxy.fetchIntegerofObject(writeStreamInstSize + 1, rcvr);
 	return !interpreterProxy.failed();
 }
 
@@ -853,8 +857,8 @@ function primitiveZipSendBlock() {
 	result = sendBlockwithwithwith(litStream, distStream, litTree, distTree);
 	if (!interpreterProxy.failed()) {
 		interpreterProxy.storeIntegerofObjectwithValue(1, rcvr, zipPosition);
-		interpreterProxy.storeIntegerofObjectwithValue(readStreamInstSize + 1, rcvr, zipBitBuf);
-		interpreterProxy.storeIntegerofObjectwithValue(readStreamInstSize + 2, rcvr, zipBitPos);
+		interpreterProxy.storeIntegerofObjectwithValue(writeStreamInstSize + 0, rcvr, zipBitBuf);
+		interpreterProxy.storeIntegerofObjectwithValue(writeStreamInstSize + 1, rcvr, zipBitPos);
 	}
 	if (!interpreterProxy.failed()) {
 		interpreterProxy.pop(5);

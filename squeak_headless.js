@@ -45,16 +45,8 @@ import "./vm.input.headless.js";        // use headless input to prevent image c
 import "./vm.plugins.js";
 import "./plugins/ConsolePlugin.js";
 
-// Run the VM
-Object.extend(Squeak, {
-    vmPath: "/",
-    platformSubtype: "Browser",
-    osVersion: navigator.userAgent,     // might want to parse
-    windowSystem: "headless",
-});
-
 // Run image by starting interpreter on it
-function runImage(imageData, imageName) {
+function runImage(imageData, imageName, options) {
 
     // Create Squeak image from raw data
     var image = new Squeak.Image(imageName.replace(/\.image$/i, ""));
@@ -99,12 +91,20 @@ function fetchImageAndRun(imageName, options) {
     });
 }
 
+// Extend Squeak with settings and options to fetch and run image
+Object.extend(Squeak, {
+    vmPath: "/",
+    platformSubtype: "Browser",
+    osVersion: navigator.userAgent,     // might want to parse
+    windowSystem: "headless",
+    fetchImageAndRun: fetchImageAndRun,
+});
+
+
 // Retrieve image name from URL
 var searchParams = (new URL(self.location)).searchParams;
 var imageName = searchParams.get("imageName");
-if(!imageName) {
-    console.error("Use search parameter 'imageName' to specify Smalltalk image (should be an URL)");
-} else {
+if(imageName) {
     var options = {
         ignoreQuit: searchParams.get("ignoreQuit") !== null
     };

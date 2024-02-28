@@ -721,11 +721,8 @@ Object.subclass('Squeak.Primitives',
         var rcvr = this.stackPos32BitInt(1);
         var arg = this.stackInteger(0);
         if (!this.success) return 0;
-        var result = this.vm.safeShift(rcvr, arg); // returns negative result if failed
-        if (result > 0)
-            return this.pos32BitIntFor(this.vm.safeShift(rcvr, arg));
-        this.success = false;
-        return 0;
+        var result = this.vm.safeShift(rcvr, arg); // returns Non-SmallInt number if failed
+        return this.ensureSmallInt(result); // sets success to false if not a SmallInt
     },
     safeFDiv: function(dividend, divisor) {
         if (divisor === 0.0) {

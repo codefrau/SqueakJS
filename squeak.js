@@ -246,6 +246,27 @@ function recordMouseEvent(what, evt, canvas, display, options) {
     }
 }
 
+function recordWheelEvent(evt, display) {
+    if (!display.vm) return;
+    if (!display.eventQueue || !display.vm.image.isSpur) {
+        // old image, queue wheel events as ctrl+up/down
+        fakeCmdOrCtrlKey(evt.deltaY > 0 ? 31 : 30, evt.timeStamp, display);
+        return;
+    }
+    var squeakEvt = [
+        Squeak.EventTypeMouseWheel,
+        evt.timeStamp,  // converted to Squeak time in makeSqueakEvent()
+        evt.deltaX,
+        -evt.deltaY,
+        display.buttons & Squeak.Mouse_All,
+        display.buttons >> 3,
+    ];
+    display.eventQueue.push(squeakEvt);
+    if (display.signalInputEvent)
+        display.signalInputEvent();
+    display.idle = 0;
+}
+
 // Squeak traditional keycodes are MacRoman
 var MacRomanToUnicode = [
     0x00C4, 0x00C5, 0x00C7, 0x00C9, 0x00D1, 0x00D6, 0x00DC, 0x00E1,
@@ -479,6 +500,10 @@ function createSqueakDisplay(canvas, options) {
     };
     canvas.onmousemove = function(evt) {
         recordMouseEvent('mousemove', evt, canvas, display, options);
+        evt.preventDefault();
+    };
+    canvas.onwheel = function(evt) {
+        recordWheelEvent(evt, display);
         evt.preventDefault();
     };
     canvas.oncontextmenu = function() {

@@ -2029,17 +2029,20 @@ Object.subclass('Squeak.Primitives',
             // 46   size of machine code zone, in bytes (stored in image file header; Cog JIT VM only, otherwise nil)
             case 46: return 0;
             // 47   desired size of machine code zone, in bytes (applies at startup only, stored in image file header; Cog JIT VM only)
-            case 48: return 0;
-            // 48   various properties of the Cog VM as an integer encoding an array of bit flags.
-            //      Bit 0: tells the VM that the image's Process class has threadId as its 5th inst var (after nextLink, suspendedContext, priority & myList)
-            //      Bit 1: on Cog JIT VMs asks the VM to set the flag bit in interpreted methods
-            //      Bit 2: if set, preempting a process puts it to the head of its run queue, not the back,
+            case 48: return 0; // not yet using/modifying this.vm.image.headerFlags
+            // 48	various properties stored in the image header (that instruct the VM) as an integer encoding an array of bit flags.
+            //     Bit 0: in a threaded VM, if set, tells the VM that the image's Process class has threadAffinity as its 5th inst var
+            //             (after nextLink, suspendedContext, priority & myList)
+            //     Bit 1: in Cog JIT VMs, if set, asks the VM to set the flag bit in interpreted methods
+            //     Bit 2: if set, preempting a process puts it to the head of its run queue, not the back,
             //             i.e. preempting a process by a higher priority one will not cause the preempted process to yield
-            //             to others at the same priority.
-            //      Bit 3: in a muilt-threaded VM, if set, the Window system will only be accessed from the first VM thread
-            //      Bit 4: in a Spur vm, if set, causes weaklings and ephemerons to be queued individually for finalization
-            //      Bit 5: if set, implies wheel events will be delivered as such and not mapped to arrow key events
-            //      Bit 6: if set, implies arithmetic primitives will fail if given arguments of different types (float vs int)
+            //                 to others at the same priority.
+            //     Bit 3: in a muilt-threaded VM, if set, the Window system will only be accessed from the first VM thread (now unassigned)
+            //     Bit 4: in a Spur VM, if set, causes weaklings and ephemerons to be queued individually for finalization
+            //     Bit 5: if set, implies wheel events will be delivered as such and not mapped to arrow key events
+            //     Bit 6: if set, implies arithmetic primitives will fail if given arguments of different types (float vs int)
+            //     Bit 7: if set, causes times delivered from file primitives to be in UTC rather than local time
+            //     Bit 8: if set, implies the VM will not upscale the display on high DPI monitors; older VMs did this by default.
             // 49   the size of the external semaphore table (read-write; Cog VMs only)
             // 50-51 reserved for VM parameters that persist in the image (such as eden above)
             // 52   root (remembered) table maximum size (read-only)

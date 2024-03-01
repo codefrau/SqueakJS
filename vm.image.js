@@ -69,6 +69,7 @@ Object.subclass('Squeak.Image',
     initialize: function(name) {
         this.headRoom = 100000000; // TODO: pass as option
         this.totalMemory = 0;
+        this.headerFlags = 0;
         this.name = name;
         this.gcCount = 0;
         this.gcMilliseconds = 0;
@@ -139,10 +140,12 @@ Object.subclass('Squeak.Image',
         var objectMemorySize = readWord(); //first unused location in heap
         var oldBaseAddr = readWord(); //object memory base address of image
         var specialObjectsOopInt = readWord(); //oop of array of special oops
-        this.savedHeaderWords = [];
-        for (var i = 0; i < 7; i++) {
+        var lastHash = readWord32(); if (is64Bit) readWord32(); // not used
+        var savedWindowSize = readWord(); // not used
+        this.headerFlags = readWord(); // vm attribute 48
+        this.savedHeaderWords = [lastHash, savedWindowSize, this.headerFlags];
+        for (var i = 0; i < 4; i++) {
             this.savedHeaderWords.push(readWord32());
-            if (is64Bit && i < 3) readWord32(); // skip half
         }
         var firstSegSize = readWord();
         var prevObj;

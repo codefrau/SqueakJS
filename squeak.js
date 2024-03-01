@@ -249,9 +249,10 @@ function recordMouseEvent(what, evt, canvas, display, options) {
 function recordWheelEvent(evt, display) {
     if (!display.vm) return;
     if (!display.eventQueue || !display.vm.image.isSpur) {
-        // old image, queue wheel events as ctrl+up/down
+        // for old images, queue wheel events as ctrl+up/down
         fakeCmdOrCtrlKey(evt.deltaY > 0 ? 31 : 30, evt.timeStamp, display);
         return;
+        // TODO: use or set VM parameter 48 (see vmParameterAt)
     }
     var squeakEvt = [
         Squeak.EventTypeMouseWheel,
@@ -365,7 +366,7 @@ function createSqueakDisplay(canvas, options) {
         width: 0,   // if 0, VM uses canvas.width
         height: 0,  // if 0, VM uses canvas.height
         scale: 1,   // VM will use window.devicePixelRatio if highdpi is enabled, also changes when touch-zooming
-        highdpi: options.highdpi,
+        highdpi: options.highdpi, // TODO: use or set VM parameter 48 (see vmParameterAt)
         mouseX: 0,
         mouseY: 0,
         buttons: 0,

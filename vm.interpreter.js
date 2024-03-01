@@ -166,8 +166,9 @@ Object.subclass('Squeak.Interpreter',
             // Squeak 5.3 disable wizard by replacing #open send with pop
             {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: opts.includes("wizard=false")},
             // Squeak source file should use UTF8 not MacRoman (both V3 and Sista)
-            {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 38, old: 0x16, hack: 0x13}, enabled: sista},
-            {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 50, old: 0x44, hack: 0x48}, enabled: !sista},
+            {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 53, old: 0x45, hack: 0x49}, enabled: !this.image.isSpur},
+            {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 38, old: 0x16, hack: 0x13}, enabled: this.image.isSpur && sista},
+            {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 50, old: 0x44, hack: 0x48}, enabled: this.image.isSpur && !sista},
         ].forEach(function(each) {
             try {
                 var m = each.enabled && this.findMethod(each.method);

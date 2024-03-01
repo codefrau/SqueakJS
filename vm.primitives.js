@@ -718,11 +718,30 @@ Object.subclass('Squeak.Primitives',
         return this.pos32BitIntFor(rcvr ^ arg);
     },
     doBitShift: function() {
+        // SmallInts are handled by the bytecode,
+        // so rcvr is a LargeInteger
         var rcvr = this.stackPos32BitInt(1);
         var arg = this.stackInteger(0);
         if (!this.success) return 0;
-        var result = this.vm.safeShift(rcvr, arg); // returns Non-SmallInt number if failed
-        return this.ensureSmallInt(result); // sets success to false if not a SmallInt
+        // we're not using safeShift() here because we want the full 32 bits
+        // and we know the receiver is unsigned
+        var result;
+        if (arg < 0) {
+            if (arg < -31) return 0; // JS would treat arg=32 as arg=0
+            result = rcvr >>> -arg;
+        } else {
+            if (arg > 31) {
+                this.success = false; // rcvr is never 0
+                return 0;
+            }
+            result = rcvr << arg;
+            // check for lost bits by seeing if computation is reversible
+            if ((result >>> arg) !== rcvr) {
+                this.success = false;
+                return 0;
+            }
+        }
+        return this.pos32BitIntFor(result);
     },
     safeFDiv: function(dividend, divisor) {
         if (divisor === 0.0) {

@@ -1498,16 +1498,21 @@ Object.subclass('Squeak.Interpreter',
         return rcvr - Math.floor(rcvr/arg) * arg;
     },
     safeShift: function(smallInt, shiftCount) {
-         // JS shifts only up to 31 bits
+        // must only be used if smallInt is actually a SmallInt!
+        // the logic is complex because JS shifts only up to 31 bits
+        // and treats e.g. 1<<32 as 1<<0, so we have to do our own checks
         if (shiftCount < 0) {
             if (shiftCount < -31) return smallInt < 0 ? -1 : 0;
+            // this would wrongly return a negative result if
+            // smallInt >= 0x80000000, but the largest smallInt
+            // is 0x3FFFFFFF so we're ok
             return smallInt >> -shiftCount; // OK to lose bits shifting right
         }
-        if (shiftCount > 31) return smallInt == 0 ? 0 : Squeak.NonSmallInt;
-        // check for lost bits by seeing if computation is reversible
+        if (shiftCount > 31) return smallInt === 0 ? 0 : Squeak.NonSmallInt;
         var shifted = smallInt << shiftCount;
-        if  ((shifted>>shiftCount) === smallInt) return shifted;
-        return Squeak.NonSmallInt;  //non-small result will cause failure
+        // check for lost bits by seeing if computation is reversible
+        if ((shifted>>shiftCount) !== smallInt) return Squeak.NonSmallInt; // fail
+        return shifted; // caller will check if still within SmallInt range
     },
 },
 'utils',

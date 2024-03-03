@@ -138,6 +138,7 @@ to single-step.
             'bitShift:', '//', 'bitAnd:', 'bitOr:', 'at:', 'at:put:', 'size', 'next', 'nextPut:',
             'atEnd', '==', 'class', 'blockCopy:', 'value', 'value:', 'do:', 'new', 'new:', 'x', 'y'];
         this.doitCounter = 0;
+        this.blockCounter = 0;
     },
 },
 'accessing', {
@@ -200,7 +201,10 @@ to single-step.
         return true;
     },
     functionNameFor: function(cls, sel) {
-        if (cls === undefined || cls === '?') return "DOIT_" + ++this.doitCounter;
+        if (cls === undefined || cls === '?') {
+            var isMethod = this.method.sqClass === this.vm.specialObjects[Squeak.splOb_ClassCompiledMethod];
+            return isMethod ? "DOIT_" + ++this.doitCounter : "BLOCK_" + ++this.blockCounter;
+        }
         cls = cls.replace(/ /g, "_").replace("[]", "Block");
         if (!/[^a-zA-Z0-9:_]/.test(sel))
             return cls + "_" + sel.replace(/:/g, "ː"); // unicode colon is valid in JS identifiers

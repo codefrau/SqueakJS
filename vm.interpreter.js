@@ -710,8 +710,7 @@ Object.subclass('Squeak.Interpreter',
         if (this.primHandler.semaphoresToSignal.length > 0)
             this.primHandler.signalExternalSemaphores();  // signal pending semaphores, if any
         // if this is a long-running do-it, compile it
-        if (!this.method.compiled && this.compiler)
-            this.compiler.compile(this.method);
+        if (!this.method.compiled) this.compileIfPossible(this.method);
         // have to return to web browser once in a while
         if (now >= this.breakOutTick)
             this.breakOut();
@@ -1052,10 +1051,14 @@ Object.subclass('Squeak.Interpreter',
         this.receiver = newContext.pointers[Squeak.Context_receiver];
         if (this.receiver !== newRcvr)
             throw Error("receivers don't match");
-        if (!newMethod.compiled && this.compiler)
-            this.compiler.compile(newMethod, optClass, optSel);
+        if (!newMethod.compiled) this.compileIfPossible(newMethod, optClass, optSel);
         // check for process switch on full method activation
         if (this.interruptCheckCounter-- <= 0) this.checkForInterrupts();
+    },
+    compileIfPossible(newMethod, optClass, optSel) {
+        if (!newMethod.compiled && this.compiler) {
+            this.compiler.compile(newMethod, optClass, optSel);
+        }
     },
     doReturn: function(returnValue, targetContext) {
         // get sender from block home or closure's outerContext

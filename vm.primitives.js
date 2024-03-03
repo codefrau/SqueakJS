@@ -1660,6 +1660,7 @@ Object.subclass('Squeak.Primitives',
         // No need to nil-out remaining temps as context pointers are nil-initialized.
         this.vm.popN(argCount + 1);
         this.vm.newActiveContext(newContext);
+        if (!closureMethod.compiled) this.vm.compileIfPossible(closureMethod);
     },
 },
 'scheduling', {

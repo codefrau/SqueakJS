@@ -80,11 +80,9 @@ Object.extend(Squeak.Primitives.prototype,
             } else {
                 this.showForm(context, cursorForm, bounds, true);
             }
-            var canvas = this.display.context.canvas,
-                scale = canvas.offsetWidth / canvas.width,
-                ratio = this.display.highdpi ? window.devicePixelRatio : 1;
-            cursorCanvas.style.width = (cursorCanvas.width * ratio * scale|0) + "px";
-            cursorCanvas.style.height = (cursorCanvas.height * ratio * scale|0) + "px";
+            var scale = this.display.scale || 1.0;
+            cursorCanvas.style.width = Math.round(cursorCanvas.width * scale) + "px";
+            cursorCanvas.style.height = Math.round(cursorCanvas.height * scale) + "px";
             this.display.cursorOffsetX = cursorForm.offsetX * scale|0;
             this.display.cursorOffsetY = cursorForm.offsetY * scale|0;
         }

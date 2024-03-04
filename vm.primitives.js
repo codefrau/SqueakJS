@@ -379,9 +379,11 @@ Object.subclass('Squeak.Primitives',
             case 235: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompareString', argCount);
             case 236: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveConvert8BitSigned', argCount);
             case 237: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompressToByteArray', argCount);
+                break;  // fail 234-237 if fell through
             case 238: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortOpen', argCount);
+                else return this.namedPrimitive('FloatArrayPlugin', 'primitiveAt', argCount);
             case 239: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortClose', argCount);
-                break;  // fail 234-239 if fell through
+                else return this.namedPrimitive('FloatArrayPlugin', 'primitiveAtPut', argCount);
             case 240: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortWrite', argCount);
                 else return this.popNandPushIfOK(argCount+1, this.microsecondClockUTC());
             case 241: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortRead', argCount);

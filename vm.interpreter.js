@@ -1146,7 +1146,9 @@ Object.subclass('Squeak.Interpreter',
         if (success
             && this.sp !== sp - argCount
             && context === this.activeContext
-            && primIndex !== 117    // named prims are checked separately
+            && primIndex !== 117    // named prims are checked separately (see namedPrimitive)
+            && primIndex !== 118    // primitiveDoPrimitiveWithArgs (will call tryPrimitive again)
+            && primIndex !== 218    // primitiveDoNamedPrimitive (will call namedPrimitive)
             && !this.frozen) {
                 this.warnOnce("stack unbalanced after primitive " + primIndex, "error");
             }

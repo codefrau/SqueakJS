@@ -357,7 +357,7 @@ Object.subclass('Squeak.Primitives',
             case 216: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketRemotePort', argCount);
             case 217: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectToPort', argCount);
             case 218: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketListenWithOrWithoutBacklog', argCount);
-                else { this.vm.warnOnce("missing primitive: 218 (tryNamedPrimitiveInForWithArgs"); return false; }
+                else return this.primitiveDoNamedPrimitive(argCount);
             case 219: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketCloseConnection', argCount);
             case 220: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketAbortConnection', argCount);
                 break;  // fail 212-220 if fell through
@@ -1323,6 +1323,29 @@ Object.subclass('Squeak.Primitives',
         // Primitive failed, restore state for failure code
         this.vm.popN(arraySize);
         this.vm.push(primIdx);
+        this.vm.push(argumentArray);
+        return false;
+    },
+    primitiveDoNamedPrimitive: function(argCount) {
+        var argumentArray = this.stackNonInteger(0),
+            rcvr = this.stackNonInteger(1),
+            primMethod = this.stackNonInteger(2);
+        if (!this.success) return false;
+        var arraySize = argumentArray.pointersSize(),
+            cntxSize = this.vm.activeContext.pointersSize();
+        if (this.vm.sp + arraySize >= cntxSize) return false;
+        // Pop primIndex, rcvr, and argArray, then push new receiver and args in place...
+        this.vm.popN(3);
+        this.vm.push(rcvr);
+        for (var i = 0; i < arraySize; i++)
+            this.vm.push(argumentArray.pointers[i]);
+        // Run the primitive
+        if (this.doNamedPrimitive(arraySize, primMethod))
+            return true;
+        // Primitive failed, restore state for failure code
+        this.vm.popN(arraySize + 1);
+        this.vm.push(primMethod);
+        this.vm.push(rcvr);
         this.vm.push(argumentArray);
         return false;
     },

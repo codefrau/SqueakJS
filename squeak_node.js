@@ -67,7 +67,7 @@ Object.assign(global, {
 // Extend the new global scope with a few browser/DOM classes and methods
 Object.assign(self, {
     localStorage: {},
-    WebSocket: require("./lib_node/WebSocket"),
+    WebSocket: typeof WebSocket === "undefined" ? require("./lib_node/WebSocket") : WebSocket,
     sha1: require("./lib/sha1"),
     btoa: function(string) {
         return Buffer.from(string, 'ascii').toString('base64');

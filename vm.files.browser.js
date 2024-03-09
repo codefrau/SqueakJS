@@ -140,9 +140,9 @@ Object.extend(Squeak,
             var trans = SqueakDB.transaction("files", mode),
                 fileStore = trans.objectStore("files");
             trans.oncomplete = function(e) { if (completionFunc) completionFunc(); }
-            trans.onerror = function(e) { console.error(e.target.error.name + ": " + description) }
+            trans.onerror = function(e) { console.error("Transaction error during " + description, e); }
             trans.onabort = function(e) {
-                console.error(e.target.error.name + ": aborting " + description);
+                console.error("Transaction error: aborting " + description, e);
                 // fall back to local/memory storage
                 transactionFunc(Squeak.dbFake());
                 if (completionFunc) completionFunc();
@@ -174,7 +174,7 @@ Object.extend(Squeak,
                 this.close();
             };
             SqueakDB.onerror = function(e) {
-                console.error("Error accessing database: " + e.target.error.name);
+                console.error("Error accessing database", e);
             };
             startTransaction();
         };
@@ -185,7 +185,7 @@ Object.extend(Squeak,
             db.createObjectStore("files");
         };
         openReq.onerror = function(e) {
-            console.error(e.target.error.name + ": cannot open files database");
+            console.error("Error opening files database", e);
             console.warn("Falling back to local storage");
             fakeTransaction();
         };
@@ -287,7 +287,7 @@ Object.extend(Squeak,
             return thenDo(SqueakDBFake.bigFiles[path.fullname]);
         this.dbTransaction("readonly", "get " + filepath, function(fileStore) {
             var getReq = fileStore.get(path.fullname);
-            getReq.onerror = function(e) { errorDo(e.target.error.name) };
+            getReq.onerror = function(e) { errorDo(e) };
             getReq.onsuccess = function(e) {
                 if (this.result !== undefined) return thenDo(this.result);
                 // might be a template

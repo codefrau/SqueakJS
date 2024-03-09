@@ -81,6 +81,9 @@ Object.extend(Squeak.Primitives.prototype,
                 this.showForm(context, cursorForm, bounds, true);
             }
             var scale = this.display.scale || 1.0;
+            if (cursorForm.width <= 16 && cursorForm.height <= 16) {
+                scale = 1.0;
+            }
             cursorCanvas.style.width = Math.round(cursorCanvas.width * scale) + "px";
             cursorCanvas.style.height = Math.round(cursorCanvas.height * scale) + "px";
             this.display.cursorOffsetX = cursorForm.offsetX * scale|0;

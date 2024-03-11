@@ -814,10 +814,11 @@ function createSqueakDisplay(canvas, options) {
             return evt.preventDefault();
         }
         // copy/paste new-style
-        if (navigator.clipboard && (display.isMac ? evt.metaKey : evt.ctrlKey)) {
+        if (display.isMac ? evt.metaKey : evt.ctrlKey) {
             switch (evt.key) {
                 case "c":
                 case "x":
+                    if (!navigator.clipboard?.writeText) return; // fire document.oncopy/oncut
                     var text = display.executeClipboardCopy(evt.key, evt.timeStamp);
                     if (typeof text === 'string') {
                         navigator.clipboard.writeText(text)
@@ -825,6 +826,7 @@ function createSqueakDisplay(canvas, options) {
                     }
                     return evt.preventDefault();
                 case "v":
+                    if (!navigator.clipboard?.readText) return; // fire document.onpaste
                     navigator.clipboard.readText()
                         .then(function(text) {
                             display.executeClipboardPaste(text, evt.timeStamp);
@@ -846,7 +848,7 @@ function createSqueakDisplay(canvas, options) {
         recordModifiers(evt, display);
     };
     // copy/paste old-style
-    if (!navigator.clipboard) {
+    if (!navigator.clipboard?.writeText) {
         document.oncopy = function(evt, key) {
             var text = display.executeClipboardCopy(key, evt.timeStamp);
             if (typeof text === 'string') {
@@ -858,6 +860,8 @@ function createSqueakDisplay(canvas, options) {
             if (!display.vm) return true;
             document.oncopy(evt, 'x');
         };
+    }
+    if (!navigator.clipboard?.readText) {
         document.onpaste = function(evt) {
             var text = evt.clipboardData.getData('Text');
             display.executeClipboardPaste(text, evt.timeStamp);

@@ -1,203 +1,216 @@
+<!DOCTYPE html>
 <html>
 <head>
+    <meta viewport="width=device-width, initial-scale=1.0">
     <title>Layout Test</title>
     <style>
+    html {
+        overscroll-behavior: none;
+        -webkit-user-select: none;
+        user-select: none;
+    }
     body {
-        background: #eae6d1;
-        font-family: sans-serif;
+        background: #000;
+        overflow: hidden;
     }
     canvas {
-        position: absolute;
-        background: #000;
-    }
-    div#header {
-        position: absolute;
+        position: fixed;
+        left: 0;
         top: 0;
-        left: 0;
-        right: 0;
-        padding: 10px;
-        border-bottom: 6px double gray;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
     }
-    div#footer {
-        position: absolute;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        padding: 10px;
-        border-top: 6px double gray;
+    #buttons {
+        position: fixed;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+    }
+    button {
+        font-size: 2rem;
     }
     </style>
-<script>
-
-function setupFullscreen(display, canvas, options) {
-    var box = canvas.parentElement,
-        fullscreenEvent = "fullscreenchange",
-        fullscreenElement = "fullscreenElement",
-        fullscreenEnabled = "fullscreenEnabled";
-
-    // Fullscreen support is very browser-dependent
-    if (!box.requestFullscreen) {
-        [
-            {req: box.webkitRequestFullscreen, exit: document.webkitExitFullscreen,
-                evt: "webkitfullscreenchange", elem: "webkitFullscreenElement", enable: "webkitFullscreenEnabled"},
-            {req: box.mozRequestFullScreen, exit: document.mozCancelFullScreen,
-                evt: "mozfullscreenchange", elem: "mozFullScreenElement", enable: "mozFullScreenEnabled"},
-            {req: box.msRequestFullscreen, exit: document.msExitFullscreen,
-                evt: "MSFullscreenChange", elem: "msFullscreenElement", enable: "msFullscreenEnabled"},
-        ].forEach(function(browser) {
-            if (browser.req) {
-                box.requestFullscreen = browser.req;
-                document.exitFullscreen = browser.exit;
-                fullscreenEvent = browser.evt;
-                fullscreenElement = browser.elem;
-                fullscreenEnabled = browser.enable;
-            }
-        })
-    }
-
-    function fullscreenChange(fullscreen) {
-        display.fullscreen = fullscreen;
-        if (options.header) options.header.style.display = fullscreen ? 'none' : '';
-        if (options.footer) options.footer.style.display = fullscreen ? 'none' : '';
-        if (options.fullscreenCheckbox) options.fullscreenCheckbox.checked = fullscreen;
-        box.style.background = fullscreen ? 'black' : '';
-        setTimeout(window.onresize, 0);
-    };
-    
-    var checkFullscreen;
-    
-    if (box.requestFullscreen) {
-        document.addEventListener(fullscreenEvent, function(){fullscreenChange(box == document[fullscreenElement])});
-        checkFullscreen = function() {
-            if (document[fullscreenEnabled] && (box == document[fullscreenElement]) != display.fullscreen) {
-                if (display.fullscreen) box.requestFullscreen();
-                else document.exitFullscreen();
-            }
-        }
-    } else {
-        var isFullscreen = false;
-        checkFullscreen = function() {
-            if ((options.header || options.footer) && isFullscreen != display.fullscreen) {
-                isFullscreen = display.fullscreen;
-                fullscreenChange(isFullscreen);
-            }
-        }
-    }
-
-    return checkFullscreen;
-}
-
-window.onload = function() {
-    var options = {
-        header: header,
-        footer: footer,
-    };
-    var display = {
-        fullscreen: false,
-        width: 10,
-        height: 10,
-        mouseX: 0,
-        mouseY: 0,
-    };
-    var checkFullscreen = setupFullscreen(display, canvas, options);
-    toggleFull.onclick = function() {
-        display.fullscreen = !display.fullscreen;
-        checkFullscreen();
-    };
-    toggleFixed.onclick = function() {
-        if (options.fixedWidth) {
-            delete options.fixedWidth;
-            delete options.fixedHeight;
-        } else {
-            options.fixedWidth = 640;
-            options.fixedHeight = 480;
-        }
-        window.onresize();
-    };
-    var ctx = canvas.getContext("2d");
-    function draw(x, y) {
-        var w = display.width,
-            h = display.height;
-        ctx.save();
-        if (display.offsetX || display.offsetY)
-            ctx.translate(display.offsetX, display.offsetY);
-        ctx.fillStyle = "white";
-        ctx.fillRect(0, 0, w, h);
-        ctx.beginPath(); ctx.arc(  20,   20, 19, 0, 2*Math.PI); ctx.stroke();
-        ctx.beginPath(); ctx.arc(w-20,   20, 19, 0, 2*Math.PI); ctx.stroke();
-        ctx.beginPath(); ctx.arc(w-20, h-20, 19, 0, 2*Math.PI); ctx.stroke();
-        ctx.beginPath(); ctx.arc(  20, h-20, 19, 0, 2*Math.PI); ctx.stroke();
-        ctx.beginPath(); ctx.arc( w/2,  h/2, Math.min(w,h)/2-2, 0, 2*Math.PI); ctx.stroke();
-        if (x !== undefined) {
-            ctx.lineWidth = 10;
-            ctx.strokeStyle = "rgba(0, 0, 0, 0.5)";
-            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-        }
-        ctx.restore();
-    }
-    canvas.onmousemove = function(evt) {
-        // scale events to actual canvas extent
-        var x = (evt.pageX - this.offsetLeft) * (this.width / this.offsetWidth),
-            y = (evt.pageY - this.offsetTop) * (this.height / this.offsetHeight);
-        // subtract display offset and clamp to display size
-        display.mouseX = Math.max(0, Math.min(display.width, x - (display.offsetX||0)));
-        display.mouseY = Math.max(0, Math.min(display.height, y - (display.offsetY||0)));
-        draw(display.mouseX, display.mouseY);
-    };
-    canvas.ontouchmove = function(evt) {
-        canvas.onmousemove(evt.touches[0]);
-    };
-    window.onresize = function() {
-        // CSS won't let us do what we want so we will layout the canvas ourselves.
-        var x = 0,
-            y = display.fullscreen ? 0 : header.offsetTop + header.offsetHeight,
-            w = window.innerWidth,
-            h = display.fullscreen ? window.innerHeight : Math.max(100, footer.offsetTop - y),
-            padX = 0,
-            padY = 0;
-        // above are the default values for laying out the canvas
-        if (!options.fixedWidth) { // set canvas resolution
-            display.width = w;
-            display.height = h;
-        } else { // fixed resolution and aspect ratio
-            display.width = options.fixedWidth;
-            display.height = options.fixedHeight;
-            var wantRatio = display.width / display.height,
-                haveRatio = w / h;
-            if (haveRatio > wantRatio) {
-                padX = w - Math.floor(h * wantRatio);
-            } else {
-                padY = h - Math.floor(w / wantRatio);
-            }
-        }
-        // set size and position
-        canvas.style.left = x + Math.floor(padX / 2);
-        canvas.style.top = y + Math.floor(padY / 2);;
-        canvas.style.width = w - padX;
-        canvas.style.height = h - padY;
-        // set resolution
-        if (canvas.width != display.width || canvas.height != display.height) {
-            canvas.width = display.width;
-            canvas.height = display.height;
-            draw();
-        }
-    }
-    window.onresize();
-}
-</script>
 </head>
 <body>
-    <div id="header">
-        <h1>Layout Test</h1>
+    <canvas id="canvas"></canvas>
+    <div id="buttons">
+        <button id="toggleFixed">Fixed Res</button>
+        <button id="toggleHighDPI">High DPI</button>
+        <button id="toggleFull">Full screen</button>
     </div>
-    <div id="footer">
-        <p>
-            <button id="toggleFull" type="button">Toggle Fullscreen</button>
-            <button id="toggleFixed" type="button">Toggle Fixed Resolution</button>
-            Test canvas layout and event handling.
-        </p>
-    </div>
-    <canvas id="canvas" width="10" height="10"></canvas>
+
+    <script>
+        // This is a simple test to see how to handle high DPI and fixed resolution
+        // in a way that works on all browsers, especially on mobile.
+        // We want to ensure that the canvas is always the same pixel density, and
+        // that mouse events are scaled to the canvas size.
+        var options = {
+            highDPI: true,
+            // fixedWidth: 800,
+            // fixedHeight: 600,
+        };
+
+        var display = {
+            width: 10,
+            height: 10,
+            mouseX: 0,
+            mouseY: 0,
+            scale: 1,
+            fullscreen: false,
+        };
+
+        function setupFullscreen() {
+            var box = canvas.parentElement;
+
+            function fullscreenChange(fullscreen) {
+                display.fullscreen = fullscreen;
+                setTimeout(window.onresize, 0);
+            };
+
+            document.addEventListener("fullscreenchange", function(){ fullscreenChange(box === document.fullscreenElement) });
+            function checkFullscreen() {
+                if (document.fullscreenEnabled && (box === document.fullscreenElement) !== display.fullscreen) {
+                    if (display.fullscreen) box.requestFullscreen();
+                    else document.exitFullscreen();
+                }
+            }
+            return checkFullscreen;
+        }
+
+        var checkFullscreen = setupFullscreen();
+
+        toggleFixed.onclick = function() {
+            if (options.fixedWidth) {
+                delete options.fixedWidth;
+                delete options.fixedHeight;
+            } else {
+                options.fixedWidth = 800;
+                options.fixedHeight = 600;
+            }
+            window.onresize();
+        };
+
+        toggleHighDPI.onclick = function() {
+            if (options.highDPI) {
+                delete options.highDPI;
+            } else {
+                options.highDPI = true;
+            }
+            window.onresize();
+        };
+
+        toggleFull.onclick = function() {
+            display.fullscreen = !display.fullscreen;
+            checkFullscreen();
+        };
+
+        var ctx = canvas.getContext("2d");
+
+        function draw(x, y) {
+            var w = display.width,
+                h = display.height,
+                s = display.scale;
+            ctx.save();
+            ctx.fillStyle = "#FFF";
+            ctx.fillRect(0, 0, w, h);
+            // draw circles
+            ctx.beginPath(); ctx.arc(  40,   40, 39, 0, 2*Math.PI); ctx.stroke();
+            ctx.beginPath(); ctx.arc(w-40,   40, 39, 0, 2*Math.PI); ctx.stroke();
+            ctx.beginPath(); ctx.arc(w-40, h-40, 39, 0, 2*Math.PI); ctx.stroke();
+            ctx.beginPath(); ctx.arc(  40, h-40, 39, 0, 2*Math.PI); ctx.stroke();
+            ctx.beginPath(); ctx.arc( w/2,  h/2, Math.min(w,h)/2-2, 0, 2*Math.PI); ctx.stroke();
+            // draw crosshairs
+            if (x !== undefined) {
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = "rgba(0, 0, 0, 0.5)";
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+            }
+            // draw resolution, scale factor and mouse position in center
+            var fontSize = 18 * s;
+            ctx.font = `${fontSize}px sans-serif`;
+            ctx.fillStyle = "black";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            var label = `${w}x${h}`;
+            if (options.fixedWidth) {
+                ctx.fillText(label, w/2, h/2);
+            } else {
+                var vw = Math.round(visualViewport.width),
+                    vh = Math.round(visualViewport.height),
+                    vs = visualViewport.scale.toFixed(2),
+                    iw = window.innerWidth * s,
+                    ih = window.innerHeight * s,
+                    ow = document.documentElement.offsetWidth * s,
+                    oh = document.documentElement.offsetHeight * s;
+                label = `${vw}x${vh}x${vs}@${s} = ${label}`;
+                ctx.fillText("visualViewport:", w/2, h/2 - 2*fontSize);
+                ctx.fillText(label, w/2, h/2 - fontSize);
+                ctx.fillText(`html.offsetWidth: ${ow}x${oh}`, w/2, h/2 + fontSize);
+                ctx.fillText(`window.innerWidth: ${iw}x${ih}`, w/2, h/2 + 2*fontSize);
+            }
+            ctx.restore();
+        }
+
+        canvas.onmousemove = function(evt) {
+            // pageX and pageY work on touch events, too
+            var evtX = evt.pageX - this.offsetLeft,
+                evtY = evt.pageY - this.offsetTop;
+            if (options.fixedWidth) {
+                // display is centered in canvas element due to object-fit: contain
+                var ratioX = display.width / canvas.offsetWidth,
+                    ratioY = display.height / canvas.offsetHeight;
+                if (ratioX > ratioY) {
+                    // full width, centered vertically (letterboxed)
+                    var x = evtX * ratioX;
+                    var topMargin = (canvas.offsetHeight - display.height / ratioX) / 2;
+                    var y = (evtY - topMargin) * ratioX;
+                } else {
+                    // full height, centered horizontally (pillarboxed)
+                    var y = evtY * ratioY;
+                    var leftMargin = (canvas.offsetWidth - display.width / ratioY) / 2;
+                    var x = (evtX - leftMargin) * ratioY;
+                }
+            } else {
+                // display fills full canvas element
+                var x = evtX * display.scale;
+                var y = evtY * display.scale;
+            }
+            // clamp to display size
+            display.mouseX = Math.max(0, Math.min(display.width, x));
+            display.mouseY = Math.max(0, Math.min(display.height, y));
+            draw(display.mouseX, display.mouseY);
+        };
+
+        canvas.ontouchmove = function(evt) {
+            canvas.onmousemove(evt.touches[0]);
+        };
+
+        window.onresize = function() {
+            const scale = window.visualViewport?.scale || 1;
+            if (options.fixedWidth) {
+                display.scale = 1;
+                display.width = options.fixedWidth;
+                display.height = options.fixedHeight;
+            } else {
+                // Safari on iOS will always report the same width, even when the device is rotated.
+                // To make our pixels stay about the same size, we use visualViewport.scale.
+                const w = Math.round((window.visualViewport?.width || window.innerWidth) * scale);
+                const h = Math.round((window.visualViewport?.height || window.innerHeight) * scale);
+                display.scale = options.highDPI ? window.devicePixelRatio : 1;
+                display.width = w * display.scale;
+                display.height = h * display.scale;
+            }
+            document.documentElement.style.fontSize = `${8 / scale}px`; // for em units
+            document.body.style.height = `${window.innerHeight - 1}px`; // prevent scroll on mobile
+            if (canvas.width != display.width || canvas.height != display.height) {
+                canvas.width = display.width;
+                canvas.height = display.height;
+            }
+            draw();
+        }
+        window.onresize();
+        </script>
 </body>
 </html>

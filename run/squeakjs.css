@@ -6,6 +6,9 @@ canvas {
     position: fixed;
     background: #000;
     display: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
 }
 canvas.pixelated {
     image-rendering: -moz-crisp-edges;
@@ -36,7 +39,7 @@ div#sqSpinner > div {
     position: absolute;
     top: 45px;
     left: 5px;
-    width: 90px; 
+    width: 90px;
     height: 10px;
     border-radius: 5px;
     box-shadow: 0 0 5px 5px #F90;

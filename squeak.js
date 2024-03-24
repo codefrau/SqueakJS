@@ -1073,7 +1073,7 @@ SqueakJS.runImage = function(buffer, name, display, options) {
         var image = new Squeak.Image(name);
         image.readFromBuffer(buffer, function startRunning() {
             display.quitFlag = false;
-            var vm = new Squeak.Interpreter(image, display);
+            var vm = new Squeak.Interpreter(image, display, options);
             SqueakJS.vm = vm;
             Squeak.Settings["squeakImageName"] = name;
             setupSwapButtons(options);

@@ -1959,7 +1959,7 @@ Object.subclass('Squeak.Primitives',
             case 0: value = (argv && argv[0]) || this.filenameToSqueak(Squeak.vmPath + Squeak.vmFile); break;
             case 1: value = (argv && argv[1]) || this.display.documentName; break; // 1.x images want document here
             case 2: value = (argv && argv[2]) || this.display.documentName; break; // later images want document here
-            case 1001: value = Squeak.platformName; break;
+            case 1001: value = this.vm.options.unix ? "unix" : Squeak.platformName; break;
             case 1002: value = Squeak.osVersion; break;
             case 1003: value = Squeak.platformSubtype; break;
             case 1004: value = Squeak.vmVersion + ' ' + Squeak.vmMakerVersion; break;

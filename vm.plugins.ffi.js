@@ -222,14 +222,6 @@ Object.extend(Squeak.Primitives.prototype,
                 var atomicType = (typeSpec & Squeak.FFIAtomicTypeMask) >> Squeak.FFIAtomicTypeShift;
                 switch (atomicType) {
                     case Squeak.FFITypeUnsignedChar8:
-                        if (stObj.bytes) return stObj.bytesAsString();
-                        if (stObj.words) return String.fromChar.apply(null, stObj.wordsAsUint8Array());
-                        if (this.interpreterProxy.isWordsOrBytes(stObj)) return '';
-                        if (stObj.pointers && stObj.pointers[0].jsData) {
-                            var data = stObj.pointers[0].jsData;
-                            if (data instanceof "string") return data;
-                        }
-                        throw Error("FFI: expected string, got " + stObj);
                     case Squeak.FFITypeUnsignedInt8:
                         if (stObj.bytes) return stObj.bytes;
                         if (stObj.words) return stObj.wordsAsUint8Array();
@@ -326,12 +318,14 @@ Object.extend(Squeak.Primitives.prototype,
                 }
             case Squeak.FFIFlagAtomicPointer:
                 // array of values
+                if (!jsResult) return this.vm.nilObj;
                 var atomicType = (typeSpec & Squeak.FFIAtomicTypeMask) >> Squeak.FFIAtomicTypeShift;
                 switch (atomicType) {
                     // char* is returned as string
                     case Squeak.FFITypeSignedChar8:
                     case Squeak.FFITypeUnsignedChar8:
-                        return this.makeStString(jsResult);
+                        if (typeof jsResult === "string") return this.makeStString(jsResult);
+                        else return this.makeStStringFromBytes(jsResult, true);
                     // all other arrays are returned as ExternalData
                     default:
                         return this.ffiMakeStExternalData(jsResult, stType);
@@ -402,16 +396,26 @@ Object.extend(Squeak.Primitives.prototype,
             byteSize = this.stackInteger(1),
             isSigned = this.stackBoolean(0);
         if (!this.success) return false;
+        byteOffset--; // 1-based indexing
         if (byteOffset < 0 || byteSize < 1 || byteSize > 8 ||
             (byteSize & (byteSize - 1)) !== 0) return false;
         var result;
         if (byteSize === 1 && !isSigned) {
             if (typeof data === "string") {
-                result = data.charCodeAt(byteOffset - 1) || 0; // 0 if out of bounds
+                result = data.charCodeAt(byteOffset) || 0; // 0 if out of bounds
             } else if (data instanceof Uint8Array) {
                 result = data[byteOffset] || 0; // 0 if out of bounds
             } else {
                 this.vm.warnOnce("FFI: expected string or Uint8Array, got " + typeof data);
+                return false;
+            }
+        } else if (byteSize === 4 && !isSigned) {
+            if (data instanceof Uint32Array) {
+                result = data[byteOffset] || 0; // 0 if out of bounds
+            } else if (data instanceof Uint8Array) {
+                result = new DataView(data.buffer).getUint32(data.byteOffset + byteOffset, true) || 0; // 0 if out of bounds
+            } else {
+                this.vm.warnOnce("FFI: expected Uint32Array, got " + typeof data);
                 return false;
             }
         } else {

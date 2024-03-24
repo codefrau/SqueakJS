@@ -940,6 +940,17 @@ Object.subclass('Squeak.Primitives',
             stString.bytes[i] = jsString.charCodeAt(i) & 0xFF;
         return stString;
     },
+    makeStStringFromBytes: function(bytes, zeroTerminated) {
+        var length = bytes.length;
+        if (zeroTerminated) {
+            length = bytes.indexOf(0);
+            if (length < 0) length = bytes.length;
+        }
+        var stString = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassString], length);
+        for (var i = 0; i < length; ++i)
+            stString.bytes[i] = bytes[i];
+        return stString;
+    },
     makeStObject: function(obj, proxyClass) {
         if (obj === undefined || obj === null) return this.vm.nilObj;
         if (obj === true) return this.vm.trueObj;

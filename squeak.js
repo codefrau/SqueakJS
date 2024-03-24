@@ -127,9 +127,6 @@ function setupFullscreen(display, canvas, options) {
         display.fullscreen = fullscreen;
         var fullwindow = fullscreen || options.fullscreen;
         box.style.background = fullwindow ? 'black' : '';
-        if (options.header) options.header.style.display = fullwindow ? 'none' : '';
-        if (options.footer) options.footer.style.display = fullwindow ? 'none' : '';
-        if (options.fullscreenCheckbox) options.fullscreenCheckbox.checked = fullscreen;
         setTimeout(onresize, 0);
     }
 
@@ -146,33 +143,14 @@ function setupFullscreen(display, canvas, options) {
     } else {
         var isFullscreen = false;
         checkFullscreen = function() {
-            if ((options.header || options.footer) && isFullscreen != display.fullscreen) {
+            if (isFullscreen != display.fullscreen) {
                 isFullscreen = display.fullscreen;
                 fullscreenChange(isFullscreen);
             }
         };
     }
 
-    if (options.fullscreenCheckbox) options.fullscreenCheckbox.onclick = function() {
-        display.fullscreen = options.fullscreenCheckbox.checked;
-        checkFullscreen();
-    };
-
     return checkFullscreen;
-}
-
-function setupSwapButtons(options) {
-    if (options.swapCheckbox) {
-        var imageName = Squeak.Settings["squeakImageName"] || "default",
-            settings = JSON.parse(Squeak.Settings["squeakSettings:" + imageName] || "{}");
-        if ("swapButtons" in settings) options.swapButtons = settings.swapButtons;
-        options.swapCheckbox.checked = options.swapButtons;
-        options.swapCheckbox.onclick = function() {
-            options.swapButtons = options.swapCheckbox.checked;
-            settings["swapButtons"] = options.swapButtons;
-            Squeak.Settings["squeakSettings:" + imageName] = JSON.stringify(settings);
-        };
-    }
 }
 
 function recordModifiers(evt, display) {
@@ -358,8 +336,6 @@ function createSqueakDisplay(canvas, options) {
         document.body.style.margin = 0;
         document.body.style.backgroundColor = 'black';
         document.ontouchmove = function(evt) { evt.preventDefault(); };
-        if (options.header) options.header.style.display = 'none';
-        if (options.footer) options.footer.style.display = 'none';
     }
     var display = {
         context: canvas.getContext("2d"),
@@ -383,7 +359,6 @@ function createSqueakDisplay(canvas, options) {
         changedCallback: null,  // invoked when display size/scale changes
         // additional functions added below
     };
-    setupSwapButtons(options);
     if (options.pixelated) {
         canvas.classList.add("pixelated");
         display.cursorCanvas && display.cursorCanvas.classList.add("pixelated");
@@ -964,18 +939,11 @@ function createSqueakDisplay(canvas, options) {
             else
                 onresize();
         }, 300);
-        // if no fancy layout, don't bother
-        if ((!options.header || !options.footer) && !options.fullscreen) {
-            display.width = canvas.width;
-            display.height = canvas.height;
-            return;
-        }
         // CSS won't let us do what we want so we will layout the canvas ourselves.
-        var fullscreen = options.fullscreen || display.fullscreen,
-            x = 0,
-            y = fullscreen ? 0 : options.header.offsetTop + options.header.offsetHeight,
+        var x = 0,
+            y = 0,
             w = window.innerWidth,
-            h = fullscreen ? window.innerHeight : Math.max(100, options.footer.offsetTop - y),
+            h = window.innerHeight,
             paddingX = 0, // padding outside canvas
             paddingY = 0;
         // above are the default values for laying out the canvas
@@ -1077,7 +1045,6 @@ SqueakJS.runImage = function(buffer, name, display, options) {
             var vm = new Squeak.Interpreter(image, display, options);
             SqueakJS.vm = vm;
             Squeak.Settings["squeakImageName"] = name;
-            setupSwapButtons(options);
             display.clear();
             display.showBanner("Starting " + SqueakJS.appName);
             var spinner = setupSpinner(vm, options);

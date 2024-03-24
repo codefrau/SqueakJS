@@ -12,7 +12,6 @@
         sqText.style.display = "none";
         sqCanvas.style.display = "block";
         SqueakJS.runSqueak(imageName, sqCanvas,{
-            fullscreen: true,
             spinner: sqSpinner,
             appName: imageName && imageName.replace(/.*\//, "").replace(/\.image$/, ""),
             onStart: function(vm, display, options) {
@@ -242,8 +241,8 @@
         The apps are configured to use template files (e.g. example projects and artwork)
         that are loaded from a server on demand.
         <ul>
-            <li><a href="../etoys/#fullscreen=true" target="_blank">Etoys</a></li>
-            <li><a href="../scratch/#fullscreen=true" target="_blank">Scratch</a></li>
+            <li><a href="../etoys/" target="_blank">Etoys</a></li>
+            <li><a href="../scratch/" target="_blank">Scratch</a></li>
             <li>demo of the <a href="../demo/simple.html#document=JSBridge.st" target="_blank">JavaScript bridge</a> (not really an app)</li>
             <li><a href="https://codefrau.github.io/jasmine/" target="_blank">Croquet Jasmine</a> (2004)</li>
         </ul>

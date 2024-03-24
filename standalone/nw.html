@@ -17,12 +17,11 @@
 	    oldRunImg(buffer, name, display, options);
 	}.bind(SqueakJS);
         SqueakJS.runSqueak(imageName, sqCanvas, {
-            fullscreen: true,
             spinner: sqSpinner,
             appName: imageName && imageName.replace(/\.image$/, ""),
         });
     }
-    
+
     window.onload = function() {
         var p = require("path");
         var imageArg = nw.App.argv.find((a) => { return a.endsWith(".image") });

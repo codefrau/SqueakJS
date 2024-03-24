@@ -20,8 +20,6 @@
  * THE SOFTWARE.
  */
 
-var fullscreen = navigator.standalone ||
-    window.matchMedia('(max-device-width: 800px) and (max-device-height: 800px)').matches;
 
 window.onload = function() {
     var url = "https://freudenbergs.de/vanessa/squeakjs/etoys.image";
@@ -29,18 +27,17 @@ window.onload = function() {
         appName: "Etoys",
         fixedWidth: 1200,
         fixedHeight: 900,
-        fullscreen: fullscreen,
-        header: sqHeader,
-        footer: sqFooter,
         spinner: sqSpinner,
         files: ["Etoys/EtoysV5.stc"],
         root: "/Etoys",
         templates: { "/Etoys": "Etoys" },
+        onStart: function(vm, display, options) {
+            // debugger
+            // vm.breakOn("Latin1Environment class>>systemConverterClass");
+        },
     });
 };
 
-if (addToHomescreen.isStandalone)
-    fullscreen = true;
-else addToHomescreen({
+if (!addToHomescreen.isStandalone) addToHomescreen({
     appID: 'squeakjs.etoys.add2home',
 });

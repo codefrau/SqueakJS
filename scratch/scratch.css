@@ -1,5 +1,5 @@
 body {
-    background-color: #eae6d1;
+    background-color: #333;
     font-family: sans-serif;
 }
 canvas {
@@ -15,22 +15,6 @@ canvas.pixelated {
     image-rendering: -webkit-optimize-contrast;
     image-rendering: pixelated;
     -ms-interpolation-mode: nearest-neighbor;
-}
-div#sqHeader {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    padding: 10px;
-    border-bottom: 6px double gray;
-}
-div#sqFooter {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    padding: 10px;
-    border-top: 6px double gray;
 }
 div#sqSpinner {
     position: fixed;

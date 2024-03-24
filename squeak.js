@@ -74,6 +74,7 @@ import "./plugins/SqueakSSL.js";
 import "./plugins/SoundGenerationPlugin.js";
 import "./plugins/StarSqueakPlugin.js";
 import "./plugins/ZipPlugin.js";
+import "./ffi/libc.js";
 import "./lib/lz-string.js";
 import "./lib/jszip.js";
 import "./lib/FileSaver.js";

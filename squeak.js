@@ -1250,9 +1250,9 @@ function downloadFile(file, display, options, thenDo) {
             console.error(Squeak.bytesAsString(new Uint8Array(this.response)));
             return alert("Failed to download:\n" + file.url);
         }
-        console.warn('Retrying with CORS proxy: ' + file.url);
         var proxy = 'https://corsproxy.io/?',
             retry = new XMLHttpRequest();
+        console.warn('Retrying with CORS proxy: ' + proxy + file.url);
         retry.open('GET', proxy + file.url);
         if (options.ajax) retry.setRequestHeader("X-Requested-With", "XMLHttpRequest");
         retry.responseType = rq.responseType;

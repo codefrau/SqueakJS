@@ -1195,7 +1195,7 @@ function processZip(file, display, options, thenDo) {
             console.log("Inflating " + file.name + ": " + filename);
             function progress(x) { display.showProgress((x.percent / 100 + done) / todo.length); }
             zip.file(filename).async("arraybuffer", progress).then(function(buffer){
-                console.log("Expanded size of " + filename + ": " + buffer.byteLength);
+                console.log("Expanded size of " + filename + ": " + buffer.byteLength + " bytes");
                 var unzipped = {};
                 if (options.image.name === filename)
                     unzipped = options.image;
@@ -1324,7 +1324,8 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
         var zips = typeof options.zip === "string" ? [options.zip] : options.zip;
         zips.forEach(function(zip) {
             var url = Squeak.splitUrl(zip, baseUrl);
-            files.push({url: url.full, name: url.filename, zip: true});
+            var prefix = url.uptoslash.replace(/^[^:]+:\/\//, "").replace(/[^a-zA-Z0-9]/g, "_");
+            files.push({url: url.full, name: prefix + url.filename, zip: true});
         });
     }
     if (image.url) files.push(image);

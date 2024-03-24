@@ -342,7 +342,7 @@ Object.extend(Squeak.Primitives.prototype,
     },
     primitiveScreenScaleFactor: function(argCount) {
         var scale = this.display.scale || 1.0,
-            scaleFactor = 1.0 / scale;
+            scaleFactor = Math.min(1.0 / scale, window.devicePixelRatio || 1.0);
         return this.popNandPushIfOK(argCount+1, this.makeFloat(scaleFactor));
     },
     primitiveSetFullScreen: function(argCount) {

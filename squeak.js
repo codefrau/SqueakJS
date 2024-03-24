@@ -981,10 +981,10 @@ function createSqueakDisplay(canvas, options) {
         if (!options.fixedWidth) { // set canvas resolution
             if (!options.minWidth) options.minWidth = 700;
             if (!options.minHeight) options.minHeight = 700;
-            var scaleW = w < options.minWidth ? options.minWidth / w : 1,
-                scaleH = h < options.minHeight ? options.minHeight / h : 1,
+            var defaultScale = display.highdpi ? window.devicePixelRatio : 1,
+                scaleW = w < options.minWidth ? options.minWidth / w : defaultScale,
+                scaleH = h < options.minHeight ? options.minHeight / h : defaultScale,
                 scale = Math.max(scaleW, scaleH);
-            if (display.highdpi) scale *= window.devicePixelRatio;
             display.width = Math.floor(w * scale);
             display.height = Math.floor(h * scale);
             display.scale = w / display.width;

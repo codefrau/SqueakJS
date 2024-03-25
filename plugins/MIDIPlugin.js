@@ -174,6 +174,7 @@ function MIDIPlugin() {
         vmProxy: null,
         vm: null,
         prims: null,
+        timeOffset: 0,
         midi: null, // WebMIDI access or false if not supported
         midiPromise: null,
         ports: new Map(), // indexed by Squeak port number
@@ -206,6 +207,7 @@ function MIDIPlugin() {
                     this.midi = false;
                 });
             }
+            if (performance.timeOrigin) this.timeOffset = performance.timeOrigin - this.vm.startupTime;
         },
         initMIDI(access) {
             const allPorts = [...access.inputs.values(), ...access.outputs.values()];
@@ -230,9 +232,6 @@ function MIDIPlugin() {
                 console.log(`MIDIPlugin: port ${portNumber} ${dir} (${names.join(', ')})`);
             }
         },
-        clock() {
-            return performance.now() & Squeak.MaxSmallInt;
-        },
         portChanged(port) {
             // Squeak likes combined input/output ports so we create sqPorts with input+output here
             let { name, manufacturer } = port;
@@ -256,22 +255,24 @@ function MIDIPlugin() {
                     input: null,
                     output: null,
                     runningStatus: 0,
-                    receivedData: [],
+                    receivedMessages: [],
                 };
                 this.ports.set(handle, sqPort);
             }
-            // update port
-            sqPort[port.type] = port;
-            sqPort.dir |=  port.type === 'input' ? 1 : 2; // 1=input, 2=output, 3=input+output
+            // dir: 1=input, 2=output, 3=input+output
+            if (port.state === "connected") {
+                sqPort[port.type] = port;
+                sqPort.dir |=  port.type === 'input' ? 1 : 2;
+            } else {
+                sqPort[port.type] = null;
+                sqPort.dir &= port.type === 'input' ? ~1 : ~2;
+            }
             return sqPort;
         },
         primitiveMIDIGetPortCount(argCount) {
             // we rely on this primitive to be called first
             // so the other primitives can be synchronous
-            const returnCount = () => {
-                const count = this.midi ? this.midi.outputs.size : 0;
-                return this.vm.popNandPush(argCount + 1, count);
-            }
+            const returnCount = () => this.vm.popNandPush(argCount + 1, this.ports.size);
             if (this.midi === null) {
                 const unfreeze = this.vm.freeze();
                 this.midiPromise
@@ -291,7 +292,9 @@ function MIDIPlugin() {
             const portNumber = this.prims.stackInteger(0);
             const port = this.ports.get(portNumber);
             if (!port) return false;
-            return this.prims.popNandPushIfOK(argCount + 1, this.prims.makeStString(port.name));
+            let name = port.name;
+            if (port.dir === 0) name += ' [disconnected]';
+            return this.prims.popNandPushIfOK(argCount + 1, this.prims.makeStString(name));
         },
         primitiveMIDIGetPortDirectionality(argCount) {
             if (!this.midi) return false;
@@ -302,7 +305,8 @@ function MIDIPlugin() {
         },
         primitiveMIDIGetClock(argCount) {
             if (!this.midi) return false;
-            return this.prims.popNandPushIfOK(argCount + 1, this.clock());
+            const clock = this.prims.millisecondClockValue();
+            return this.prims.popNandPushIfOK(argCount + 1, clock);
         },
         primitiveMIDIParameterGetOrSet(argCount) {
             if (!this.midi) return false;
@@ -338,7 +342,11 @@ function MIDIPlugin() {
             let port;
             const checkPort = () => {
                 port = this.ports.get(portNumber);
-                if (!port) console.error('MIDIPlugin: invalid port ' + portNumber);
+                if (!port) console.error(`MIDIPlugin: invalid port ${portNumber}`);
+                else if (!port.dir) {
+                    console.error(`MIDIPlugin: port ${portNumber} ${port.name} is disconnected`);
+                    port = null;
+                }
             };
             const openPort = unfreeze => {
                 const promises = []; // wait for MIDI initialization first
@@ -349,12 +357,14 @@ function MIDIPlugin() {
                     if (port.output.connection === "closed") promises.push(port.output.open());
                     else console.warn(`MIDIPlugin: output port ${portNumber} is ${port.output.connection}`);
                 port.runningStatus = 0;
-                port.receivedData = [];
+                port.receivedMessages = [];
                 Promise.all(promises)
                     .then(() => {
                         if (port.input) port.input.onmidimessage = event => {
-                            port.receivedData.push(event.data);
-                            if (this.debug) console.log('MIDIPlugin: received', event.data);
+                            const time = Math.round(event.timeStamp + this.timeOffset);
+                            const bytes = new Uint8Array(event.data);
+                            port.receivedMessages.push({time, bytes});
+                            if (this.debug) console.log('MIDIPlugin: received', time, [...bytes]);
                         };
                     })
                     .catch(err => console.error('MIDIPlugin: ' + err))
@@ -385,7 +395,7 @@ function MIDIPlugin() {
                 if (port.input && port.input.connection === 'open') {
                     promises.push(port.input.close());
                     port.input.onmidimessage = null;
-                    port.receivedData.length = 0;
+                    port.receivedMessages.length = 0;
                 }
                 if (port.output && port.output.connection === 'open') {
                     promises.push(port.output.close());
@@ -424,16 +434,14 @@ function MIDIPlugin() {
                 data = newData;
             }
             try {
-                if (this.debug) console.log('MIDIPlugin: send', data, timestamp);
+                if (this.debug) console.log('MIDIPlugin: send', [...data], timestamp);
                 // send or schedule data
                 if (timestamp === 0) port.output.send(data);
                 else port.output.send(data, timestamp);
                 // find last status byte in data, but ignore real-time messages (0xF8-0xFF)
                 // system common messages (0xF0-0xF7) reset the running status
-                for (let i = data.length-3; i >= 0; i-=2) {
-                    if (data[i] < 0x80) continue; // skip data bytes
-                    if (data[i] >= 0xF8) i -= 1; // skip real-time message
-                    else {
+                for (let i = data.length - 1; i >= 0; i--) {
+                    if (data[i] >= 0x80 && data[i] <= 0xF7) {
                         port.runningStatus = data[i] < 0xF0 ? data[i] : 0;
                         break;
                     }
@@ -451,21 +459,17 @@ function MIDIPlugin() {
             const port = this.ports.get(portNumber);
             if (!port || !port.input || port.input.connection !== 'open') return false;
             let received = 0;
-            let chunk = port.receivedData.shift();
-            while (chunk && received < data.length) {
-                const free = data.length - received;
-                if (chunk.length <= free) {
-                    data.set(chunk, received);
-                    received += chunk.length;
-                    chunk = port.receivedData.shift()
-                } else {
-                    data.set(chunk.subarray(0, free), received);
-                    received += free;
-                    port.receivedData.unshift(chunk.subarray(free));
-                    chunk = null;
-                }
+            const event = port.receivedMessages.shift();
+            if (event) {
+                let { time, bytes } = event;
+                data[0] = (time >> 24) & 0xFF;
+                data[1] = (time >> 16) & 0xFF;
+                data[2] = (time >> 8) & 0xFF;
+                data[3] = time & 0xFF;
+                data.set(bytes, 4);
+                received = bytes.length + 4;
+                if (this.debug) console.log('MIDIPlugin: read', received, [...data.subarray(0, received)]);
             }
-            if (this.debug) console.log('MIDIPlugin: read', received, data.subarray(0, received));
             return this.prims.popNandPushIfOK(argCount + 1, received);
         },
     };

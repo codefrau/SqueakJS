@@ -119,7 +119,7 @@
     "version", {
         // system attributes
         vmVersion: "SqueakJS 1.1.2",
-        vmDate: "2024-03-10",               // Maybe replace at build time?
+        vmDate: "2024-03-24",               // Maybe replace at build time?
         vmBuild: "unknown",                 // or replace at runtime by last-modified?
         vmPath: "unknown",                  // Replace at runtime
         vmFile: "vm.js",
@@ -2780,11 +2780,12 @@
 
     Object.subclass('Squeak.Interpreter',
     'initialization', {
-        initialize: function(image, display) {
+        initialize: function(image, display, options) {
             console.log('squeak: initializing interpreter ' + Squeak.vmVersion + ' (' + Squeak.vmDate + ')');
             this.Squeak = Squeak;   // store locally to avoid dynamic lookup in Lively
             this.image = image;
             this.image.vm = this;
+            this.options = options || {};
             this.primHandler = new Squeak.Primitives(this, display);
             this.loadImageState();
             this.initVMState();
@@ -5916,9 +5917,11 @@
         namedPrimitive: function(modName, functionName, argCount) {
             // duplicated in loadFunctionFrom()
             var mod = modName === "" ? this : this.loadedModules[modName];
+            var justLoaded = false;
             if (mod === undefined) { // null if earlier load failed
                 mod = this.loadModule(modName);
                 this.loadedModules[modName] = mod;
+                justLoaded = true;
             }
             var result = false;
             var sp = this.vm.sp;
@@ -5934,8 +5937,9 @@
                 } else {
                     this.vm.warnOnce("missing primitive: " + modName + "." + functionName);
                 }
-            } else {
-                this.vm.warnOnce("missing module: " + modName + " (" + functionName + ")");
+            } else if (justLoaded) {
+                if (this.success) this.vm.warnOnce("missing module: " + modName + " (" + functionName + ")");
+                else this.vm.warnOnce("failed to load module: " + modName + " (" + functionName + ")");
             }
             if ((result === true || (result !== false && this.success)) && this.vm.sp !== sp - argCount && !this.vm.frozen) {
                 this.vm.warnOnce("stack unbalanced after primitive " + modName + "." + functionName, "error");
@@ -6422,6 +6426,17 @@
             var stString = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassString], jsString.length);
             for (var i = 0; i < jsString.length; ++i)
                 stString.bytes[i] = jsString.charCodeAt(i) & 0xFF;
+            return stString;
+        },
+        makeStStringFromBytes: function(bytes, zeroTerminated) {
+            var length = bytes.length;
+            if (zeroTerminated) {
+                length = bytes.indexOf(0);
+                if (length < 0) length = bytes.length;
+            }
+            var stString = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassString], length);
+            for (var i = 0; i < length; ++i)
+                stString.bytes[i] = bytes[i];
             return stString;
         },
         makeStObject: function(obj, proxyClass) {
@@ -7443,7 +7458,7 @@
                 case 0: value = (argv && argv[0]) || this.filenameToSqueak(Squeak.vmPath + Squeak.vmFile); break;
                 case 1: value = (argv && argv[1]) || this.display.documentName; break; // 1.x images want document here
                 case 2: value = (argv && argv[2]) || this.display.documentName; break; // later images want document here
-                case 1001: value = Squeak.platformName; break;
+                case 1001: value = this.vm.options.unix ? "unix" : Squeak.platformName; break;
                 case 1002: value = Squeak.osVersion; break;
                 case 1003: value = Squeak.platformSubtype; break;
                 case 1004: value = Squeak.vmVersion + ' ' + Squeak.vmMakerVersion; break;
@@ -9332,7 +9347,7 @@
         },
         primitiveScreenScaleFactor: function(argCount) {
             var scale = this.display.scale || 1.0,
-                scaleFactor = 1.0 / scale;
+                scaleFactor = Math.min(1.0 / scale, window.devicePixelRatio || 1.0);
             return this.popNandPushIfOK(argCount+1, this.makeFloat(scaleFactor));
         },
         primitiveSetFullScreen: function(argCount) {
@@ -10420,14 +10435,6 @@
                     var atomicType = (typeSpec & Squeak.FFIAtomicTypeMask) >> Squeak.FFIAtomicTypeShift;
                     switch (atomicType) {
                         case Squeak.FFITypeUnsignedChar8:
-                            if (stObj.bytes) return stObj.bytesAsString();
-                            if (stObj.words) return String.fromChar.apply(null, stObj.wordsAsUint8Array());
-                            if (this.interpreterProxy.isWordsOrBytes(stObj)) return '';
-                            if (stObj.pointers && stObj.pointers[0].jsData) {
-                                var data = stObj.pointers[0].jsData;
-                                if (data instanceof "string") return data;
-                            }
-                            throw Error("FFI: expected string, got " + stObj);
                         case Squeak.FFITypeUnsignedInt8:
                             if (stObj.bytes) return stObj.bytes;
                             if (stObj.words) return stObj.wordsAsUint8Array();
@@ -10524,12 +10531,14 @@
                     }
                 case Squeak.FFIFlagAtomicPointer:
                     // array of values
+                    if (!jsResult) return this.vm.nilObj;
                     var atomicType = (typeSpec & Squeak.FFIAtomicTypeMask) >> Squeak.FFIAtomicTypeShift;
                     switch (atomicType) {
                         // char* is returned as string
                         case Squeak.FFITypeSignedChar8:
                         case Squeak.FFITypeUnsignedChar8:
-                            return this.makeStString(jsResult);
+                            if (typeof jsResult === "string") return this.makeStString(jsResult);
+                            else return this.makeStStringFromBytes(jsResult, true);
                         // all other arrays are returned as ExternalData
                         default:
                             return this.ffiMakeStExternalData(jsResult, stType);
@@ -10600,16 +10609,26 @@
                 byteSize = this.stackInteger(1),
                 isSigned = this.stackBoolean(0);
             if (!this.success) return false;
+            byteOffset--; // 1-based indexing
             if (byteOffset < 0 || byteSize < 1 || byteSize > 8 ||
                 (byteSize & (byteSize - 1)) !== 0) return false;
             var result;
             if (byteSize === 1 && !isSigned) {
                 if (typeof data === "string") {
-                    result = data.charCodeAt(byteOffset - 1) || 0; // 0 if out of bounds
+                    result = data.charCodeAt(byteOffset) || 0; // 0 if out of bounds
                 } else if (data instanceof Uint8Array) {
                     result = data[byteOffset] || 0; // 0 if out of bounds
                 } else {
                     this.vm.warnOnce("FFI: expected string or Uint8Array, got " + typeof data);
+                    return false;
+                }
+            } else if (byteSize === 4 && !isSigned) {
+                if (data instanceof Uint32Array) {
+                    result = data[byteOffset] || 0; // 0 if out of bounds
+                } else if (data instanceof Uint8Array) {
+                    result = new DataView(data.buffer).getUint32(data.byteOffset + byteOffset, true) || 0; // 0 if out of bounds
+                } else {
+                    this.vm.warnOnce("FFI: expected Uint32Array, got " + typeof data);
                     return false;
                 }
             } else {
@@ -38543,6 +38562,487 @@
 
     })(); // Register module/plugin
 
+    "use strict";
+
+    /*
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
+     *
+     * Permission is hereby granted, free of charge, to any person obtaining a copy
+     * of this software and associated documentation files (the "Software"), to deal
+     * in the Software without restriction, including without limitation the rights
+     * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+     * copies of the Software, and to permit persons to whom the Software is
+     * furnished to do so, subject to the following conditions:
+     *
+     * The above copyright notice and this permission notice shall be included in
+     * all copies or substantial portions of the Software.
+     *
+     * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+     * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+     * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+     * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+     * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+     * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+     * THE SOFTWARE.
+     */
+
+    /*
+    initialize
+    	"Initialize the MIDI parameter constants."
+    	"MidiPrimTester initialize"
+
+    	Installed := 1.
+    		"Read-only. Return 1 if a MIDI driver is installed, 0 if not.
+    		 On OMS-based MIDI drivers, this returns 1 only if the OMS
+    		 system is properly installed and configured."
+
+    	Version := 2.
+    		"Read-only. Return the integer version number of this MIDI driver.
+    		 The version numbering sequence is relative to a particular driver.
+    		 That is, version 3 of the Macintosh MIDI driver is not necessarily
+    		 related to version 3 of the Win95 MIDI driver."
+
+    	HasBuffer := 3.
+    		"Read-only. Return 1 if this MIDI driver has a time-stamped output
+    		 buffer, 0 otherwise. Such a buffer allows the client to schedule
+    		 MIDI output packets to be sent later. This can allow more precise
+    		 timing, since the driver uses timer interrupts to send the data
+    		 at the right time even if the processor is in the midst of a
+    		 long-running Squeak primitive or is running some other application
+    		 or system task."
+
+    	HasDurs := 4.
+    		"Read-only. Return 1 if this MIDI driver supports an extended
+    		 primitive for note-playing that includes the note duration and
+    		 schedules both the note-on and the note-off messages in the
+    		 driver. Otherwise, return 0."
+
+    	CanSetClock := 5.
+    		"Read-only. Return 1 if this MIDI driver's clock can be set
+    		 via an extended primitive, 0 if not."
+
+    	CanUseSemaphore := 6.
+    		"Read-only. Return 1 if this MIDI driver can signal a semaphore
+    		 when MIDI input arrives. Otherwise, return 0. If this driver
+    		 supports controller caching and it is enabled, then incoming
+    		 controller messages will not signal the semaphore."
+
+    	EchoOn := 7.
+    		"Read-write. If this flag is set to a non-zero value, and if
+    		 the driver supports echoing, then incoming MIDI events will
+    		 be echoed immediately. If this driver does not support echoing,
+    		 then queries of this parameter will always return 0 and
+    		 attempts to change its value will do nothing."
+
+    	UseControllerCache := 8.
+    		"Read-write. If this flag is set to a non-zero value, and if
+    		 the driver supports a controller cache, then the driver will
+    		 maintain a cache of the latest value seen for each MIDI controller,
+    		 and control update messages will be filtered out of the incoming
+    		 MIDI stream. An extended MIDI primitive allows the client to
+    		 poll the driver for the current value of each controller. If
+    		 this driver does not support a controller cache, then queries
+    		 of this parameter will always return 0 and attempts to change
+    		 its value will do nothing."
+
+    	EventsAvailable := 9.
+    		"Read-only. Return the number of MIDI packets in the input queue."
+
+    	FlushDriver := 10.
+    		"Write-only. Setting this parameter to any value forces the driver
+    		 to flush its I/0 buffer, discarding all unprocessed data. Reading
+    		 this parameter returns 0. Setting this parameter will do nothing
+    		 if the driver does not support buffer flushing."
+
+    	ClockTicksPerSec := 11.
+    		"Read-only. Return the MIDI clock rate in ticks per second."
+
+    	HasInputClock := 12.
+    		"Read-only. Return 1 if this MIDI driver timestamps incoming
+    		 MIDI data with the current value of the MIDI clock, 0 otherwise.
+    		 If the driver does not support such timestamping, then the
+    		 client must read input data frequently and provide its own
+    		 timestamping."
+    */
+
+    const MIDI = {
+        Installed: 1,
+            // Read-only. Return 1 if a MIDI driver is installed, 0 if not.
+            // On OMS-based MIDI drivers, this returns 1 only if the OMS
+            // system is properly installed and configured.
+        Version: 2,
+            // Read-only. Return the integer version number of this MIDI driver.
+            // The version numbering sequence is relative to a particular driver.
+            // That is, version 3 of the Macintosh MIDI driver is not necessarily
+            // related to version 3 of the Win95 MIDI driver.
+        HasBuffer: 3,
+            // Read-only. Return 1 if this MIDI driver has a time-stamped output
+            // buffer, 0 otherwise. Such a buffer allows the client to schedule
+            // MIDI output packets to be sent later. This can allow more precise
+            // timing, since the driver uses timer interrupts to send the data
+            // at the right time even if the processor is in the midst of a
+            // long-running Squeak primitive or is running some other application
+            // or system task.
+        HasDurs: 4,
+            // Read-only. Return 1 if this MIDI driver supports an extended
+            // primitive for note-playing that includes the note duration and
+            // schedules both the note-on and the note-off messages in the
+            // driver. Otherwise, return 0.
+        CanSetClock: 5,
+            // Read-only. Return 1 if this MIDI driver's clock can be set
+            // via an extended primitive, 0 if not.
+        CanUseSemaphore: 6,
+            // Read-only. Return 1 if this MIDI driver can signal a semaphore
+            // when MIDI input arrives. Otherwise, return 0. If this driver
+            // supports controller caching and it is enabled, then incoming
+            // controller messages will not signal the semaphore.
+        EchoOn: 7,
+            // Read-write. If this flag is set to a non-zero value, and if
+            // the driver supports echoing, then incoming MIDI events will
+            // be echoed immediately. If this driver does not support echoing,
+            // then queries of this parameter will always return 0 and
+            // attempts to change its value will do nothing.
+        UseControllerCache: 8,
+            // Read-write. If this flag is set to a non-zero value, and if
+            // the driver supports a controller cache, then the driver will
+            // maintain a cache of the latest value seen for each MIDI controller,
+            // and control update messages will be filtered out of the incoming
+            // MIDI stream. An extended MIDI primitive allows the client to
+            // poll the driver for the current value of each controller. If
+            // this driver does not support a controller cache, then queries
+            // of this parameter will always return 0 and attempts to change
+            // its value will do nothing.
+        EventsAvailable: 9,
+            // Read-only. Return the number of MIDI packets in the input queue.
+        FlushDriver: 10,
+            // Write-only. Setting this parameter to any value forces the driver
+            // to flush its I/0 buffer, discarding all unprocessed data. Reading
+            // this parameter returns 0. Setting this parameter will do nothing
+            // if the driver does not support buffer flushing.
+        ClockTicksPerSec: 11,
+            // Read-only. Return the MIDI clock rate in ticks per second.
+        HasInputClock: 12,
+            // Read-only. Return 1 if this MIDI driver timestamps incoming
+            // MIDI data with the current value of the MIDI clock, 0 otherwise.
+            // If the driver does not support such timestamping, then the
+            // client must read input data frequently and provide its own
+            // timestamping.
+    };
+
+
+    function MIDIPlugin() {
+        "use strict";
+
+        return {
+            debug: false,
+            vmProxy: null,
+            vm: null,
+            prims: null,
+            midi: null, // WebMIDI access or false if not supported
+            midiPromise: null,
+            ports: new Map(), // indexed by Squeak port number
+
+            getModuleName() { return 'MIDIPlugin (SqueakJS)'; },
+            setInterpreter(vmProxy) {
+                this.vmProxy = vmProxy;
+                this.vm = vmProxy.vm;
+                this.prims = vmProxy.vm.primHandler;
+                return true;
+            },
+            initialiseModule() {
+                this.debug = this.vm.options.debugMIDI;
+                if (!navigator.requestMIDIAccess) {
+                    console.log('MIDIPlugin: WebMIDI not supported');
+                    this.vmProxy.success(false);
+                    return;
+                }
+                if (!this.midiPromise) {
+                    this.midiPromise = navigator.requestMIDIAccess({
+                        software: true, // because why not
+                        sysex: false,   // if you change this, tweak the running status handling
+                    })
+                    .then(access => {
+                        this.midi = access;
+                        this.initMIDI(access);
+                    })
+                    .catch(err => {
+                        console.error('MIDIPlugin: ' + err);
+                        this.midi = false;
+                    });
+                }
+            },
+            initMIDI(access) {
+                const allPorts = [...access.inputs.values(), ...access.outputs.values()];
+                for (const port of allPorts) this.portChanged(port);
+                access.onstatechange = (event) => {
+                    const port = event.port;
+                    let { name, manufacturer, state } = port;
+                    if (manufacturer && !name.includes(manufacturer)) name += ` (${manufacturer})`;
+                    const sqPort = this.portChanged(port);
+                    const isNew = !port.sqPort;
+                    if (isNew) port.sqPort = sqPort;
+                    if (isNew || state === 'disconnected' || this.debug) {
+                        console.log(`MIDIPlugin: ${name} ${state} (port ${sqPort.handle} ${port.type} ${port.connection})`);
+                    }
+                };
+                console.log(`MIDIPlugin: WebMIDI initialized (ports: ${this.ports.size})`);
+                for (const [portNumber, port] of this.ports) {
+                    const dir = port.dir === 3 ? 'in+out' : port.dir === 2 ? 'out' : 'in';
+                    const names = [];
+                    if (port.input) names.push(port.input.name);
+                    if (port.output) names.push(port.output.name);
+                    console.log(`MIDIPlugin: port ${portNumber} ${dir} (${names.join(', ')})`);
+                }
+            },
+            clock() {
+                return performance.now() & Squeak.MaxSmallInt;
+            },
+            portChanged(port) {
+                // Squeak likes combined input/output ports so we create sqPorts with input+output here
+                let { name, manufacturer } = port;
+                // strip input / output designation
+                name = name.replace(/(\b(in|out)(put)?\b)/i, '').replace(/(\(\)|\[\])/, '').replace(/  /, " ").trim();
+                if (manufacturer && !name.includes(manufacturer)) name += ` (${manufacturer})`;
+                // find existing port or create new one
+                let sqPort;
+                for (const existingPort of this.ports.values()) {
+                    if (existingPort.name === name) {
+                        sqPort = existingPort;
+                        break;
+                    }
+                }
+                if (!sqPort) {
+                    const handle = this.ports.size;
+                    sqPort = {
+                        handle,
+                        name,
+                        dir: 0,
+                        input: null,
+                        output: null,
+                        runningStatus: 0,
+                        receivedData: [],
+                    };
+                    this.ports.set(handle, sqPort);
+                }
+                // update port
+                sqPort[port.type] = port;
+                sqPort.dir |=  port.type === 'input' ? 1 : 2; // 1=input, 2=output, 3=input+output
+                return sqPort;
+            },
+            primitiveMIDIGetPortCount(argCount) {
+                // we rely on this primitive to be called first
+                // so the other primitives can be synchronous
+                const returnCount = () => {
+                    const count = this.midi ? this.midi.outputs.size : 0;
+                    return this.vm.popNandPush(argCount + 1, count);
+                };
+                if (this.midi === null) {
+                    const unfreeze = this.vm.freeze();
+                    this.midiPromise
+                        .then(returnCount)
+                        .catch(err => {
+                            console.error('MIDIPlugin: ' + err);
+                            returnCount();
+                        })
+                        .finally(unfreeze);
+                } else {
+                    returnCount();
+                }
+                return true;
+            },
+            primitiveMIDIGetPortName(argCount) {
+                if (!this.midi) return false;
+                const portNumber = this.prims.stackInteger(0);
+                const port = this.ports.get(portNumber);
+                if (!port) return false;
+                return this.prims.popNandPushIfOK(argCount + 1, this.prims.makeStString(port.name));
+            },
+            primitiveMIDIGetPortDirectionality(argCount) {
+                if (!this.midi) return false;
+                const portNumber = this.prims.stackInteger(0);
+                const port = this.ports.get(portNumber);
+                if (!port) return false;
+                return this.prims.popNandPushIfOK(argCount + 1, port.dir);
+            },
+            primitiveMIDIGetClock(argCount) {
+                if (!this.midi) return false;
+                return this.prims.popNandPushIfOK(argCount + 1, this.clock());
+            },
+            primitiveMIDIParameterGetOrSet(argCount) {
+                if (!this.midi) return false;
+                const parameter = this.prims.stackInteger(argCount - 1);
+                // const newValue = argCount > 1 ? this.prims.stackInteger(0) : null;
+                let value;
+                switch (parameter) {
+                    case MIDI.Installed:
+                        value = 1; break
+                    case MIDI.Version:
+                        value = 1; break;
+                    case MIDI.HasBuffer:
+                    case MIDI.HasDurs:
+                    case MIDI.CanSetClock:
+                    case MIDI.CanUseSemaphore:
+                    case MIDI.EchoOn:
+                    case MIDI.UseControllerCache:
+                    case MIDI.EventsAvailable:
+                    case MIDI.FlushDriver:
+                        value = 0; break;
+                    case MIDI.ClockTicksPerSec:
+                        value = 1000; break; // we use 1ms clock ticks
+                    case MIDI.HasInputClock:
+                        value = 1; break;
+                    default: return false;
+                }
+                return this.prims.popNandPushIfOK(argCount + 1, value);
+            },
+            primitiveMIDIOpenPort(argCount) {
+                const portNumber = this.prims.stackInteger(2);
+                // const readSemaIndex = this.prims.stackInteger(1);       // ignored
+                // const interfaceClockRate = this.prims.stackInteger(0);  // ignored
+                let port;
+                const checkPort = () => {
+                    port = this.ports.get(portNumber);
+                    if (!port) console.error('MIDIPlugin: invalid port ' + portNumber);
+                };
+                const openPort = unfreeze => {
+                    const promises = []; // wait for MIDI initialization first
+                    if (port.input)
+                        if (port.input.connection === "closed") promises.push(port.input.open());
+                        else console.warn(`MIDIPlugin: input port ${portNumber} is ${port.input.connection}`);
+                    if (port.output)
+                        if (port.output.connection === "closed") promises.push(port.output.open());
+                        else console.warn(`MIDIPlugin: output port ${portNumber} is ${port.output.connection}`);
+                    port.runningStatus = 0;
+                    port.receivedData = [];
+                    Promise.all(promises)
+                        .then(() => {
+                            if (port.input) port.input.onmidimessage = event => {
+                                port.receivedData.push(event.data);
+                                if (this.debug) console.log('MIDIPlugin: received', event.data);
+                            };
+                        })
+                        .catch(err => console.error('MIDIPlugin: ' + err))
+                        .finally(unfreeze);
+                };
+                // if already initialized, report failure immediately
+                if (this.midi) {
+                    checkPort();
+                    if (!port) return false;
+                }
+                // otherwise, we wait for initialization
+                const unfreeze = this.vm.freeze();
+                this.midiPromise
+                    .then(() => {
+                        if (!port) checkPort();
+                        if (port) openPort(unfreeze);
+                        else unfreeze();
+                    });
+                return this.prims.popNIfOK(argCount);
+            },
+            primitiveMIDIClosePort(argCount) {
+                // ok to close even if not initialized
+                if (this.midi) {
+                    const portNumber = this.prims.stackInteger(0);
+                    const port = this.ports.get(portNumber);
+                    if (!port) return false;
+                    const promises = [];
+                    if (port.input && port.input.connection === 'open') {
+                        promises.push(port.input.close());
+                        port.input.onmidimessage = null;
+                        port.receivedData.length = 0;
+                    }
+                    if (port.output && port.output.connection === 'open') {
+                        promises.push(port.output.close());
+                    }
+                    if (promises.length) {
+                        const unfreeze = this.vm.freeze();
+                        Promise.all(promises)
+                            .catch(err => console.error('MIDIPlugin: ' + err))
+                            .finally(unfreeze);
+                    }
+                }
+                return this.prims.popNIfOK(argCount);
+            },
+            primitiveMIDIWrite(argCount) {
+                if (!this.midi) return false;
+                const portNumber = this.prims.stackInteger(2);
+                let data = this.prims.stackNonInteger(1).bytes;
+                const timestamp = this.prims.stackInteger(0);
+                const port = this.ports.get(portNumber);
+                if (!port || !port.output || !data) return false;
+                if (port.output.connection !== 'open') {
+                    console.error('MIDIPlugin: primitiveMIDIWrite error (port not open)');
+                    return this.prims.popNandPushIfOK(argCount + 1, 0);
+                }
+                // this could be simple if it were not for the running status
+                // WebMIDI insists the first byte is a status byte
+                // so we need to keep track of it, and prepend it if necessary
+                if (data[0] < 0x80) {
+                    if (port.runningStatus === 0) {
+                        console.error('MIDIPlugin: no running status byte');
+                        return false;
+                    }
+                    const newData = new Uint8Array(data.length + 1);
+                    newData[0] = port.runningStatus;
+                    newData.set(data, 1);
+                    data = newData;
+                }
+                try {
+                    if (this.debug) console.log('MIDIPlugin: send', data, timestamp);
+                    // send or schedule data
+                    if (timestamp === 0) port.output.send(data);
+                    else port.output.send(data, timestamp);
+                    // find last status byte in data, but ignore real-time messages (0xF8-0xFF)
+                    // system common messages (0xF0-0xF7) reset the running status
+                    for (let i = data.length-3; i >= 0; i-=2) {
+                        if (data[i] < 0x80) continue; // skip data bytes
+                        if (data[i] >= 0xF8) i -= 1; // skip real-time message
+                        else {
+                            port.runningStatus = data[i] < 0xF0 ? data[i] : 0;
+                            break;
+                        }
+                    }
+                } catch (err) {
+                    console.error('MIDIPlugin: ' + err);
+                    return false;
+                }
+                return this.prims.popNandPushIfOK(argCount + 1, data.length);
+            },
+            primitiveMIDIRead(argCount) {
+                if (!this.midi) return false;
+                const portNumber = this.prims.stackInteger(1);
+                const data = this.prims.stackNonInteger(0).bytes;
+                const port = this.ports.get(portNumber);
+                if (!port || !port.input || port.input.connection !== 'open') return false;
+                let received = 0;
+                const chunk = port.receivedData.shift();
+                while (chunk && received < data.length) {
+                    const free = data.length - received;
+                    if (chunk.length <= free) {
+                        data.set(chunk, received);
+                        received += chunk.length;
+                        chunk = port.receivedData.shift();
+                    } else {
+                        data.set(chunk.subarray(0, free), received);
+                        received += free;
+                        port.receivedData.unshift(chunk.subarray(free));
+                        chunk = null;
+                    }
+                }
+                if (this.debug) console.log('MIDIPlugin: read', received, data.subarray(0, received));
+                return this.prims.popNandPushIfOK(argCount + 1, received);
+            },
+        };
+    }
+
+    function registerMIDIPlugin() {
+        if (typeof Squeak === "object" && Squeak.registerExternalModule) {
+            Squeak.registerExternalModule('MIDIPlugin', MIDIPlugin());
+        } else self.setTimeout(registerMIDIPlugin, 100);
+    };
+
+    registerMIDIPlugin();
+
     /* Smalltalk from Squeak4.5 with VMMaker 4.13.6 translated as JS source on 3 November 2014 1:52:23 pm */
     /* Automatically generated by
     	JSPluginCodeGenerator VMMakerJS-bf.15 uuid: fd4e10f2-3773-4e80-8bb5-c4b471a014e5
@@ -43176,6 +43676,78 @@
     registerPlugin();
 
     })(); // Register module/plugin
+
+    "use strict";
+    /*
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
+     *
+     * Permission is hereby granted, free of charge, to any person obtaining a copy
+     * of this software and associated documentation files (the "Software"), to deal
+     * in the Software without restriction, including without limitation the rights
+     * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+     * copies of the Software, and to permit persons to whom the Software is
+     * furnished to do so, subject to the following conditions:
+     *
+     * The above copyright notice and this permission notice shall be included in
+     * all copies or substantial portions of the Software.
+     *
+     * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+     * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+     * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+     * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+     * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+     * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+     * THE SOFTWARE.
+     */
+
+    // This is a minimal libc module for SqueakJS
+    // serving mostly as a demo for FFI
+
+    function libc() {
+        return {
+            // LIBC module
+            getModuleName() { return "libc (SqueakJS)"; },
+            setInterpreter(proxy) { this.vm = proxy.vm; return true; },
+
+            // helper functions
+            bytesToString(bytes) {
+                const zero = bytes.indexOf(0);
+                if (zero >= 0) bytes = bytes.subarray(0, zero);
+                return String.fromCharCode.apply(null, bytes);
+            },
+            stringToBytes(string, bytes) {
+                for (let i = 0; i < string.length; i++) bytes[i] = string.charCodeAt(i);
+                bytes[string.length] = 0;
+                return bytes;
+            },
+
+            // LIBC emulation functions called via FFI
+            getenv(v) {
+                v = this.bytesToString(v);
+                switch (v) {
+                    case "USER": return this.vm.options.user || "squeak";
+                    case "HOME": return this.vm.options.root || "/";
+                }
+                this.vm.warnOnce("UNIMPLEMENTED getenv: " + v);
+                return null;
+            },
+            getcwd(buf, size) {
+                const cwd = this.vm.options.root || "/";
+                if (!buf) buf = new Uint8Array(cwd.length + 1);
+                if (size < cwd.length + 1) return 0; // should set errno to ERANGE
+                this.stringToBytes(cwd, buf);
+                return buf; // converted to Smalltalk String by FFI if declared as char*
+            },
+        };
+    }
+
+    function registerLibC() {
+        if (typeof Squeak === "object" && Squeak.registerExternalModule) {
+            Squeak.registerExternalModule('libc', libc());
+        } else self.setTimeout(registerLibC, 100);
+    };
+
+    registerLibC();
 
     // Copyright (c) 2013 Pieroxy <pieroxy@pieroxy.net>
     // This work is free. You can redistribute it and/or modify it
@@ -56395,9 +56967,6 @@
             display.fullscreen = fullscreen;
             var fullwindow = fullscreen || options.fullscreen;
             box.style.background = fullwindow ? 'black' : '';
-            if (options.header) options.header.style.display = fullwindow ? 'none' : '';
-            if (options.footer) options.footer.style.display = fullwindow ? 'none' : '';
-            if (options.fullscreenCheckbox) options.fullscreenCheckbox.checked = fullscreen;
             setTimeout(onresize, 0);
         }
 
@@ -56414,33 +56983,14 @@
         } else {
             var isFullscreen = false;
             checkFullscreen = function() {
-                if ((options.header || options.footer) && isFullscreen != display.fullscreen) {
+                if (isFullscreen != display.fullscreen) {
                     isFullscreen = display.fullscreen;
                     fullscreenChange(isFullscreen);
                 }
             };
         }
 
-        if (options.fullscreenCheckbox) options.fullscreenCheckbox.onclick = function() {
-            display.fullscreen = options.fullscreenCheckbox.checked;
-            checkFullscreen();
-        };
-
         return checkFullscreen;
-    }
-
-    function setupSwapButtons(options) {
-        if (options.swapCheckbox) {
-            var imageName = Squeak.Settings["squeakImageName"] || "default",
-                settings = JSON.parse(Squeak.Settings["squeakSettings:" + imageName] || "{}");
-            if ("swapButtons" in settings) options.swapButtons = settings.swapButtons;
-            options.swapCheckbox.checked = options.swapButtons;
-            options.swapCheckbox.onclick = function() {
-                options.swapButtons = options.swapCheckbox.checked;
-                settings["swapButtons"] = options.swapButtons;
-                Squeak.Settings["squeakSettings:" + imageName] = JSON.stringify(settings);
-            };
-        }
     }
 
     function recordModifiers(evt, display) {
@@ -56626,8 +57176,6 @@
             document.body.style.margin = 0;
             document.body.style.backgroundColor = 'black';
             document.ontouchmove = function(evt) { evt.preventDefault(); };
-            if (options.header) options.header.style.display = 'none';
-            if (options.footer) options.footer.style.display = 'none';
         }
         var display = {
             context: canvas.getContext("2d"),
@@ -56651,7 +57199,6 @@
             changedCallback: null,  // invoked when display size/scale changes
             // additional functions added below
         };
-        setupSwapButtons(options);
         if (options.pixelated) {
             canvas.classList.add("pixelated");
             display.cursorCanvas && display.cursorCanvas.classList.add("pixelated");
@@ -57232,28 +57779,21 @@
                 else
                     onresize();
             }, 300);
-            // if no fancy layout, don't bother
-            if ((!options.header || !options.footer) && !options.fullscreen) {
-                display.width = canvas.width;
-                display.height = canvas.height;
-                return;
-            }
             // CSS won't let us do what we want so we will layout the canvas ourselves.
-            var fullscreen = options.fullscreen || display.fullscreen,
-                x = 0,
-                y = fullscreen ? 0 : options.header.offsetTop + options.header.offsetHeight,
+            var x = 0,
+                y = 0,
                 w = window.innerWidth,
-                h = fullscreen ? window.innerHeight : Math.max(100, options.footer.offsetTop - y),
+                h = window.innerHeight,
                 paddingX = 0, // padding outside canvas
                 paddingY = 0;
             // above are the default values for laying out the canvas
             if (!options.fixedWidth) { // set canvas resolution
                 if (!options.minWidth) options.minWidth = 700;
                 if (!options.minHeight) options.minHeight = 700;
-                var scaleW = w < options.minWidth ? options.minWidth / w : 1,
-                    scaleH = h < options.minHeight ? options.minHeight / h : 1,
+                var defaultScale = display.highdpi ? window.devicePixelRatio : 1,
+                    scaleW = w < options.minWidth ? options.minWidth / w : defaultScale,
+                    scaleH = h < options.minHeight ? options.minHeight / h : defaultScale,
                     scale = Math.max(scaleW, scaleH);
-                if (display.highdpi) scale *= window.devicePixelRatio;
                 display.width = Math.floor(w * scale);
                 display.height = Math.floor(h * scale);
                 display.scale = w / display.width;
@@ -57342,10 +57882,9 @@
             var image = new Squeak.Image(name);
             image.readFromBuffer(buffer, function startRunning() {
                 display.quitFlag = false;
-                var vm = new Squeak.Interpreter(image, display);
+                var vm = new Squeak.Interpreter(image, display, options);
                 SqueakJS.vm = vm;
                 Squeak.Settings["squeakImageName"] = name;
-                setupSwapButtons(options);
                 display.clear();
                 display.showBanner("Starting " + SqueakJS.appName);
                 var spinner = setupSpinner(vm, options);
@@ -57463,7 +58002,7 @@
                 console.log("Inflating " + file.name + ": " + filename);
                 function progress(x) { display.showProgress((x.percent / 100 + done) / todo.length); }
                 zip.file(filename).async("arraybuffer", progress).then(function(buffer){
-                    console.log("Expanded size of " + filename + ": " + buffer.byteLength);
+                    console.log("Expanded size of " + filename + ": " + buffer.byteLength + " bytes");
                     var unzipped = {};
                     if (options.image.name === filename)
                         unzipped = options.image;
@@ -57519,9 +58058,9 @@
                 console.error(Squeak.bytesAsString(new Uint8Array(this.response)));
                 return alert("Failed to download:\n" + file.url);
             }
-            console.warn('Retrying with CORS proxy: ' + file.url);
             var proxy = 'https://corsproxy.io/?',
                 retry = new XMLHttpRequest();
+            console.warn('Retrying with CORS proxy: ' + proxy + file.url);
             retry.open('GET', proxy + file.url);
             if (options.ajax) retry.setRequestHeader("X-Requested-With", "XMLHttpRequest");
             retry.responseType = rq.responseType;
@@ -57592,7 +58131,12 @@
             var zips = typeof options.zip === "string" ? [options.zip] : options.zip;
             zips.forEach(function(zip) {
                 var url = Squeak.splitUrl(zip, baseUrl);
-                files.push({url: url.full, name: url.filename, zip: true});
+                var prefix = "";
+                // if filename has no version info, but full url has it, use full url as prefix
+                if (!url.filename.match(/[0-9]/) && url.uptoslash.match(/[0-9]/)) {
+                    prefix = url.uptoslash.replace(/^[^:]+:\/\//, "").replace(/[^a-zA-Z0-9]/g, "_");
+                }
+                files.push({url: url.full, name: prefix + url.filename, zip: true});
             });
         }
         if (image.url) files.push(image);

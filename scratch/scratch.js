@@ -27,18 +27,12 @@ window.onload = function() {
     var url = "https://freudenbergs.de/vanessa/squeakjs/scratch/Scratch.image";
     SqueakJS.runSqueak(url, sqCanvas, {
         appName: "Scratch",
-        fullscreen: fullscreen,
-        header: sqHeader,
-        footer: sqFooter,
         spinner: sqSpinner,
-        fullscreenCheckbox: sqFullscreen,
         root: "/Scratch",
         templates: ["Projects", "Media", "Help", "locale"],
     });
 };
 
-if (addToHomescreen.isStandalone)
-    fullscreen = true;
-else addToHomescreen({
+if (addToHomescreen.isStandalone) addToHomescreen({
     appID: 'squeakjs.scratch.add2home',
 });

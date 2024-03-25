@@ -451,7 +451,7 @@ function MIDIPlugin() {
             const port = this.ports.get(portNumber);
             if (!port || !port.input || port.input.connection !== 'open') return false;
             let received = 0;
-            const chunk = port.receivedData.shift();
+            let chunk = port.receivedData.shift();
             while (chunk && received < data.length) {
                 const free = data.length - received;
                 if (chunk.length <= free) {

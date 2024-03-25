@@ -15,7 +15,9 @@
             spinner: sqSpinner,
             appName: imageName && imageName.replace(/.*\//, "").replace(/\.image$/, ""),
             onStart: function(vm, display, options) {
+                // debugger
                 // vm.breakOn("FileDirectory class>>activeDirectoryClass");
+                // vm.breakOnMessageNotUnderstood = true;
             },
             onQuit: function(vm, display, options) {
                 display.showBanner(SqueakJS.appName + " stopped.");

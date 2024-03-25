@@ -67,6 +67,7 @@ import "./plugins/Klatt.js";
 import "./plugins/LargeIntegers.js";
 import "./plugins/Matrix2x3Plugin.js";
 import "./plugins/MiscPrimitivePlugin.js";
+import "./plugins/MIDIPlugin.js";
 import "./plugins/ScratchPlugin.js";
 import "./plugins/SocketPlugin.js";
 import "./plugins/SpeechPlugin.js";
@@ -1291,7 +1292,11 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options) {
         var zips = typeof options.zip === "string" ? [options.zip] : options.zip;
         zips.forEach(function(zip) {
             var url = Squeak.splitUrl(zip, baseUrl);
-            var prefix = url.uptoslash.replace(/^[^:]+:\/\//, "").replace(/[^a-zA-Z0-9]/g, "_");
+            var prefix = "";
+            // if filename has no version info, but full url has it, use full url as prefix
+            if (!url.filename.match(/[0-9]/) && url.uptoslash.match(/[0-9]/)) {
+                prefix = url.uptoslash.replace(/^[^:]+:\/\//, "").replace(/[^a-zA-Z0-9]/g, "_");
+            }
             files.push({url: url.full, name: prefix + url.filename, zip: true});
         });
     }

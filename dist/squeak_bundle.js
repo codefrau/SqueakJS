@@ -2,7 +2,7 @@
     'use strict';
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -63,7 +63,10 @@
         Function.prototype.subclass = function(classPath /* + more args */ ) {
             // create subclass
             var subclass = function() {
-                if (this.initialize) this.initialize.apply(this, arguments);
+                if (this.initialize) {
+                    var result = this.initialize.apply(this, arguments);
+                    if (result !== undefined) return result;
+                }
                 return this;
             };
             // set up prototype
@@ -89,7 +92,7 @@
     }
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -113,8 +116,8 @@
     Object.extend(Squeak,
     "version", {
         // system attributes
-        vmVersion: "SqueakJS 1.1.2",
-        vmDate: "2023-11-24",               // Maybe replace at build time?
+        vmVersion: "SqueakJS 1.2.0",
+        vmDate: "2024-03-25",               // Maybe replace at build time?
         vmBuild: "unknown",                 // or replace at runtime by last-modified?
         vmPath: "unknown",                  // Replace at runtime
         vmFile: "vm.js",
@@ -327,7 +330,7 @@
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -889,7 +892,7 @@
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -1348,7 +1351,7 @@
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -1417,6 +1420,7 @@
         initialize: function(name) {
             this.headRoom = 100000000; // TODO: pass as option
             this.totalMemory = 0;
+            this.headerFlags = 0;
             this.name = name;
             this.gcCount = 0;
             this.gcMilliseconds = 0;
@@ -1486,10 +1490,12 @@
             var objectMemorySize = readWord(); //first unused location in heap
             var oldBaseAddr = readWord(); //object memory base address of image
             var specialObjectsOopInt = readWord(); //oop of array of special oops
-            this.savedHeaderWords = [];
-            for (var i = 0; i < 7; i++) {
+            var lastHash = readWord32(); if (is64Bit) readWord32(); // not used
+            var savedWindowSize = readWord(); // not used
+            this.headerFlags = readWord(); // vm attribute 48
+            this.savedHeaderWords = [lastHash, savedWindowSize, this.headerFlags];
+            for (var i = 0; i < 4; i++) {
                 this.savedHeaderWords.push(readWord32());
-                if (is64Bit && i < 3) readWord32(); // skip half
             }
             var firstSegSize = readWord();
             var prevObj;
@@ -1606,8 +1612,8 @@
                     // last 16 bytes in segment is a bridge object
                     var deltaWords = readWord32(),
                         deltaWordsHi = readWord32(),
-                        segmentBytes = readWord32(),
-                        segmentBytesHi = readWord32();
+                        segmentBytes = readWord32();
+                        readWord32();
                     //  if segmentBytes is zero, the end of the image has been reached
                     if (segmentBytes !== 0) {
                         var deltaBytes = deltaWordsHi & 0xFF000000 ? (deltaWords & 0x00FFFFFF) * 4 : 0;
@@ -1802,6 +1808,9 @@
             // sorting them by id, and then linking them into old space.
             this.vm.addMessage("fullGC: " + reason);
             var start = Date.now();
+            var previousNew = this.newSpaceCount;
+            var previousYoung = this.youngSpaceCount;
+            var previousOld = this.oldSpaceCount;
             var newObjects = this.markReachableObjects();
             this.removeUnmarkedOldObjects();
             this.appendToOldObjects(newObjects);
@@ -1812,8 +1821,12 @@
             this.hasNewInstances = {};
             this.gcCount++;
             this.gcMilliseconds += Date.now() - start;
-            console.log("Full GC (" + reason + "): " + (Date.now() - start) + " ms");
-            if (reason === "primitive") console.log("  surviving objects: " + this.oldSpaceCount + " (" + this.oldSpaceBytes + " bytes)");
+            var delta = previousOld - this.oldSpaceCount;
+            console.log("Full GC (" + reason + "): " + (Date.now() - start) + " ms, " +
+                "surviving objects: " + this.oldSpaceCount + " (" + this.oldSpaceBytes + " bytes), " +
+                "tenured " + newObjects.length + " (total " + (delta > 0 ? "+" : "") + delta + "), " +
+                "gc'ed " + previousYoung + " young and " + (previousNew - previousYoung) + " new objects");
+
             return newObjects.length > 0 ? newObjects[0] : null;
         },
         gcRoots: function() {
@@ -1962,6 +1975,7 @@
             // and finalize weak refs
             this.vm.addMessage("partialGC: " + reason);
             var start = Date.now();
+            var previous = this.newSpaceCount;
             var young = this.findYoungObjects();
             this.appendToYoungSpace(young);
             this.finalizeWeakReferences();
@@ -1971,7 +1985,9 @@
             this.newSpaceCount = this.youngSpaceCount;
             this.pgcCount++;
             this.pgcMilliseconds += Date.now() - start;
-            console.log("Partial GC (" + reason+ "): " + (Date.now() - start) + " ms");
+            console.log("Partial GC (" + reason+ "): " + (Date.now() - start) + " ms, " +
+                "found " + this.youngRootsCount + " roots in " + this.oldSpaceCount + " old, " +
+                "kept " + this.youngSpaceCount + " young (" + (previous - this.youngSpaceCount) + " gc'ed)");
             return young[0];
         },
         youngRoots: function() {
@@ -1990,7 +2006,7 @@
                             dirty = true;
                         }
                     }
-                    object.dirty = dirty;
+                    if (!dirty) object.dirty = false;
                 }
                 object = object.nextObject;
             }
@@ -2000,6 +2016,7 @@
             // PartialGC: find new objects transitively reachable from old objects
             var todo = this.youngRoots(),     // direct pointers from old space
                 newObjects = [];
+            this.youngRootsCount = todo.length;
             this.weakObjects = [];
             while (todo.length > 0) {
                 var object = todo.pop();
@@ -2386,6 +2403,10 @@
             // between segmentWordArray and its following object (endMarker).
             // This only increases oldSpaceCount but not oldSpaceBytes.
             // The code below is almost the same as readFromBuffer() ... should unify
+            if (segmentWordArray.words.length === 1) {
+                // segment already loaded
+                return segmentWordArray.nextObject;
+            }
             var segment = new DataView(segmentWordArray.words.buffer),
                 littleEndian = false,
                 nativeFloats = false,
@@ -2472,6 +2493,7 @@
                     oopMap[--fakeClsOop] = cls; return fakeClsOop; });
             // truncate segmentWordArray array to one element
             segmentWordArray.words = new Uint32Array([segmentWordArray.words[0]]);
+            delete segmentWordArray.uint8Array; // in case it was a view onto words
             // map objects using oopMap
             var roots = segmentWordArray.nextObject,
                 floatClass = this.specialObjectsArray.pointers[Squeak.splOb_ClassFloat],
@@ -2723,7 +2745,7 @@
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -2746,16 +2768,17 @@
 
     Object.subclass('Squeak.Interpreter',
     'initialization', {
-        initialize: function(image, display) {
-            console.log('squeak: initializing interpreter ' + Squeak.vmVersion);
+        initialize: function(image, display, options) {
+            console.log('squeak: initializing interpreter ' + Squeak.vmVersion + ' (' + Squeak.vmDate + ')');
             this.Squeak = Squeak;   // store locally to avoid dynamic lookup in Lively
             this.image = image;
             this.image.vm = this;
+            this.options = options || {};
             this.primHandler = new Squeak.Primitives(this, display);
             this.loadImageState();
-            this.hackImage();
             this.initVMState();
             this.loadInitialContext();
+            this.hackImage();
             this.initCompiler();
             console.log('squeak: ready');
         },
@@ -2803,6 +2826,7 @@
             this.breakOutTick = 0;
             this.breakOnMethod = null; // method to break on
             this.breakOnNewMethod = false;
+            this.breakOnMessageNotUnderstood = false;
             this.breakOnContextChanged = false;
             this.breakOnContextReturned = null; // context to break on
             this.messages = {};
@@ -2860,14 +2884,19 @@
             // compiler might decide to not handle current image
             try {
                 console.log("squeak: initializing JIT compiler");
-                this.compiler = new Squeak.Compiler(this);
+                var compiler = new Squeak.Compiler(this);
+                if (compiler.compile) this.compiler = compiler;
             } catch(e) {
-                console.warn("Compiler " + e);
+                console.warn("Compiler: " + e);
+            }
+            if (!this.compiler) {
+                console.warn("SqueakJS will be running in interpreter mode only (slow)");
             }
         },
         hackImage: function() {
             // hack methods to make work / speed up
-            var opts = typeof location === 'object' ? location.hash : "";
+            var opts = typeof location === 'object' ? location.hash : "",
+                sista = this.method.methodSignFlag();
             [
                 // Etoys fallback for missing translation files is hugely inefficient.
                 // This speeds up opening a viewer by 10x (!)
@@ -2878,6 +2907,10 @@
                 {method: "SmalltalkImage>>wordSize", literal: {index: 1, old: 8, hack: 4}, enabled: true},
                 // Squeak 5.3 disable wizard by replacing #open send with pop
                 {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: opts.includes("wizard=false")},
+                // Squeak source file should use UTF8 not MacRoman (both V3 and Sista)
+                {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 53, old: 0x45, hack: 0x49}, enabled: !this.image.isSpur},
+                {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 38, old: 0x16, hack: 0x13}, enabled: this.image.isSpur && sista},
+                {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 50, old: 0x44, hack: 0x48}, enabled: this.image.isSpur && !sista},
             ].forEach(function(each) {
                 try {
                     var m = each.enabled && this.findMethod(each.method);
@@ -2891,7 +2924,7 @@
                         else if (byte && m.bytes[byte.pc] === byte.hack) hacked = false; // already there
                         else if (lit && m.pointers[lit.index].pointers[1] === lit.old) m.pointers[lit.index].pointers[1] = lit.hack;
                         else if (lit && m.pointers[lit.index].pointers[1] === lit.hack) hacked = false; // already there
-                        else { hacked = false; console.error("Failed to hack " + each.method); }
+                        else { hacked = false; console.warn("Not hacking " + each.method); }
                         if (hacked) console.warn("Hacking " + each.method);
                     }
                 } catch (error) {
@@ -2903,9 +2936,6 @@
     },
     'interpreting', {
         interpretOne: function(singleStep) {
-            if (this.method.methodSignFlag()) {
-                return this.interpretOneSistaWithExtensions(singleStep, 0, 0);
-            }
             if (this.method.compiled) {
                 if (singleStep) {
                     if (!this.compiler.enableSingleStepping(this.method)) {
@@ -2916,6 +2946,9 @@
                 }
                 this.method.compiled(this);
                 return;
+            }
+            if (this.method.methodSignFlag()) {
+                return this.interpretOneSistaWithExtensions(singleStep, 0, 0);
             }
             var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively
             var b, b2;
@@ -2998,10 +3031,14 @@
                     this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2]);
                     return;
                 case 0x8D: b2 = this.nextByte(); // remote store into temp vector
-                    this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2] = this.top();
+                    var vec = this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()];
+                    vec.pointers[b2] = this.top();
+                    vec.dirty = true;
                     return;
                 case 0x8E: b2 = this.nextByte(); // remote store and pop into temp vector
-                    this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2] = this.pop();
+                    var vec = this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()];
+                    vec.pointers[b2] = this.pop();
+                    vec.dirty = true;
                     return;
                 case 0x8F: this.pushClosureCopy(); return;
 
@@ -3287,10 +3324,14 @@
                     this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2]);
                     return;
                 case 0xFC: b2 = this.nextByte(); // remote store into temp vector
-                    this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2] = this.top();
+                    var vec = this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()];
+                    vec.pointers[b2] = this.top();
+                    vec.dirty = true;
                     return;
                 case 0xFD: b2 = this.nextByte(); // remote store and pop into temp vector
-                    this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2] = this.pop();
+                    var vec = this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()];
+                    vec.pointers[b2] = this.pop();
+                    vec.dirty = true;
                     return;
                 case 0xFE: case 0xFF: this.nono(); return; // unused
             }
@@ -3304,7 +3345,7 @@
             if (this.frozen) return 'frozen';
             this.isIdle = false;
             this.breakOutOfInterpreter = false;
-            this.breakOutTick = this.primHandler.millisecondClockValue() + (forMilliseconds || 500);
+            this.breakAfter(forMilliseconds || 500);
             while (this.breakOutOfInterpreter === false)
                 if (this.method.compiled) {
                     this.method.compiled(this);
@@ -3411,8 +3452,7 @@
             if (this.primHandler.semaphoresToSignal.length > 0)
                 this.primHandler.signalExternalSemaphores();  // signal pending semaphores, if any
             // if this is a long-running do-it, compile it
-            if (!this.method.compiled && this.compiler)
-                this.compiler.compile(this.method);
+            if (!this.method.compiled) this.compileIfPossible(this.method);
             // have to return to web browser once in a while
             if (now >= this.breakOutTick)
                 this.breakOut();
@@ -3640,7 +3680,11 @@
         sendAsPrimitiveFailure: function(rcvr, method, argCount) {
             this.executeNewMethod(rcvr, method, argCount, 0);
         },
-        findSelectorInClass: function(selector, argCount, startingClass) {
+        /**
+         * @param {*} trueArgCount The number of arguments for the method to be found
+         * @param {*} argCount The number of arguments currently on the stack (may be different from trueArgCount in the context of primitive 84 etc.)
+         */
+        findSelectorInClass: function(selector, trueArgCount, startingClass, argCount = trueArgCount) {
             this.currentSelector = selector; // for primitiveInvokeObjectAsMethod
             var cacheEntry = this.findMethodCacheEntry(selector, startingClass);
             if (cacheEntry.method) return cacheEntry; // Found it in the method cache
@@ -3652,16 +3696,21 @@
                     // MethodDict pointer is nil (hopefully due a swapped out stub)
                     //        -- send #cannotInterpret:
                     var cantInterpSel = this.specialObjects[Squeak.splOb_SelectorCannotInterpret],
-                        cantInterpMsg = this.createActualMessage(selector, argCount, startingClass);
-                    this.popNandPush(argCount, cantInterpMsg);
+                        cantInterpMsg = this.createActualMessage(selector, trueArgCount, startingClass);
+                    this.popNandPush(argCount + 1, cantInterpMsg);
                     return this.findSelectorInClass(cantInterpSel, 1, currentClass.superclass());
                 }
                 var newMethod = this.lookupSelectorInDict(mDict, selector);
                 if (!newMethod.isNil) {
-                    // if method is not actually a CompiledMethod, let primitiveInvokeObjectAsMethod (576) handle it
                     cacheEntry.method = newMethod;
-                    cacheEntry.primIndex = newMethod.isMethod() ? newMethod.methodPrimitiveIndex() : 576;
-                    cacheEntry.argCount = argCount;
+                    if (newMethod.isMethod()) {
+                        cacheEntry.primIndex = newMethod.methodPrimitiveIndex();
+                    cacheEntry.argCount = newMethod.methodNumArgs();
+                    } else {
+                        // if method is not actually a CompiledMethod, let primitiveInvokeObjectAsMethod (576) handle it
+                        cacheEntry.primIndex = 576;
+                        cacheEntry.argCount = trueArgCount;
+                    }
                     cacheEntry.mClass = currentClass;
                     return cacheEntry;
                 }
@@ -3671,7 +3720,11 @@
             var dnuSel = this.specialObjects[Squeak.splOb_SelectorDoesNotUnderstand];
             if (selector === dnuSel) // Cannot find #doesNotUnderstand: -- unrecoverable error.
                 throw Error("Recursive not understood error encountered");
-            var dnuMsg = this.createActualMessage(selector, argCount, startingClass); //The argument to doesNotUnderstand:
+            var dnuMsg = this.createActualMessage(selector, trueArgCount, startingClass); // The argument to doesNotUnderstand:
+            if (this.breakOnMessageNotUnderstood) {
+                var receiver = this.stackValue(argCount);
+                this.breakNow("Message not understood: " + receiver + " " + startingClass.className() + ">>" + selector.bytesAsString());
+            }
             this.popNandPush(argCount, dnuMsg);
             return this.findSelectorInClass(dnuSel, 1, startingClass);
         },
@@ -3699,7 +3752,13 @@
         executeNewMethod: function(newRcvr, newMethod, argumentCount, primitiveIndex, optClass, optSel) {
             this.sendCount++;
             if (newMethod === this.breakOnMethod) this.breakNow("executing method " + this.printMethod(newMethod, optClass, optSel));
-            if (this.logSends) console.log(this.sendCount + ' ' + this.printMethod(newMethod, optClass, optSel));
+            if (this.logSends) {
+                var indent = ' ';
+                var ctx = this.activeContext;
+                while (!ctx.isNil) { indent += '| '; ctx = ctx.pointers[Squeak.Context_sender]; }
+                var args = this.activeContext.pointers.slice(this.sp + 1 - argumentCount, this.sp + 1);
+                console.log(this.sendCount + indent + this.printMethod(newMethod, optClass, optSel, args));
+            }
             if (this.breakOnContextChanged) {
                 this.breakOnContextChanged = false;
                 this.breakNow();
@@ -3734,10 +3793,14 @@
             this.receiver = newContext.pointers[Squeak.Context_receiver];
             if (this.receiver !== newRcvr)
                 throw Error("receivers don't match");
-            if (!newMethod.compiled && this.compiler)
-                this.compiler.compile(newMethod, optClass, optSel);
+            if (!newMethod.compiled) this.compileIfPossible(newMethod, optClass, optSel);
             // check for process switch on full method activation
             if (this.interruptCheckCounter-- <= 0) this.checkForInterrupts();
+        },
+        compileIfPossible(newMethod, optClass, optSel) {
+            if (!newMethod.compiled && this.compiler) {
+                this.compiler.compile(newMethod, optClass, optSel);
+            }
         },
         doReturn: function(returnValue, targetContext) {
             // get sender from block home or closure's outerContext
@@ -3825,7 +3888,9 @@
             if (success
                 && this.sp !== sp - argCount
                 && context === this.activeContext
-                && primIndex !== 117    // named prims are checked separately
+                && primIndex !== 117    // named prims are checked separately (see namedPrimitive)
+                && primIndex !== 118    // primitiveDoPrimitiveWithArgs (will call tryPrimitive again)
+                && primIndex !== 218    // primitiveDoNamedPrimitive (will call namedPrimitive)
                 && !this.frozen) {
                     this.warnOnce("stack unbalanced after primitive " + primIndex, "error");
                 }
@@ -3845,14 +3910,20 @@
         primitivePerform: function(argCount) {
             var selector = this.stackValue(argCount-1);
             var rcvr = this.stackValue(argCount);
-            // NOTE: findNewMethodInClass may fail and be converted to #doesNotUnderstand:,
-            //       (Whoah) so we must slide args down on the stack now, so that would work
             var trueArgCount = argCount - 1;
-            var selectorIndex = this.sp - trueArgCount;
+            var entry = this.findSelectorInClass(selector, trueArgCount, this.getClass(rcvr), argCount);
+            if (entry.selector === selector) {
+                // selector has been found, rearrange stack
+                if (entry.argCount !== trueArgCount)
+                    return false;
             var stack = this.activeContext.pointers; // slide eveything down...
+                var selectorIndex = this.sp - trueArgCount;
             this.arrayCopy(stack, selectorIndex+1, stack, selectorIndex, trueArgCount);
             this.sp--; // adjust sp accordingly
-            var entry = this.findSelectorInClass(selector, trueArgCount, this.getClass(rcvr));
+            } else {
+                // stack has already been arranged for #doesNotUnderstand:/#cannotInterpret:
+                rcvr = this.stackValue(entry.argCount);
+            }
             this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
             return true;
         },
@@ -3872,11 +3943,20 @@
                 }
             }
             var trueArgCount = args.pointersSize();
-            var selectorIndex = this.sp - (rcvrPos - 1);
+            var entry = this.findSelectorInClass(selector, trueArgCount, lookupClass, argCount);
+            if (entry.selector === selector) {
+                // selector has been found, rearrange stack
+                if (entry.argCount !== trueArgCount)
+                    return false;
             var stack = this.activeContext.pointers;
+                var selectorIndex = this.sp - (argCount - 1);
+                stack[selectorIndex - 1] = rcvr;
             this.arrayCopy(args.pointers, 0, stack, selectorIndex, trueArgCount);
-            this.sp += trueArgCount - argCount; //pop selector and array then push args
-            var entry = this.findSelectorInClass(selector, trueArgCount, lookupClass);
+                this.sp += trueArgCount - argCount; // pop old args then push new args
+            } else {
+                // stack has already been arranged for #doesNotUnderstand: or #cannotInterpret:
+                rcvr = this.stackValue(entry.argCount);
+            }
             this.executeNewMethod(rcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
             return true;
         },
@@ -4165,16 +4245,21 @@
             return rcvr - Math.floor(rcvr/arg) * arg;
         },
         safeShift: function(smallInt, shiftCount) {
-             // JS shifts only up to 31 bits
+            // must only be used if smallInt is actually a SmallInt!
+            // the logic is complex because JS shifts only up to 31 bits
+            // and treats e.g. 1<<32 as 1<<0, so we have to do our own checks
             if (shiftCount < 0) {
                 if (shiftCount < -31) return smallInt < 0 ? -1 : 0;
+                // this would wrongly return a negative result if
+                // smallInt >= 0x80000000, but the largest smallInt
+                // is 0x3FFFFFFF so we're ok
                 return smallInt >> -shiftCount; // OK to lose bits shifting right
             }
-            if (shiftCount > 31) return smallInt == 0 ? 0 : Squeak.NonSmallInt;
-            // check for lost bits by seeing if computation is reversible
+            if (shiftCount > 31) return smallInt === 0 ? 0 : Squeak.NonSmallInt;
             var shifted = smallInt << shiftCount;
-            if  ((shifted>>shiftCount) === smallInt) return shifted;
-            return Squeak.NonSmallInt;  //non-small result will cause failure
+            // check for lost bits by seeing if computation is reversible
+            if ((shifted>>shiftCount) !== smallInt) return Squeak.NonSmallInt; // fail
+            return shifted; // caller will check if still within SmallInt range
         },
     },
     'utils',
@@ -4230,18 +4315,32 @@
             return this.messages[message] ? ++this.messages[message] : this.messages[message] = 1;
         },
         warnOnce: function(message, what) {
-            if (this.addMessage(message) == 1)
+            if (this.addMessage(message) == 1) {
                 console[what || "warn"](message);
+                return true;
+            }
         },
-        printMethod: function(aMethod, optContext, optSel) {
+        printMethod: function(aMethod, optContext, optSel, optArgs) {
             // return a 'class>>selector' description for the method
             if (aMethod.sqClass != this.specialObjects[Squeak.splOb_ClassCompiledMethod]) {
-              return this.printMethod(aMethod.blockOuterCode(), optContext, optSel)
+              return this.printMethod(aMethod.blockOuterCode(), optContext, optSel, optArgs)
             }
-            if (optSel) return optContext.className() + '>>' + optSel.bytesAsString();
+            var found;
+            if (optSel) {
+                var printed = optContext.className() + '>>';
+                var selector = optSel.bytesAsString();
+                if (!optArgs || !optArgs.length) printed += selector;
+                else {
+                    var parts = selector.split(/(?<=:)/); // keywords
+                    for (var i = 0; i < optArgs.length; i++) {
+                        if (i > 0) printed += ' ';
+                        printed += parts[i] + ' ' + optArgs[i];
+                    }
+                }
+                return printed;
+            }
             // this is expensive, we have to search all classes
             if (!aMethod) aMethod = this.activeContext.contextMethod();
-            var found;
             this.allMethodsDo(function(classObj, methodObj, selectorObj) {
                 if (methodObj === aMethod)
                     return found = classObj.className() + '>>' + selectorObj.bytesAsString();
@@ -4305,7 +4404,7 @@
                 }
             });
         },
-        printStack: function(ctx, limit) {
+        printStack: function(ctx, limit, indent) {
             // both args are optional
             if (typeof ctx == "number") {limit = ctx; ctx = null;}
             if (!ctx) ctx = this.activeContext;
@@ -4322,7 +4421,9 @@
                 contexts = contexts.slice(0, limit).concat(['...']).concat(contexts.slice(-extra));
             }
             var stack = [],
-                i = contexts.length;
+                i = contexts.length,
+                indents = '';
+            if (indent && this.logSends) indents = Array((""+this.sendCount).length + 2).join(' ');
             while (i-- > 0) {
                 var ctx = contexts[i];
                 if (!ctx.pointers) {
@@ -4336,7 +4437,10 @@
                     } else if (!ctx.pointers[Squeak.Context_closure].isNil) {
                         block = '[] in '; // it's a closure activation
                     }
-                    stack.push(block + this.printMethod(method, ctx) + '\n');
+                    var line = block + this.printMethod(method, ctx);
+                    if (indent) line = indents + line;
+                    stack.push(line + '\n');
+                    if (indent) indents += indent;
                 }
             }
             return stack.join('');
@@ -4353,6 +4457,9 @@
                         return found = methodObj;
             });
             return found;
+        },
+        breakAfter: function(ms) {
+            this.breakOutTick = this.primHandler.millisecondClockValue() + ms;
         },
         breakNow: function(msg) {
             if (msg) console.log("Break: " + msg);
@@ -4391,12 +4498,17 @@
             var stackTop = homeCtx.contextSizeWithStack(this) - 1;
             var firstTemp = stackBottom + 1;
             var lastTemp = firstTemp + tempCount - 1;
+            var lastArg = firstTemp + homeCtx.pointers[Squeak.Context_method].methodNumArgs() - 1;
             var stack = '';
             for (var i = stackBottom; i <= stackTop; i++) {
                 var value = printObj(homeCtx.pointers[i]);
                 var label = '';
-                if (i == stackBottom) label = '=rcvr'; else
-                if (i <= lastTemp) label = '=tmp' + (i - firstTemp);
+                if (i === stackBottom) {
+                    label = '=rcvr';
+                } else {
+                    if (i <= lastTemp) label = '=tmp' + (i - firstTemp);
+                    if (i <= lastArg) label += '/arg' + (i - firstTemp);
+                }
                 stack += '\nctx[' + i + ']' + label +': ' + value;
             }
             if (isBlock) {
@@ -4405,10 +4517,11 @@
                 var firstArg = this.decodeSqueakSP(1);
                 var lastArg = firstArg + nArgs;
                 var sp = ctx === this.activeContext ? this.sp : ctx.pointers[Squeak.Context_stackPointer];
+                if (sp < firstArg) stack += '\nblk <stack empty>';
                 for (var i = firstArg; i <= sp; i++) {
                     var value = printObj(ctx.pointers[i]);
                     var label = '';
-                    if (i <= lastArg) label = '=arg' + (i - firstArg);
+                    if (i < lastArg) label = '=arg' + (i - firstArg);
                     stack += '\nblk[' + i + ']' + label +': ' + value;
                 }
             }
@@ -4423,39 +4536,62 @@
             // print active process
             var activeProc = sched.pointers[Squeak.ProcSched_activeProcess],
                 result = "Active: " + this.printProcess(activeProc, true);
-            // print other runnable processes
+            // print other runnable processes in order of priority
             var lists = sched.pointers[Squeak.ProcSched_processLists].pointers;
             for (var priority = lists.length - 1; priority >= 0; priority--) {
                 var process = lists[priority].pointers[Squeak.LinkedList_firstLink];
                 while (!process.isNil) {
+                    result += "\n------------------------------------------";
                     result += "\nRunnable: " + this.printProcess(process);
                     process = process.pointers[Squeak.Link_nextLink];
                 }
             }
-            // print all processes waiting on a semaphore
+            // print all processes waiting on a semaphore in order of priority
             var semaClass = this.specialObjects[Squeak.splOb_ClassSemaphore],
-                sema = this.image.someInstanceOf(semaClass);
+                sema = this.image.someInstanceOf(semaClass),
+                waiting = [];
             while (sema) {
                 var process = sema.pointers[Squeak.LinkedList_firstLink];
                 while (!process.isNil) {
-                    result += "\nWaiting: " + this.printProcess(process);
+                    waiting.push(process);
                     process = process.pointers[Squeak.Link_nextLink];
                 }
                 sema = this.image.nextInstanceAfter(sema);
             }
+            waiting.sort(function(a, b){
+                return b.pointers[Squeak.Proc_priority] - a.pointers[Squeak.Proc_priority];
+            });
+            for (var i = 0; i < waiting.length; i++) {
+                result += "\n------------------------------------------";
+                result += "\nWaiting: " + this.printProcess(waiting[i]);
+            }
             return result;
         },
-        printProcess: function(process, active) {
-            var context = process.pointers[Squeak.Proc_suspendedContext],
+        printProcess: function(process, active, indent) {
+            if (!process) {
+                var schedAssn = this.specialObjects[Squeak.splOb_SchedulerAssociation],
+                sched = schedAssn.pointers[Squeak.Assn_value];
+                process = sched.pointers[Squeak.ProcSched_activeProcess],
+                active = true;
+            }
+            var context = active ? this.activeContext : process.pointers[Squeak.Proc_suspendedContext],
                 priority = process.pointers[Squeak.Proc_priority],
-                stack = this.printStack(active ? null : context),
-                values = this.printContext(context);
-            return process.toString() +" at priority " + priority + "\n" + stack + values + "\n";
+                stack = this.printStack(context, 20, indent),
+                values = indent && this.logSends ? "" : this.printContext(context) + "\n";
+            return process.toString() +" at priority " + priority + "\n" + stack + values;
         },
         printByteCodes: function(aMethod, optionalIndent, optionalHighlight, optionalPC) {
             if (!aMethod) aMethod = this.method;
             var printer = new Squeak.InstructionPrinter(aMethod, this);
             return printer.printInstructions(optionalIndent, optionalHighlight, optionalPC);
+        },
+        logStack: function() {
+            // useful for debugging interactively:
+            // SqueakJS.vm.logStack()
+            console.log(this.printStack()
+                + this.printActiveContext() + '\n\n'
+                + this.printByteCodes(this.method, '   ', '=> ', this.pc),
+                this.activeContext.pointers.slice(0, this.sp + 1));
         },
         willSendOrReturn: function() {
             // Answer whether the next bytecode corresponds to a Smalltalk
@@ -4529,7 +4665,7 @@
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -4553,7 +4689,7 @@
     Object.subclass('Squeak.InterpreterProxy',
     // provides function names exactly like the C interpreter, for ease of porting
     // but maybe less efficiently because of the indirection
-    // only used for plugins translated from Slang (see plugins/*.js)
+    // mostly used for plugins translated from Slang (see plugins/*.js)
     // built-in primitives use the interpreter directly
     'initialization', {
         VM_PROXY_MAJOR: 1,
@@ -4796,6 +4932,9 @@
         classString: function() {
             return this.vm.specialObjects[Squeak.splOb_ClassString];
         },
+        classByteArray: function() {
+            return this.vm.specialObjects[Squeak.splOb_ClassByteArray];
+        },
         nilObject: function() {
             return this.vm.nilObj;
         },
@@ -4808,6 +4947,9 @@
     },
     'vm functions',
     {
+        clone: function(object) {
+            return this.vm.image.clone(object);
+        },
         instantiateClassindexableSize: function(aClass, indexableSize) {
             return this.vm.instantiateClass(aClass, indexableSize);
         },
@@ -4835,7 +4977,7 @@
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -4974,7 +5116,7 @@
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -5001,7 +5143,7 @@
             return this.interpretNextInstructionExtFor(client, 0, 0);
         },
         interpretNextInstructionExtFor: function(client, extA, extB) {
-            var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively
+            this.Squeak; // avoid dynamic lookup of "Squeak" in Lively
             // Send to the argument, client, a message that specifies the type of the next instruction.
             var b = this.method.bytes[this.pc++];
             switch (b) {
@@ -5084,7 +5226,9 @@
                     return b2 < 128 ? client.pushNewArray(b2) : client.popIntoNewArray(b2 - 128);
                 }
                 case 0xE8: return client.pushConstant(b2 + (extB << 8));
-                case 0xE9: return client.pushConstant("$" + b2 + (extB << 8));
+                case 0xE9:
+                    var unicode = b2 + (extB << 8);
+                    return client.pushConstant("$" + String.fromCodePoint(unicode) + " (" + unicode + ")");
                 case 0xEA: return client.send(this.method.methodGetSelector((b2 >> 3) + (extA << 5)), (b2 & 7) + (extB << 3), false);
                 case 0xEB:
                     var literal = this.method.methodGetSelector((b2 >> 3) + (extA << 5));
@@ -5139,7 +5283,7 @@
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -5210,9 +5354,11 @@
     'decoding', {
         blockReturnConstant: function(obj) {
             this.print('blockReturn: ' + obj.toString());
+            this.done = this.scanner.pc > this.endPC; // full block
         },
         blockReturnTop: function() {
             this.print('blockReturn');
+            this.done = this.scanner.pc > this.endPC; // full block
         },
         doDup: function() {
             this.print('dup');
@@ -5310,7 +5456,7 @@
             if (to > this.endPC) this.endPC = to;
         },
         pushFullClosure: function(literalIndex, numCopied, numArgs) {
-            this.print('pushFullClosure: (self literalAt: ' + literalIndex + ') numCopied: ' + numCopied + ' numArgs: ' + numArgs);
+            this.print('pushFullClosure: (self literalAt: ' + (literalIndex + 1) + ') numCopied: ' + numCopied + ' numArgs: ' + numArgs);
         },
         callPrimitive: function(primitiveIndex) {
             this.print('primitive: ' + primitiveIndex);
@@ -5318,7 +5464,7 @@
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -5382,7 +5528,7 @@
                 //case 0x3: return false; // next
                 //case 0x4: return false; // nextPut:
                 //case 0x5: return false; // atEnd
-                case 0x6: return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
+                case 0x6: return this.popNandPushBoolIfOK(2, this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
                 case 0x7: return this.popNandPushIfOK(1,this.vm.getClass(this.vm.top())); // class
                 case 0x8: return this.popNandPushIfOK(2,this.doBlockCopy()); // blockCopy:
                 case 0x9: return this.primitiveBlockValue(0); // value
@@ -5399,23 +5545,23 @@
             this.success = true;
             switch (index) {
                 // Integer Primitives (0-19)
-                case 1: return this.popNandPushIntIfOK(2,this.stackInteger(1) + this.stackInteger(0));  // Integer.add
-                case 2: return this.popNandPushIntIfOK(2,this.stackInteger(1) - this.stackInteger(0));  // Integer.subtract
-                case 3: return this.pop2andPushBoolIfOK(this.stackInteger(1) < this.stackInteger(0));   // Integer.less
-                case 4: return this.pop2andPushBoolIfOK(this.stackInteger(1) > this.stackInteger(0));   // Integer.greater
-                case 5: return this.pop2andPushBoolIfOK(this.stackInteger(1) <= this.stackInteger(0));  // Integer.leq
-                case 6: return this.pop2andPushBoolIfOK(this.stackInteger(1) >= this.stackInteger(0));  // Integer.geq
-                case 7: return this.pop2andPushBoolIfOK(this.stackInteger(1) === this.stackInteger(0)); // Integer.equal
-                case 8: return this.pop2andPushBoolIfOK(this.stackInteger(1) !== this.stackInteger(0)); // Integer.notequal
-                case 9: return this.popNandPushIntIfOK(2,this.stackInteger(1) * this.stackInteger(0));  // Integer.multiply *
-                case 10: return this.popNandPushIntIfOK(2,this.vm.quickDivide(this.stackInteger(1),this.stackInteger(0)));  // Integer.divide /  (fails unless exact)
-                case 11: return this.popNandPushIntIfOK(2,this.vm.mod(this.stackInteger(1),this.stackInteger(0)));  // Integer.mod \\
-                case 12: return this.popNandPushIntIfOK(2,this.vm.div(this.stackInteger(1),this.stackInteger(0)));  // Integer.div //
-                case 13: return this.popNandPushIntIfOK(2,this.stackInteger(1) / this.stackInteger(0) | 0);  // Integer.quo
-                case 14: return this.popNandPushIfOK(2,this.doBitAnd());  // SmallInt.bitAnd
-                case 15: return this.popNandPushIfOK(2,this.doBitOr());  // SmallInt.bitOr
-                case 16: return this.popNandPushIfOK(2,this.doBitXor());  // SmallInt.bitXor
-                case 17: return this.popNandPushIfOK(2,this.doBitShift());  // SmallInt.bitShift
+                case 1: return this.popNandPushIntIfOK(argCount+1,this.stackInteger(1) + this.stackInteger(0));  // Integer.add
+                case 2: return this.popNandPushIntIfOK(argCount+1,this.stackInteger(1) - this.stackInteger(0));  // Integer.subtract
+                case 3: return this.popNandPushBoolIfOK(argCount+1, this.stackInteger(1) < this.stackInteger(0));   // Integer.less
+                case 4: return this.popNandPushBoolIfOK(argCount+1, this.stackInteger(1) > this.stackInteger(0));   // Integer.greater
+                case 5: return this.popNandPushBoolIfOK(argCount+1, this.stackInteger(1) <= this.stackInteger(0));  // Integer.leq
+                case 6: return this.popNandPushBoolIfOK(argCount+1, this.stackInteger(1) >= this.stackInteger(0));  // Integer.geq
+                case 7: return this.popNandPushBoolIfOK(argCount+1, this.stackInteger(1) === this.stackInteger(0)); // Integer.equal
+                case 8: return this.popNandPushBoolIfOK(argCount+1, this.stackInteger(1) !== this.stackInteger(0)); // Integer.notequal
+                case 9: return this.popNandPushIntIfOK(argCount+1,this.stackInteger(1) * this.stackInteger(0));  // Integer.multiply *
+                case 10: return this.popNandPushIntIfOK(argCount+1,this.vm.quickDivide(this.stackInteger(1),this.stackInteger(0)));  // Integer.divide /  (fails unless exact)
+                case 11: return this.popNandPushIntIfOK(argCount+1,this.vm.mod(this.stackInteger(1),this.stackInteger(0)));  // Integer.mod \\
+                case 12: return this.popNandPushIntIfOK(argCount+1,this.vm.div(this.stackInteger(1),this.stackInteger(0)));  // Integer.div //
+                case 13: return this.popNandPushIntIfOK(argCount+1,this.stackInteger(1) / this.stackInteger(0) | 0);  // Integer.quo
+                case 14: return this.popNandPushIfOK(argCount+1,this.doBitAnd());  // SmallInt.bitAnd
+                case 15: return this.popNandPushIfOK(argCount+1,this.doBitOr());  // SmallInt.bitOr
+                case 16: return this.popNandPushIfOK(argCount+1,this.doBitXor());  // SmallInt.bitXor
+                case 17: return this.popNandPushIfOK(argCount+1,this.doBitShift());  // SmallInt.bitShift
                 case 18: return this.primitiveMakePoint(argCount, false);
                 case 19: return false;                                 // Guard primitive for simulation -- *must* fail
                 // LargeInteger Primitives (20-39)
@@ -5423,12 +5569,12 @@
                 case 20: this.vm.warnOnce("missing primitive: 20 (primitiveRemLargeIntegers)"); return false;
                 case 21: this.vm.warnOnce("missing primitive: 21 (primitiveAddLargeIntegers)"); return false;
                 case 22: this.vm.warnOnce("missing primitive: 22 (primitiveSubtractLargeIntegers)"); return false;
-                case 23: return this.primitiveLessThanLargeIntegers();
-                case 24: return this.primitiveGreaterThanLargeIntegers();
-                case 25: return this.primitiveLessOrEqualLargeIntegers();
-                case 26: return this.primitiveGreaterOrEqualLargeIntegers();
-                case 27: return this.primitiveEqualLargeIntegers();
-                case 28: return this.primitiveNotEqualLargeIntegers();
+                case 23: return this.primitiveLessThanLargeIntegers(argCount);
+                case 24: return this.primitiveGreaterThanLargeIntegers(argCount);
+                case 25: return this.primitiveLessOrEqualLargeIntegers(argCount);
+                case 26: return this.primitiveGreaterOrEqualLargeIntegers(argCount);
+                case 27: return this.primitiveEqualLargeIntegers(argCount);
+                case 28: return this.primitiveNotEqualLargeIntegers(argCount);
                 case 29: this.vm.warnOnce("missing primitive: 29 (primitiveMultiplyLargeIntegers)"); return false;
                 case 30: this.vm.warnOnce("missing primitive: 30 (primitiveDivideLargeIntegers)"); return false;
                 case 31: this.vm.warnOnce("missing primitive: 31 (primitiveModLargeIntegers)"); return false;
@@ -5444,18 +5590,18 @@
                 case 40: return this.popNandPushFloatIfOK(argCount+1,this.stackInteger(0)); // primitiveAsFloat
                 case 41: return this.popNandPushFloatIfOK(argCount+1,this.stackFloat(1)+this.stackFloat(0));  // Float +
                 case 42: return this.popNandPushFloatIfOK(argCount+1,this.stackFloat(1)-this.stackFloat(0));  // Float -
-                case 43: return this.pop2andPushBoolIfOK(this.stackFloat(1)<this.stackFloat(0));  // Float <
-                case 44: return this.pop2andPushBoolIfOK(this.stackFloat(1)>this.stackFloat(0));  // Float >
-                case 45: return this.pop2andPushBoolIfOK(this.stackFloat(1)<=this.stackFloat(0));  // Float <=
-                case 46: return this.pop2andPushBoolIfOK(this.stackFloat(1)>=this.stackFloat(0));  // Float >=
-                case 47: return this.pop2andPushBoolIfOK(this.stackFloat(1)===this.stackFloat(0));  // Float =
-                case 48: return this.pop2andPushBoolIfOK(this.stackFloat(1)!==this.stackFloat(0));  // Float !=
+                case 43: return this.popNandPushBoolIfOK(argCount+1, this.stackFloat(1)<this.stackFloat(0));  // Float <
+                case 44: return this.popNandPushBoolIfOK(argCount+1, this.stackFloat(1)>this.stackFloat(0));  // Float >
+                case 45: return this.popNandPushBoolIfOK(argCount+1, this.stackFloat(1)<=this.stackFloat(0));  // Float <=
+                case 46: return this.popNandPushBoolIfOK(argCount+1, this.stackFloat(1)>=this.stackFloat(0));  // Float >=
+                case 47: return this.popNandPushBoolIfOK(argCount+1, this.stackFloat(1)===this.stackFloat(0));  // Float =
+                case 48: return this.popNandPushBoolIfOK(argCount+1, this.stackFloat(1)!==this.stackFloat(0));  // Float !=
                 case 49: return this.popNandPushFloatIfOK(argCount+1,this.stackFloat(1)*this.stackFloat(0));  // Float.mul
                 case 50: return this.popNandPushFloatIfOK(argCount+1,this.safeFDiv(this.stackFloat(1),this.stackFloat(0)));  // Float.div
                 case 51: return this.popNandPushIfOK(argCount+1,this.floatAsSmallInt(this.stackFloat(0)));  // Float.asInteger
                 case 52: return this.popNandPushFloatIfOK(argCount+1,this.floatFractionPart(this.stackFloat(0)));
                 case 53: return this.popNandPushIntIfOK(argCount+1, this.frexp_exponent(this.stackFloat(0)) - 1); // Float.exponent
-                case 54: return this.popNandPushFloatIfOK(2, this.ldexp(this.stackFloat(1), this.stackFloat(0))); // Float.timesTwoPower
+                case 54: return this.popNandPushFloatIfOK(argCount+1, this.ldexp(this.stackFloat(1), this.stackFloat(0))); // Float.timesTwoPower
                 case 55: return this.popNandPushFloatIfOK(argCount+1, Math.sqrt(this.stackFloat(0))); // SquareRoot
                 case 56: return this.popNandPushFloatIfOK(argCount+1, Math.sin(this.stackFloat(0))); // Sine
                 case 57: return this.popNandPushFloatIfOK(argCount+1, Math.atan(this.stackFloat(0))); // Arctan
@@ -5484,7 +5630,7 @@
                 case 78: return this.popNandPushIfOK(argCount+1, this.nextInstanceAfter(this.stackNonInteger(0))); // Object.nextInstance
                 case 79: return this.primitiveNewMethod(argCount); // Compiledmethod.new
                 // Control Primitives (80-89)
-                case 80: return this.popNandPushIfOK(2,this.doBlockCopy()); // blockCopy:
+                case 80: return this.popNandPushIfOK(argCount+1,this.doBlockCopy()); // blockCopy:
                 case 81: return this.primitiveBlockValue(argCount); // BlockContext.value
                 case 82: return this.primitiveBlockValueWithArgs(argCount); // BlockContext.valueWithArguments:
                 case 83: return this.vm.primitivePerform(argCount); // Object.perform:(with:)*
@@ -5516,7 +5662,7 @@
                 case 108: return this.primitiveKeyboardNext(argCount); // Sensor kbdNext
                 case 109: return this.primitiveKeyboardPeek(argCount); // Sensor kbdPeek
                 // System Primitives (110-119)
-                case 110: return this.pop2andPushBoolIfOK(this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
+                case 110: return this.popNandPushBoolIfOK(argCount+1, this.vm.stackValue(1) === this.vm.stackValue(0)); // ==
                 case 111: return this.popNandPushIfOK(argCount+1, this.vm.getClass(this.vm.top())); // Object.class
                 case 112: return this.popNandPushIfOK(argCount+1, this.vm.image.bytesLeft()); //primitiveBytesLeft
                 case 113: return this.primitiveQuit(argCount);
@@ -5527,24 +5673,24 @@
                 case 118: return this.primitiveDoPrimitiveWithArgs(argCount);
                 case 119: return this.vm.flushMethodCacheForSelector(this.vm.top()); // before Squeak 2.3 uses 116
                 // Miscellaneous Primitives (120-149)
-                case 120: this.vm.warnOnce("missing primitive:121 (primitiveCalloutToFFI)"); return false;
+                case 120: return this.primitiveCalloutToFFI(argCount, primMethod);
                 case 121: return this.primitiveImageName(argCount); //get+set imageName
                 case 122: return this.primitiveReverseDisplay(argCount); // Blue Book: primitiveImageVolume
                 case 123: this.vm.warnOnce("missing primitive: 123 (primitiveValueUninterruptably)"); return false;
-                case 124: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore));
-                case 125: return this.popNandPushIfOK(2, this.setLowSpaceThreshold());
+                case 124: return this.popNandPushIfOK(argCount+1, this.registerSemaphore(Squeak.splOb_TheLowSpaceSemaphore));
+                case 125: return this.popNandPushIfOK(argCount+1, this.setLowSpaceThreshold());
                 case 126: return this.primitiveDeferDisplayUpdates(argCount);
                 case 127: return this.primitiveShowDisplayRect(argCount);
                 case 128: return this.primitiveArrayBecome(argCount, true, true); // both ways, do copy hash
-                case 129: return this.popNandPushIfOK(1, this.vm.image.specialObjectsArray); //specialObjectsOop
+                case 129: return this.popNandPushIfOK(argCount+1, this.vm.image.specialObjectsArray); //specialObjectsOop
                 case 130: return this.primitiveFullGC(argCount);
                 case 131: return this.primitivePartialGC(argCount);
-                case 132: return this.pop2andPushBoolIfOK(this.pointsTo(this.stackNonInteger(1), this.vm.top())); //Object.pointsTo
+                case 132: return this.popNandPushBoolIfOK(argCount+1, this.pointsTo(this.stackNonInteger(1), this.vm.top())); //Object.pointsTo
                 case 133: return this.popNIfOK(argCount); //TODO primitiveSetInterruptKey
-                case 134: return this.popNandPushIfOK(2, this.registerSemaphore(Squeak.splOb_TheInterruptSemaphore));
-                case 135: return this.popNandPushIfOK(1, this.millisecondClockValue());
+                case 134: return this.popNandPushIfOK(argCount+1, this.registerSemaphore(Squeak.splOb_TheInterruptSemaphore));
+                case 135: return this.popNandPushIfOK(argCount+1, this.millisecondClockValue());
                 case 136: return this.primitiveSignalAtMilliseconds(argCount); //Delay signal:atMs:();
-                case 137: return this.popNandPushIfOK(1, this.secondClock()); // seconds since Jan 1, 1901
+                case 137: return this.popNandPushIfOK(argCount+1, this.secondClock()); // seconds since Jan 1, 1901
                 case 138: return this.popNandPushIfOK(argCount+1, this.someObject()); // Object.someObject
                 case 139: return this.popNandPushIfOK(argCount+1, this.nextObject(this.vm.top())); // Object.nextObject
                 case 140: return this.primitiveBeep(argCount);
@@ -5585,7 +5731,7 @@
                 case 167: return false; // Processor.yield
                 case 168: return this.primitiveCopyObject(argCount);
                 case 169: if (this.oldPrims) return this.primitiveDirectorySetMacTypeAndCreator(argCount);
-                    else return this.pop2andPushBoolIfOK(this.vm.stackValue(1) !== this.vm.stackValue(0)); //new: primitiveNotIdentical
+                    else return this.popNandPushBoolIfOK(argCount+1, this.vm.stackValue(1) !== this.vm.stackValue(0)); //new: primitiveNotIdentical
                 // Sound Primitives (170-199)
                 case 170: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStart', argCount);
                     else return this.primitiveAsCharacter(argCount);
@@ -5664,18 +5810,18 @@
                 case 209: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketCreate', argCount);
                     else return this.primitiveFullClosureValueNoContextSwitch(argCount);
                 case 210: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketDestroy', argCount);
-                    else return this.popNandPushIfOK(2, this.objectAt(false,false,false)); // contextAt:
+                    else return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,false)); // contextAt:
                 case 211: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectionStatus', argCount);
-                    else return this.popNandPushIfOK(3, this.objectAtPut(false,false,false)); // contextAt:put:
+                    else return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,false)); // contextAt:put:
                 case 212: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketError', argCount);
-                    else return this.popNandPushIfOK(1, this.objectSize(false)); // contextSize
+                    else return this.popNandPushIfOK(argCount+1, this.objectSize(false)); // contextSize
                 case 213: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketLocalAddress', argCount);
                 case 214: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketLocalPort', argCount);
                 case 215: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketRemoteAddress', argCount);
                 case 216: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketRemotePort', argCount);
                 case 217: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketConnectToPort', argCount);
-                case 218: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketListenOnPort', argCount);
-                    else { this.vm.warnOnce("missing primitive: 218 (tryNamedPrimitiveInForWithArgs"); return false; }
+                case 218: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketListenWithOrWithoutBacklog', argCount);
+                    else return this.primitiveDoNamedPrimitive(argCount);
                 case 219: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketCloseConnection', argCount);
                 case 220: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketAbortConnection', argCount);
                     break;  // fail 212-220 if fell through
@@ -5685,6 +5831,7 @@
                     else return this.primitiveClosureValueNoContextSwitch(argCount);
                 case 223: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketSendDataBufCount', argCount);
                 case 224: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketSendDone', argCount);
+                case 225: if (this.oldPrims) return this.namedPrimitive('SocketPlugin', 'primitiveSocketAccept', argCount);
                     break;  // fail 223-229 if fell through
                 // 225-229: unused
                 // Other Primitives (230-249)
@@ -5696,13 +5843,15 @@
                 case 235: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompareString', argCount);
                 case 236: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveConvert8BitSigned', argCount);
                 case 237: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveCompressToByteArray', argCount);
+                    break;  // fail 234-237 if fell through
                 case 238: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortOpen', argCount);
+                    else return this.namedPrimitive('FloatArrayPlugin', 'primitiveAt', argCount);
                 case 239: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortClose', argCount);
-                    break;  // fail 234-239 if fell through
+                    else return this.namedPrimitive('FloatArrayPlugin', 'primitiveAtPut', argCount);
                 case 240: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortWrite', argCount);
-                    else return this.popNandPushIfOK(1, this.microsecondClockUTC());
+                    else return this.popNandPushIfOK(argCount+1, this.microsecondClockUTC());
                 case 241: if (this.oldPrims) return this.namedPrimitive('SerialPlugin', 'primitiveSerialPortRead', argCount);
-                    else return this.popNandPushIfOK(1, this.microsecondClockLocal());
+                    else return this.popNandPushIfOK(argCount+1, this.microsecondClockLocal());
                 case 242: if (this.oldPrims) break; // unused
                     else return this.primitiveSignalAtUTCMicroseconds(argCount);
                 case 243: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveTranslateStringWithTable', argCount);
@@ -5747,14 +5896,17 @@
         namedPrimitive: function(modName, functionName, argCount) {
             // duplicated in loadFunctionFrom()
             var mod = modName === "" ? this : this.loadedModules[modName];
+            var justLoaded = false;
             if (mod === undefined) { // null if earlier load failed
                 mod = this.loadModule(modName);
                 this.loadedModules[modName] = mod;
+                justLoaded = true;
             }
             var result = false;
             var sp = this.vm.sp;
             if (mod) {
                 this.interpreterProxy.argCount = argCount;
+                this.interpreterProxy.primitiveName = functionName;
                 var primitive = mod[functionName];
                 if (typeof primitive === "function") {
                     result = mod[functionName](argCount);
@@ -5764,8 +5916,9 @@
                 } else {
                     this.vm.warnOnce("missing primitive: " + modName + "." + functionName);
                 }
-            } else {
-                this.vm.warnOnce("missing module: " + modName + " (" + functionName + ")");
+            } else if (justLoaded) {
+                if (this.success) this.vm.warnOnce("missing module: " + modName + " (" + functionName + ")");
+                else this.vm.warnOnce("failed to load module: " + modName + " (" + functionName + ")");
             }
             if ((result === true || (result !== false && this.success)) && this.vm.sp !== sp - argCount && !this.vm.frozen) {
                 this.vm.warnOnce("stack unbalanced after primitive " + modName + "." + functionName, "error");
@@ -5815,6 +5968,7 @@
                 console.log("Module initialization failed: " + modName);
                 return null;
             }
+            if (mod.getModuleName) modName = mod.getModuleName();
             console.log("Loaded module: " + modName);
             return mod;
         },
@@ -5894,6 +6048,11 @@
             this.vm.success = this.success;
             return this.vm.pop2AndPushBoolResult(bool);
         },
+        popNandPushBoolIfOK: function(nToPop, bool) {
+            if (!this.success) return false;
+            this.vm.popNandPush(nToPop, bool ? this.vm.trueObj : this.vm.falseObj);
+            return true;
+        },
         popNandPushIfOK: function(nToPop, returnValue) {
             if (!this.success || returnValue == null) return false;
             this.vm.popNandPush(nToPop, returnValue);
@@ -5901,11 +6060,13 @@
         },
         popNandPushIntIfOK: function(nToPop, returnValue) {
             if (!this.success || !this.vm.canBeSmallInt(returnValue)) return false;
-            return this.popNandPushIfOK(nToPop, returnValue);
+            this.vm.popNandPush(nToPop, returnValue);
+            return true;
         },
         popNandPushFloatIfOK: function(nToPop, returnValue) {
             if (!this.success) return false;
-            return this.popNandPushIfOK(nToPop, this.makeFloat(returnValue));
+            this.vm.popNandPush(nToPop, this.makeFloat(returnValue));
+            return true;
         },
         stackNonInteger: function(nDeep) {
             return this.checkNonInteger(this.vm.stackValue(nDeep));
@@ -6025,14 +6186,30 @@
             return this.pos32BitIntFor(rcvr ^ arg);
         },
         doBitShift: function() {
+            // SmallInts are handled by the bytecode,
+            // so rcvr is a LargeInteger
             var rcvr = this.stackPos32BitInt(1);
             var arg = this.stackInteger(0);
             if (!this.success) return 0;
-            var result = this.vm.safeShift(rcvr, arg); // returns negative result if failed
-            if (result > 0)
-                return this.pos32BitIntFor(this.vm.safeShift(rcvr, arg));
-            this.success = false;
-            return 0;
+            // we're not using safeShift() here because we want the full 32 bits
+            // and we know the receiver is unsigned
+            var result;
+            if (arg < 0) {
+                if (arg < -31) return 0; // JS would treat arg=32 as arg=0
+                result = rcvr >>> -arg;
+            } else {
+                if (arg > 31) {
+                    this.success = false; // rcvr is never 0
+                    return 0;
+                }
+                result = rcvr << arg;
+                // check for lost bits by seeing if computation is reversible
+                if ((result >>> arg) !== rcvr) {
+                    this.success = false;
+                    return 0;
+                }
+            }
+            return this.pos32BitIntFor(result);
         },
         safeFDiv: function(dividend, divisor) {
             if (divisor === 0.0) {
@@ -6080,23 +6257,23 @@
                 result *= Math.pow(2, Math.floor((exponent + i) / steps));
             return result;
         },
-        primitiveLessThanLargeIntegers: function() {
-            return this.pop2andPushBoolIfOK(this.stackSigned53BitInt(1) < this.stackSigned53BitInt(0));
+        primitiveLessThanLargeIntegers: function(argCount) {
+            return this.popNandPushBoolIfOK(argCount+1, this.stackSigned53BitInt(1) < this.stackSigned53BitInt(0));
         },
-        primitiveGreaterThanLargeIntegers: function() {
-            return this.pop2andPushBoolIfOK(this.stackSigned53BitInt(1) > this.stackSigned53BitInt(0));
+        primitiveGreaterThanLargeIntegers: function(argCount) {
+            return this.popNandPushBoolIfOK(argCount+1, this.stackSigned53BitInt(1) > this.stackSigned53BitInt(0));
         },
-        primitiveLessOrEqualLargeIntegers: function() {
-            return this.pop2andPushBoolIfOK(this.stackSigned53BitInt(1) <= this.stackSigned53BitInt(0));
+        primitiveLessOrEqualLargeIntegers: function(argCount) {
+            return this.popNandPushBoolIfOK(argCount+1, this.stackSigned53BitInt(1) <= this.stackSigned53BitInt(0));
         },
-        primitiveGreaterOrEqualLargeIntegers: function() {
-            return this.pop2andPushBoolIfOK(this.stackSigned53BitInt(1) >= this.stackSigned53BitInt(0));
+        primitiveGreaterOrEqualLargeIntegers: function(argCount) {
+            return this.popNandPushBoolIfOK(argCount+1, this.stackSigned53BitInt(1) >= this.stackSigned53BitInt(0));
         },
-        primitiveEqualLargeIntegers: function() {
-            return this.pop2andPushBoolIfOK(this.stackSigned53BitInt(1) === this.stackSigned53BitInt(0));
+        primitiveEqualLargeIntegers: function(argCount) {
+            return this.popNandPushBoolIfOK(argCount+1, this.stackSigned53BitInt(1) === this.stackSigned53BitInt(0));
         },
-        primitiveNotEqualLargeIntegers: function() {
-            return this.pop2andPushBoolIfOK(this.stackSigned53BitInt(1) !== this.stackSigned53BitInt(0));
+        primitiveNotEqualLargeIntegers: function(argCount) {
+            return this.popNandPushBoolIfOK(argCount+1, this.stackSigned53BitInt(1) !== this.stackSigned53BitInt(0));
         },
     },
     'utils', {
@@ -6227,6 +6404,17 @@
             var stString = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassString], jsString.length);
             for (var i = 0; i < jsString.length; ++i)
                 stString.bytes[i] = jsString.charCodeAt(i) & 0xFF;
+            return stString;
+        },
+        makeStStringFromBytes: function(bytes, zeroTerminated) {
+            var length = bytes.length;
+            if (zeroTerminated) {
+                length = bytes.indexOf(0);
+                if (length < 0) length = bytes.length;
+            }
+            var stString = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassString], length);
+            for (var i = 0; i < length; ++i)
+                stString.bytes[i] = bytes[i];
             return stString;
         },
         makeStObject: function(obj, proxyClass) {
@@ -6520,12 +6708,12 @@
         primitiveFullGC: function(argCount) {
             this.vm.image.fullGC("primitive");
             var bytes = this.vm.image.bytesLeft();
-            return this.popNandPushIfOK(1, this.makeLargeIfNeeded(bytes));
+            return this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(bytes));
         },
         primitivePartialGC: function(argCount) {
             this.vm.image.partialGC("primitive");
             var bytes = this.vm.image.bytesLeft();
-            return this.popNandPushIfOK(1, this.makeLargeIfNeeded(bytes));
+            return this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(bytes));
         },
         primitiveMakePoint: function(argCount, checkNumbers) {
             var x = this.vm.stackValue(1);
@@ -6613,6 +6801,29 @@
             // Primitive failed, restore state for failure code
             this.vm.popN(arraySize);
             this.vm.push(primIdx);
+            this.vm.push(argumentArray);
+            return false;
+        },
+        primitiveDoNamedPrimitive: function(argCount) {
+            var argumentArray = this.stackNonInteger(0),
+                rcvr = this.stackNonInteger(1),
+                primMethod = this.stackNonInteger(2);
+            if (!this.success) return false;
+            var arraySize = argumentArray.pointersSize(),
+                cntxSize = this.vm.activeContext.pointersSize();
+            if (this.vm.sp + arraySize >= cntxSize) return false;
+            // Pop primIndex, rcvr, and argArray, then push new receiver and args in place...
+            this.vm.popN(3);
+            this.vm.push(rcvr);
+            for (var i = 0; i < arraySize; i++)
+                this.vm.push(argumentArray.pointers[i]);
+            // Run the primitive
+            if (this.doNamedPrimitive(arraySize, primMethod))
+                return true;
+            // Primitive failed, restore state for failure code
+            this.vm.popN(arraySize + 1);
+            this.vm.push(primMethod);
+            this.vm.push(rcvr);
             this.vm.push(argumentArray);
             return false;
         },
@@ -6950,6 +7161,7 @@
             // No need to nil-out remaining temps as context pointers are nil-initialized.
             this.vm.popN(argCount + 1);
             this.vm.newActiveContext(newContext);
+            if (!closureMethod.compiled) this.vm.compileIfPossible(closureMethod);
         },
     },
     'scheduling', {
@@ -7007,11 +7219,16 @@
             oldProc.dirty = true;
             this.vm.newActiveContext(newProc.pointers[Squeak.Proc_suspendedContext]);
             newProc.pointers[Squeak.Proc_suspendedContext] = this.vm.nilObj;
+            if (!this.oldPrims) newProc.pointers[Squeak.Proc_myList] = this.vm.nilObj;
             this.vm.reclaimableContextCount = 0;
             if (this.vm.breakOnContextChanged) {
                 this.vm.breakOnContextChanged = false;
                 this.vm.breakNow();
             }
+            if (this.vm.logProcess) console.log(
+                "\n============= Process Switch ==================\n"
+                + this.vm.printProcess(newProc, true, this.vm.logSends ? '| ' : '')
+                + "===============================================");
         },
         wakeHighestPriority: function() {
             //Return the highest priority process that is ready to run.
@@ -7070,7 +7287,10 @@
             } else {
                 var temp = first;
                 while (true) {
-                    if (temp.isNil) return this.success = false;
+                    if (temp.isNil) {
+                        if (this.oldPrims) this.success = false;
+                        return;
+                    }
                     next = temp.pointers[Squeak.Link_nextLink];
                     if (next === process) break;
                     temp = next;
@@ -7215,7 +7435,7 @@
                 case 0: value = (argv && argv[0]) || this.filenameToSqueak(Squeak.vmPath + Squeak.vmFile); break;
                 case 1: value = (argv && argv[1]) || this.display.documentName; break; // 1.x images want document here
                 case 2: value = (argv && argv[2]) || this.display.documentName; break; // later images want document here
-                case 1001: value = Squeak.platformName; break;
+                case 1001: value = this.vm.options.unix ? "unix" : Squeak.platformName; break;
                 case 1002: value = Squeak.osVersion; break;
                 case 1003: value = Squeak.platformSubtype; break;
                 case 1004: value = Squeak.vmVersion + ' ' + Squeak.vmMakerVersion; break;
@@ -7310,17 +7530,20 @@
                 // 46   size of machine code zone, in bytes (stored in image file header; Cog JIT VM only, otherwise nil)
                 case 46: return 0;
                 // 47   desired size of machine code zone, in bytes (applies at startup only, stored in image file header; Cog JIT VM only)
-                case 48: return 0;
-                // 48   various properties of the Cog VM as an integer encoding an array of bit flags.
-                //      Bit 0: tells the VM that the image's Process class has threadId as its 5th inst var (after nextLink, suspendedContext, priority & myList)
-                //      Bit 1: on Cog JIT VMs asks the VM to set the flag bit in interpreted methods
-                //      Bit 2: if set, preempting a process puts it to the head of its run queue, not the back,
+                case 48: return 0; // not yet using/modifying this.vm.image.headerFlags
+                // 48	various properties stored in the image header (that instruct the VM) as an integer encoding an array of bit flags.
+                //     Bit 0: in a threaded VM, if set, tells the VM that the image's Process class has threadAffinity as its 5th inst var
+                //             (after nextLink, suspendedContext, priority & myList)
+                //     Bit 1: in Cog JIT VMs, if set, asks the VM to set the flag bit in interpreted methods
+                //     Bit 2: if set, preempting a process puts it to the head of its run queue, not the back,
                 //             i.e. preempting a process by a higher priority one will not cause the preempted process to yield
-                //             to others at the same priority.
-                //      Bit 3: in a muilt-threaded VM, if set, the Window system will only be accessed from the first VM thread
-                //      Bit 4: in a Spur vm, if set, causes weaklings and ephemerons to be queued individually for finalization
-                //      Bit 5: if set, implies wheel events will be delivered as such and not mapped to arrow key events
-                //      Bit 6: if set, implies arithmetic primitives will fail if given arguments of different types (float vs int)
+                //                 to others at the same priority.
+                //     Bit 3: in a muilt-threaded VM, if set, the Window system will only be accessed from the first VM thread (now unassigned)
+                //     Bit 4: in a Spur VM, if set, causes weaklings and ephemerons to be queued individually for finalization
+                //     Bit 5: if set, implies wheel events will be delivered as such and not mapped to arrow key events
+                //     Bit 6: if set, implies arithmetic primitives will fail if given arguments of different types (float vs int)
+                //     Bit 7: if set, causes times delivered from file primitives to be in UTC rather than local time
+                //     Bit 8: if set, implies the VM will not upscale the display on high DPI monitors; older VMs did this by default.
                 // 49   the size of the external semaphore table (read-write; Cog VMs only)
                 // 50-51 reserved for VM parameters that persist in the image (such as eden above)
                 // 52   root (remembered) table maximum size (read-only)
@@ -7470,7 +7693,7 @@
     });
 
     /*
-     * Copyright (c) 2014-2020 Vanessa Freudenberg
+     * Copyright (c) 2014-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -7608,22 +7831,43 @@
                 'bitShift:', '//', 'bitAnd:', 'bitOr:', 'at:', 'at:put:', 'size', 'next', 'nextPut:',
                 'atEnd', '==', 'class', 'blockCopy:', 'value', 'value:', 'do:', 'new', 'new:', 'x', 'y'];
             this.doitCounter = 0;
+            this.blockCounter = 0;
         },
     },
     'accessing', {
-        compile: function(method, optClass, optSel) {
-            if (method.methodSignFlag()) {
-                return; // Sista bytecode set not (yet) supported by JIT
-            } else if (method.compiled === undefined) {
+        compile: function(method, optClassObj, optSelObj) {
+            if (method.compiled === undefined) {
                 // 1st time
                 method.compiled = false;
             } else {
                 // 2nd time
                 this.singleStep = false;
                 this.debug = this.comments;
-                var clsName = optClass && optClass.className(),
-                    sel = optSel && optSel.bytesAsString();
-                method.compiled = this.generate(method, clsName, sel);
+                var clsName, sel, instVars;
+                if (this.debug && !optClassObj) {
+                    // this is expensive, so only do it when debugging
+                    var isMethod = method.sqClass === this.vm.specialObjects[Squeak.splOb_ClassCompiledMethod];
+                    this.vm.allMethodsDo(function(classObj, methodObj, selectorObj) {
+                        if (isMethod ? methodObj === method : methodObj.pointers.includes(method)) {
+                            optClassObj = classObj;
+                            optSelObj = selectorObj;
+                            return true;
+                        }
+                    });
+                }
+                if (optClassObj) {
+                    clsName = optClassObj.className();
+                    sel = optSelObj.bytesAsString();
+                    if (this.debug) {
+                        // only when debugging
+                        var isMethod = method.sqClass === this.vm.specialObjects[Squeak.splOb_ClassCompiledMethod];
+                        if (!isMethod) {
+                            clsName = "[] in " + clsName;
+                        }
+                        instVars = optClassObj.allInstVarNames();
+                    }
+                }
+                method.compiled = this.generate(method, clsName, sel, instVars);
             }
         },
         enableSingleStepping: function(method, optClass, optSel) {
@@ -7650,26 +7894,31 @@
             return true;
         },
         functionNameFor: function(cls, sel) {
-            if (cls === undefined || cls === '?') return "DOIT_" + ++this.doitCounter;
+            if (cls === undefined || cls === '?') {
+                var isMethod = this.method.sqClass === this.vm.specialObjects[Squeak.splOb_ClassCompiledMethod];
+                return isMethod ? "DOIT_" + ++this.doitCounter : "BLOCK_" + ++this.blockCounter;
+            }
+            cls = cls.replace(/ /g, "_").replace("[]", "Block");
             if (!/[^a-zA-Z0-9:_]/.test(sel))
-                return (cls + "_" + sel).replace(/[: ]/g, "_");
+                return cls + "_" + sel.replace(/:/g, "ː"); // unicode colon is valid in JS identifiers
             var op = sel.replace(/./g, function(char) {
                 var repl = {'|': "OR", '~': "NOT", '<': "LT", '=': "EQ", '>': "GT",
                         '&': "AND", '@': "AT", '*': "TIMES", '+': "PLUS", '\\': "MOD",
                         '-': "MINUS", ',': "COMMA", '/': "DIV", '?': "IF"}[char];
                 return repl || 'OPERATOR';
             });
-            return cls.replace(/[ ]/, "_") + "__" + op + "__";
+            return cls + "__" + op + "__";
         },
     },
     'generating', {
         generate: function(method, optClass, optSel, optInstVarNames) {
             this.method = method;
+            this.sista = method.methodSignFlag();
             this.pc = 0;                // next bytecode
             this.endPC = 0;             // pc of furthest jump target
             this.prevPC = 0;            // pc at start of current instruction
             this.source = [];           // snippets will be joined in the end
-            this.sourceLabels = {};     // source pos of generated labels
+            this.sourceLabels = {};     // source pos of generated jump labels
             this.needsLabel = {};       // jump targets
             this.sourcePos = {};        // source pos of optional vars / statements
             this.needsVar = {};         // true if var was used
@@ -7685,6 +7934,21 @@
             this.sourcePos['temp[']      = this.source.length; this.source.push("var temp = vm.homeContext.pointers;\n");
             this.sourcePos['lit[']       = this.source.length; this.source.push("var lit = vm.method.pointers;\n");
             this.sourcePos['loop-start'] = this.source.length; this.source.push("while (true) switch (vm.pc) {\ncase 0:\n");
+            if (this.sista) this.generateSista(method);
+            else this.generateV3(method);
+            var funcName = this.functionNameFor(optClass, optSel);
+            if (this.singleStep) {
+                if (this.debug) this.source.push("// all valid PCs have a label;\n");
+                this.source.push("default: throw Error('invalid PC');\n}"); // all PCs handled
+            } else {
+                this.sourcePos['loop-end'] = this.source.length; this.source.push("default: vm.interpretOne(true); return;\n}");
+                this.deleteUnneededLabels();
+            }
+            this.deleteUnneededVariables();
+            var source = "'use strict';\nreturn function " + funcName + "(vm) {\n" + this.source.join("") + "}";
+            return new Function(source)();
+        },
+        generateV3: function(method) {
             this.done = false;
             while (!this.done) {
                 var byte = method.bytes[this.pc++],
@@ -7736,12 +8000,12 @@
                             case 0x7B: this.generateReturn("vm.nilObj"); break;
                             case 0x7C: this.generateReturn("stack[vm.sp]"); break;
                             case 0x7D: this.generateBlockReturn(); break;
-                            default: throw Error("unusedBytecode");
+                            default: throw Error("unusedBytecode " + byte);
                         }
                         break;
                     // Extended bytecodes
                     case 0x80: case 0x88:
-                        this.generateExtended(byte);
+                        this.generateV3Extended(byte);
                         break;
                     // short jump
                     case 0x90:
@@ -7781,18 +8045,8 @@
                         break;
                 }
             }
-            var funcName = this.functionNameFor(optClass, optSel);
-            if (this.singleStep) {
-                if (this.debug) this.source.push("// all valid PCs have a label;\n");
-                this.source.push("default: throw Error('invalid PC');\n}"); // all PCs handled
-            } else {
-                this.sourcePos['loop-end'] = this.source.length; this.source.push("default: vm.interpretOne(true); return;\n}");
-                this.deleteUnneededLabels();
-            }
-            this.deleteUnneededVariables();
-            return new Function("'use strict';\nreturn function " + funcName + "(vm) {\n" + this.source.join("") + "}")();
         },
-        generateExtended: function(bytecode) {
+        generateV3Extended: function(bytecode) {
             var byte2, byte3;
             switch (bytecode) {
                 // extended push
@@ -7877,7 +8131,7 @@
                 case 0x8B:
                     byte2 = this.method.bytes[this.pc++];
                     byte3 = this.method.bytes[this.pc++];
-                    this.generateCallPrimitive(byte2 + 256 * byte3);
+                    this.generateCallPrimitive(byte2 + 256 * byte3, 0x81);
                     return
                 // remote push from temp vector
                 case 0x8C:
@@ -7909,6 +8163,259 @@
                     return;
             }
         },
+        generateSista: function() {
+            var bytes = this.method.bytes,
+                b,
+                b2,
+                b3,
+                extA = 0,
+                extB = 0;
+            this.done = false;
+            while (!this.done) {
+                b = bytes[this.pc++];
+                switch (b) {
+                    // 1 Byte Bytecodes
+
+                    // load receiver variable
+                    case 0x00: case 0x01: case 0x02: case 0x03: case 0x04: case 0x05: case 0x06: case 0x07:
+                    case 0x08: case 0x09: case 0x0A: case 0x0B: case 0x0C: case 0x0D: case 0x0E: case 0x0F:
+                        this.generatePush("inst[", b & 0x0F, "]");
+                        break;
+                    // load literal variable
+                    case 0x10: case 0x11: case 0x12: case 0x13: case 0x14: case 0x15: case 0x16: case 0x17:
+                    case 0x18: case 0x19: case 0x1A: case 0x1B: case 0x1C: case 0x1D: case 0x1E: case 0x1F:
+                        this.generatePush("lit[", 1 + (b & 0x0F), "].pointers[1]");
+                        break;
+                    // load literal constant
+                    case 0x20: case 0x21: case 0x22: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27:
+                    case 0x28: case 0x29: case 0x2A: case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F:
+                    case 0x30: case 0x31: case 0x32: case 0x33: case 0x34: case 0x35: case 0x36: case 0x37:
+                    case 0x38: case 0x39: case 0x3A: case 0x3B: case 0x3C: case 0x3D: case 0x3E: case 0x3F:
+                        this.generatePush("lit[", 1 + (b & 0x1F), "]");
+                        break;
+                    // load temporary variable
+                    case 0x40: case 0x41: case 0x42: case 0x43: case 0x44: case 0x45: case 0x46: case 0x47:
+                        this.generatePush("temp[", 6 + (b & 0x07), "]");
+                        break;
+                    case 0x48: case 0x49: case 0x4A: case 0x4B:
+                        this.generatePush("temp[", 6 + (b & 0x03) + 8, "]");
+                        break;
+                    case 0x4C: this.generatePush("rcvr");
+                        break;
+                    case 0x4D: this.generatePush("vm.trueObj");
+                        break;
+                    case 0x4E: this.generatePush("vm.falseObj");
+                        break;
+                    case 0x4F: this.generatePush("vm.nilObj");
+                        break;
+                    case 0x50: this.generatePush(0);
+                        break;
+                    case 0x51: this.generatePush(1);
+                        break;
+                    case 0x52:
+                        this.needsVar['stack'] = true;
+                        this.generateInstruction("push thisContext", "stack[++vm.sp] = vm.exportThisContext()");
+                        break;
+                    case 0x53:
+                        this.needsVar['stack'] = true;
+                        this.generateInstruction("dup", "var dup = stack[vm.sp]; stack[++vm.sp] = dup");
+                        break;
+                    case 0x54: case 0x55: case 0x56: case 0x57:
+                        throw Error("unusedBytecode " + b);
+                    case 0x58: this.generateReturn("rcvr");
+                        break;
+                    case 0x59: this.generateReturn("vm.trueObj");
+                        break;
+                    case 0x5A: this.generateReturn("vm.falseObj");
+                        break;
+                    case 0x5B: this.generateReturn("vm.nilObj");
+                        break;
+                    case 0x5C: this.generateReturn("stack[vm.sp]");
+                        break;
+                    case 0x5D: this.generateBlockReturn("vm.nilObj");
+                        break;
+                    case 0x5E: this.generateBlockReturn();
+                        break;
+                    case 0x5F: break; // nop
+                    case 0x60: case 0x61: case 0x62: case 0x63: case 0x64: case 0x65: case 0x66: case 0x67:
+                    case 0x68: case 0x69: case 0x6A: case 0x6B: case 0x6C: case 0x6D: case 0x6E: case 0x6F:
+                        this.generateNumericOp(b);
+                        break;
+                    case 0x70: case 0x71: case 0x72: case 0x73: case 0x74: case 0x75: case 0x76: case 0x77:
+                    case 0x78: case 0x79: case 0x7A: case 0x7B: case 0x7C: case 0x7D: case 0x7E: case 0x7F:
+                        this.generateQuickPrim(b);
+                        break;
+                    case 0x80: case 0x81: case 0x82: case 0x83: case 0x84: case 0x85: case 0x86: case 0x87:
+                    case 0x88: case 0x89: case 0x8A: case 0x8B: case 0x8C: case 0x8D: case 0x8E: case 0x8F:
+                        this.generateSend("lit[", 1 + (b & 0x0F), "]", 0, false);
+                        break;
+                    case 0x90: case 0x91: case 0x92: case 0x93: case 0x94: case 0x95: case 0x96: case 0x97:
+                    case 0x98: case 0x99: case 0x9A: case 0x9B: case 0x9C: case 0x9D: case 0x9E: case 0x9F:
+                        this.generateSend("lit[", 1 + (b & 0x0F), "]", 1, false);
+                        break;
+                    case 0xA0: case 0xA1: case 0xA2: case 0xA3: case 0xA4: case 0xA5: case 0xA6: case 0xA7:
+                    case 0xA8: case 0xA9: case 0xAA: case 0xAB: case 0xAC: case 0xAD: case 0xAE: case 0xAF:
+                        this.generateSend("lit[", 1 + (b & 0x0F), "]", 2, false);
+                        break;
+                    case 0xB0: case 0xB1: case 0xB2: case 0xB3: case 0xB4: case 0xB5: case 0xB6: case 0xB7:
+                        this.generateJump((b & 0x07) + 1);
+                        break;
+                    case 0xB8: case 0xB9: case 0xBA: case 0xBB: case 0xBC: case 0xBD: case 0xBE: case 0xBF:
+                        this.generateJumpIf(true, (b & 0x07) + 1);
+                        break;
+                    case 0xC0: case 0xC1: case 0xC2: case 0xC3: case 0xC4: case 0xC5: case 0xC6: case 0xC7:
+                        this.generateJumpIf(false, (b & 0x07) + 1);
+                        break;
+                    case 0xC8: case 0xC9: case 0xCA: case 0xCB: case 0xCC: case 0xCD: case 0xCE: case 0xCF:
+                        this.generatePopInto("inst[", b & 0x07, "]");
+                        break;
+                    case 0xD0: case 0xD1: case 0xD2: case 0xD3: case 0xD4: case 0xD5: case 0xD6: case 0xD7:
+                        this.generatePopInto("temp[", 6 + (b & 0x07), "]");
+                        break;
+                    case 0xD8: this.generateInstruction("pop", "vm.sp--");
+                        break;
+                    case 0xD9:
+                        throw Error("unumplementedBytecode: 0xD9 (unconditional trap)");
+                    case 0xDA: case 0xDB: case 0xDC: case 0xDD: case 0xDE: case 0xDF:
+                        throw Error("unusedBytecode " + b);
+
+                    // 2 Byte Bytecodes
+                    case 0xE0:
+                        b2 = bytes[this.pc++];
+                        extA = extA * 256 + b2;
+                        continue;
+                    case 0xE1:
+                        b2 = bytes[this.pc++];
+                        extB = extB * 256 + (b2 < 128 ? b2 : b2 - 256);
+                        continue;
+                    case 0xE2:
+                        b2 = bytes[this.pc++];
+                        this.generatePush("inst[", b2 + extA * 256, "]");
+                        break;
+                    case 0xE3:
+                        b2 = bytes[this.pc++];
+                        this.generatePush("lit[", 1 + b2 + extA * 256, "].pointers[1]");
+                        break;
+                    case 0xE4:
+                        b2 = bytes[this.pc++];
+                        this.generatePush("lit[", 1 + b2 + extA * 256, "]");
+                        break;
+                    case 0xE5:
+                        b2 = bytes[this.pc++];
+                        this.generatePush("temp[", 6 + b2, "]");
+                        break;
+                    case 0xE6:
+                        throw Error("unusedBytecode 0xE6");
+                    case 0xE7:
+                        b2 = bytes[this.pc++];
+                        var popValues = b2 > 127,
+                            count = b2 & 127;
+                        this.generateClosureTemps(count, popValues);
+                        break;
+                    case 0xE8:
+                        b2 = bytes[this.pc++];
+                        this.generatePush(b2 + extB * 256);
+                        break;
+                    case 0xE9:
+                        b2 = bytes[this.pc++];
+                        this.generatePush("vm.image.getCharacter(", b2 + extB * 256, ")");
+                        break;
+                    case 0xEA:
+                        b2 = bytes[this.pc++];
+                        this.generateSend("lit[", 1 + (b2 >> 3) + (extA << 5), "]", (b2 & 7) + (extB << 3), false);
+                        break;
+                    case 0xEB:
+                        b2 = bytes[this.pc++];
+                        var lit = (b2 >> 3) + (extA << 5),
+                            numArgs = (b2 & 7) + ((extB & 63) << 3),
+                            directed = extB >= 64;
+                            this.generateSend("lit[", 1 + lit, "]", numArgs, directed ? "directed" : true);
+                        break;
+                    case 0xEC:
+                        throw Error("unimplemented bytecode: 0xEC (class trap)");
+                    case 0xED:
+                        b2 = bytes[this.pc++];
+                        this.generateJump(b2 + extB * 256);
+                        break;
+                    case 0xEE:
+                        b2 = bytes[this.pc++];
+                        this.generateJumpIf(true, b2 + extB * 256);
+                        break;
+                    case 0xEF:
+                        b2 = bytes[this.pc++];
+                        this.generateJumpIf(false, b2 + extB * 256);
+                        break;
+                    case 0xF0:
+                        b2 = bytes[this.pc++];
+                        this.generatePopInto("inst[", b2 + extA * 256, "]");
+                        break;
+                    case 0xF1:
+                        b2 = bytes[this.pc++];
+                        this.generatePopInto("lit[", 1 + b2 + extA * 256, "].pointers[1]");
+                        break;
+                    case 0xF2:
+                        b2 = bytes[this.pc++];
+                        this.generatePopInto("temp[", 6 + b2, "]");
+                        break;
+                    case 0xF3:
+                        b2 = bytes[this.pc++];
+                        this.generateStoreInto("inst[", b2 + extA * 256, "]");
+                        break;
+                    case 0xF4:
+                        b2 = bytes[this.pc++];
+                        this.generateStoreInto("lit[", 1 + b2 + extA * 256, "].pointers[1]");
+                        break;
+                    case 0xF5:
+                        b2 = bytes[this.pc++];
+                        this.generateStoreInto("temp[", 6 + b2, "]");
+                        break;
+                    case 0xF6: case 0xF7:
+                        throw Error("unusedBytecode " + b);
+
+                    // 3 Byte Bytecodes
+
+                    case 0xF8:
+                        b2 = bytes[this.pc++];
+                        b3 = bytes[this.pc++];
+                        this.generateCallPrimitive(b2 + b3 * 256, 0xF5);
+                        break;
+                    case 0xF9:
+                        b2 = bytes[this.pc++];
+                        b3 = bytes[this.pc++];
+                        this.generatePushFullClosure(b2 + extA * 255, b3);
+                        break;
+                    case 0xFA:
+                        b2 = bytes[this.pc++];
+                        b3 = bytes[this.pc++];
+                        var numArgs = (b2 & 0x07) + (extA & 0x0F) * 8,
+                            numCopied = (b2 >> 3 & 0x7) + (extA >> 4) * 8,
+                            blockSize = b3 + (extB << 8);
+                        this.generateClosureCopy(numArgs, numCopied, blockSize);
+                        break;
+                    case 0xFB:
+                        b2 = bytes[this.pc++];
+                        b3 = bytes[this.pc++];
+                        this.generatePush("temp[", 6 + b3, "].pointers[", b2, "]");
+                        break;
+                    case 0xFC:
+                        b2 = bytes[this.pc++];
+                        b3 = bytes[this.pc++];
+                        this.generateStoreInto("temp[", 6 + b3, "].pointers[", b2, "]");
+                        break;
+                    case 0xFD:
+                        b2 = bytes[this.pc++];
+                        b3 = bytes[this.pc++];
+                        this.generatePopInto("temp[", 6 + b3, "].pointers[", b2, "]");
+                        break;
+                    case 0xFE: case 0xFF:
+                        throw Error("unusedBytecode " + b);
+                    default:
+                        throw Error("illegal bytecode: " + b);
+                }
+                extA = 0;
+                extB = 0;
+            }
+        },
         generatePush: function(target, arg1, suffix1, arg2, suffix2) {
             if (this.debug) this.generateDebugCode("push", target, arg1, suffix1, arg2, suffix2);
             this.generateLabel();
@@ -7936,7 +8443,7 @@
                 }
             }
             this.source.push(" = stack[vm.sp];\n");
-            this.generateDirty(target, arg1);
+            this.generateDirty(target, arg1, suffix1);
         },
         generatePopInto: function(target, arg1, suffix1, arg2, suffix2) {
             if (this.debug) this.generateDebugCode("pop into", target, arg1, suffix1, arg2, suffix2);
@@ -7951,7 +8458,7 @@
                 }
             }
             this.source.push(" = stack[vm.sp--];\n");
-            this.generateDirty(target, arg1);
+            this.generateDirty(target, arg1, suffix1);
         },
         generateReturn: function(what) {
             if (this.debug) this.generateDebugCode("return", what);
@@ -7962,14 +8469,19 @@
             this.needsBreak = false; // returning anyway
             this.done = this.pc > this.endPC;
         },
-        generateBlockReturn: function() {
+        generateBlockReturn: function(retVal) {
             if (this.debug) this.generateDebugCode("block return");
             this.generateLabel();
-            this.needsVar['stack'] = true;
+            if (!retVal) {
+                this.needsVar['stack'] = true;
+                retVal = "stack[vm.sp--]";
+            }
             // actually stack === context.pointers but that would look weird
+            this.needsVar['context'] = true;
             this.source.push(
-                "vm.pc = ", this.pc, "; vm.doReturn(stack[vm.sp--], context.pointers[0]); return;\n");
+                "vm.pc = ", this.pc, "; vm.doReturn(", retVal, ", context.pointers[0]); return;\n");
             this.needsBreak = false; // returning anyway
+            this.done = this.pc > this.endPC;
         },
         generateJump: function(distance) {
             var destination = this.pc + distance;
@@ -8005,8 +8517,8 @@
         generateQuickPrim: function(byte) {
             if (this.debug) this.generateDebugCode("quick send #" + this.specialSelectors[(byte & 0x0F) + 16]);
             this.generateLabel();
-            switch (byte) {
-                case 0xC0: // at:
+            switch (byte & 0x0F) {
+                case 0x0: // at:
                     this.needsVar['stack'] = true;
                     this.source.push(
                         "var a, b; if ((a=stack[vm.sp-1]).sqClass === vm.specialObjects[7] && typeof (b=stack[vm.sp]) === 'number' && b>0 && b<=a.pointers.length) {\n",
@@ -8015,7 +8527,7 @@
                         "  vm.pc = ", this.pc, "; vm.sendSpecial(16); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return; }}\n");
                     this.needsLabel[this.pc] = true;
                     return;
-                case 0xC1: // at:put:
+                case 0x1: // at:put:
                     this.needsVar['stack'] = true;
                     this.source.push(
                         "var a, b; if ((a=stack[vm.sp-2]).sqClass === vm.specialObjects[7] && typeof (b=stack[vm.sp-1]) === 'number' && b>0 && b<=a.pointers.length) {\n",
@@ -8024,7 +8536,7 @@
                         "  vm.pc = ", this.pc, "; vm.sendSpecial(17); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return; }}\n");
                     this.needsLabel[this.pc] = true;
                     return;
-                case 0xC2: // size
+                case 0x2: // size
                     this.needsVar['stack'] = true;
                     this.source.push(
                         "if (stack[vm.sp].sqClass === vm.specialObjects[7]) stack[vm.sp] = stack[vm.sp].pointersSize();\n",     // Array
@@ -8032,18 +8544,18 @@
                         "else { vm.pc = ", this.pc, "; vm.sendSpecial(18); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return; }\n");
                     this.needsLabel[this.pc] = true;
                     return;
-                //case 0xC3: return false; // next
-                //case 0xC4: return false; // nextPut:
-                //case 0xC5: return false; // atEnd
-                case 0xC6: // ==
+                //case 0x3: return false; // next
+                //case 0x4: return false; // nextPut:
+                //case 0x5: return false; // atEnd
+                case 0x6: // ==
                     this.needsVar['stack'] = true;
                     this.source.push("var cond = stack[vm.sp-1] === stack[vm.sp];\nstack[--vm.sp] = cond ? vm.trueObj : vm.falseObj;\n");
                     return;
-                case 0xC7: // class
+                case 0x7: // class
                     this.needsVar['stack'] = true;
                     this.source.push("stack[vm.sp] = typeof stack[vm.sp] === 'number' ? vm.specialObjects[5] : stack[vm.sp].sqClass;\n");
                     return;
-                case 0xC8: // blockCopy:
+                case 0x8: // blockCopy:
                     this.needsVar['rcvr'] = true;
                     this.source.push(
                         "vm.pc = ", this.pc, "; if (!vm.primHandler.quickSendOther(rcvr, ", (byte & 0x0F), ")) ",
@@ -8051,18 +8563,18 @@
                     this.needsLabel[this.pc] = true;        // for send
                     this.needsLabel[this.pc + 2] = true;    // for start of block
                     return;
-                case 0xC9: // value
-                case 0xCA: // value:
-                case 0xCB: // do:
+                case 0x9: // value
+                case 0xA: // value:
+                case 0xB: // do:
                     this.needsVar['rcvr'] = true;
                     this.source.push(
                         "vm.pc = ", this.pc, "; if (!vm.primHandler.quickSendOther(rcvr, ", (byte & 0x0F), ")) vm.sendSpecial(", ((byte & 0x0F) + 16), "); return;\n");
                     this.needsLabel[this.pc] = true;
                     return;
-                //case 0xCC: return false; // new
-                //case 0xCD: return false; // new:
-                //case 0xCE: return false; // x
-                //case 0xCF: return false; // y
+                //case 0xC: return false; // new
+                //case 0xD: return false; // new:
+                //case 0xE: return false; // x
+                //case 0xF: return false; // y
             }
             // generic version for the bytecodes not yet handled above
             this.needsVar['rcvr'] = true;
@@ -8081,50 +8593,50 @@
             // if the op cannot be executed here, do a full send and return to main loop
             // we need a label for coming back
             this.needsLabel[this.pc] = true;
-            switch (byte) {
-                case 0xB0: // PLUS +
+            switch (byte & 0x0F) {
+                case 0x0: // PLUS +
                     this.needsVar['stack'] = true;
                     this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                     "if (typeof a === 'number' && typeof b === 'number') {\n",
                     "   stack[--vm.sp] = vm.primHandler.signed32BitIntegerFor(a + b);\n",
                     "} else { vm.pc = ", this.pc, "; vm.sendSpecial(0); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
                     return;
-                case 0xB1: // MINUS -
+                case 0x1: // MINUS -
                     this.needsVar['stack'] = true;
                     this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                     "if (typeof a === 'number' && typeof b === 'number') {\n",
                     "   stack[--vm.sp] = vm.primHandler.signed32BitIntegerFor(a - b);\n",
                     "} else { vm.pc = ", this.pc, "; vm.sendSpecial(1); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
                     return;
-                case 0xB2: // LESS <
+                case 0x2: // LESS <
                     this.needsVar['stack'] = true;
                     this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                     "if (typeof a === 'number' && typeof b === 'number') {\n",
                     "   stack[--vm.sp] = a < b ? vm.trueObj : vm.falseObj;\n",
                     "} else { vm.pc = ", this.pc, "; vm.sendSpecial(2); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
                     return;
-                case 0xB3: // GRTR >
+                case 0x3: // GRTR >
                     this.needsVar['stack'] = true;
                     this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                     "if (typeof a === 'number' && typeof b === 'number') {\n",
                     "   stack[--vm.sp] = a > b ? vm.trueObj : vm.falseObj;\n",
                     "} else { vm.pc = ", this.pc, "; vm.sendSpecial(3); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
                     return;
-                case 0xB4: // LEQ <=
+                case 0x4: // LEQ <=
                     this.needsVar['stack'] = true;
                     this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                     "if (typeof a === 'number' && typeof b === 'number') {\n",
                     "   stack[--vm.sp] = a <= b ? vm.trueObj : vm.falseObj;\n",
                     "} else { vm.pc = ", this.pc, "; vm.sendSpecial(4); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
                     return;
-                case 0xB5: // GEQ >=
+                case 0x5: // GEQ >=
                     this.needsVar['stack'] = true;
                     this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                     "if (typeof a === 'number' && typeof b === 'number') {\n",
                     "   stack[--vm.sp] = a >= b ? vm.trueObj : vm.falseObj;\n",
                     "} else { vm.pc = ", this.pc, "; vm.sendSpecial(5); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
                     return;
-                case 0xB6: // EQU =
+                case 0x6: // EQU =
                     this.needsVar['stack'] = true;
                     this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                     "if (typeof a === 'number' && typeof b === 'number') {\n",
@@ -8133,7 +8645,7 @@
                     "   stack[--vm.sp] = vm.trueObj;\n",
                     "} else { vm.pc = ", this.pc, "; vm.sendSpecial(6); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
                     return;
-                case 0xB7: // NEQ ~=
+                case 0x7: // NEQ ~=
                     this.needsVar['stack'] = true;
                     this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                     "if (typeof a === 'number' && typeof b === 'number') {\n",
@@ -8142,42 +8654,48 @@
                     "   stack[--vm.sp] = vm.falseObj;\n",
                     "} else { vm.pc = ", this.pc, "; vm.sendSpecial(7); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
                     return;
-                case 0xB8: // TIMES *
+                case 0x8: // TIMES *
                     this.source.push("vm.success = true; vm.resultIsFloat = false; if(!vm.pop2AndPushNumResult(vm.stackIntOrFloat(1) * vm.stackIntOrFloat(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(8); return}\n");
                     return;
-                case 0xB9: // DIV /
+                case 0x9: // DIV /
                     this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.quickDivide(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(9); return}\n");
                     return;
-                case 0xBA: // MOD \
+                case 0xA: // MOD \
                     this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.mod(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(10); return}\n");
                     return;
-                case 0xBB:  // MakePt int@int
+                case 0xB:  // MakePt int@int
                     this.source.push("vm.success = true; if(!vm.primHandler.primitiveMakePoint(1, true)) { vm.pc = ", this.pc, "; vm.sendSpecial(11); return}\n");
                     return;
-                case 0xBC: // bitShift:
+                case 0xC: // bitShift:
                     this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.safeShift(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(12); return}\n");
                     return;
-                case 0xBD: // Divide //
+                case 0xD: // Divide //
                     this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.div(vm.stackInteger(1),vm.stackInteger(0)))) { vm.pc = ", this.pc, "; vm.sendSpecial(13); return}\n");
                     return;
-                case 0xBE: // bitAnd:
+                case 0xE: // bitAnd:
                     this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.stackInteger(1) & vm.stackInteger(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(14); return}\n");
                     return;
-                case 0xBF: // bitOr:
+                case 0xF: // bitOr:
                     this.source.push("vm.success = true; if(!vm.pop2AndPushIntResult(vm.stackInteger(1) | vm.stackInteger(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(15); return}\n");
                     return;
             }
         },
         generateSend: function(prefix, num, suffix, numArgs, superSend) {
-            if (this.debug) this.generateDebugCode("send " + (prefix === "lit[" ? this.method.pointers[num].bytesAsString() : "..."));
+            if (this.debug) this.generateDebugCode(
+                (superSend === "directed" ? "directed super send " : superSend ? "super send " : "send ")
+                + (prefix === "lit[" ? this.method.pointers[num].bytesAsString() : "..."));
             this.generateLabel();
             this.needsVar[prefix] = true;
             this.needsVar['context'] = true;
             // set pc, activate new method, and return to main loop
             // unless the method was a successfull primitive call (no context change)
-            this.source.push(
-                "vm.pc = ", this.pc, "; vm.send(", prefix, num, suffix, ", ", numArgs, ", ", superSend, "); ",
-                "if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return;\n");
+            this.source.push("vm.pc = ", this.pc);
+            if (superSend === "directed") {
+                this.source.push("; vm.sendSuperDirected(", prefix, num, suffix, ", ", numArgs, "); ");
+            } else {
+                this.source.push("; vm.send(", prefix, num, suffix, ", ", numArgs, ", ", superSend, "); ");
+            }
+            this.source.push("if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return;\n");
             this.needsBreak = false; // already checked
             // need a label for coming back after send
             this.needsLabel[this.pc] = true;
@@ -8221,19 +8739,46 @@
             this.needsLabel[to] = true;     // for jump over closure
             if (to > this.endPC) this.endPC = to;
         },
-        generateCallPrimitive: function(index) {
+        generatePushFullClosure: function(index, b3) {
+            if (this.debug) this.generateDebugCode("push full closure " + (index + 1));
+            this.generateLabel();
+            this.needsVar['lit['] = true;
+            this.needsVar['rcvr'] = true;
+            this.needsVar['stack'] = true;
+            var numCopied = b3 & 63;
+            var outer;
+            if ((b3 >> 6 & 1) === 1) {
+                outer = "vm.nilObj";
+            } else {
+                outer = "context";
+            }
+            if ((b3 >> 7 & 1) === 1) {
+                throw Error("on-stack receiver not yet supported");
+            }
+            this.source.push("var closure = vm.newFullClosure(", outer, ", ", numCopied, ", lit[", 1 + index, "]);\n");
+            this.source.push("closure.pointers[", Squeak.ClosureFull_receiver, "] = rcvr;\n");
+            if (outer === "context") this.source.push("vm.reclaimableContextCount = 0;\n");
+            if (numCopied > 0) {
+                for (var i = 0; i < numCopied; i++)
+                    this.source.push("closure.pointers[", i + Squeak.ClosureFull_firstCopiedValue, "] = stack[vm.sp - ", numCopied - i - 1,"];\n");
+                this.source.push("stack[vm.sp -= ", numCopied - 1,"] = closure;\n");
+            } else {
+                this.source.push("stack[++vm.sp] = closure;\n");
+            }
+        },
+        generateCallPrimitive: function(index, extendedStoreBytecode) {
             if (this.debug) this.generateDebugCode("call primitive " + index);
             this.generateLabel();
-            if (this.method.bytes[this.pc] === 0x81)  {// extended store
+            if (this.method.bytes[this.pc] === extendedStoreBytecode)  {
                 this.needsVar['stack'] = true;
                 this.source.push("if (vm.primFailCode) {stack[vm.sp] = vm.getErrorObjectFromPrimFailCode(); vm.primFailCode = 0;}\n");
             }
         },
-        generateDirty: function(target, arg) {
+        generateDirty: function(target, arg, suffix) {
             switch(target) {
                 case "inst[": this.source.push("rcvr.dirty = true;\n"); break;
                 case "lit[": this.source.push(target, arg, "].dirty = true;\n"); break;
-                case "temp[": break;
+                case "temp[": if (suffix !== "]") this.source.push(target, arg, "].dirty = true;\n"); break;
                 default:
                     throw Error("unexpected target " + target);
             }
@@ -8258,7 +8803,7 @@
                 bytecodes.push((this.method.bytes[i] + 0x100).toString(16).slice(-2).toUpperCase());
             this.source.push("// ", this.prevPC, " <", bytecodes.join(" "), "> ", command);
             // append argument to comment
-            if (what) {
+            if (what !== undefined) {
                 this.source.push(" ");
                 switch (what) {
                     case 'vm.nilObj':    this.source.push('nil'); break;
@@ -8317,7 +8862,7 @@
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -8342,40 +8887,43 @@
     "audio", {
         startAudioOut: function() {
             if (!this.audioOutContext) {
-                var ctxProto = window.AudioContext || window.webkitAudioContext
-                    || window.mozAudioContext || window.msAudioContext;
-                this.audioOutContext = ctxProto && new ctxProto();
+                this.audioOutContext = new AudioContext();
             }
             return this.audioOutContext;
+        },
+        stopAudioOut: function() {
+            if (this.audioOutContext) {
+                this.audioOutContext.close();
+                this.audioOutContext = null;
+            }
         },
         startAudioIn: function(thenDo, errorDo) {
             if (this.audioInContext) {
                 this.audioInSource.disconnect();
                 return thenDo(this.audioInContext, this.audioInSource);
             }
-            navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia
-                || navigator.mozGetUserMedia || navigator.msGetUserMedia;
-            if (!navigator.getUserMedia) return errorDo("test: audio input not supported");
-            navigator.getUserMedia({audio: true, toString: function() {return "audio"}},
-                function onSuccess(stream) {
-                    var ctxProto = window.AudioContext || window.webkitAudioContext
-                        || window.mozAudioContext || window.msAudioContext;
-                    this.audioInContext = ctxProto && new ctxProto();
+            if (!navigator.mediaDevices) return errorDo("test: audio input not supported");
+            navigator.mediaDevices.getUserMedia({audio: true})
+                .then(stream => {
+                    this.audioInContext = new AudioContext();
                     this.audioInSource = this.audioInContext.createMediaStreamSource(stream);
                     thenDo(this.audioInContext, this.audioInSource);
-                },
-                function onError() {
-                    errorDo("cannot access microphone");
-                });
+                })
+                .catch(err => errorDo("cannot access microphone. " + err.name + ": " + err.message));
         },
-        stopAudio: function() {
-            if (this.audioInSource)
+        stopAudioIn: function() {
+            if (this.audioInSource) {
                 this.audioInSource.disconnect();
+                this.audioInSource = null;
+                this.audioInContext.close();
+                this.audioInContext = null;
+            }
+
         },
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -8429,7 +8977,7 @@
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -8509,11 +9057,12 @@
                 } else {
                     this.showForm(context, cursorForm, bounds, true);
                 }
-                var canvas = this.display.context.canvas,
-                    scale = canvas.offsetWidth / canvas.width,
-                    ratio = this.display.highdpi ? window.devicePixelRatio : 1;
-                cursorCanvas.style.width = (cursorCanvas.width * ratio * scale|0) + "px";
-                cursorCanvas.style.height = (cursorCanvas.height * ratio * scale|0) + "px";
+                var scale = this.display.scale || 1.0;
+                if (cursorForm.width <= 16 && cursorForm.height <= 16) {
+                    scale = 1.0;
+                }
+                cursorCanvas.style.width = Math.round(cursorCanvas.width * scale) + "px";
+                cursorCanvas.style.height = Math.round(cursorCanvas.height * scale) + "px";
                 this.display.cursorOffsetX = cursorForm.offsetX * scale|0;
                 this.display.cursorOffsetY = cursorForm.offsetY * scale|0;
             }
@@ -8765,8 +9314,8 @@
             return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(w, h));
         },
         primitiveScreenScaleFactor: function(argCount) {
-            var scale = this.display.initialScale || 1.0,
-                scaleFactor = 1.0 / scale;
+            var scale = this.display.scale || 1.0,
+                scaleFactor = Math.min(1.0 / scale, window.devicePixelRatio || 1.0);
             return this.popNandPushIfOK(argCount+1, this.makeFloat(scaleFactor));
         },
         primitiveSetFullScreen: function(argCount) {
@@ -8789,7 +9338,7 @@
         },
         primitiveTestDisplayDepth: function(argCount) {
             var supportedDepths =  [1, 2, 4, 8, 16, 32]; // match showForm
-            return this.pop2andPushBoolIfOK(supportedDepths.indexOf(this.stackInteger(0)) >= 0);
+            return this.popNandPushBoolIfOK(argCount+1, supportedDepths.indexOf(this.stackInteger(0)) >= 0);
         },
         loadForm: function(formObj, withOffset) {
             if (formObj.isNil) return null;
@@ -8848,10 +9397,18 @@
             }
             return this.popNIfOK(argCount);
         },
+        hostWindow_primitiveHostWindowTitle: function(argCount) {
+            if (this.display.setTitle) {
+                var utf8 = this.stackNonInteger(0).bytes;
+                var title = (new TextDecoder()).decode(utf8);
+                this.display.setTitle(title);
+            }
+            return this.popNIfOK(argCount);
+        }
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -8874,8 +9431,9 @@
 
     Object.extend(Squeak,
     "files", {
-        fsck: function(whenDone, dir, files, stats) {
+        fsck: function(whenDone, dir, files, stale, stats) {
             dir = dir || "";
+            stale = stale || {dirs: [], files: []};
             stats = stats || {dirs: 0, files: 0, bytes: 0, deleted: 0};
             if (!files) {
                 // find existing files
@@ -8895,17 +9453,17 @@
                         cursorReq.onsuccess = function(e) {
                             var cursor = e.target.result;
                             if (cursor) {
-                                files[cursor.key] = true;
+                                files[cursor.key] = cursor.value.byteLength;
                                 cursor.continue();
-                            } else { // done
-                                Squeak.fsck(whenDone, dir, files, stats);
+                            } else { // got all files
+                                Squeak.fsck(whenDone, dir, files, stale, stats);
                             }
                         };
                         cursorReq.onerror = function(e) {
                             console.error("fsck failed");
                         };
                     });
-                }
+                } // otherwise fall through
             }
             // check directories
             var entries = Squeak.dirList(dir);
@@ -8913,47 +9471,60 @@
                 var path = dir + "/" + name,
                     isDir = entries[name][3];
                 if (isDir) {
+                    stats.dirs++;
                     var exists = "squeak:" + path in Squeak.Settings;
                     if (exists) {
-                        Squeak.fsck(null, path, files, stats);
-                        stats.dirs++;
+                        Squeak.fsck(null, path, files, stale, stats);
                     } else {
-                        console.log("Deleting stale directory " + path);
-                        Squeak.dirDelete(path);
-                        stats.deleted++;
+                        stale.dirs.push(path);
                     }
                 } else {
-                    if (!files[path]) {
-                        console.log("Deleting stale file entry " + path);
-                        Squeak.fileDelete(path, true);
-                        stats.deleted++;
-                    } else {
-                        files[path] = false; // mark as visited
-                        stats.files++;
+                    stats.files++;
+                    if (path in files) {
+                        files[path] = null; // mark as visited
                         stats.bytes += entries[name][4];
+                    } else {
+                        stale.files.push(path);
                     }
                 }
             }
-            // check orphaned files
             if (dir === "") {
+                // we're back at the root, almost done
                 console.log("squeak fsck: " + stats.dirs + " directories, " + stats.files + " files, " + (stats.bytes/1000000).toFixed(1) + " MBytes");
+                // check orphaned files
                 var orphaned = [];
                 for (var path in files) {
-                    if (files[path]) orphaned.push(path); // not marked visited
+                    var size = files[path];
+                    if (size !== null) orphaned.push({ path: path, size: size }); // not marked visited
                 }
-                if (orphaned.length > 0) {
-                    for (var i = 0; i < orphaned.length; i++) {
-                        console.log("Deleting orphaned file " + orphaned[i]);
-                        delete Squeak.Settings["squeak-file:" + orphaned[i]];
-                        delete Squeak.Settings["squeak-file.lz:" + orphaned[i]];
-                        stats.deleted++;
-                    }
-                    if (typeof indexedDB !== "undefined") {
-                        this.dbTransaction("readwrite", "fsck delete", function(fileStore) {
-                            for (var i = 0; i < orphaned.length; i++) {
-                                fileStore.delete(orphaned[i]);
-                            }                    });
-                    }
+                // recreate directory entries for orphaned files
+                for (var i = 0; i < orphaned.length; i++) {
+                    var path = Squeak.splitFilePath(orphaned[i].path);
+                    var size = orphaned[i].size;
+                    console.log("squeak fsck: restoring " + path.fullname + " (" + size + " bytes)");
+                    Squeak.dirCreate(path.dirname, true, "force");
+                    var directory = Squeak.dirList(path.dirname);
+                    var now = Squeak.totalSeconds();
+                    var entry = [/*name*/ path.basename, /*ctime*/ now, /*mtime*/ 0, /*dir*/ false, size];
+                    directory[path.basename] = entry;
+                    Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(directory);
+                }
+                for (var i = 0; i < stale.dirs.length; i++) {
+                    var dir = stale.dirs[i];
+                    if (Squeak.Settings["squeak:" + dir]) continue; // now contains orphaned files
+                    console.log("squeak fsck: cleaning up directory " + dir);
+                    Squeak.dirDelete(dir);
+                    stats.dirs--;
+                    stats.deleted++;
+                }
+                for (var i = 0; i < stale.files.length; i++) {
+                    var path = stale.files[i];
+                    if (path in files) continue; // was orphaned
+                    if (Squeak.Settings["squeak:" + path]) continue; // now is a directory
+                    console.log("squeak fsck: cleaning up file entry " + path);
+                    Squeak.fileDelete(path);
+                    stats.files--;
+                    stats.deleted++;
                 }
                 if (whenDone) whenDone(stats);
             }
@@ -8974,9 +9545,9 @@
                 var trans = SqueakDB.transaction("files", mode),
                     fileStore = trans.objectStore("files");
                 trans.oncomplete = function(e) { if (completionFunc) completionFunc(); };
-                trans.onerror = function(e) { console.error(e.target.error.name + ": " + description); };
+                trans.onerror = function(e) { console.error("Transaction error during " + description, e); };
                 trans.onabort = function(e) {
-                    console.error(e.target.error.name + ": aborting " + description);
+                    console.error("Transaction error: aborting " + description, e);
                     // fall back to local/memory storage
                     transactionFunc(Squeak.dbFake());
                     if (completionFunc) completionFunc();
@@ -9000,25 +9571,25 @@
             }
 
             openReq.onsuccess = function(e) {
-                console.log("Opened files database.");
+                if (Squeak.debugFiles) console.log("Opened files database.");
                 window.SqueakDB = this.result;
                 SqueakDB.onversionchange = function(e) {
                     delete window.SqueakDB;
                     this.close();
                 };
                 SqueakDB.onerror = function(e) {
-                    console.error("Error accessing database: " + e.target.error.name);
+                    console.error("Error accessing database", e);
                 };
                 startTransaction();
             };
             openReq.onupgradeneeded = function (e) {
                 // run only first time, or when version changed
-                console.log("Creating files database");
+                if (Squeak.debugFiles) console.log("Creating files database");
                 var db = e.target.result;
                 db.createObjectStore("files");
             };
             openReq.onerror = function(e) {
-                console.error(e.target.error.name + ": cannot open files database");
+                console.error("Error opening files database", e);
                 console.warn("Falling back to local storage");
                 fakeTransaction();
             };
@@ -9120,7 +9691,7 @@
                 return thenDo(SqueakDBFake.bigFiles[path.fullname]);
             this.dbTransaction("readonly", "get " + filepath, function(fileStore) {
                 var getReq = fileStore.get(path.fullname);
-                getReq.onerror = function(e) { errorDo(e.target.error.name); };
+                getReq.onerror = function(e) { errorDo(e); };
                 getReq.onsuccess = function(e) {
                     if (this.result !== undefined) return thenDo(this.result);
                     // might be a template
@@ -9149,7 +9720,12 @@
                 directory[path.basename] = entry;
             } else if (entry[3]) // is a directory
                 return null;
-            if (Squeak.debugFiles) console.log("Writing " + path.fullname + " (" + contents.byteLength + " bytes)");
+            if (Squeak.debugFiles) {
+                console.log("Writing " + path.fullname + " (" + contents.byteLength + " bytes)");
+                if (contents.byteLength > 0 && filepath.endsWith(".log")) {
+                    console.log((new TextDecoder).decode(contents).replace(/\r/g, '\n'));
+                }
+            }
             // update directory entry
             entry[2] = now; // modification time
             entry[4] = contents.byteLength || contents.length || 0;
@@ -9212,17 +9788,28 @@
             var entry = directory[path.basename]; if (!entry || entry[3]) return false; // not found or is a directory
             return true;
         },
-        dirCreate: function(dirpath, withParents) {
+        dirCreate: function(dirpath, withParents, force) {
             var path = this.splitFilePath(dirpath); if (!path.basename) return false;
             if (withParents && !Squeak.Settings["squeak:" + path.dirname]) Squeak.dirCreate(path.dirname, true);
-            var directory = this.dirList(path.dirname); if (!directory) return false;
-            if (directory[path.basename]) return false;
+            var parent = this.dirList(path.dirname); if (!parent) return false;
+            var existing = parent[path.basename];
+            if (existing) {
+                if (!existing[3]) {
+                    // already exists and is not a directory
+                    if (!force) return false;
+                    existing[3] = true; // force it to be a directory
+                    Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(parent);
+                }
+                if (Squeak.Settings["squeak:" + path.fullname]) return true; // already exists
+                // directory exists but is not in localStorage, so create it
+                // (this is not supposed to happen but deal with it anyways)
+            }
             if (Squeak.debugFiles) console.log("Creating directory " + path.fullname);
             var now = this.totalSeconds(),
                 entry = [/*name*/ path.basename, /*ctime*/ now, /*mtime*/ now, /*dir*/ true, /*size*/ 0];
-            directory[path.basename] = entry;
+            parent[path.basename] = entry;
             Squeak.Settings["squeak:" + path.fullname] = JSON.stringify({});
-            Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(directory);
+            Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(parent);
             return true;
         },
         dirDelete: function(dirpath) {
@@ -9289,10 +9876,6 @@
                     (new Uint8Array(buffer)).set(file.contents.subarray(0, file.size));
                 }
                 Squeak.filePut(file.name, buffer);
-                // if (/SqueakDebug.log/.test(file.name)) {
-                //     var chars = Squeak.bytesAsString(new Uint8Array(buffer));
-                //     console.warn(chars.replace(/\r/g, '\n'));
-                // }
                 file.modified = false;
             }
         },
@@ -9335,7 +9918,7 @@
                 rq.open('GET', index, true);
                 rq.onload = function(e) {
                     if (rq.status == 200) {
-                        console.log("adding template " + path);
+                        console.log("adding template dir " + path);
                         ensureTemplateParent(path);
                         var entries = JSON.parse(rq.response),
                             template = {url: url, entries: {}};
@@ -9384,7 +9967,7 @@
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -9427,10 +10010,24 @@
         EventDragMove: 2,
         EventDragLeave: 3,
         EventDragDrop: 4,
+        EventTypeWindow: 5,
+        EventTypeComplex: 6,
+        EventTypeMouseWheel: 7,
+        WindowEventMetricChange: 1,
+        WindowEventClose: 2,
+        WindowEventIconise: 3,
+        WindowEventActivated: 4,
+        WindowEventPaint: 5,
+        WindowEventScreenChange: 6,
+        EventTouchDown: 1,
+        EventTouchUp: 2,
+        EventTouchMoved: 3,
+        EventTouchStationary: 4,
+        EventTouchCancelled: 5,
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -9515,7 +10112,7 @@
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -9546,8 +10143,10 @@
                 SoundPlugin:            this.findPluginFunctions("snd_"),
                 JPEGReadWriter2Plugin:  this.findPluginFunctions("jpeg2_"),
                 SqueakFFIPrims:         this.findPluginFunctions("ffi_", "", true),
+                HostWindowPlugin:       this.findPluginFunctions("hostWindow_"),
                 SecurityPlugin: {
                     primitiveDisableImageWrite: this.fakePrimitive.bind(this, "SecurityPlugin.primitiveDisableImageWrite", 0),
+                    primitiveGetUntrustedUserDirectory: this.fakePrimitive.bind(this, "SecurityPlugin.primitiveGetUntrustedUserDirectory", "/SqueakJS"),
                 },
                 LocalePlugin: {
                     primitiveTimezoneOffset: this.fakePrimitive.bind(this, "LocalePlugin.primitiveTimezoneOffset", 0),
@@ -9572,7 +10171,7 @@
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -9602,24 +10201,415 @@
         ExtLibFunc_name: 3,
         ExtLibFunc_module: 4,
         ExtLibFunc_errorCodeName: 5,
+    },
+    "FFI error codes", {
+        FFINoCalloutAvailable: -1, // No callout mechanism available
+        FFIErrorGenericError: 0, // generic error
+        FFIErrorNotFunction: 1, // primitive invoked without ExternalFunction
+        FFIErrorBadArgs: 2, // bad arguments to primitive call
+        FFIErrorBadArg: 3, // generic bad argument
+        FFIErrorIntAsPointer: 4, // int passed as pointer
+        FFIErrorBadAtomicType: 5, // bad atomic type (e.g., unknown)
+        FFIErrorCoercionFailed: 6, // argument coercion failed
+        FFIErrorWrongType: 7, // Type check for non-atomic types failed
+        FFIErrorStructSize: 8, // struct size wrong or too large
+        FFIErrorCallType: 9, // unsupported calling convention
+        FFIErrorBadReturn: 10, // cannot return the given type
+        FFIErrorBadAddress: 11, // bad function address
+        FFIErrorNoModule: 12, // no module given but required for finding address
+        FFIErrorAddressNotFound: 13, // function address not found
+        FFIErrorAttemptToPassVoid: 14, // attempt to pass 'void' parameter
+        FFIErrorModuleNotFound: 15, // module not found
+        FFIErrorBadExternalLibrary: 16, // external library invalid
+        FFIErrorBadExternalFunction: 17, // external function invalid
+        FFIErrorInvalidPointer: 18, // ExternalAddress points to ST memory (don't you dare to do this!)
+        FFIErrorCallFrameTooBig: 19, // Stack frame required more than 16k bytes to pass arguments.
+    },
+    "FFI types", {
+        // type void
+        FFITypeVoid: 0,
+        // type bool
+        FFITypeBool: 1,
+        // basic integer types.
+        // note: (integerType anyMask: 1) = integerType isSigned
+        FFITypeUnsignedInt8: 2,
+        FFITypeSignedInt8: 3,
+        FFITypeUnsignedInt16: 4,
+        FFITypeSignedInt16: 5,
+        FFITypeUnsignedInt32: 6,
+        FFITypeSignedInt32: 7,
+        FFITypeUnsignedInt64: 8,
+        FFITypeSignedInt64: 9,
+        // original character types
+        // note: isCharacterType ^type >> 1 >= 5 and: [(type >> 1) odd]
+        FFITypeUnsignedChar8: 10,
+        FFITypeSignedChar8: 11, // N.B. misnomer!
+        // float types
+        // note: isFloatType ^type >> 1 = 6
+        FFITypeSingleFloat: 12,
+        FFITypeDoubleFloat: 13,
+        // new character types
+        // note: isCharacterType ^type >> 1 >= 5 and: [(type >> 1) odd]
+        FFITypeUnsignedChar16: 14,
+        FFITypeUnsignedChar32: 15,
+        // type flags
+        FFIFlagAtomic: 0x40000, // type is atomic
+        FFIFlagPointer: 0x20000, // type is pointer to base type (a.k.a. array)
+        FFIFlagStructure: 0x10000, // baseType is structure of 64k length
+        FFIFlagAtomicPointer: 0x60000, // baseType is atomic and pointer (array)
+        FFIFlagMask: 0x70000, // mask for flags
+        FFIStructSizeMask: 0xFFFF, // mask for max size of structure
+        FFIAtomicTypeMask: 0x0F000000, // mask for atomic type spec
+        FFIAtomicTypeShift: 24, // shift for atomic type
     });
 
     Object.extend(Squeak.Primitives.prototype,
     'FFI', {
+        // naming:
+        //   - ffi_* for public methods of SqueakFFIPrims module
+        //     (see vm.plugins.js)
+        //   - other ffi* for private methods of this module
+        //   - primitiveCalloutToFFI: old callout primitive (not in SqueakFFIPrims)
+        ffi_lastError: 0,
+
+        ffiModules: {}, // map library name to module name
+
+        ffiDoCallout: function(argCount, extLibFunc, stArgs) {
+            this.ffi_lastError = Squeak.FFIErrorGenericError;
+            var libName = extLibFunc.pointers[Squeak.ExtLibFunc_module].bytesAsString();
+            var funcName = extLibFunc.pointers[Squeak.ExtLibFunc_name].bytesAsString();
+
+            if (!libName) libName = "libc"; // default to libc
+
+            var modName = this.ffiModules[libName];
+            if (modName === undefined) {
+                if (!Squeak.externalModules[libName]) {
+                    var prefixes = ["", "lib"];
+                    var suffixes = ["", ".so",
+                        ".so.9", ".9", ".so.8", ".8", ".so.7", ".7",
+                        ".so.6", ".6", ".so.5", ".5", ".so.4", ".4",
+                        ".so.3", ".3", ".so.2", ".2", ".so.1", ".1"];
+                    loop: for (var p = 0; p < prefixes.length; p++) {
+                        var prefix = prefixes[p];
+                        for (var s = 0; s < suffixes.length; s++) {
+                            var suffix = suffixes[s];
+                            if (Squeak.externalModules[prefix + libName + suffix]) {
+                                modName = prefix + libName + suffix;
+                                break loop;
+                            }
+                            if (prefix && libName.startsWith(prefix) && Squeak.externalModules[libName.slice(prefix.length) + suffix]) {
+                                modName = libName.slice(prefix.length) + suffix;
+                                break loop;
+                            }
+                            if (suffix && libName.endsWith(suffix) && Squeak.externalModules[prefix + libName.slice(0, -suffix.length)]) {
+                                modName = prefix + libName.slice(0, -suffix.length);
+                                break loop;
+                            }
+                        }
+                    }
+                    if (modName) console.log("FFI: found library " + libName + " as module " + modName);
+                    // there still is a chance loadModuleDynamically will find it under libName
+                }
+                if (!modName) modName = libName; // default to libName
+                this.ffiModules[libName] = modName;
+            }
+
+            var mod = this.loadedModules[modName];
+            if (mod === undefined) { // null if earlier load failed
+                mod = this.loadModule(modName);
+                this.loadedModules[modName] = mod;
+                if (!mod) {
+                    this.vm.warnOnce('FFI: library not found: ' + libName);
+                }
+            }
+            if (!mod) {
+                this.ffi_lastError = Squeak.FFIErrorModuleNotFound;
+                return false;
+            }
+            // types[0] is return type, types[1] is first arg type, etc.
+            var stTypes = extLibFunc.pointers[Squeak.ExtLibFunc_argTypes].pointers;
+            var jsArgs = [];
+            for (var i = 0; i < stArgs.length; i++) {
+                jsArgs.push(this.ffiArgFromSt(stArgs[i], stTypes[i+1]));
+            }
+            var jsResult;
+            if (!(funcName in mod)) {
+                if (this.vm.warnOnce('FFI: function not found: ' + libName + '::' + funcName)) {
+                    console.warn(jsArgs);
+                }
+                if (mod.ffiFunctionNotFoundHandler) {
+                    jsResult = mod.ffiFunctionNotFoundHandler(funcName, jsArgs);
+                }
+                if (jsResult === undefined) {
+                    this.ffi_lastError = Squeak.FFIErrorAddressNotFound;
+                    return false;
+                }
+            } else {
+                jsResult = mod[funcName].apply(mod, jsArgs);
+            }
+            var stResult = this.ffiResultToSt(jsResult, stTypes[0]);
+            return this.popNandPushIfOK(argCount + 1, stResult);
+        },
+        ffiArgFromSt: function(stObj, stType) {
+            var typeSpec = stType.pointers[0].words[0];
+            switch (typeSpec & Squeak.FFIFlagMask) {
+                case Squeak.FFIFlagAtomic:
+                    // single value
+                    var atomicType = (typeSpec & Squeak.FFIAtomicTypeMask) >> Squeak.FFIAtomicTypeShift;
+                    switch (atomicType) {
+                        case Squeak.FFITypeVoid:
+                            return null;
+                        case Squeak.FFITypeBool:
+                            if (stObj.isTrue) return true;
+                            if (stObj.isFalse) return false;
+                            if (typeof stObj === "number") return !!stObj;
+                            if (stObj.isFloat) return !!stObj.float;
+                            throw Error("FFI: expected bool, got " + stObj);
+                        case Squeak.FFITypeUnsignedInt8:
+                        case Squeak.FFITypeSignedInt8:
+                        case Squeak.FFITypeUnsignedInt16:
+                        case Squeak.FFITypeSignedInt16:
+                        case Squeak.FFITypeUnsignedInt32:
+                        case Squeak.FFITypeSignedInt32:
+                        case Squeak.FFITypeUnsignedInt64:
+                        case Squeak.FFITypeSignedInt64:
+                        case Squeak.FFITypeUnsignedChar8:
+                        case Squeak.FFITypeSignedChar8:
+                        case Squeak.FFITypeUnsignedChar16:
+                        case Squeak.FFITypeUnsignedChar32:
+                            // we ignore the signedness and size of the integer for now
+                            if (typeof stObj === "number") return stObj;
+                            throw Error("FFI: expected integer, got " + stObj);
+                        case Squeak.FFITypeSingleFloat:
+                        case Squeak.FFITypeDoubleFloat:
+                            if (typeof stObj === "number") return stObj;
+                            if (stObj.isFloat) return stObj.float;
+                            throw Error("FFI: expected float, got " + stObj);
+                        default:
+                            throw Error("FFI: unimplemented atomic arg type: " + atomicType);
+                    }
+                case Squeak.FFIFlagAtomicPointer:
+                    // array of values
+                    var atomicType = (typeSpec & Squeak.FFIAtomicTypeMask) >> Squeak.FFIAtomicTypeShift;
+                    switch (atomicType) {
+                        case Squeak.FFITypeUnsignedChar8:
+                        case Squeak.FFITypeUnsignedInt8:
+                            if (stObj.bytes) return stObj.bytes;
+                            if (stObj.words) return stObj.wordsAsUint8Array();
+                            if (this.interpreterProxy.isWordsOrBytes(stObj)) return new Uint8Array(0);
+                            if (stObj.pointers && stObj.pointers[0].jsData) {
+                                var data = stObj.pointers[0].jsData;
+                                if (data instanceof Uint8Array) return data;
+                                if (data instanceof ArrayBuffer) return new Uint8Array(data);
+                            }
+                            throw Error("FFI: expected bytes, got " + stObj);
+                        case Squeak.FFITypeUnsignedInt32:
+                            if (stObj.words) return stObj.words;
+                            if (this.interpreterProxy.isWords(stObj)) return new Uint32Array(0);
+                            if (stObj.pointers && stObj.pointers[0].jsData) {
+                                var data = stObj.pointers[0].jsData;
+                                if (data instanceof Uint32Array) return data;
+                                if (data instanceof ArrayBuffer) return new Uint32Array(data);
+                            }
+                            throw Error("FFI: expected words, got " + stObj);
+                        case Squeak.FFITypeSignedInt32:
+                            if (stObj.words) return stObj.wordsAsInt32Array();
+                            if (this.interpreterProxy.isWords(stObj)) return new Int32Array(0);
+                            if (stObj.pointers && stObj.pointers[0].jsData) {
+                                var data = stObj.pointers[0].jsData;
+                                if (data instanceof Int32Array) return data;
+                                if (data instanceof ArrayBuffer) return new Int32Array(data);
+                            }
+                            throw Error("FFI: expected words, got " + stObj);
+                        case Squeak.FFITypeSingleFloat:
+                            if (stObj.words) return stObj.wordsAsFloat32Array();
+                            if (stObj.isFloat) return new Float32Array([stObj.float]);
+                            if (this.interpreterProxy.isWords(stObj)) return new Float32Array(0);
+                            if (stObj.pointers && stObj.pointers[0].jsData) {
+                                var data = stObj.pointers[0].jsData;
+                                if (data instanceof Float32Array) return data;
+                                if (data instanceof ArrayBuffer) return new Float32Array(data);
+                            }
+                            throw Error("FFI: expected floats, got " + stObj);
+                        case Squeak.FFITypeDoubleFloat:
+                            if (stObj.words) return stObj.wordsAsFloat64Array();
+                            if (stObj.isFloat) return new Float64Array([stObj.float]);
+                            if (this.interpreterProxy.isWords(stObj)) return new Float64Array(0);
+                            if (stObj.pointers && stObj.pointers[0].jsData) {
+                                var data = stObj.pointers[0].jsData;
+                                if (data instanceof Float64Array) return data;
+                                if (data instanceof ArrayBuffer) return new Float64Array(data);
+                            }
+                            throw Error("FFI: expected floats, got " + stObj);
+                        case Squeak.FFITypeVoid: // void* is passed as buffer
+                            if (stObj.words) return stObj.words.buffer;
+                            if (stObj.bytes) return stObj.bytes.buffer;
+                            if (stObj.isNil || this.interpreterProxy.isWordsOrBytes(stObj)) return new ArrayBuffer(0); // null pointer
+                            if (stObj.pointers && stObj.pointers[0].jsData) {
+                                var data = stObj.pointers[0].jsData;
+                                if (data instanceof ArrayBuffer) return data;
+                            }
+                            throw Error("FFI: expected words or bytes, got " + stObj);
+                        default:
+                            throw Error("FFI: unimplemented atomic array arg type: " + atomicType);
+                    }
+                default:
+                    throw Error("FFI: unimplemented arg type flags: " + typeSpec);
+            }
+        },
+        ffiResultToSt: function(jsResult, stType) {
+            var typeSpec = stType.pointers[0].words[0];
+            switch (typeSpec & Squeak.FFIFlagMask) {
+                case Squeak.FFIFlagAtomic:
+                    // single value
+                    var atomicType = (typeSpec & Squeak.FFIAtomicTypeMask) >> Squeak.FFIAtomicTypeShift;
+                    switch (atomicType) {
+                        case Squeak.FFITypeVoid:
+                            return this.vm.nilObj;
+                        case Squeak.FFITypeBool:
+                            return jsResult ? this.vm.trueObj : this.vm.falseObj;
+                        case Squeak.FFITypeUnsignedInt8:
+                        case Squeak.FFITypeSignedInt8:
+                        case Squeak.FFITypeUnsignedInt16:
+                        case Squeak.FFITypeSignedInt16:
+                        case Squeak.FFITypeUnsignedInt32:
+                        case Squeak.FFITypeSignedInt32:
+                        case Squeak.FFITypeUnsignedInt64:
+                        case Squeak.FFITypeSignedInt64:
+                        case Squeak.FFITypeUnsignedChar8:
+                        case Squeak.FFITypeSignedChar8:
+                        case Squeak.FFITypeUnsignedChar16:
+                        case Squeak.FFITypeUnsignedChar32:
+                        case Squeak.FFITypeSingleFloat:
+                        case Squeak.FFITypeDoubleFloat:
+                            if (typeof jsResult !== "number") throw Error("FFI: expected number, got " + jsResult);
+                            return this.makeStObject(jsResult);
+                        default:
+                            throw Error("FFI: unimplemented atomic return type: " + atomicType);
+                    }
+                case Squeak.FFIFlagAtomicPointer:
+                    // array of values
+                    if (!jsResult) return this.vm.nilObj;
+                    var atomicType = (typeSpec & Squeak.FFIAtomicTypeMask) >> Squeak.FFIAtomicTypeShift;
+                    switch (atomicType) {
+                        // char* is returned as string
+                        case Squeak.FFITypeSignedChar8:
+                        case Squeak.FFITypeUnsignedChar8:
+                            if (typeof jsResult === "string") return this.makeStString(jsResult);
+                            else return this.makeStStringFromBytes(jsResult, true);
+                        // all other arrays are returned as ExternalData
+                        default:
+                            return this.ffiMakeStExternalData(jsResult, stType);
+                    }
+                default:
+                    throw Error("FFI: unimplemented return type flags: " + typeSpec);
+            }
+        },
+        ffiNextExtAddr: 0, // fake addresses for ExternalAddress objects
+        ffiMakeStExternalAddress: function() {
+            var extAddr = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassExternalAddress], 4);
+            new (Uint32Array)(extAddr.bytes.buffer)[0] = ++this.ffiNextExtAddr;
+            return extAddr;
+        },
+        ffiMakeStExternalData: function(jsData, stType) {
+            var extAddr = this.ffiMakeStExternalAddress();
+            extAddr.jsData = jsData; // save for later
+            var extData = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassExternalData], 0);
+            extData.pointers[0] = extAddr;
+            extData.pointers[1] = stType;
+            return extData;
+        },
+        ffiDataFromStack: function(arg) {
+            var oop = this.stackNonInteger(arg);
+            if (oop.jsData !== undefined) return oop.jsData;
+            if (oop.bytes) return oop.bytes;
+            if (oop.words) return oop.words;
+            this.vm.warnOnce("FFI: expected ExternalAddress with jsData, got " + oop);
+            this.success = false;
+        },
+        ffi_primitiveFFIAllocate: function(argCount) {
+            var size = this.stackInteger(0);
+            if (!this.success) return false;
+            var extAddr = this.ffiMakeStExternalAddress();
+            extAddr.jsData = new ArrayBuffer(size);
+            return this.popNandPushIfOK(argCount + 1, extAddr);
+        },
+        ffi_primitiveFFIFree: function(argCount) {
+            var extAddr = this.stackNonInteger(0);
+            if (!this.success) return false;
+            if (extAddr.jsData === undefined) {
+                this.vm.warnOnce("primitiveFFIFree: expected ExternalAddress with jsData, got " + extAddr);
+                return false;
+            }
+            delete extAddr.jsData;
+            return true;
+        },
+        primitiveCalloutToFFI: function(argCount, method) {
+            var extLibFunc = method.pointers[1];
+            if (!this.isKindOf(extLibFunc, Squeak.splOb_ClassExternalFunction)) return false;
+            var args = [];
+            for (var i = argCount - 1; i >= 0; i--)
+                args.push(this.vm.stackValue(i));
+            return this.ffiDoCallout(argCount, extLibFunc, args);
+        },
         ffi_primitiveCalloutWithArgs: function(argCount) {
             var extLibFunc = this.stackNonInteger(1),
                 argsObj = this.stackNonInteger(0);
             if (!this.isKindOf(extLibFunc, Squeak.splOb_ClassExternalFunction)) return false;
-            var moduleName = extLibFunc.pointers[Squeak.ExtLibFunc_module].bytesAsString();
-            var funcName = extLibFunc.pointers[Squeak.ExtLibFunc_name].bytesAsString();
-            var args = argsObj.pointers.join(', ');
-            this.vm.warnOnce('FFI: ignoring ' + moduleName + ': ' + funcName + '(' + args + ')');
-            return false;
+            return this.ffiDoCallout(argCount, extLibFunc, argsObj.pointers);
+        },
+        ffi_primitiveFFIGetLastError: function(argCount) {
+            return this.popNandPushIfOK(argCount + 1, this.ffi_lastError);
+        },
+        ffi_primitiveFFIIntegerAt: function(argCount) {
+            var data = this.ffiDataFromStack(3),
+                byteOffset = this.stackInteger(2),
+                byteSize = this.stackInteger(1),
+                isSigned = this.stackBoolean(0);
+            if (!this.success) return false;
+            byteOffset--; // 1-based indexing
+            if (byteOffset < 0 || byteSize < 1 || byteSize > 8 ||
+                (byteSize & (byteSize - 1)) !== 0) return false;
+            var result;
+            if (byteSize === 1 && !isSigned) {
+                if (typeof data === "string") {
+                    result = data.charCodeAt(byteOffset) || 0; // 0 if out of bounds
+                } else if (data instanceof Uint8Array) {
+                    result = data[byteOffset] || 0; // 0 if out of bounds
+                } else {
+                    this.vm.warnOnce("FFI: expected string or Uint8Array, got " + typeof data);
+                    return false;
+                }
+            } else if (byteSize === 4 && !isSigned) {
+                if (data instanceof Uint32Array) {
+                    result = data[byteOffset] || 0; // 0 if out of bounds
+                } else if (data instanceof Uint8Array) {
+                    result = new DataView(data.buffer).getUint32(data.byteOffset + byteOffset, true) || 0; // 0 if out of bounds
+                } else {
+                    this.vm.warnOnce("FFI: expected Uint32Array, got " + typeof data);
+                    return false;
+                }
+            } else {
+                this.vm.warnOnce("FFI: unimplemented integer type size: " + byteSize + " signed: " + isSigned);
+                return false;
+            }
+            return this.popNandPushIfOK(argCount + 1, result);
+        },
+        ffi_primitiveFFIDoubleAtPut: function(argCount) {
+            var data = this.ffiDataFromStack(2),
+                byteOffset = this.stackInteger(1),
+                valueOop = this.vm.stackValue(0),
+                value = valueOop.isFloat ? valueOop.float : valueOop;
+            if (!this.success || typeof value !== "number") return false;
+            byteOffset--; // 1-based indexing
+            if (byteOffset & 7) new DataView(data).setFloat64(byteOffset, value, true);
+            else new Float64Array(data)[byteOffset / 8] = value;
+            return this.popNandPushIfOK(argCount + 1, valueOop);
         },
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -9688,7 +10678,7 @@
                     }
                 }
             } catch(err) {
-                return this.js_setError(err.message);
+                return this.js_setError(err);
             }
             var stResult = this.makeStObject(jsResult, rcvr.sqClass);
             return this.popNandPushIfOK(argCount + 1, stResult);
@@ -9711,7 +10701,7 @@
                     jsPropValue = jsRcvr[jsPropName];
                 propValue = this.makeStObject(jsPropValue, rcvr.sqClass);
             } catch(err) {
-                return this.js_setError(err.message);
+                return this.js_setError(err);
             }
             return this.popNandPushIfOK(argCount + 1, propValue);
         },
@@ -9725,7 +10715,7 @@
                     jsPropValue = this.js_fromStObject(propValue);
                 jsRcvr[jsPropName] = jsPropValue;
             } catch(err) {
-                return this.js_setError(err.message);
+                return this.js_setError(err);
             }
             return this.popNandPushIfOK(argCount + 1, propValue);
         },
@@ -9757,7 +10747,7 @@
                 var array = this.makeStArray(callback.args, proxyClass);
                 return this.popNandPushIfOK(argCount+1, array);
             } catch(err) {
-                return this.js_setError(err.message);
+                return this.js_setError(err);
             }
         },
         js_primitiveReturnFromCallback: function(argCount) {
@@ -9770,12 +10760,22 @@
             return true;
         },
         js_primitiveGetError: function(argCount) {
-            var error = this.makeStObject(this.js_error);
+            if (this.js_error == null) return false;
+            var msg = this.js_error;
+            if (msg instanceof Error) msg = msg.message;
+            var error = this.makeStString("" + msg);
+            this.js_error = null;
+            return this.popNandPushIfOK(argCount + 1, error);
+        },
+        js_primitiveGetErrorObject: function(argCount) {
+            if (this.js_error == null) return false;
+            var rcvr = this.stackNonInteger(argCount);
+            var error = this.makeStObject(this.js_error, rcvr.sqClass);
             this.js_error = null;
             return this.popNandPushIfOK(argCount + 1, error);
         },
         js_setError: function(err) {
-            this.js_error = String(err);
+            this.js_error = err;
             return false;
         },
         js_fromStObject: function(obj) {
@@ -9792,7 +10792,7 @@
             if (obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassBlockContext] ||
                 obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassBlockClosure])
                 return this.js_fromStBlock(obj);
-            throw Error("asJSArgument needed for " + obj);
+            throw Error("asJSArgument needed for " + obj);  // image recognizes error string and will try again
         },
         js_fromStArray: function(objs, maybeDict) {
             if (objs.length > 0 && maybeDict && this.isAssociation(objs[0]))
@@ -9876,7 +10876,7 @@
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -10115,7 +11115,7 @@
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -10160,7 +11160,7 @@
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -10190,7 +11190,7 @@
             this.success = Squeak.dirCreate(dirName);
             if (!this.success) {
                 var path = Squeak.splitFilePath(dirName);
-                console.log("Directory not created: " + path.fullname);
+                if (Squeak.debugFiles) console.warn("Directory not created: " + path.fullname);
             }
             return this.popNIfOK(argCount);
         },
@@ -10216,7 +11216,7 @@
             var entries = Squeak.dirList(dirName, true);
             if (!entries) {
                 var path = Squeak.splitFilePath(dirName);
-                console.log("Directory not found: " + path.fullname);
+                if (Squeak.debugFiles) console.log("Directory not found: " + path.fullname);
                 return false;
             }
             var entry = fileName === "." ? [".", 0, 0, true, 0] : entries[fileName];
@@ -10232,8 +11232,11 @@
             var entries = Squeak.dirList(dirName, true);
             if (!entries) {
                 var path = Squeak.splitFilePath(dirName);
-                console.log("Directory not found: " + path.fullname);
+                if (Squeak.debugFiles) console.log("Directory not found: " + path.fullname);
                 return false;
+            }
+            if (Squeak.debugFiles && index === 1) {
+                console.log("Reading directory " + dirName + " with " + Object.keys(entries).length + " entries");
             }
             var keys = Object.keys(entries).sort(),
                 entry = entries[keys[index - 1]];
@@ -10318,8 +11321,13 @@
                 handle = this.stackNonInteger(3);
             if (!this.success || !arrayObj.isWordsOrBytes() || !handle.file) return false;
             if (!count) return this.popNandPushIfOK(argCount+1, 0);
-            var size = arrayObj.isWords() ? arrayObj.wordsSize() : arrayObj.bytesSize();
-            if (startIndex < 0 || startIndex + count > size)
+            var array = arrayObj.bytes;
+            if (!array) {
+                array = arrayObj.wordsAsUint8Array();
+                startIndex *= 4;
+                count *= 4;
+            }
+            if (startIndex < 0 || startIndex + count > array.length)
                 return false;
             if (typeof handle.file === "string") {
                 //this.fileConsoleRead(handle.file, array, startIndex, count);
@@ -10329,21 +11337,12 @@
             return this.fileContentsDo(handle.file, function(file) {
                 if (!file.contents)
                     return this.popNandPushIfOK(argCount+1, 0);
-                var srcArray, dstArray;
-                if (arrayObj.isWords()) {
-                    srcArray = new Uint32Array(file.contents.buffer);
-                    dstArray = arrayObj.words,
-                    count = Math.min(count, (file.size - handle.filePos) >>> 2);
-                    for (var i = 0; i < count; i++)
-                        dstArray[startIndex + i] = srcArray[handle.filePos + i];
-                    handle.filePos += count << 2;
-                } else {
-                    srcArray = file.contents;
-                    dstArray = arrayObj.bytes;
-                    count = Math.min(count, file.size - handle.filePos);
-                    for (var i = 0; i < count; i++)
-                        dstArray[startIndex + i] = srcArray[handle.filePos++];
-                }
+                var srcArray = file.contents,
+                    dstArray = array;
+                count = Math.min(count, file.size - handle.filePos);
+                for (var i = 0; i < count; i++)
+                    dstArray[startIndex + i] = srcArray[handle.filePos++];
+                if (!arrayObj.bytes) count >>= 2;  // words
                 this.popNandPushIfOK(argCount+1, Math.max(0, count));
             }.bind(this));
         },
@@ -10428,6 +11427,7 @@
                     dstArray[handle.filePos++] = srcArray[startIndex + i];
                 if (handle.filePos > file.size) file.size = handle.filePos;
                 file.modified = true;
+                if (!arrayObj.bytes) count >>= 2;  // words
                 this.popNandPushIfOK(argCount+1, count);
             }.bind(this));
         },
@@ -10453,13 +11453,13 @@
                 }
             } else {
                 if (!writeFlag) {
-                    console.log("File not found: " + path.fullname);
+                    if (Squeak.debugFiles) console.log("File not found: " + path.fullname);
                     return null;
                 }
                 contents = new Uint8Array();
                 entry = Squeak.filePut(path.fullname, contents.buffer);
                 if (!entry) {
-                    console.log("Cannot create file: " + path.fullname);
+                    if (Squeak.debugFiles) console.log("Cannot create file: " + path.fullname);
                     return null;
                 }
             }
@@ -10487,7 +11487,7 @@
                     return false;
                 this.vm.freeze(function(unfreeze) {
                     var error = (function(msg) {
-                        console.log("File get failed: " + msg);
+                        console.warn("File get failed: " + msg);
                         file.contents = false;
                         unfreeze();
                         func(file);
@@ -10528,7 +11528,7 @@
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -10619,20 +11619,65 @@
             return this.popNIfOK(argCount);
         },
         jpeg2_primJPEGWriteImageonByteArrayformqualityprogressiveJPEGerrorMgr: function(argCount) {
-            this.vm.warnOnce("JPEGReadWritePlugin2: writing not implemented yet");
-            return false;
+            if (argCount < 6) return false;
+            var destination = this.stackNonInteger(4).bytes,
+                form = this.stackNonInteger(3).pointers,
+                quality = this.stackInteger(2);
+                // rest ignored
+            if (!this.success || !destination || !form) return false;
+            var formWidth = form[Squeak.Form_width],
+                formHeight = form[Squeak.Form_height],
+                formDepth = form[Squeak.Form_depth],
+                formBits = form[Squeak.Form_bits].words;
+            if (formDepth !== 32) {
+                this.vm.warnOnce("JPEG2WriteImage: only 32 bit depth supported");
+                return false;
+            }
+            var bytesCount = this.jpeg2_writeFormToBytes(formBits, formWidth, formHeight, quality, destination);
+            return this.popNandPushIfOK(argCount + 1, bytesCount);
+        },
+        jpeg2_writeFormToBytes: function(formBits, width, height, quality, destination) {
+            var canvas = document.createElement("canvas"),
+                context = canvas.getContext("2d");
+            canvas.width = width;
+            canvas.height = height;
+            var imageData = context.createImageData(width, height),
+                pixels = imageData.data;
+            for (var i = 0; i < formBits.length; i++) {
+                var pix = formBits[i];
+                pixels[i*4 + 0] = (pix >> 16) & 255;
+                pixels[i*4 + 1] = (pix >> 8) & 255;
+                pixels[i*4 + 2] = pix & 255;
+                pixels[i*4 + 3] = 255;
+            }
+            context.putImageData(imageData, 0, 0);
+            var jpeg = canvas.toDataURL("image/jpeg", quality / 100);
+            return this.jpeg2_dataURLToBytes(jpeg, destination);
+        },
+        jpeg2_dataURLToBytes: function(dataURL, destination) {
+            var base64 = dataURL.split(',')[1];
+            if (!base64) return 0;
+            var needed = base64.length * 3 / 4;
+            if (needed - 3 > destination.length) return 0;
+            var bytes = atob(base64);
+            if (bytes.length > destination.length) return 0;
+            for (var i = 0; i < bytes.length; i++)
+                destination[i] = bytes.charCodeAt(i);
+            return bytes.length;
         },
         jpeg2_readImageFromBytes: function(bytes, thenDo, errorDo) {
             var blob = new Blob([bytes], {type: "image/jpeg"}),
                 image = new Image();
             image.onload = function() {
                 thenDo(image);
+                URL.revokeObjectURL(image.src);
             };
             image.onerror = function() {
                 console.warn("could not render JPEG");
                 errorDo();
+                URL.revokeObjectURL(image.src);
             };
-            image.src = (window.URL || window.webkitURL).createObjectURL(blob);
+            image.src = URL.createObjectURL(blob);
         },
         jpeg2_getPixelsFromImage: function(image) {
             var canvas = document.createElement("canvas"),
@@ -10709,7 +11754,7 @@
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -10763,7 +11808,7 @@
     });
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -10807,7 +11852,7 @@
                 this.audioContext.createBuffer(stereoFlag ? 2 : 1, bufFrames, samplesPerSec),
                 this.audioContext.createBuffer(stereoFlag ? 2 : 1, bufFrames, samplesPerSec),
             ];
-            console.log("sound: started");
+            // console.log("sound: started");
             return this.popNIfOK(argCount);
         },
         snd_playNextBuffer: function() {
@@ -10817,9 +11862,9 @@
             source.buffer = this.audioBuffersReady.shift();
             source.connect(this.audioContext.destination);
             if (this.audioNextTimeSlot < this.audioContext.currentTime) {
-                if (this.audioNextTimeSlot > 0)
-                    console.log("sound " + this.audioContext.currentTime.toFixed(3) +
-                        ": buffer underrun by " + (this.audioContext.currentTime - this.audioNextTimeSlot).toFixed(3) + " s");
+                // if (this.audioNextTimeSlot > 0)
+                //     console.log("sound " + this.audioContext.currentTime.toFixed(3) +
+                //         ": buffer underrun by " + (this.audioContext.currentTime - this.audioNextTimeSlot).toFixed(3) + " s");
                 this.audioNextTimeSlot = this.audioContext.currentTime;
             }
             source.start(this.audioNextTimeSlot);
@@ -10841,7 +11886,7 @@
         },
         snd_primitiveSoundAvailableSpace: function(argCount) {
             if (!this.audioContext) {
-                console.log("sound: no audio context");
+                console.warn("sound: no audio context");
                 return false;
             }
             var available = 0;
@@ -10853,7 +11898,7 @@
         },
         snd_primitiveSoundPlaySamples: function(argCount) {
             if (!this.audioContext || this.audioBuffersUnused.length === 0) {
-                console.log("sound: play but no free buffers");
+                console.warn("sound: play but no free buffers");
                 return false;
             }
             var count = this.stackInteger(2),
@@ -10876,7 +11921,7 @@
         },
         snd_primitiveSoundPlaySilence: function(argCount) {
             if (!this.audioContext || this.audioBuffersUnused.length === 0) {
-                console.log("sound: play but no free buffers");
+                console.warn("sound: play but no free buffers");
                 return false;
             }
             var buffer = this.audioBuffersUnused.shift(),
@@ -10898,7 +11943,7 @@
                 this.audioBuffersUnused = null;
                 this.audioNextTimeSlot = 0;
                 this.audioSema = 0;
-                console.log("sound: stopped");
+                // console.log("sound: stopped");
             }
             return this.popNIfOK(argCount);
         },
@@ -10914,7 +11959,7 @@
                 self = this;
             Squeak.startAudioIn(
                 function onSuccess(audioContext, source) {
-                    console.log("sound: recording started");
+                    // console.log("sound: recording started")
                     self.audioInContext = audioContext;
                     self.audioInSource = source;
                     self.audioInSema = semaIndex;
@@ -10957,7 +12002,7 @@
         snd_primitiveSoundGetRecordingSampleRate: function(argCount) {
            if (!this.audioInContext) return false;
            var actualRate = this.audioInContext.sampleRate / this.audioInOverSample | 0;
-           console.log("sound: actual recording rate " + actualRate + "x" + this.audioInOverSample);
+        //    console.log("sound: actual recording rate " + actualRate + "x" + this.audioInOverSample);
            return this.popNandPushIfOK(argCount + 1, actualRate);
         },
         snd_primitiveSoundRecordSamples: function(argCount) {
@@ -11006,10 +12051,12 @@
                 this.audioInProcessor = null;
                 console.log("sound recording stopped");
             }
-            return true;
+            Squeak.stopAudioIn();
+            return this.popNIfOK(argCount);
         },
         snd_primitiveSoundSetRecordLevel: function(argCount) {
-            return true;
+            this.vm.warnOnce("sound set record level not supported");
+            return this.popNIfOK(argCount);
         },
     });
 
@@ -11524,10 +12571,9 @@
 
     function primitiveEncodeStereo() {
     	var rcvr;
-    	var count;
 
     	rcvr = interpreterProxy.stackValue(1);
-    	count = interpreterProxy.stackIntegerValue(0);
+    	interpreterProxy.stackIntegerValue(0);
     	currentByte = interpreterProxy.fetchIntegerofObject(6, rcvr);
     	bitPosition = interpreterProxy.fetchIntegerofObject(7, rcvr);
     	byteIndex = interpreterProxy.fetchIntegerofObject(8, rcvr);
@@ -17282,7 +18328,6 @@
     	var length;
     	var needReload;
     	var pluginName;
-    	var ptr;
 
 
     	/* Must be string to work */
@@ -17295,7 +18340,7 @@
     	if (length >= 256) {
     		return interpreterProxy.primitiveFail();
     	}
-    	ptr = pluginName.bytes;
+    	pluginName.bytes;
     	needReload = false;
 
         // JS hack: can't copy bytes as in the C version
@@ -34924,7 +35969,7 @@
     function primCheckIfCModuleExists() {
     	var _return_value;
 
-    	_return_value = ( interpreterProxy.trueObject() );
+    	_return_value = (interpreterProxy.trueObject() );
     	if (interpreterProxy.failed()) {
     		return null;
     	}
@@ -35831,9 +36876,8 @@
     /*	Argument bytesOop must not be aSmallInteger! */
 
     function unsafeByteOfat(bytesOop, ix) {
-    	var pointer;
 
-    	return ((pointer = bytesOop.bytes))[ix - 1];
+    	return ((bytesOop.bytes))[ix - 1];
     }
 
 
@@ -36396,7 +37440,6 @@
     /*	Return 1, 2 or 3, if string1 is <, =, or > string2, with the collating order of characters given by the order array. */
 
     function primitiveCompareString(argCount) {
-    	var rcvr;
     	var string1;
     	var string2;
     	var order;
@@ -36406,7 +37449,7 @@
     	var len1;
     	var len2;
 
-    	rcvr = interpreterProxy.stackValue(3);
+    	interpreterProxy.stackValue(3);
     	string1 = interpreterProxy.stackBytes(2);
     	string2 = interpreterProxy.stackBytes(1);
     	order = interpreterProxy.stackBytes(0);
@@ -36474,7 +37517,6 @@
     			255		next 4 bytes */
 
     function primitiveCompressToByteArray(argCount) {
-    	var rcvr;
     	var bm;
     	var ba;
     	var eqBytes;
@@ -36486,7 +37528,7 @@
     	var size;
     	var word;
 
-    	rcvr = interpreterProxy.stackValue(2);
+    	interpreterProxy.stackValue(2);
     	bm = interpreterProxy.stackInt32Array(1);
     	ba = interpreterProxy.stackBytes(0);
     	if (interpreterProxy.failed()) {
@@ -36560,14 +37602,13 @@
     /*	Copy the contents of the given array of signed 8-bit samples into the given array of 16-bit signed samples. */
 
     function primitiveConvert8BitSigned(argCount) {
-    	var rcvr;
     	var aByteArray;
     	var aSoundBuffer;
     	var i;
     	var n;
     	var s;
 
-    	rcvr = interpreterProxy.stackValue(2);
+    	interpreterProxy.stackValue(2);
     	aByteArray = interpreterProxy.stackBytes(1);
     	aSoundBuffer = interpreterProxy.stackUint16Array(0);
     	if (interpreterProxy.failed()) {
@@ -36605,7 +37646,6 @@
     /*	NOTE:  If fed with garbage, this routine could read past the end of ba, but it should fail before writing past the ned of bm. */
 
     function primitiveDecompressFromByteArray(argCount) {
-    	var rcvr;
     	var bm;
     	var ba;
     	var index;
@@ -36620,7 +37660,7 @@
     	var n;
     	var pastEnd;
 
-    	rcvr = interpreterProxy.stackValue(3);
+    	interpreterProxy.stackValue(3);
     	bm = interpreterProxy.stackInt32Array(2);
     	ba = interpreterProxy.stackBytes(1);
     	index = interpreterProxy.stackIntegerValue(0);
@@ -36710,14 +37750,13 @@
     }
 
     function primitiveFindFirstInString(argCount) {
-    	var rcvr;
     	var aString;
     	var inclusionMap;
     	var start;
     	var i;
     	var stringSize;
 
-    	rcvr = interpreterProxy.stackValue(3);
+    	interpreterProxy.stackValue(3);
     	aString = interpreterProxy.stackBytes(2);
     	inclusionMap = interpreterProxy.stackBytes(1);
     	start = interpreterProxy.stackIntegerValue(0);
@@ -36756,7 +37795,6 @@
     	The algorithm below is not optimum -- it is intended to be translated to C which will go so fast that it wont matter. */
 
     function primitiveFindSubstring(argCount) {
-    	var rcvr;
     	var key;
     	var body;
     	var start;
@@ -36764,7 +37802,7 @@
     	var index;
     	var startIndex;
 
-    	rcvr = interpreterProxy.stackValue(4);
+    	interpreterProxy.stackValue(4);
     	key = interpreterProxy.stackBytes(3);
     	body = interpreterProxy.stackBytes(2);
     	start = interpreterProxy.stackIntegerValue(1);
@@ -36800,14 +37838,13 @@
     }
 
     function primitiveIndexOfAsciiInString(argCount) {
-    	var rcvr;
     	var anInteger;
     	var aString;
     	var start;
     	var pos;
     	var stringSize;
 
-    	rcvr = interpreterProxy.stackValue(3);
+    	interpreterProxy.stackValue(3);
     	anInteger = interpreterProxy.stackIntegerValue(2);
     	aString = interpreterProxy.stackBytes(1);
     	start = interpreterProxy.stackIntegerValue(0);
@@ -36840,7 +37877,6 @@
     	suitable point in the future */
 
     function primitiveStringHash(argCount) {
-    	var rcvr;
     	var aByteArray;
     	var speciesHash;
     	var byteArraySize;
@@ -36848,7 +37884,7 @@
     	var low;
     	var pos;
 
-    	rcvr = interpreterProxy.stackValue(2);
+    	interpreterProxy.stackValue(2);
     	aByteArray = interpreterProxy.stackBytes(1);
     	speciesHash = interpreterProxy.stackIntegerValue(0);
     	if (interpreterProxy.failed()) {
@@ -36875,14 +37911,13 @@
     /*	translate the characters in the string by the given table, in place */
 
     function primitiveTranslateStringWithTable(argCount) {
-    	var rcvr;
     	var aString;
     	var start;
     	var stop;
     	var table;
     	var i;
 
-    	rcvr = interpreterProxy.stackValue(4);
+    	interpreterProxy.stackValue(4);
     	aString = interpreterProxy.stackBytes(3);
     	start = interpreterProxy.stackIntegerValue(2);
     	stop = interpreterProxy.stackIntegerValue(1);
@@ -36936,6 +37971,415 @@
     registerPlugin();
 
     })(); // Register module/plugin
+
+    /*
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
+     *
+     * Permission is hereby granted, free of charge, to any person obtaining a copy
+     * of this software and associated documentation files (the "Software"), to deal
+     * in the Software without restriction, including without limitation the rights
+     * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+     * copies of the Software, and to permit persons to whom the Software is
+     * furnished to do so, subject to the following conditions:
+     *
+     * The above copyright notice and this permission notice shall be included in
+     * all copies or substantial portions of the Software.
+     *
+     * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+     * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+     * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+     * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+     * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+     * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+     * THE SOFTWARE.
+     */
+
+
+    function MIDIPlugin() {
+
+        const MIDI = midiParameterConstants();
+
+        return {
+            debug: false,
+            vmProxy: null,
+            vm: null,
+            prims: null,
+            timeOffset: 0,
+            midi: null, // WebMIDI access or false if not supported
+            midiPromise: null,
+            ports: new Map(), // indexed by Squeak port number
+
+            getModuleName() { return 'MIDIPlugin (SqueakJS)'; },
+            setInterpreter(vmProxy) {
+                this.vmProxy = vmProxy;
+                this.vm = vmProxy.vm;
+                this.prims = vmProxy.vm.primHandler;
+                return true;
+            },
+            initialiseModule() {
+                this.debug = this.vm.options.debugMIDI;
+                if (!navigator.requestMIDIAccess) {
+                    console.log('MIDIPlugin: WebMIDI not supported');
+                    this.vmProxy.success(false);
+                    return;
+                }
+                if (!this.midiPromise) {
+                    this.midiPromise = navigator.requestMIDIAccess({
+                        software: true, // because why not
+                        sysex: false,   // if you change this, tweak the running status handling
+                    })
+                    .then(access => {
+                        this.midi = access;
+                        this.initMIDI(access);
+                    })
+                    .catch(err => {
+                        console.error('MIDIPlugin: ' + err);
+                        this.midi = false;
+                    });
+                }
+                if (performance.timeOrigin) this.timeOffset = performance.timeOrigin - this.vm.startupTime;
+            },
+            initMIDI(access) {
+                const allPorts = [...access.inputs.values(), ...access.outputs.values()];
+                for (const port of allPorts) this.portChanged(port);
+                access.onstatechange = (event) => {
+                    const port = event.port;
+                    let { name, manufacturer, state } = port;
+                    if (manufacturer && !name.includes(manufacturer)) name += ` (${manufacturer})`;
+                    const sqPort = this.portChanged(port);
+                    const isNew = !port.sqPort;
+                    if (isNew) port.sqPort = sqPort;
+                    if (isNew || state === 'disconnected' || this.debug) {
+                        console.log(`MIDIPlugin: ${name} ${state} (port ${sqPort.handle} ${port.type} ${port.connection})`);
+                    }
+                };
+                console.log(`MIDIPlugin: WebMIDI initialized (ports: ${this.ports.size})`);
+                for (const [portNumber, port] of this.ports) {
+                    const dir = port.dir === 3 ? 'in+out' : port.dir === 2 ? 'out' : 'in';
+                    const names = [];
+                    if (port.input) names.push(port.input.name);
+                    if (port.output) names.push(port.output.name);
+                    console.log(`MIDIPlugin: port ${portNumber} ${dir} (${names.join(', ')})`);
+                }
+            },
+            portChanged(port) {
+                // Squeak likes combined input/output ports so we create sqPorts with input+output here
+                let { name, manufacturer } = port;
+                // strip input / output designation
+                name = name.replace(/(\b(in|out)(put)?\b)/i, '').replace(/(\(\)|\[\])/, '').replace(/  /, " ").trim();
+                if (manufacturer && !name.includes(manufacturer)) name += ` (${manufacturer})`;
+                // find existing port or create new one
+                let sqPort;
+                for (const existingPort of this.ports.values()) {
+                    if (existingPort.name === name) {
+                        sqPort = existingPort;
+                        break;
+                    }
+                }
+                if (!sqPort) {
+                    const handle = this.ports.size;
+                    sqPort = {
+                        handle,
+                        name,
+                        dir: 0,
+                        input: null,
+                        output: null,
+                        runningStatus: 0,
+                        receivedMessages: [],
+                    };
+                    this.ports.set(handle, sqPort);
+                }
+                // dir: 1=input, 2=output, 3=input+output
+                if (port.state === "connected") {
+                    sqPort[port.type] = port;
+                    sqPort.dir |=  port.type === 'input' ? 1 : 2;
+                } else {
+                    sqPort[port.type] = null;
+                    sqPort.dir &= port.type === 'input' ? ~1 : ~2;
+                }
+                return sqPort;
+            },
+            primitiveMIDIGetPortCount(argCount) {
+                // we rely on this primitive to be called first
+                // so the other primitives can be synchronous
+                const returnCount = () => this.vm.popNandPush(argCount + 1, this.ports.size);
+                if (this.midi === null) {
+                    const unfreeze = this.vm.freeze();
+                    this.midiPromise
+                        .then(returnCount)
+                        .catch(err => {
+                            console.error('MIDIPlugin: ' + err);
+                            returnCount();
+                        })
+                        .finally(unfreeze);
+                } else {
+                    returnCount();
+                }
+                return true;
+            },
+            primitiveMIDIGetPortName(argCount) {
+                if (!this.midi) return false;
+                const portNumber = this.prims.stackInteger(0);
+                const port = this.ports.get(portNumber);
+                if (!port) return false;
+                let name = port.name;
+                if (port.dir === 0) name += ' [disconnected]';
+                return this.prims.popNandPushIfOK(argCount + 1, this.prims.makeStString(name));
+            },
+            primitiveMIDIGetPortDirectionality(argCount) {
+                if (!this.midi) return false;
+                const portNumber = this.prims.stackInteger(0);
+                const port = this.ports.get(portNumber);
+                if (!port) return false;
+                return this.prims.popNandPushIfOK(argCount + 1, port.dir);
+            },
+            primitiveMIDIGetClock(argCount) {
+                if (!this.midi) return false;
+                const clock = this.prims.millisecondClockValue();
+                return this.prims.popNandPushIfOK(argCount + 1, clock);
+            },
+            primitiveMIDIParameterGetOrSet(argCount) {
+                if (!this.midi) return false;
+                const parameter = this.prims.stackInteger(argCount - 1);
+                // const newValue = argCount > 1 ? this.prims.stackInteger(0) : null;
+                let value;
+                // mostly untested, because I found no Squeak app that actually uses these
+                switch (parameter) {
+                    case MIDI.Installed:
+                        value = 1; break
+                    case MIDI.Version:
+                        value = 1; break;
+                    case MIDI.HasBuffer:
+                    case MIDI.HasDurs:
+                    case MIDI.CanSetClock:
+                    case MIDI.CanUseSemaphore:
+                    case MIDI.EchoOn:
+                    case MIDI.UseControllerCache:
+                    case MIDI.EventsAvailable:
+                    case MIDI.FlushDriver:
+                        value = 0; break;
+                    case MIDI.ClockTicksPerSec:
+                        value = 1000; break;
+                    case MIDI.HasInputClock:
+                        value = 1; break;
+                    default: return false;
+                }
+                return this.prims.popNandPushIfOK(argCount + 1, value);
+            },
+            primitiveMIDIOpenPort(argCount) {
+                const portNumber = this.prims.stackInteger(2);
+                // const readSemaIndex = this.prims.stackInteger(1);       // ignored
+                // const interfaceClockRate = this.prims.stackInteger(0);  // ignored
+                let port;
+                const checkPort = () => {
+                    port = this.ports.get(portNumber);
+                    if (!port) console.error(`MIDIPlugin: invalid port ${portNumber}`);
+                    else if (!port.dir) {
+                        console.error(`MIDIPlugin: port ${portNumber} ${port.name} is disconnected`);
+                        port = null;
+                    }
+                };
+                const openPort = unfreeze => {
+                    const promises = []; // wait for MIDI initialization first
+                    if (port.input)
+                        if (port.input.connection === "closed") promises.push(port.input.open());
+                        else console.warn(`MIDIPlugin: input port ${portNumber} is ${port.input.connection}`);
+                    if (port.output)
+                        if (port.output.connection === "closed") promises.push(port.output.open());
+                        else console.warn(`MIDIPlugin: output port ${portNumber} is ${port.output.connection}`);
+                    port.runningStatus = 0;
+                    port.receivedMessages = [];
+                    Promise.all(promises)
+                        .then(() => {
+                            if (port.input) port.input.onmidimessage = event => {
+                                const time = Math.round(event.timeStamp + this.timeOffset);
+                                const bytes = new Uint8Array(event.data);
+                                port.receivedMessages.push({time, bytes});
+                                if (this.debug) console.log('MIDIPlugin: received', time, [...bytes]);
+                            };
+                        })
+                        .catch(err => console.error('MIDIPlugin: ' + err))
+                        .finally(unfreeze);
+                };
+                // if already initialized, report failure immediately
+                if (this.midi) {
+                    checkPort();
+                    if (!port) return false;
+                }
+                // otherwise, we wait for initialization
+                const unfreeze = this.vm.freeze();
+                this.midiPromise
+                    .then(() => {
+                        if (!port) checkPort();
+                        if (port) openPort(unfreeze);
+                        else unfreeze();
+                    });
+                return this.prims.popNIfOK(argCount);
+            },
+            primitiveMIDIClosePort(argCount) {
+                // ok to close even if not initialized
+                if (this.midi) {
+                    const portNumber = this.prims.stackInteger(0);
+                    const port = this.ports.get(portNumber);
+                    if (!port) return false;
+                    const promises = [];
+                    if (port.input && port.input.connection === 'open') {
+                        promises.push(port.input.close());
+                        port.input.onmidimessage = null;
+                        port.receivedMessages.length = 0;
+                    }
+                    if (port.output && port.output.connection === 'open') {
+                        promises.push(port.output.close());
+                    }
+                    if (promises.length) {
+                        const unfreeze = this.vm.freeze();
+                        Promise.all(promises)
+                            .catch(err => console.error('MIDIPlugin: ' + err))
+                            .finally(unfreeze);
+                    }
+                }
+                return this.prims.popNIfOK(argCount);
+            },
+            primitiveMIDIWrite(argCount) {
+                if (!this.midi) return false;
+                const portNumber = this.prims.stackInteger(2);
+                let data = this.prims.stackNonInteger(1).bytes;
+                const timestamp = this.prims.stackInteger(0);
+                const port = this.ports.get(portNumber);
+                if (!port || !port.output || !data) return false;
+                if (port.output.connection !== 'open') {
+                    console.error('MIDIPlugin: primitiveMIDIWrite error (port not open)');
+                    return this.prims.popNandPushIfOK(argCount + 1, 0);
+                }
+                // this could be simple if it were not for the running status
+                // WebMIDI insists the first byte is a status byte
+                // so we need to keep track of it, and prepend it if necessary
+                if (data[0] < 0x80) {
+                    if (port.runningStatus === 0) {
+                        console.error('MIDIPlugin: no running status byte');
+                        return false;
+                    }
+                    const newData = new Uint8Array(data.length + 1);
+                    newData[0] = port.runningStatus;
+                    newData.set(data, 1);
+                    data = newData;
+                }
+                try {
+                    if (this.debug) console.log('MIDIPlugin: send', [...data], timestamp);
+                    // send or schedule data
+                    if (timestamp === 0) port.output.send(data);
+                    else port.output.send(data, timestamp);
+                    // find last status byte in data, but ignore real-time messages (0xF8-0xFF)
+                    // system common messages (0xF0-0xF7) reset the running status
+                    for (let i = data.length - 1; i >= 0; i--) {
+                        if (data[i] >= 0x80 && data[i] <= 0xF7) {
+                            port.runningStatus = data[i] < 0xF0 ? data[i] : 0;
+                            break;
+                        }
+                    }
+                } catch (err) {
+                    console.error('MIDIPlugin: ' + err);
+                    return false;
+                }
+                return this.prims.popNandPushIfOK(argCount + 1, data.length);
+            },
+            primitiveMIDIRead(argCount) {
+                if (!this.midi) return false;
+                const portNumber = this.prims.stackInteger(1);
+                const data = this.prims.stackNonInteger(0).bytes;
+                const port = this.ports.get(portNumber);
+                if (!port || !port.input || port.input.connection !== 'open') return false;
+                let received = 0;
+                const event = port.receivedMessages.shift();
+                if (event) {
+                    let { time, bytes } = event;
+                    data[0] = (time >> 24) & 0xFF;
+                    data[1] = (time >> 16) & 0xFF;
+                    data[2] = (time >> 8) & 0xFF;
+                    data[3] = time & 0xFF;
+                    data.set(bytes, 4);
+                    received = bytes.length + 4;
+                    if (this.debug) console.log('MIDIPlugin: read', received, [...data.subarray(0, received)]);
+                }
+                return this.prims.popNandPushIfOK(argCount + 1, received);
+            },
+        };
+    }
+
+    function midiParameterConstants() {
+        // MIDI parameter key constants
+        // see primitiveMIDIParameterGetOrSet() for SqueakJS values
+        return  {
+            Installed: 1,
+                // Read-only. Return 1 if a MIDI driver is installed, 0 if not.
+                // On OMS-based MIDI drivers, this returns 1 only if the OMS
+                // system is properly installed and configured.
+            Version: 2,
+                // Read-only. Return the integer version number of this MIDI driver.
+                // The version numbering sequence is relative to a particular driver.
+                // That is, version 3 of the Macintosh MIDI driver is not necessarily
+                // related to version 3 of the Win95 MIDI driver.
+            HasBuffer: 3,
+                // Read-only. Return 1 if this MIDI driver has a time-stamped output
+                // buffer, 0 otherwise. Such a buffer allows the client to schedule
+                // MIDI output packets to be sent later. This can allow more precise
+                // timing, since the driver uses timer interrupts to send the data
+                // at the right time even if the processor is in the midst of a
+                // long-running Squeak primitive or is running some other application
+                // or system task.
+            HasDurs: 4,
+                // Read-only. Return 1 if this MIDI driver supports an extended
+                // primitive for note-playing that includes the note duration and
+                // schedules both the note-on and the note-off messages in the
+                // driver. Otherwise, return 0.
+            CanSetClock: 5,
+                // Read-only. Return 1 if this MIDI driver's clock can be set
+                // via an extended primitive, 0 if not.
+            CanUseSemaphore: 6,
+                // Read-only. Return 1 if this MIDI driver can signal a semaphore
+                // when MIDI input arrives. Otherwise, return 0. If this driver
+                // supports controller caching and it is enabled, then incoming
+                // controller messages will not signal the semaphore.
+            EchoOn: 7,
+                // Read-write. If this flag is set to a non-zero value, and if
+                // the driver supports echoing, then incoming MIDI events will
+                // be echoed immediately. If this driver does not support echoing,
+                // then queries of this parameter will always return 0 and
+                // attempts to change its value will do nothing.
+            UseControllerCache: 8,
+                // Read-write. If this flag is set to a non-zero value, and if
+                // the driver supports a controller cache, then the driver will
+                // maintain a cache of the latest value seen for each MIDI controller,
+                // and control update messages will be filtered out of the incoming
+                // MIDI stream. An extended MIDI primitive allows the client to
+                // poll the driver for the current value of each controller. If
+                // this driver does not support a controller cache, then queries
+                // of this parameter will always return 0 and attempts to change
+                // its value will do nothing.
+            EventsAvailable: 9,
+                // Read-only. Return the number of MIDI packets in the input queue.
+            FlushDriver: 10,
+                // Write-only. Setting this parameter to any value forces the driver
+                // to flush its I/0 buffer, discarding all unprocessed data. Reading
+                // this parameter returns 0. Setting this parameter will do nothing
+                // if the driver does not support buffer flushing.
+            ClockTicksPerSec: 11,
+                // Read-only. Return the MIDI clock rate in ticks per second.
+            HasInputClock: 12,
+                // Read-only. Return 1 if this MIDI driver timestamps incoming
+                // MIDI data with the current value of the MIDI clock, 0 otherwise.
+                // If the driver does not support such timestamping, then the
+                // client must read input data frequently and provide its own
+                // timestamping.
+        };
+    }
+
+    function registerMIDIPlugin() {
+        if (typeof Squeak === "object" && Squeak.registerExternalModule) {
+            Squeak.registerExternalModule('MIDIPlugin', MIDIPlugin());
+        } else self.setTimeout(registerMIDIPlugin, 100);
+    }
+    registerMIDIPlugin();
 
     /* Smalltalk from Squeak4.5 with VMMaker 4.13.6 translated as JS source on 3 November 2014 1:52:23 pm */
     /* Automatically generated by
@@ -38443,10 +39887,16 @@
                   var end = this.sendBuffer.byteLength;
                   data = this.sendBuffer.subarray(end - contentLength, end);
                 } else if (line.match(/Host:/i)) {
-                  var host = line.substr(6).trim();
+                  var hostAndPort = line.substr(6).trim();
+                  var host = hostAndPort.split(':')[0];
+                  var port = parseInt(hostAndPort.split(':')[1]) || this.port;
                   if (this.host !== host) {
                     console.warn('Host for ' + this.hostAddress + ' was ' + this.host + ' but from HTTP request now ' + host);
                     this.host = host;
+                  }
+                  if (this.port !== port) {
+                    console.warn('Port for ' + this.hostAddress + ' was ' + this.port + ' but from HTTP request now ' + port);
+                    this.port = port;
                   }
                 } if (line.match(/Connection: Upgrade/i)) {
                   seenUpgrade = true;
@@ -39435,7 +40885,7 @@
           var handle = this.interpreterProxy.stackObjectValue(4).handle;
           if (handle === undefined) return false;
           var srcBuf = this.interpreterProxy.stackObjectValue(3);
-          var start = this.interpreterProxy.stackIntegerValue(2) - 1;
+          this.interpreterProxy.stackIntegerValue(2) - 1;
           var length = this.interpreterProxy.stackIntegerValue(1);
           var dstBuf = this.interpreterProxy.stackObjectValue(0);
           dstBuf.bytes = srcBuf.bytes; // Just copy all there is
@@ -39448,7 +40898,7 @@
           var handle = this.interpreterProxy.stackObjectValue(4).handle;
           if (handle === undefined) return false;
           var srcBuf = this.interpreterProxy.stackObjectValue(3);
-          var start = this.interpreterProxy.stackIntegerValue(2) - 1;
+          this.interpreterProxy.stackIntegerValue(2) - 1;
           var length = this.interpreterProxy.stackIntegerValue(1);
           var dstBuf = this.interpreterProxy.stackObjectValue(0);
           dstBuf.bytes = srcBuf.bytes; // Just copy all there is
@@ -41494,6 +42944,76 @@
 
     })(); // Register module/plugin
 
+    /*
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
+     *
+     * Permission is hereby granted, free of charge, to any person obtaining a copy
+     * of this software and associated documentation files (the "Software"), to deal
+     * in the Software without restriction, including without limitation the rights
+     * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+     * copies of the Software, and to permit persons to whom the Software is
+     * furnished to do so, subject to the following conditions:
+     *
+     * The above copyright notice and this permission notice shall be included in
+     * all copies or substantial portions of the Software.
+     *
+     * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+     * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+     * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+     * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+     * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+     * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+     * THE SOFTWARE.
+     */
+
+    // This is a minimal libc module for SqueakJS
+    // serving mostly as a demo for FFI
+
+    function libc() {
+        return {
+            // LIBC module
+            getModuleName() { return "libc (SqueakJS)"; },
+            setInterpreter(proxy) { this.vm = proxy.vm; return true; },
+
+            // helper functions
+            bytesToString(bytes) {
+                const zero = bytes.indexOf(0);
+                if (zero >= 0) bytes = bytes.subarray(0, zero);
+                return String.fromCharCode.apply(null, bytes);
+            },
+            stringToBytes(string, bytes) {
+                for (let i = 0; i < string.length; i++) bytes[i] = string.charCodeAt(i);
+                bytes[string.length] = 0;
+                return bytes;
+            },
+
+            // LIBC emulation functions called via FFI
+            getenv(v) {
+                v = this.bytesToString(v);
+                switch (v) {
+                    case "USER": return this.vm.options.user || "squeak";
+                    case "HOME": return this.vm.options.root || "/";
+                }
+                this.vm.warnOnce("UNIMPLEMENTED getenv: " + v);
+                return null;
+            },
+            getcwd(buf, size) {
+                const cwd = this.vm.options.root || "/";
+                if (!buf) buf = new Uint8Array(cwd.length + 1);
+                if (size < cwd.length + 1) return 0; // should set errno to ERANGE
+                this.stringToBytes(cwd, buf);
+                return buf; // converted to Smalltalk String by FFI if declared as char*
+            },
+        };
+    }
+
+    function registerLibC() {
+        if (typeof Squeak === "object" && Squeak.registerExternalModule) {
+            Squeak.registerExternalModule('libc', libc());
+        } else self.setTimeout(registerLibC, 100);
+    }
+    registerLibC();
+
     // Copyright (c) 2013 Pieroxy <pieroxy@pieroxy.net>
     // This work is free. You can redistribute it and/or modify it
     // under the terms of the WTFPL, Version 2
@@ -41995,7 +43515,6 @@
         if (compressed == null) return "";
         if (compressed == "") return null;
         var dictionary = [],
-            next,
             enlargeIn = 4,
             dictSize = 4,
             numBits = 3,
@@ -42026,7 +43545,7 @@
           power <<= 1;
         }
         
-        switch (next = bits) {
+        switch (bits) {
           case 0: 
               bits = 0;
               maxpower = Math.pow(2,8);
@@ -42172,7 +43691,7 @@
     https://github.com/nodeca/pako/blob/master/LICENSE
     */
 
-    (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f();}else if(typeof define==="function"&&define.amd){define([],f);}else{var g;if(typeof window!=="undefined"){g=window;}else if(typeof global!=="undefined"){g=global;}else if(typeof self!=="undefined"){g=self;}else{g=this;}g.JSZip = f();}})(function(){return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r);}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+    (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f();}else if(typeof define==="function"&&define.amd){define([],f);}else {var g;if(typeof window!=="undefined"){g=window;}else if(typeof global!=="undefined"){g=global;}else if(typeof self!=="undefined"){g=self;}else {g=this;}g.JSZip = f();}})(function(){return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r);}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
     var utils = require('./utils');
     var support = require('./support');
     // private property
@@ -45420,7 +46939,7 @@
     var utils = require('./utils');
     var sig = require('./signature');
     var ZipEntry = require('./zipEntry');
-    var utf8 = require('./utf8');
+    require('./utf8');
     var support = require('./support');
     //  class ZipEntries {{{
     /**
@@ -54564,7 +56083,7 @@
     })();
 
     /*
-     * Copyright (c) 2013-2020 Vanessa Freudenberg
+     * Copyright (c) 2013-2024 Vanessa Freudenberg
      *
      * Permission is hereby granted, free of charge, to any person obtaining a copy
      * of this software and associated documentation files (the "Software"), to deal
@@ -54584,6 +56103,7 @@
      * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
      * THE SOFTWARE.
      */
+
 
     Object.extend(Squeak, {
         vmPath: "/",
@@ -54632,10 +56152,7 @@
             display.fullscreen = fullscreen;
             var fullwindow = fullscreen || options.fullscreen;
             box.style.background = fullwindow ? 'black' : '';
-            if (options.header) options.header.style.display = fullwindow ? 'none' : '';
-            if (options.footer) options.footer.style.display = fullwindow ? 'none' : '';
-            if (options.fullscreenCheckbox) options.fullscreenCheckbox.checked = fullscreen;
-            setTimeout(window.onresize, 0);
+            setTimeout(onresize, 0);
         }
 
         var checkFullscreen;
@@ -54651,39 +56168,20 @@
         } else {
             var isFullscreen = false;
             checkFullscreen = function() {
-                if ((options.header || options.footer) && isFullscreen != display.fullscreen) {
+                if (isFullscreen != display.fullscreen) {
                     isFullscreen = display.fullscreen;
                     fullscreenChange(isFullscreen);
                 }
             };
         }
 
-        if (options.fullscreenCheckbox) options.fullscreenCheckbox.onclick = function() {
-            display.fullscreen = options.fullscreenCheckbox.checked;
-            checkFullscreen();
-        };
-
         return checkFullscreen;
-    }
-
-    function setupSwapButtons(options) {
-        if (options.swapCheckbox) {
-            var imageName = Squeak.Settings["squeakImageName"] || "default",
-                settings = JSON.parse(Squeak.Settings["squeakSettings:" + imageName] || "{}");
-            if ("swapButtons" in settings) options.swapButtons = settings.swapButtons;
-            options.swapCheckbox.checked = options.swapButtons;
-            options.swapCheckbox.onclick = function() {
-                options.swapButtons = options.swapCheckbox.checked;
-                settings["swapButtons"] = options.swapButtons;
-                Squeak.Settings["squeakSettings:" + imageName] = JSON.stringify(settings);
-            };
-        }
     }
 
     function recordModifiers(evt, display) {
         var shiftPressed = evt.shiftKey,
             ctrlPressed = evt.ctrlKey && !evt.altKey,
-            cmdPressed = evt.metaKey || (evt.altKey && !evt.ctrlKey),
+            cmdPressed = display.isMac ? evt.metaKey : evt.altKey && !evt.ctrlKey,
             modifiers =
                 (shiftPressed ? Squeak.Keyboard_Shift : 0) +
                 (ctrlPressed ? Squeak.Keyboard_Ctrl : 0) +
@@ -54719,6 +56217,8 @@
                     case 1: buttons = Squeak.Mouse_Yellow; break;   // middle
                     case 2: buttons = Squeak.Mouse_Blue; break;     // right
                 }
+                if (buttons === Squeak.Mouse_Red && (evt.altKey || evt.metaKey))
+                    buttons = Squeak.Mouse_Yellow; // emulate middle-click
                 if (options.swapButtons)
                     if (buttons == Squeak.Mouse_Yellow) buttons = Squeak.Mouse_Blue;
                     else if (buttons == Squeak.Mouse_Blue) buttons = Squeak.Mouse_Yellow;
@@ -54750,29 +56250,75 @@
         }
     }
 
-    function recordKeyboardEvent(key, timestamp, display) {
+    function recordWheelEvent(evt, display) {
         if (!display.vm) return;
-        var code = (display.buttons >> 3) << 8 | key;
-        if (code === display.vm.interruptKeycode) {
-            display.vm.interruptPending = true;
-        } else if (display.eventQueue) {
+        if (!display.eventQueue || !display.vm.image.isSpur) {
+            // for old images, queue wheel events as ctrl+up/down
+            fakeCmdOrCtrlKey(evt.deltaY > 0 ? 31 : 30, evt.timeStamp, display);
+            return;
+            // TODO: use or set VM parameter 48 (see vmParameterAt)
+        }
+        var squeakEvt = [
+            Squeak.EventTypeMouseWheel,
+            evt.timeStamp,  // converted to Squeak time in makeSqueakEvent()
+            evt.deltaX,
+            -evt.deltaY,
+            display.buttons & Squeak.Mouse_All,
+            display.buttons >> 3,
+        ];
+        display.eventQueue.push(squeakEvt);
+        if (display.signalInputEvent)
+            display.signalInputEvent();
+        display.idle = 0;
+    }
+
+    // Squeak traditional keycodes are MacRoman
+    var MacRomanToUnicode = [
+        0x00C4, 0x00C5, 0x00C7, 0x00C9, 0x00D1, 0x00D6, 0x00DC, 0x00E1,
+        0x00E0, 0x00E2, 0x00E4, 0x00E3, 0x00E5, 0x00E7, 0x00E9, 0x00E8,
+        0x00EA, 0x00EB, 0x00ED, 0x00EC, 0x00EE, 0x00EF, 0x00F1, 0x00F3,
+        0x00F2, 0x00F4, 0x00F6, 0x00F5, 0x00FA, 0x00F9, 0x00FB, 0x00FC,
+        0x2020, 0x00B0, 0x00A2, 0x00A3, 0x00A7, 0x2022, 0x00B6, 0x00DF,
+        0x00AE, 0x00A9, 0x2122, 0x00B4, 0x00A8, 0x2260, 0x00C6, 0x00D8,
+        0x221E, 0x00B1, 0x2264, 0x2265, 0x00A5, 0x00B5, 0x2202, 0x2211,
+        0x220F, 0x03C0, 0x222B, 0x00AA, 0x00BA, 0x03A9, 0x00E6, 0x00F8,
+        0x00BF, 0x00A1, 0x00AC, 0x221A, 0x0192, 0x2248, 0x2206, 0x00AB,
+        0x00BB, 0x2026, 0x00A0, 0x00C0, 0x00C3, 0x00D5, 0x0152, 0x0153,
+        0x2013, 0x2014, 0x201C, 0x201D, 0x2018, 0x2019, 0x00F7, 0x25CA,
+        0x00FF, 0x0178, 0x2044, 0x20AC, 0x2039, 0x203A, 0xFB01, 0xFB02,
+        0x2021, 0x00B7, 0x201A, 0x201E, 0x2030, 0x00C2, 0x00CA, 0x00C1,
+        0x00CB, 0x00C8, 0x00CD, 0x00CE, 0x00CF, 0x00CC, 0x00D3, 0x00D4,
+        0xF8FF, 0x00D2, 0x00DA, 0x00DB, 0x00D9, 0x0131, 0x02C6, 0x02DC,
+        0x00AF, 0x02D8, 0x02D9, 0x02DA, 0x00B8, 0x02DD, 0x02DB, 0x02C7,
+    ];
+    var UnicodeToMacRoman = {};
+    for (var i = 0; i < MacRomanToUnicode.length; i++)
+        UnicodeToMacRoman[MacRomanToUnicode[i]] = i + 128;
+
+    function recordKeyboardEvent(unicode, timestamp, display) {
+        if (!display.vm) return;
+        var macCode = UnicodeToMacRoman[unicode] || (unicode < 128 ? unicode : 0);
+        var modifiersAndKey = (display.buttons >> 3) << 8 | macCode;
+        if (display.eventQueue) {
             display.eventQueue.push([
                 Squeak.EventTypeKeyboard,
                 timestamp,  // converted to Squeak time in makeSqueakEvent()
-                key, // MacRoman
+                macCode, // MacRoman
                 Squeak.EventKeyChar,
                 display.buttons >> 3,
-                key,  // Unicode
+                unicode,  // Unicode
             ]);
             if (display.signalInputEvent)
                 display.signalInputEvent();
             // There are some old images that use both event-based
             // and polling primitives. To make those work, keep the
             // last key event
-            display.keys[0] = code;
+            display.keys[0] = modifiersAndKey;
+        } else if (modifiersAndKey === display.vm.interruptKeycode) {
+            display.vm.interruptPending = true;
         } else {
             // no event queue, queue keys the old-fashioned way
-            display.keys.push(code);
+            display.keys.push(modifiersAndKey);
         }
         display.idle = 0;
         if (display.runNow) display.runNow(); // don't wait for timeout to run
@@ -54815,15 +56361,14 @@
             document.body.style.margin = 0;
             document.body.style.backgroundColor = 'black';
             document.ontouchmove = function(evt) { evt.preventDefault(); };
-            if (options.header) options.header.style.display = 'none';
-            if (options.footer) options.footer.style.display = 'none';
         }
         var display = {
             context: canvas.getContext("2d"),
             fullscreen: false,
             width: 0,   // if 0, VM uses canvas.width
             height: 0,  // if 0, VM uses canvas.height
-            highdpi: options.highdpi,
+            scale: 1,   // VM will use window.devicePixelRatio if highdpi is enabled, also changes when touch-zooming
+            highdpi: options.highdpi, // TODO: use or set VM parameter 48 (see vmParameterAt)
             mouseX: 0,
             mouseY: 0,
             buttons: 0,
@@ -54831,14 +56376,14 @@
             eventQueue: null, // only used if image uses event primitives
             clipboardString: '',
             clipboardStringChanged: false,
-            cursorCanvas: options.cursor !== false && document.createElement("canvas"),
+            cursorCanvas: options.cursor !== false && document.getElementById("sqCursor") || document.createElement("canvas"),
             cursorOffsetX: 0,
             cursorOffsetY: 0,
             droppedFiles: [],
             signalInputEvent: null, // function set by VM
+            changedCallback: null,  // invoked when display size/scale changes
             // additional functions added below
         };
-        setupSwapButtons(options);
         if (options.pixelated) {
             canvas.classList.add("pixelated");
             display.cursorCanvas && display.cursorCanvas.classList.add("pixelated");
@@ -54886,6 +56431,9 @@
         };
         display.clear = function() {
             canvas.width = canvas.width;
+        };
+        display.setTitle = function(title) {
+            document.title = title;
         };
         display.showBanner = function(msg, style) {
             style = style || {};
@@ -54956,6 +56504,10 @@
             recordMouseEvent('mousemove', evt, canvas, display, options);
             evt.preventDefault();
         };
+        canvas.onwheel = function(evt) {
+            recordWheelEvent(evt, display);
+            evt.preventDefault();
+        };
         canvas.oncontextmenu = function() {
             return false;
         };
@@ -54986,22 +56538,23 @@
         }
         function dd(ax, ay, bx, by) {var x = ax - bx, y = ay - by; return Math.sqrt(x*x + y*y);}
         function dist(a, b) {return dd(a.pageX, a.pageY, b.pageX, b.pageY);}
-        function adjustDisplay(l, t, w, h) {
+        function adjustCanvas(l, t, w, h) {
             var cursorCanvas = display.cursorCanvas,
-                scale = w / canvas.width,
-                ratio = display.highdpi ? window.devicePixelRatio : 1;
+                cssScale = w / canvas.width,
+                ratio = display.highdpi ? window.devicePixelRatio : 1,
+                pixelScale = cssScale * ratio;
             canvas.style.left = (l|0) + "px";
             canvas.style.top = (t|0) + "px";
             canvas.style.width = (w|0) + "px";
             canvas.style.height = (h|0) + "px";
             if (cursorCanvas) {
-                cursorCanvas.style.left = (l + display.cursorOffsetX + display.mouseX * scale|0) + "px";
-                cursorCanvas.style.top = (t + display.cursorOffsetY + display.mouseY * scale|0) + "px";
-                cursorCanvas.style.width = (cursorCanvas.width * ratio * scale|0) + "px";
-                cursorCanvas.style.height = (cursorCanvas.height * ratio * scale|0) + "px";
+                cursorCanvas.style.left = (l + display.cursorOffsetX + display.mouseX * cssScale|0) + "px";
+                cursorCanvas.style.top = (t + display.cursorOffsetY + display.mouseY * cssScale|0) + "px";
+                cursorCanvas.style.width = (cursorCanvas.width * pixelScale|0) + "px";
+                cursorCanvas.style.height = (cursorCanvas.height * pixelScale|0) + "px";
             }
+            // if pixelation is not forced, turn it on for integer scales
             if (!options.pixelated) {
-                var pixelScale = window.devicePixelRatio * scale;
                 if (pixelScale % 1 === 0 || pixelScale > 5) {
                     canvas.classList.add("pixelated");
                     cursorCanvas && cursorCanvas.classList.add("pixelated");
@@ -55010,7 +56563,17 @@
                     cursorCanvas && display.cursorCanvas.classList.remove("pixelated");
                 }
             }
-            return scale;
+            display.css = {
+                left: l,
+                top: t,
+                width: w,
+                height: h,
+                scale: cssScale,
+                pixelScale: pixelScale,
+                ratio: ratio,
+            };
+            if (display.changedCallback) display.changedCallback();
+            return cssScale;
         }
         // zooming/panning with two fingers
         var maxZoom = 5;
@@ -55047,7 +56610,7 @@
             // allow to rubber-band by 20px for feedback
             l = Math.max(Math.min(l, touch.orig.left + 20), touch.orig.right - w - 20);
             t = Math.max(Math.min(t, touch.orig.top + 20), touch.orig.bottom - h - 20);
-            adjustDisplay(l, t, w, h);
+            adjustCanvas(l, t, w, h);
         }
         function zoomEnd(evt) {
             var l = canvas.offsetLeft,
@@ -55058,10 +56621,10 @@
             h = touch.orig.height * w / touch.orig.width;
             l = Math.max(Math.min(l, touch.orig.left), touch.orig.right - w);
             t = Math.max(Math.min(t, touch.orig.top), touch.orig.bottom - h);
-            var scale = adjustDisplay(l, t, w, h);
-            if ((scale - display.initialScale) < 0.0001) {
+            var scale = adjustCanvas(l, t, w, h);
+            if ((scale - display.scale) < 0.0001) {
                 touch.orig = null;
-                window.onresize();
+                onresize();
             }
         }
         // State machine to distinguish between 1st/2nd mouse button and zoom/pan:
@@ -55176,18 +56739,75 @@
             canvas.style.cursor = "none";
         }
         // keyboard stuff
-        document.onkeypress = function(evt) {
+        // create hidden input field to capture not only keyboard events
+        // but also copy/paste and input events (for dead keys)
+        var input = document.createElement("input");
+        input.setAttribute("autocomplete", "off");
+        input.setAttribute("autocorrect", "off");
+        input.setAttribute("autocapitalize", "off");
+        input.setAttribute("spellcheck", "false");
+        input.style.position = "absolute";
+        input.style.width = "0";
+        input.style.height = "0";
+        input.style.opacity = "0";
+        input.style.pointerEvents = "none";
+        canvas.parentElement.appendChild(input);
+        // touch-keyboard button
+        if ('ontouchstart' in document) {
+            var keyboardButton = document.createElement('div');
+            keyboardButton.innerHTML = '<?xml version="1.0" encoding="UTF-8" standalone="no"?><svg width="50px" height="50px" viewBox="0 0 150 150" version="1.1" xmlns="http://www.w3.org/2000/svg"><g id="Page-1" stroke="none" fill="#000000"><rect x="33" y="105" width="10" height="10" rx="1"></rect><rect x="26" y="60" width="10" height="10" rx="1"></rect><rect x="41" y="60" width="10" height="10" rx="1"></rect><rect x="56" y="60" width="10" height="10" rx="1"></rect><rect x="71" y="60" width="10" height="10" rx="1"></rect><rect x="86" y="60" width="10" height="10" rx="1"></rect><rect x="101" y="60" width="10" height="10" rx="1"></rect><rect x="116" y="60" width="10" height="10" rx="1"></rect><rect x="108" y="105" width="10" height="10" rx="1"></rect><rect x="33" y="75" width="10" height="10" rx="1"></rect><rect x="48" y="75" width="10" height="10" rx="1"></rect><rect x="63" y="75" width="10" height="10" rx="1"></rect><rect x="78" y="75" width="10" height="10" rx="1"></rect><rect x="93" y="75" width="10" height="10" rx="1"></rect><rect x="108" y="75" width="10" height="10" rx="1"></rect><rect x="41" y="90" width="10" height="10" rx="1"></rect><rect x="26" y="90" width="10" height="10" rx="1"></rect><rect x="56" y="90" width="10" height="10" rx="1"></rect><rect x="71" y="90" width="10" height="10" rx="1"></rect><rect x="86" y="90" width="10" height="10" rx="1"></rect><rect x="101" y="90" width="10" height="10" rx="1"></rect><rect x="116" y="90" width="10" height="10" rx="1"></rect><rect x="48" y="105" width="55" height="10" rx="1"></rect><path d="M20.0056004,51 C18.3456532,51 17.0000001,52.3496496 17.0000001,54.0038284 L17.0000001,85.6824519 L17,120.003453 C17.0000001,121.6584 18.3455253,123 20.0056004,123 L131.9944,123 C133.654347,123 135,121.657592 135,119.997916 L135,54.0020839 C135,52.3440787 133.654475,51 131.9944,51 L20.0056004,51 Z" fill="none" stroke="#000000" stroke-width="2"></path><path d="M52.0410156,36.6054687 L75.5449219,21.6503905 L102.666016,36.6054687" id="Line" stroke="#000000" stroke-width="3" stroke-linecap="round" fill="none"></path></g></svg>';
+            keyboardButton.setAttribute('style', 'position:fixed;right:0;bottom:0;background-color:rgba(128,128,128,0.5);border-radius:5px');
+            canvas.parentElement.appendChild(keyboardButton);
+            keyboardButton.onmousedown = function(evt) {
+                // show on-screen keyboard
+                input.focus();
+                evt.preventDefault();
+            };
+            keyboardButton.ontouchstart = keyboardButton.onmousedown;
+        } else {
+            // keep focus on input field
+            input.onblur = function() { input.focus(); };
+            input.focus();
+        }
+        display.isMac = navigator.userAgent.includes("Mac");
+        // emulate keypress events
+        var deadKey = false, // true if last keydown was a dead key
+            deadChars = [];
+        input.oninput = function(evt) {
             if (!display.vm) return true;
-            // check for ctrl-x/c/v/r
-            if (/[CXVR]/.test(String.fromCharCode(evt.charCode + 64)))
-                return true;  // let browser handle cut/copy/paste/reload
-            recordModifiers(evt, display);
-            recordKeyboardEvent(evt.charCode, evt.timeStamp, display);
-            evt.preventDefault();
+            if (evt.inputType === "insertText"                // regular key, or Chrome
+                || evt.inputType === "insertCompositionText"  // Firefox, Chrome
+                || evt.inputType === "insertFromComposition") // Safari
+            {
+                // generate backspace to delete inserted dead chars
+                var hadDeadChars = deadChars.length > 0;
+                if (hadDeadChars) {
+                    var oldButtons = display.buttons;
+                    display.buttons &= ~Squeak.Keyboard_All;  // remove all modifiers
+                    for (var i = 0; i < deadChars.length; i++) {
+                        recordKeyboardEvent(8, evt.timeStamp, display);
+                    }
+                    display.buttons = oldButtons;
+                    deadChars = [];
+                }
+                // generate keyboard events for each character
+                // single input could be many characters, e.g. for emoji
+                var chars = Array.from(evt.data); // split by surrogate pairs
+                for (var i = 0; i < chars.length; i++) {
+                    var unicode = chars[i].codePointAt(0); // codePointAt combines pair into unicode
+                    recordKeyboardEvent(unicode, evt.timeStamp, display);
+                }
+                if (!hadDeadChars && evt.isComposing && evt.inputType === "insertCompositionText") {
+                    deadChars = deadChars.concat(chars);
+                }
+            }
+            if (!deadChars.length) input.value = "";  // clear input
         };
-        document.onkeydown = function(evt) {
+        input.onkeydown = function(evt) {
             checkFullscreen();
             if (!display.vm) return true;
+            deadKey = evt.key === "Dead";
+            if (deadKey) return;  // let browser handle dead keys
             recordModifiers(evt, display);
             var squeakCode = ({
                 8: 8,   // Backspace
@@ -55210,56 +56830,60 @@
                 recordKeyboardEvent(squeakCode, evt.timeStamp, display);
                 return evt.preventDefault();
             }
-            if ((evt.metaKey || (evt.altKey && !evt.ctrlKey))) {
-                var key = evt.key; // only supported in FireFox, others have keyIdentifier
-                if (!key && evt.keyIdentifier && evt.keyIdentifier.slice(0,2) == 'U+')
-                    key = String.fromCharCode(parseInt(evt.keyIdentifier.slice(2), 16));
-                if (key && key.length == 1) {
-                    if (/[CXVR]/i.test(key))
-                        return true;  // let browser handle cut/copy/paste/reload
-                    var code = key.charCodeAt(0);
-                    if (/[A-Z]/.test(key) && !evt.shiftKey) code += 32;  // make lower-case
-                    recordKeyboardEvent(code, evt.timeStamp, display);
-                    return evt.preventDefault();
+            // copy/paste new-style
+            if (display.isMac ? evt.metaKey : evt.ctrlKey) {
+                switch (evt.key) {
+                    case "c":
+                    case "x":
+                        if (!navigator.clipboard?.writeText) return; // fire document.oncopy/oncut
+                        var text = display.executeClipboardCopy(evt.key, evt.timeStamp);
+                        if (typeof text === 'string') {
+                            navigator.clipboard.writeText(text)
+                                .catch(function(err) { console.error("display: copy error " + err.message); });
+                        }
+                        return evt.preventDefault();
+                    case "v":
+                        if (!navigator.clipboard?.readText) return; // fire document.onpaste
+                        navigator.clipboard.readText()
+                            .then(function(text) {
+                                display.executeClipboardPaste(text, evt.timeStamp);
+                            })
+                            .catch(function(err) { console.error("display: paste error " + err.message); });
+                        return evt.preventDefault();
                 }
             }
+            if (evt.key.length !== 1) return; // let browser handle other keys
+            if (display.buttons & (Squeak.Keyboard_Cmd | Squeak.Keyboard_Ctrl)) {
+                var code = evt.key.toLowerCase().charCodeAt(0);
+                if ((display.buttons & Squeak.Keyboard_Ctrl) && code >= 96 && code < 127) code &= 0x1F; // ctrl-<key>
+                recordKeyboardEvent(code, evt.timeStamp, display);
+                return evt.preventDefault();
+            }
         };
-        document.onkeyup = function(evt) {
+        input.onkeyup = function(evt) {
             if (!display.vm) return true;
             recordModifiers(evt, display);
         };
-        document.oncopy = function(evt, key) {
-            var text = display.executeClipboardCopy(key, evt.timeStamp);
-            if (typeof text === 'string') {
-                evt.clipboardData.setData("Text", text);
-            }
-            evt.preventDefault();
-        };
-        document.oncut = function(evt) {
-            if (!display.vm) return true;
-            document.oncopy(evt, 'x');
-        };
-        document.onpaste = function(evt) {
-            var text = evt.clipboardData.getData('Text');
-            display.executeClipboardPaste(text, evt.timeStamp);
-            evt.preventDefault();
-        };
-        // touch keyboard button
-        if ('ontouchstart' in document) {
-            var keyboardButton = document.createElement('div');
-            keyboardButton.innerHTML = '<?xml version="1.0" encoding="UTF-8" standalone="no"?><svg width="50px" height="50px" viewBox="0 0 150 150" version="1.1" xmlns="http://www.w3.org/2000/svg"><g id="Page-1" stroke="none" fill="#000000"><rect x="33" y="105" width="10" height="10" rx="1"></rect><rect x="26" y="60" width="10" height="10" rx="1"></rect><rect x="41" y="60" width="10" height="10" rx="1"></rect><rect x="56" y="60" width="10" height="10" rx="1"></rect><rect x="71" y="60" width="10" height="10" rx="1"></rect><rect x="86" y="60" width="10" height="10" rx="1"></rect><rect x="101" y="60" width="10" height="10" rx="1"></rect><rect x="116" y="60" width="10" height="10" rx="1"></rect><rect x="108" y="105" width="10" height="10" rx="1"></rect><rect x="33" y="75" width="10" height="10" rx="1"></rect><rect x="48" y="75" width="10" height="10" rx="1"></rect><rect x="63" y="75" width="10" height="10" rx="1"></rect><rect x="78" y="75" width="10" height="10" rx="1"></rect><rect x="93" y="75" width="10" height="10" rx="1"></rect><rect x="108" y="75" width="10" height="10" rx="1"></rect><rect x="41" y="90" width="10" height="10" rx="1"></rect><rect x="26" y="90" width="10" height="10" rx="1"></rect><rect x="56" y="90" width="10" height="10" rx="1"></rect><rect x="71" y="90" width="10" height="10" rx="1"></rect><rect x="86" y="90" width="10" height="10" rx="1"></rect><rect x="101" y="90" width="10" height="10" rx="1"></rect><rect x="116" y="90" width="10" height="10" rx="1"></rect><rect x="48" y="105" width="55" height="10" rx="1"></rect><path d="M20.0056004,51 C18.3456532,51 17.0000001,52.3496496 17.0000001,54.0038284 L17.0000001,85.6824519 L17,120.003453 C17.0000001,121.6584 18.3455253,123 20.0056004,123 L131.9944,123 C133.654347,123 135,121.657592 135,119.997916 L135,54.0020839 C135,52.3440787 133.654475,51 131.9944,51 L20.0056004,51 Z" fill="none" stroke="#000000" stroke-width="2"></path><path d="M52.0410156,36.6054687 L75.5449219,21.6503905 L102.666016,36.6054687" id="Line" stroke="#000000" stroke-width="3" stroke-linecap="round" fill="none"></path></g></svg>';
-            keyboardButton.setAttribute('style', 'position:fixed;right:0;bottom:0;background-color:rgba(128,128,128,0.5);border-radius:5px');
-            canvas.parentElement.appendChild(keyboardButton);
-            keyboardButton.onmousedown = function(evt) {
-                canvas.contentEditable = true;
-                canvas.setAttribute('autocomplete', 'off');
-                canvas.setAttribute('autocorrect', 'off');
-                canvas.setAttribute('autocapitalize', 'off');
-                canvas.setAttribute('spellcheck', 'off');
-                canvas.focus();
+        // copy/paste old-style
+        if (!navigator.clipboard?.writeText) {
+            document.oncopy = function(evt, key) {
+                var text = display.executeClipboardCopy(key, evt.timeStamp);
+                if (typeof text === 'string') {
+                    evt.clipboardData.setData("Text", text);
+                }
                 evt.preventDefault();
             };
-            keyboardButton.ontouchstart = keyboardButton.onmousedown;
+            document.oncut = function(evt) {
+                if (!display.vm) return true;
+                document.oncopy(evt, 'x');
+            };
+        }
+        if (!navigator.clipboard?.readText) {
+            document.onpaste = function(evt) {
+                var text = evt.clipboardData.getData('Text');
+                display.executeClipboardPaste(text, evt.timeStamp);
+                evt.preventDefault();
+            };
         }
         // do not use addEventListener, we want to replace any previous drop handler
         function dragEventHasFiles(evt) {
@@ -55292,20 +56916,30 @@
                 image, imageName = null;
             display.droppedFiles = [];
             files.forEach(function(f) {
-                display.droppedFiles.push(f.name);
+                var path = options.root + f.name;
+                display.droppedFiles.push(path);
                 var reader = new FileReader();
                 reader.onload = function () {
                     var buffer = this.result;
-                    Squeak.filePut(f.name, buffer);
-                    loaded.push(f.name);
-                    if (!image && /.*image$/.test(f.name) && (!display.vm || confirm("Run " + f.name + " now?\n(cancel to use as file)"))) {
+                    Squeak.filePut(path, buffer);
+                    loaded.push(path);
+                    if (!image && /.*image$/.test(path) && (!display.vm || confirm("Run " + f.name + " now?\n(cancel to use as file)"))) {
                         image = buffer;
-                        imageName = f.name;
+                        imageName = path;
                     }
                     if (loaded.length == files.length) {
                         if (image) {
-                            SqueakJS.appName = imageName.slice(0, -6);
-                            SqueakJS.runImage(image, imageName, display, options);
+                            if (display.vm) {
+                                display.quitFlag = true;
+                                options.onQuit = function(vm, display, options) {
+                                    options.onQuit = null;
+                                    SqueakJS.appName = imageName.replace(/.*\//,'').replace(/\.image$/,'');
+                                    SqueakJS.runImage(image, imageName, display, options);
+                                };
+                            } else {
+                                SqueakJS.appName = imageName.replace(/.*\//,'').replace(/\.image$/,'');
+                                SqueakJS.runImage(image, imageName, display, options);
+                            }
                         } else {
                             recordDragDropEvent(Squeak.EventDragDrop, evt, canvas, display);
                         }
@@ -55315,40 +56949,38 @@
             });
             return false;
         };
-        window.onresize = function() {
+
+        var debounceTimeout;
+        function onresize() {
             if (touch.orig) return; // manually resized
             // call resizeDone only if window size didn't change for 300ms
             var debounceWidth = window.innerWidth,
                 debounceHeight = window.innerHeight;
-            setTimeout(function() {
+            clearTimeout(debounceTimeout);
+            debounceTimeout = setTimeout(function() {
                 if (debounceWidth == window.innerWidth && debounceHeight == window.innerHeight)
                     display.resizeDone();
+                else
+                    onresize();
             }, 300);
-            // if no fancy layout, don't bother
-            if ((!options.header || !options.footer) && !options.fullscreen) {
-                display.width = canvas.width;
-                display.height = canvas.height;
-                return;
-            }
             // CSS won't let us do what we want so we will layout the canvas ourselves.
-            var fullscreen = options.fullscreen || display.fullscreen,
-                x = 0,
-                y = fullscreen ? 0 : options.header.offsetTop + options.header.offsetHeight,
+            var x = 0,
+                y = 0,
                 w = window.innerWidth,
-                h = fullscreen ? window.innerHeight : Math.max(100, options.footer.offsetTop - y),
+                h = window.innerHeight,
                 paddingX = 0, // padding outside canvas
                 paddingY = 0;
             // above are the default values for laying out the canvas
             if (!options.fixedWidth) { // set canvas resolution
                 if (!options.minWidth) options.minWidth = 700;
                 if (!options.minHeight) options.minHeight = 700;
-                var scaleW = w < options.minWidth ? options.minWidth / w : 1,
-                    scaleH = h < options.minHeight ? options.minHeight / h : 1,
+                var defaultScale = display.highdpi ? window.devicePixelRatio : 1,
+                    scaleW = w < options.minWidth ? options.minWidth / w : defaultScale,
+                    scaleH = h < options.minHeight ? options.minHeight / h : defaultScale,
                     scale = Math.max(scaleW, scaleH);
-                if (display.highdpi) scale *= window.devicePixelRatio;
                 display.width = Math.floor(w * scale);
                 display.height = Math.floor(h * scale);
-                display.initialScale = w / display.width;
+                display.scale = w / display.width;
             } else { // fixed resolution and aspect ratio
                 display.width = options.fixedWidth;
                 display.height = options.fixedHeight;
@@ -55359,13 +56991,8 @@
                 } else {
                     paddingY = h - Math.floor(w / wantRatio);
                 }
-                display.initialScale = (w - paddingX) / display.width;
+                display.scale = (w - paddingX) / display.width;
             }
-            // set size and position
-            canvas.style.left = (x + Math.floor(paddingX / 2)) + "px";
-            canvas.style.top = (y + Math.floor(paddingY / 2)) + "px";
-            canvas.style.width = (w - paddingX) + "px";
-            canvas.style.height = (h - paddingY) + "px";
             // set resolution
             if (canvas.width != display.width || canvas.height != display.height) {
                 var preserveScreen = options.fixedWidth || !display.resizeTodo, // preserve unless changing fullscreen
@@ -55374,27 +57001,17 @@
                 canvas.height = display.height;
                 if (imgData) display.context.putImageData(imgData, 0, 0);
             }
-            // set cursor scale
-            var cursorCanvas = display.cursorCanvas,
-                scale = canvas.offsetWidth / canvas.width;
-            if (display.highdpi) scale *= window.devicePixelRatio;
-            if (cursorCanvas && options.fixedWidth) {
-                cursorCanvas.style.width = (cursorCanvas.width * scale) + "px";
-                cursorCanvas.style.height = (cursorCanvas.height * scale) + "px";
-            }
-            // set pixelation
-            if (!options.pixelated) {
-                var pixelScale = window.devicePixelRatio * scale;
-                if (pixelScale % 1 === 0 || pixelScale > 5) {
-                    canvas.classList.add("pixelated");
-                    cursorCanvas && cursorCanvas.classList.add("pixelated");
-                } else {
-                    canvas.classList.remove("pixelated");
-                    cursorCanvas && display.cursorCanvas.classList.remove("pixelated");
-                }
-            }
-        };
-        window.onresize();
+            // set canvas and cursor canvas size, position, pixelation
+            adjustCanvas(
+                x + Math.floor(paddingX / 2),
+                y + Math.floor(paddingY / 2),
+                w - paddingX,
+                h - paddingY
+            );
+        }
+        onresize();
+        window.onresize = onresize;
+
         return display;
     }
 
@@ -55444,21 +57061,19 @@
         display.clear();
         display.showBanner("Loading " + SqueakJS.appName);
         display.showProgress(0);
-        var self = this;
         window.setTimeout(function readImageAsync() {
             var image = new Squeak.Image(name);
             image.readFromBuffer(buffer, function startRunning() {
                 display.quitFlag = false;
-                var vm = new Squeak.Interpreter(image, display);
+                var vm = new Squeak.Interpreter(image, display, options);
                 SqueakJS.vm = vm;
                 Squeak.Settings["squeakImageName"] = name;
-                setupSwapButtons(options);
                 display.clear();
                 display.showBanner("Starting " + SqueakJS.appName);
                 var spinner = setupSpinner(vm, options);
                 function run() {
                     try {
-                        if (display.quitFlag) self.onQuit(vm, display, options);
+                        if (display.quitFlag) SqueakJS.onQuit(vm, display, options);
                         else vm.interpret(50, function runAgain(ms) {
                             if (ms == "sleep") ms = 200;
                             if (spinner) updateSpinner(spinner, ms, vm, display);
@@ -55480,6 +57095,7 @@
                         display.runNow();
                     } while (Date.now() < stoptime);
                 };
+                if (options.onStart) options.onStart(vm, display, options);
                 run();
             },
             function readProgress(value) {display.showProgress(value);});
@@ -55519,7 +57135,10 @@
             }
             for (var path in options.templates) {
                 var dir = path[0] == "/" ? path : options.root + path,
-                    url = Squeak.splitUrl(options.templates[path], options.url).full;
+                    baseUrl = new URL(options.url, document.baseURI).href.split(/[?#]/)[0],
+                    url = Squeak.splitUrl(options.templates[path], baseUrl).full;
+                    if (url.endsWith("/")) url = url.slice(0,-1);
+                    if (url.endsWith("/.")) url = url.slice(0,-2);
                 Squeak.fetchTemplateDir(dir, url);
             }
         }
@@ -55566,7 +57185,7 @@
                 console.log("Inflating " + file.name + ": " + filename);
                 function progress(x) { display.showProgress((x.percent / 100 + done) / todo.length); }
                 zip.file(filename).async("arraybuffer", progress).then(function(buffer){
-                    console.log("Expanded size of " + filename + ": " + buffer.byteLength);
+                    console.log("Expanded size of " + filename + ": " + buffer.byteLength + " bytes");
                     var unzipped = {};
                     if (options.image.name === filename)
                         unzipped = options.image;
@@ -55622,9 +57241,9 @@
                 console.error(Squeak.bytesAsString(new Uint8Array(this.response)));
                 return alert("Failed to download:\n" + file.url);
             }
-            console.warn('Retrying with CORS proxy: ' + file.url);
             var proxy = 'https://corsproxy.io/?',
                 retry = new XMLHttpRequest();
+            console.warn('Retrying with CORS proxy: ' + proxy + file.url);
             retry.open('GET', proxy + file.url);
             if (options.ajax) retry.setRequestHeader("X-Requested-With", "XMLHttpRequest");
             retry.responseType = rq.responseType;
@@ -55660,7 +57279,11 @@
         // we need to fetch all files first, then run the image
         processOptions(options);
         if (!imageUrl && options.image) imageUrl = options.image;
-        var baseUrl = options.url || (imageUrl && imageUrl.replace(/[^\/]*$/, "")) || "";
+        var baseUrl = options.url || "";
+        if (!baseUrl && imageUrl && imageUrl.replace(/[^\/]*$/, "")) {
+            baseUrl = imageUrl.replace(/[^\/]*$/, "");
+            imageUrl = imageUrl.replace(/^.*\//, "");
+        }
         options.url = baseUrl;
         if (baseUrl[0] === "/" && baseUrl[1] !== "/" && baseUrl.length > 1 && options.root === "/") {
             options.root = baseUrl;
@@ -55691,7 +57314,12 @@
             var zips = typeof options.zip === "string" ? [options.zip] : options.zip;
             zips.forEach(function(zip) {
                 var url = Squeak.splitUrl(zip, baseUrl);
-                files.push({url: url.full, name: url.filename, zip: true});
+                var prefix = "";
+                // if filename has no version info, but full url has it, use full url as prefix
+                if (!url.filename.match(/[0-9]/) && url.uptoslash.match(/[0-9]/)) {
+                    prefix = url.uptoslash.replace(/^[^:]+:\/\//, "").replace(/[^a-zA-Z0-9]/g, "_");
+                }
+                files.push({url: url.full, name: prefix + url.filename, zip: true});
             });
         }
         if (image.url) files.push(image);
@@ -55702,7 +57330,7 @@
         }
         options.image = image;
         fetchFiles(files, display, options, function thenDo() {
-            Squeak.fsck();
+            Squeak.fsck(); // will run async
             var image = options.image;
             if (!image.name) return alert("could not find an image");
             if (!image.data) return alert("could not find image " + image.name);
@@ -55739,4 +57367,4 @@
         });
     }
 
-}());
+})();

@@ -5,7 +5,7 @@ SqueakJS is an HTML5 runtime engine for [Squeak][squeak]</a> Smalltalk written i
 
 Embedding a Smalltalk application in your webpage can be as simple as:
 
-    SqueakJS.runSqueak(imageUrl, canvas, { fullscreen: true });
+    SqueakJS.runSqueak(imageUrl, canvas);
 
 The interpreter core is divided in a number of `vm.*.js` modules, internal plugins in `vm.plugins.*.js` modules and external plugins in the "plugins" directory. The Just-in-Time compiler is optional ("jit.js") and can be easily replaced with your own.
 
@@ -51,14 +51,20 @@ If your browser does not support ES6 modules try the full or headless SqueakJS V
 
 Installing locally
 ------------------
-* download and unpack the [ZIP archive][zip] (or clone the [github repo][repo])
+* clone the [github repo][repo]:
+  ```
+  git clone https://github.com/codefrau/SqueakJS.git
+  ```
+  or download and unpack the [ZIP archive][zip]
 * serve the SqueakJS directory using a local web server.
 
-  TIP: If you have python try out something like
+  TIP: If you have Node.js, try
   ```
-  python -m SimpleHTTPServer 9090
+  cd SqueakJS
+  npx serve
   ```
-* in your web browser, open the SqueakJS/demo/simple.html file
+  which will run a webserver on port 3000.
+* in a web browser, open http://localhost:3000/run/ and pick one of the images, or drag and drop your own
 
 Now Squeak should be running.
 The reason for having to run from a web server is because the image is loaded with an XMLHttpRequest which does not work with a file URL. Alternatively, you could just open SqueakJS/run/index.html and drop in a local image.
@@ -67,6 +73,7 @@ Using (self contained) bundled files
 ------------------------------------
 * select your preferred type of interface (browser or headless)
 * use the appropriate file (`squeak_bundle.js` resp. `squeak_headless_bundle.js`) from the [Distribution][dist] directory
+* you can also build minified bundles using `npm run build`
 
 How to modify it
 ----------------
@@ -82,9 +89,9 @@ Contributions are very welcome!
 
 Things to work on
 -----------------
-SqueakJS is intended to run any Squeak image. It can already load any image from the original 1996 Squeak release to the latest Cog-Spur release, including 64-bit and Sista variants. But various pieces (primitives in various plugins) are still missing, in particular media support (MIDI, 3D graphics). Also, we should make pre-Spur 64 bit images load, and add a JIT for SISTA bytecodes. And, it would be nice to make it work on as many browsers as possible, especially on mobile touch devices.
+SqueakJS is intended to run any Squeak image. It can already load any image from the original 1996 Squeak release to the latest Cog-Spur release, including 64-bit and Sista variants. But various pieces (primitives in various plugins) are still missing, in particular 3D graphics and networking (however, see [Croquet][jasmine] which supports both, but should be generalized). Also, we should make pre-Spur 64 bit images load. And, it would be nice to make it work on as many browsers as possible, especially on mobile touch devices.
 
-As for optimizing I think the way to go is an optimizing JIT compiler. The current JIT is very simple and does not optimize at all. Since we can't access or manipulate the JavaScript stack, we might want that compiler to inline as much as possible, but keep the call sequence flat so we can return to the browser at any time. Even better (but potentially more complicated) is actually using the JavaScript stack, just like Eliot's Stack VM uses the C stack. I have done some [advanced JIT mockups][jit]. To make BitBlt fast, we could probably use WebGL.
+As for optimizing I think the way to go is an optimizing JIT compiler. The current JIT is very simple and does not optimize at all. Since we can't access or manipulate the JavaScript stack, we might want that compiler to inline as much as possible, but keep the call sequence flat so we can return to the browser at any time. Even better (but potentially more complicated) is actually using the JavaScript stack, just like Eliot's Stack VM uses the C stack. I have done some [advanced JIT mockups][jit]. To make BitBlt fast, we could probably use WASM or even WebGL.
 
 To make SqueakJS useful beyond running existing Squeak images, we should use the JavaScript bridge to write a native HTML UI which would certainly be much faster than BitBlt.
 
@@ -102,6 +109,7 @@ There's a gazillion exciting things to do :)
   [mini]:     https://squeak.js.org/demo/simple.html
   [etoys]:    https://squeak.js.org/etoys/
   [scratch]:  https://squeak.js.org/scratch/
+  [jasmine]:  https://github.com/codefrau/jasmine
   [jit]:      https://squeak.js.org/docs/jit.md.html
   [ws]:       https://github.com/codefrau/SqueakJS/tree/main/ws
   [dist]:     https://github.com/codefrau/SqueakJS/tree/main/dist
@@ -111,6 +119,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2024-03-25: 1.2.0 add FFI and MIDI plugins, JIT for Sista bytecodes, JPEG write prim, fix keyboard input, copy/paste, scroll wheel, highdpi, allow ES6 in source
     2023-11-24: 1.1.2 fixed BitBlt bug (symptom reported 9 years ago, thanks to Agustin Martinez for narrowing it down), add object pinning, support keyboard in ancient Scratch images
     2023-10-24: 1.1.1 workarounds for Cuis 6
     2023-10-23: 1.1.0 implement Etoys project saving (image segment export), drag-n-drop directories

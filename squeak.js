@@ -119,7 +119,7 @@
     "version", {
         // system attributes
         vmVersion: "SqueakJS 1.1.2",
-        vmDate: "2024-03-24",               // Maybe replace at build time?
+        vmDate: "2024-03-25",               // Maybe replace at build time?
         vmBuild: "unknown",                 // or replace at runtime by last-modified?
         vmPath: "unknown",                  // Replace at runtime
         vmFile: "vm.js",
@@ -38586,152 +38586,11 @@
      * THE SOFTWARE.
      */
 
-    /*
-    initialize
-    	"Initialize the MIDI parameter constants."
-    	"MidiPrimTester initialize"
-
-    	Installed := 1.
-    		"Read-only. Return 1 if a MIDI driver is installed, 0 if not.
-    		 On OMS-based MIDI drivers, this returns 1 only if the OMS
-    		 system is properly installed and configured."
-
-    	Version := 2.
-    		"Read-only. Return the integer version number of this MIDI driver.
-    		 The version numbering sequence is relative to a particular driver.
-    		 That is, version 3 of the Macintosh MIDI driver is not necessarily
-    		 related to version 3 of the Win95 MIDI driver."
-
-    	HasBuffer := 3.
-    		"Read-only. Return 1 if this MIDI driver has a time-stamped output
-    		 buffer, 0 otherwise. Such a buffer allows the client to schedule
-    		 MIDI output packets to be sent later. This can allow more precise
-    		 timing, since the driver uses timer interrupts to send the data
-    		 at the right time even if the processor is in the midst of a
-    		 long-running Squeak primitive or is running some other application
-    		 or system task."
-
-    	HasDurs := 4.
-    		"Read-only. Return 1 if this MIDI driver supports an extended
-    		 primitive for note-playing that includes the note duration and
-    		 schedules both the note-on and the note-off messages in the
-    		 driver. Otherwise, return 0."
-
-    	CanSetClock := 5.
-    		"Read-only. Return 1 if this MIDI driver's clock can be set
-    		 via an extended primitive, 0 if not."
-
-    	CanUseSemaphore := 6.
-    		"Read-only. Return 1 if this MIDI driver can signal a semaphore
-    		 when MIDI input arrives. Otherwise, return 0. If this driver
-    		 supports controller caching and it is enabled, then incoming
-    		 controller messages will not signal the semaphore."
-
-    	EchoOn := 7.
-    		"Read-write. If this flag is set to a non-zero value, and if
-    		 the driver supports echoing, then incoming MIDI events will
-    		 be echoed immediately. If this driver does not support echoing,
-    		 then queries of this parameter will always return 0 and
-    		 attempts to change its value will do nothing."
-
-    	UseControllerCache := 8.
-    		"Read-write. If this flag is set to a non-zero value, and if
-    		 the driver supports a controller cache, then the driver will
-    		 maintain a cache of the latest value seen for each MIDI controller,
-    		 and control update messages will be filtered out of the incoming
-    		 MIDI stream. An extended MIDI primitive allows the client to
-    		 poll the driver for the current value of each controller. If
-    		 this driver does not support a controller cache, then queries
-    		 of this parameter will always return 0 and attempts to change
-    		 its value will do nothing."
-
-    	EventsAvailable := 9.
-    		"Read-only. Return the number of MIDI packets in the input queue."
-
-    	FlushDriver := 10.
-    		"Write-only. Setting this parameter to any value forces the driver
-    		 to flush its I/0 buffer, discarding all unprocessed data. Reading
-    		 this parameter returns 0. Setting this parameter will do nothing
-    		 if the driver does not support buffer flushing."
-
-    	ClockTicksPerSec := 11.
-    		"Read-only. Return the MIDI clock rate in ticks per second."
-
-    	HasInputClock := 12.
-    		"Read-only. Return 1 if this MIDI driver timestamps incoming
-    		 MIDI data with the current value of the MIDI clock, 0 otherwise.
-    		 If the driver does not support such timestamping, then the
-    		 client must read input data frequently and provide its own
-    		 timestamping."
-    */
-
-    const MIDI = {
-        Installed: 1,
-            // Read-only. Return 1 if a MIDI driver is installed, 0 if not.
-            // On OMS-based MIDI drivers, this returns 1 only if the OMS
-            // system is properly installed and configured.
-        Version: 2,
-            // Read-only. Return the integer version number of this MIDI driver.
-            // The version numbering sequence is relative to a particular driver.
-            // That is, version 3 of the Macintosh MIDI driver is not necessarily
-            // related to version 3 of the Win95 MIDI driver.
-        HasBuffer: 3,
-            // Read-only. Return 1 if this MIDI driver has a time-stamped output
-            // buffer, 0 otherwise. Such a buffer allows the client to schedule
-            // MIDI output packets to be sent later. This can allow more precise
-            // timing, since the driver uses timer interrupts to send the data
-            // at the right time even if the processor is in the midst of a
-            // long-running Squeak primitive or is running some other application
-            // or system task.
-        HasDurs: 4,
-            // Read-only. Return 1 if this MIDI driver supports an extended
-            // primitive for note-playing that includes the note duration and
-            // schedules both the note-on and the note-off messages in the
-            // driver. Otherwise, return 0.
-        CanSetClock: 5,
-            // Read-only. Return 1 if this MIDI driver's clock can be set
-            // via an extended primitive, 0 if not.
-        CanUseSemaphore: 6,
-            // Read-only. Return 1 if this MIDI driver can signal a semaphore
-            // when MIDI input arrives. Otherwise, return 0. If this driver
-            // supports controller caching and it is enabled, then incoming
-            // controller messages will not signal the semaphore.
-        EchoOn: 7,
-            // Read-write. If this flag is set to a non-zero value, and if
-            // the driver supports echoing, then incoming MIDI events will
-            // be echoed immediately. If this driver does not support echoing,
-            // then queries of this parameter will always return 0 and
-            // attempts to change its value will do nothing.
-        UseControllerCache: 8,
-            // Read-write. If this flag is set to a non-zero value, and if
-            // the driver supports a controller cache, then the driver will
-            // maintain a cache of the latest value seen for each MIDI controller,
-            // and control update messages will be filtered out of the incoming
-            // MIDI stream. An extended MIDI primitive allows the client to
-            // poll the driver for the current value of each controller. If
-            // this driver does not support a controller cache, then queries
-            // of this parameter will always return 0 and attempts to change
-            // its value will do nothing.
-        EventsAvailable: 9,
-            // Read-only. Return the number of MIDI packets in the input queue.
-        FlushDriver: 10,
-            // Write-only. Setting this parameter to any value forces the driver
-            // to flush its I/0 buffer, discarding all unprocessed data. Reading
-            // this parameter returns 0. Setting this parameter will do nothing
-            // if the driver does not support buffer flushing.
-        ClockTicksPerSec: 11,
-            // Read-only. Return the MIDI clock rate in ticks per second.
-        HasInputClock: 12,
-            // Read-only. Return 1 if this MIDI driver timestamps incoming
-            // MIDI data with the current value of the MIDI clock, 0 otherwise.
-            // If the driver does not support such timestamping, then the
-            // client must read input data frequently and provide its own
-            // timestamping.
-    };
-
 
     function MIDIPlugin() {
         "use strict";
+
+        const MIDI = midiParameterConstants();
 
         return {
             debug: false,
@@ -38877,6 +38736,7 @@
                 const parameter = this.prims.stackInteger(argCount - 1);
                 // const newValue = argCount > 1 ? this.prims.stackInteger(0) : null;
                 let value;
+                // mostly untested, because I found no Squeak app that actually uses these
                 switch (parameter) {
                     case MIDI.Installed:
                         value = 1; break
@@ -38892,7 +38752,7 @@
                     case MIDI.FlushDriver:
                         value = 0; break;
                     case MIDI.ClockTicksPerSec:
-                        value = 1000; break; // we use 1ms clock ticks
+                        value = 1000; break;
                     case MIDI.HasInputClock:
                         value = 1; break;
                     default: return false;
@@ -39036,6 +38896,74 @@
                 }
                 return this.prims.popNandPushIfOK(argCount + 1, received);
             },
+        };
+    }
+
+    function midiParameterConstants() {
+        // MIDI parameter key constants
+        // see primitiveMIDIParameterGetOrSet() for SqueakJS values
+        return  {
+            Installed: 1,
+                // Read-only. Return 1 if a MIDI driver is installed, 0 if not.
+                // On OMS-based MIDI drivers, this returns 1 only if the OMS
+                // system is properly installed and configured.
+            Version: 2,
+                // Read-only. Return the integer version number of this MIDI driver.
+                // The version numbering sequence is relative to a particular driver.
+                // That is, version 3 of the Macintosh MIDI driver is not necessarily
+                // related to version 3 of the Win95 MIDI driver.
+            HasBuffer: 3,
+                // Read-only. Return 1 if this MIDI driver has a time-stamped output
+                // buffer, 0 otherwise. Such a buffer allows the client to schedule
+                // MIDI output packets to be sent later. This can allow more precise
+                // timing, since the driver uses timer interrupts to send the data
+                // at the right time even if the processor is in the midst of a
+                // long-running Squeak primitive or is running some other application
+                // or system task.
+            HasDurs: 4,
+                // Read-only. Return 1 if this MIDI driver supports an extended
+                // primitive for note-playing that includes the note duration and
+                // schedules both the note-on and the note-off messages in the
+                // driver. Otherwise, return 0.
+            CanSetClock: 5,
+                // Read-only. Return 1 if this MIDI driver's clock can be set
+                // via an extended primitive, 0 if not.
+            CanUseSemaphore: 6,
+                // Read-only. Return 1 if this MIDI driver can signal a semaphore
+                // when MIDI input arrives. Otherwise, return 0. If this driver
+                // supports controller caching and it is enabled, then incoming
+                // controller messages will not signal the semaphore.
+            EchoOn: 7,
+                // Read-write. If this flag is set to a non-zero value, and if
+                // the driver supports echoing, then incoming MIDI events will
+                // be echoed immediately. If this driver does not support echoing,
+                // then queries of this parameter will always return 0 and
+                // attempts to change its value will do nothing.
+            UseControllerCache: 8,
+                // Read-write. If this flag is set to a non-zero value, and if
+                // the driver supports a controller cache, then the driver will
+                // maintain a cache of the latest value seen for each MIDI controller,
+                // and control update messages will be filtered out of the incoming
+                // MIDI stream. An extended MIDI primitive allows the client to
+                // poll the driver for the current value of each controller. If
+                // this driver does not support a controller cache, then queries
+                // of this parameter will always return 0 and attempts to change
+                // its value will do nothing.
+            EventsAvailable: 9,
+                // Read-only. Return the number of MIDI packets in the input queue.
+            FlushDriver: 10,
+                // Write-only. Setting this parameter to any value forces the driver
+                // to flush its I/0 buffer, discarding all unprocessed data. Reading
+                // this parameter returns 0. Setting this parameter will do nothing
+                // if the driver does not support buffer flushing.
+            ClockTicksPerSec: 11,
+                // Read-only. Return the MIDI clock rate in ticks per second.
+            HasInputClock: 12,
+                // Read-only. Return 1 if this MIDI driver timestamps incoming
+                // MIDI data with the current value of the MIDI clock, 0 otherwise.
+                // If the driver does not support such timestamping, then the
+                // client must read input data frequently and provide its own
+                // timestamping.
         };
     }
 
@@ -57559,6 +57487,8 @@
             canvas.style.cursor = "none";
         }
         // keyboard stuff
+        // create hidden input field to capture not only keyboard events
+        // but also copy/paste and input events (for dead keys)
         var input = document.createElement("input");
         input.setAttribute("autocomplete", "off");
         input.setAttribute("autocorrect", "off");
@@ -57570,8 +57500,23 @@
         input.style.opacity = "0";
         input.style.pointerEvents = "none";
         canvas.parentElement.appendChild(input);
-        input.focus();
-        input.onblur = function() { input.focus(); };
+        // touch-keyboard button
+        if ('ontouchstart' in document) {
+            var keyboardButton = document.createElement('div');
+            keyboardButton.innerHTML = '<?xml version="1.0" encoding="UTF-8" standalone="no"?><svg width="50px" height="50px" viewBox="0 0 150 150" version="1.1" xmlns="http://www.w3.org/2000/svg"><g id="Page-1" stroke="none" fill="#000000"><rect x="33" y="105" width="10" height="10" rx="1"></rect><rect x="26" y="60" width="10" height="10" rx="1"></rect><rect x="41" y="60" width="10" height="10" rx="1"></rect><rect x="56" y="60" width="10" height="10" rx="1"></rect><rect x="71" y="60" width="10" height="10" rx="1"></rect><rect x="86" y="60" width="10" height="10" rx="1"></rect><rect x="101" y="60" width="10" height="10" rx="1"></rect><rect x="116" y="60" width="10" height="10" rx="1"></rect><rect x="108" y="105" width="10" height="10" rx="1"></rect><rect x="33" y="75" width="10" height="10" rx="1"></rect><rect x="48" y="75" width="10" height="10" rx="1"></rect><rect x="63" y="75" width="10" height="10" rx="1"></rect><rect x="78" y="75" width="10" height="10" rx="1"></rect><rect x="93" y="75" width="10" height="10" rx="1"></rect><rect x="108" y="75" width="10" height="10" rx="1"></rect><rect x="41" y="90" width="10" height="10" rx="1"></rect><rect x="26" y="90" width="10" height="10" rx="1"></rect><rect x="56" y="90" width="10" height="10" rx="1"></rect><rect x="71" y="90" width="10" height="10" rx="1"></rect><rect x="86" y="90" width="10" height="10" rx="1"></rect><rect x="101" y="90" width="10" height="10" rx="1"></rect><rect x="116" y="90" width="10" height="10" rx="1"></rect><rect x="48" y="105" width="55" height="10" rx="1"></rect><path d="M20.0056004,51 C18.3456532,51 17.0000001,52.3496496 17.0000001,54.0038284 L17.0000001,85.6824519 L17,120.003453 C17.0000001,121.6584 18.3455253,123 20.0056004,123 L131.9944,123 C133.654347,123 135,121.657592 135,119.997916 L135,54.0020839 C135,52.3440787 133.654475,51 131.9944,51 L20.0056004,51 Z" fill="none" stroke="#000000" stroke-width="2"></path><path d="M52.0410156,36.6054687 L75.5449219,21.6503905 L102.666016,36.6054687" id="Line" stroke="#000000" stroke-width="3" stroke-linecap="round" fill="none"></path></g></svg>';
+            keyboardButton.setAttribute('style', 'position:fixed;right:0;bottom:0;background-color:rgba(128,128,128,0.5);border-radius:5px');
+            canvas.parentElement.appendChild(keyboardButton);
+            keyboardButton.onmousedown = function(evt) {
+                // show on-screen keyboard
+                input.focus();
+                evt.preventDefault();
+            };
+            keyboardButton.ontouchstart = keyboardButton.onmousedown;
+        } else {
+            // keep focus on input field
+            input.onblur = function() { input.focus(); };
+            input.focus();
+        }
         display.isMac = navigator.userAgent.includes("Mac");
         // emulate keypress events
         var deadKey = false, // true if last keydown was a dead key
@@ -57687,23 +57632,6 @@
                 display.executeClipboardPaste(text, evt.timeStamp);
                 evt.preventDefault();
             };
-        }
-        // touch keyboard button
-        if ('ontouchstart' in document) {
-            var keyboardButton = document.createElement('div');
-            keyboardButton.innerHTML = '<?xml version="1.0" encoding="UTF-8" standalone="no"?><svg width="50px" height="50px" viewBox="0 0 150 150" version="1.1" xmlns="http://www.w3.org/2000/svg"><g id="Page-1" stroke="none" fill="#000000"><rect x="33" y="105" width="10" height="10" rx="1"></rect><rect x="26" y="60" width="10" height="10" rx="1"></rect><rect x="41" y="60" width="10" height="10" rx="1"></rect><rect x="56" y="60" width="10" height="10" rx="1"></rect><rect x="71" y="60" width="10" height="10" rx="1"></rect><rect x="86" y="60" width="10" height="10" rx="1"></rect><rect x="101" y="60" width="10" height="10" rx="1"></rect><rect x="116" y="60" width="10" height="10" rx="1"></rect><rect x="108" y="105" width="10" height="10" rx="1"></rect><rect x="33" y="75" width="10" height="10" rx="1"></rect><rect x="48" y="75" width="10" height="10" rx="1"></rect><rect x="63" y="75" width="10" height="10" rx="1"></rect><rect x="78" y="75" width="10" height="10" rx="1"></rect><rect x="93" y="75" width="10" height="10" rx="1"></rect><rect x="108" y="75" width="10" height="10" rx="1"></rect><rect x="41" y="90" width="10" height="10" rx="1"></rect><rect x="26" y="90" width="10" height="10" rx="1"></rect><rect x="56" y="90" width="10" height="10" rx="1"></rect><rect x="71" y="90" width="10" height="10" rx="1"></rect><rect x="86" y="90" width="10" height="10" rx="1"></rect><rect x="101" y="90" width="10" height="10" rx="1"></rect><rect x="116" y="90" width="10" height="10" rx="1"></rect><rect x="48" y="105" width="55" height="10" rx="1"></rect><path d="M20.0056004,51 C18.3456532,51 17.0000001,52.3496496 17.0000001,54.0038284 L17.0000001,85.6824519 L17,120.003453 C17.0000001,121.6584 18.3455253,123 20.0056004,123 L131.9944,123 C133.654347,123 135,121.657592 135,119.997916 L135,54.0020839 C135,52.3440787 133.654475,51 131.9944,51 L20.0056004,51 Z" fill="none" stroke="#000000" stroke-width="2"></path><path d="M52.0410156,36.6054687 L75.5449219,21.6503905 L102.666016,36.6054687" id="Line" stroke="#000000" stroke-width="3" stroke-linecap="round" fill="none"></path></g></svg>';
-            keyboardButton.setAttribute('style', 'position:fixed;right:0;bottom:0;background-color:rgba(128,128,128,0.5);border-radius:5px');
-            canvas.parentElement.appendChild(keyboardButton);
-            keyboardButton.onmousedown = function(evt) {
-                canvas.contentEditable = true;
-                canvas.setAttribute('autocomplete', 'off');
-                canvas.setAttribute('autocorrect', 'off');
-                canvas.setAttribute('autocapitalize', 'off');
-                canvas.setAttribute('spellcheck', 'off');
-                input.focus();
-                evt.preventDefault();
-            };
-            keyboardButton.ontouchstart = keyboardButton.onmousedown;
         }
         // do not use addEventListener, we want to replace any previous drop handler
         function dragEventHasFiles(evt) {

@@ -58,7 +58,11 @@ Object.subclass('Squeak.Image',
     Objects are tenured to old space during a full GC.
     New objects are only referenced by other objects' pointers, and thus can be garbage-collected
     at any time by the Javascript GC.
-    A partial GC links new objects to support enumeration of new space.
+    A partial GC creates a linked list of new objects reachable from old space. We call this
+    list "young space". It is not stored, but only created by primitives like nextObject,
+    nextInstance, or become to support enumeration of new space.
+    To efficiently find potential young space roots, any write to an instance variable sets
+    the "dirty" flag of the object, allowing to skip clean objects.
 
     Weak references are finalized by a full GC. A partial GC only finalizes young weak references.
 
@@ -460,10 +464,9 @@ Object.subclass('Squeak.Image',
         // sorting them by id, and then linking them into old space.
         this.vm.addMessage("fullGC: " + reason);
         var start = Date.now();
-        var previousNew = this.newSpaceCount;
-        var previousYoung = this.youngSpaceCount;
+        var previousNew = this.newSpaceCount; // includes young and newly allocated
         var previousOld = this.oldSpaceCount;
-        var newObjects = this.markReachableObjects();
+        var newObjects = this.markReachableObjects(); // technically these are young objects
         this.removeUnmarkedOldObjects();
         this.appendToOldObjects(newObjects);
         this.finalizeWeakReferences();
@@ -473,11 +476,20 @@ Object.subclass('Squeak.Image',
         this.hasNewInstances = {};
         this.gcCount++;
         this.gcMilliseconds += Date.now() - start;
-        var delta = previousOld - this.oldSpaceCount;
-        console.log("Full GC (" + reason + "): " + (Date.now() - start) + " ms, " +
-            "surviving objects: " + this.oldSpaceCount + " (" + this.oldSpaceBytes + " bytes), " +
-            "tenured " + newObjects.length + " (total " + (delta > 0 ? "+" : "") + delta + "), " +
-            "gc'ed " + previousYoung + " young and " + (previousNew - previousYoung) + " new objects");
+        var delta = previousOld - this.oldSpaceCount; // absolute change
+        var survivingNew = newObjects.length;
+        var survivingOld = this.oldSpaceCount - survivingNew;
+        var gcedNew = previousNew - survivingNew;
+        var gcedOld = previousOld - survivingOld;
+        console.log("Full GC (" + reason + "): " + (Date.now() - start) + " ms;" +
+            " before: " + previousOld.toLocaleString() + " old objects;" +
+            " allocated " + previousNew.toLocaleString() + " new;" +
+            " surviving " + survivingOld.toLocaleString() + " old;" +
+            " tenuring " + survivingNew.toLocaleString() + " new;" +
+            " gc'ed " + gcedOld.toLocaleString() + " old and " + gcedNew.toLocaleString() + " new;" +
+            " total now: " + this.oldSpaceCount.toLocaleString() + " (" + (delta > 0 ? "+" : "") + delta.toLocaleString() + ", "
+            + this.oldSpaceBytes.toLocaleString() + " bytes)"
+            );
 
         return newObjects.length > 0 ? newObjects[0] : null;
     },
@@ -488,7 +500,7 @@ Object.subclass('Squeak.Image',
     },
     markReachableObjects: function() {
         // FullGC: Visit all reachable objects and mark them.
-        // Return surviving new objects
+        // Return surviving new objects (young objects to be tenured).
         // Contexts are handled specially: they have garbage beyond the stack pointer
         // which must not be traced, and is cleared out here
         // In weak objects, only the inst vars are traced
@@ -639,8 +651,8 @@ Object.subclass('Squeak.Image',
         this.pgcCount++;
         this.pgcMilliseconds += Date.now() - start;
         console.log("Partial GC (" + reason+ "): " + (Date.now() - start) + " ms, " +
-            "found " + this.youngRootsCount + " roots in " + this.oldSpaceCount + " old, " +
-            "kept " + this.youngSpaceCount + " young (" + (previous - this.youngSpaceCount) + " gc'ed)");
+            "found " + this.youngRootsCount.toLocaleString() + " roots in " + this.oldSpaceCount.toLocaleString() + " old, " +
+            "kept " + this.youngSpaceCount.toLocaleString() + " young (" + (previous - this.youngSpaceCount).toLocaleString() + " gc'ed)");
         return young[0];
     },
     youngRoots: function() {

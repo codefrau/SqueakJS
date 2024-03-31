@@ -1249,8 +1249,16 @@ Object.subclass('Squeak.Primitives',
         return this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(bytes));
     },
     primitivePartialGC: function(argCount) {
-        this.vm.image.partialGC("primitive");
-        var bytes = this.vm.image.bytesLeft();
+        var young = this.vm.image.partialGC("primitive");
+        var youngSpaceBytes = 0;
+        while (young) {
+            youngSpaceBytes += young.totalBytes();
+            young = young.nextObject;
+        }
+        console.log("    old space: " + this.vm.image.oldSpaceBytes.toLocaleString() + " bytes, " +
+            "young space: " + youngSpaceBytes.toLocaleString() + " bytes, " +
+            "total: " + (this.vm.image.oldSpaceBytes + youngSpaceBytes).toLocaleString() + " bytes");
+        var bytes = this.vm.image.bytesLeft() - youngSpaceBytes;
         return this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(bytes));
     },
     primitiveMakePoint: function(argCount, checkNumbers) {

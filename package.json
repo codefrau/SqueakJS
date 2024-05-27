@@ -21,12 +21,14 @@
     "access": "public"
   },
   "scripts": {
+    "start": "http-server -o run/",
     "build:cleanup": "rimraf dist",
     "build:bundle": "rollup squeak.js --file dist/squeak_bundle.js --format iife && rollup squeak_headless.js --file dist/squeak_headless_bundle.js",
     "build:minify": "uglifyjs dist/squeak_bundle.js -o dist/squeak_bundle.min.js -c -m --source-map && uglifyjs dist/squeak_headless_bundle.js -o dist/squeak_headless_bundle.min.js -c -m --source-map",
     "build": "npm run build:cleanup && npm run build:bundle && npm run build:minify"
   },
   "devDependencies": {
+    "http-server": "^14.1.1",
     "rimraf": "^5.0.5",
     "rollup": "^4.9.4",
     "uglify-js": "^3.17.4"

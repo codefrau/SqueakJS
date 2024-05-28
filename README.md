@@ -119,6 +119,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2024-05-27: 1.2.1 add virtual cmd button, fix touch events
     2024-03-25: 1.2.0 add FFI and MIDI plugins, JIT for Sista bytecodes, JPEG write prim, fix keyboard input, copy/paste, scroll wheel, highdpi, allow ES6 in source
     2023-11-24: 1.1.2 fixed BitBlt bug (symptom reported 9 years ago, thanks to Agustin Martinez for narrowing it down), add object pinning, support keyboard in ancient Scratch images
     2023-10-24: 1.1.1 workarounds for Cuis 6

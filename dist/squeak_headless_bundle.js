@@ -113,8 +113,8 @@ if (!Function.prototype.subclass) {
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 1.2.0",
-    vmDate: "2024-03-25",               // Maybe replace at build time?
+    vmVersion: "SqueakJS 1.2.1",
+    vmDate: "2024-05-27",               // Maybe replace at build time?
     vmBuild: "unknown",                 // or replace at runtime by last-modified?
     vmPath: "unknown",                  // Replace at runtime
     vmFile: "vm.js",
@@ -3073,37 +3073,37 @@ Object.subclass('Squeak.Interpreter',
 
             // Arithmetic Ops... + - < > <= >= = ~=    * /  @ lshift: lxor: land: lor:
             case 0xB0: this.success = true; this.resultIsFloat = false;
-                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) + this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // PLUS +
+                if (!this.pop2AndPushNumResult(this.stackIntOrFloat(1) + this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // PLUS +
             case 0xB1: this.success = true; this.resultIsFloat = false;
-                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) - this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // MINUS -
+                if (!this.pop2AndPushNumResult(this.stackIntOrFloat(1) - this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // MINUS -
             case 0xB2: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) < this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LESS <
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) < this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LESS <
             case 0xB3: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) > this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GRTR >
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) > this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GRTR >
             case 0xB4: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) <= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LEQ <=
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) <= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LEQ <=
             case 0xB5: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) >= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GEQ >=
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) >= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GEQ >=
             case 0xB6: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) === this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // EQU =
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) === this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // EQU =
             case 0xB7: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) !== this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // NEQ ~=
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) !== this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // NEQ ~=
             case 0xB8: this.success = true; this.resultIsFloat = false;
-                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) * this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // TIMES *
+                if (!this.pop2AndPushNumResult(this.stackIntOrFloat(1) * this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // TIMES *
             case 0xB9: this.success = true;
-                if(!this.pop2AndPushIntResult(this.quickDivide(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide /
+                if (!this.pop2AndPushIntResult(this.quickDivide(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide /
             case 0xBA: this.success = true;
-                if(!this.pop2AndPushIntResult(this.mod(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // MOD \
+                if (!this.pop2AndPushIntResult(this.mod(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // MOD \
             case 0xBB: this.success = true;
-                if(!this.primHandler.primitiveMakePoint(1, true)) this.sendSpecial(b&0xF); return;  // MakePt int@int
+                if (!this.primHandler.primitiveMakePoint(1, true)) this.sendSpecial(b&0xF); return;  // MakePt int@int
             case 0xBC: this.success = true;
-                if(!this.pop2AndPushIntResult(this.safeShift(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return; // bitShift:
+                if (!this.pop2AndPushIntResult(this.safeShift(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return; // bitShift:
             case 0xBD: this.success = true;
-                if(!this.pop2AndPushIntResult(this.div(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide //
+                if (!this.pop2AndPushIntResult(this.div(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide //
             case 0xBE: this.success = true;
-                if(!this.pop2AndPushIntResult(this.stackInteger(1) & this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitAnd:
+                if (!this.pop2AndPushIntResult(this.stackInteger(1) & this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitAnd:
             case 0xBF: this.success = true;
-                if(!this.pop2AndPushIntResult(this.stackInteger(1) | this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitOr:
+                if (!this.pop2AndPushIntResult(this.stackInteger(1) | this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitOr:
 
             // at:, at:put:, size, next, nextPut:, ...
             case 0xC0: case 0xC1: case 0xC2: case 0xC3: case 0xC4: case 0xC5: case 0xC6: case 0xC7:
@@ -3187,37 +3187,37 @@ Object.subclass('Squeak.Interpreter',
 
              // Arithmetic Ops... + - < > <= >= = ~=    * /  @ lshift: lxor: land: lor:
              case 0x60: this.success = true; this.resultIsFloat = false;
-                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) + this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // PLUS +
+                if (!this.pop2AndPushNumResult(this.stackIntOrFloat(1) + this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // PLUS +
             case 0x61: this.success = true; this.resultIsFloat = false;
-                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) - this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // MINUS -
+                if (!this.pop2AndPushNumResult(this.stackIntOrFloat(1) - this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // MINUS -
             case 0x62: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) < this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LESS <
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) < this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LESS <
             case 0x63: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) > this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GRTR >
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) > this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GRTR >
             case 0x64: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) <= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LEQ <=
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) <= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LEQ <=
             case 0x65: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) >= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GEQ >=
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) >= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GEQ >=
             case 0x66: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) === this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // EQU =
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) === this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // EQU =
             case 0x67: this.success = true;
-                if(!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) !== this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // NEQ ~=
+                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) !== this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // NEQ ~=
             case 0x68: this.success = true; this.resultIsFloat = false;
-                if(!this.pop2AndPushNumResult(this.stackIntOrFloat(1) * this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // TIMES *
+                if (!this.pop2AndPushNumResult(this.stackIntOrFloat(1) * this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // TIMES *
             case 0x69: this.success = true;
-                if(!this.pop2AndPushIntResult(this.quickDivide(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide /
+                if (!this.pop2AndPushIntResult(this.quickDivide(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide /
             case 0x6A: this.success = true;
-                if(!this.pop2AndPushIntResult(this.mod(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // MOD \
+                if (!this.pop2AndPushIntResult(this.mod(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // MOD \
             case 0x6B: this.success = true;
-                if(!this.primHandler.primitiveMakePoint(1, true)) this.sendSpecial(b&0xF); return;  // MakePt int@int
+                if (!this.primHandler.primitiveMakePoint(1, true)) this.sendSpecial(b&0xF); return;  // MakePt int@int
             case 0x6C: this.success = true;
-                if(!this.pop2AndPushIntResult(this.safeShift(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return; // bitShift:
+                if (!this.pop2AndPushIntResult(this.safeShift(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return; // bitShift:
             case 0x6D: this.success = true;
-                if(!this.pop2AndPushIntResult(this.div(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide //
+                if (!this.pop2AndPushIntResult(this.div(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide //
             case 0x6E: this.success = true;
-                if(!this.pop2AndPushIntResult(this.stackInteger(1) & this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitAnd:
+                if (!this.pop2AndPushIntResult(this.stackInteger(1) & this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitAnd:
             case 0x6F: this.success = true;
-                if(!this.pop2AndPushIntResult(this.stackInteger(1) | this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitOr:
+                if (!this.pop2AndPushIntResult(this.stackInteger(1) | this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitOr:
 
             // at:, at:put:, size, next, nextPut:, ...
             case 0x70: case 0x71: case 0x72: case 0x73: case 0x74: case 0x75: case 0x76: case 0x77:
@@ -3440,7 +3440,7 @@ Object.subclass('Squeak.Interpreter',
             var sema = this.specialObjects[Squeak.splOb_TheLowSpaceSemaphore];
             if (!sema.isNil) this.primHandler.synchronousSignal(sema);
         }
-        //  if(now >= nextPollTick) {
+        //  if (now >= nextPollTick) {
         //            ioProcessEvents(); //sets interruptPending if interrupt key pressed
         //            nextPollTick= now + 500; } //msecs to wait before next call to ioProcessEvents"
         if (this.interruptPending) {
@@ -7022,8 +7022,8 @@ Object.subclass('Squeak.Primitives',
         var rcvr = this.vm.stackValue(1);
         var sqArgCount = this.stackInteger(0);
         var homeCtxt = rcvr;
-        if(!this.vm.isContext(homeCtxt)) this.success = false;
-        if(!this.success) return rcvr;
+        if (!this.vm.isContext(homeCtxt)) this.success = false;
+        if (!this.success) return rcvr;
         if (typeof homeCtxt.pointers[Squeak.Context_method] === "number")
             // ctxt is itself a block; get the context for its enclosing method
             homeCtxt = homeCtxt.pointers[Squeak.BlockContext_home];
@@ -7614,7 +7614,7 @@ Object.subclass('Squeak.Primitives',
         this.vm.image.fullGC("snapshot");               // before cleanup so traversal works
         var buffer = this.vm.image.writeToBuffer();
         // Write snapshot if files are supported
-        if(Squeak.flushAllFiles) {
+        if (Squeak.flushAllFiles) {
             Squeak.flushAllFiles();                         // so there are no more writes pending
             Squeak.filePut(this.vm.image.name, buffer);
         }
@@ -7623,7 +7623,7 @@ Object.subclass('Squeak.Primitives',
     },
     primitiveQuit: function(argCount) {
         // Flush any files if files are supported
-        if(Squeak.flushAllFiles)
+        if (Squeak.flushAllFiles)
             Squeak.flushAllFiles();
         this.display.quitFlag = true;
         this.vm.breakNow("quit");
@@ -9226,7 +9226,7 @@ function runImage(imageData, imageName, options) {
                 vm.interpret(50, function runAgain(ms) {
                     // Ignore display.quitFlag when requested.
                     // Some Smalltalk images quit when no display is found.
-                    if(options.ignoreQuit || !display.quitFlag) {
+                    if (options.ignoreQuit || !display.quitFlag) {
                         setTimeout(run, ms === "sleep" ? 10 : ms);
                     }
                 });
@@ -9246,7 +9246,7 @@ function fetchImageAndRun(imageName, options) {
         mode: "cors",
         cache: "no-store"
     }).then(function(response) {
-        if(!response.ok) {
+        if (!response.ok) {
             throw new Error("Response not OK: " + response.status);
         }
         return response.arrayBuffer();
@@ -9270,7 +9270,7 @@ Object.extend(Squeak, {
 // Retrieve image name from URL
 var searchParams = (new URL(self.location)).searchParams;
 var imageName = searchParams.get("imageName");
-if(imageName) {
+if (imageName) {
     var options = {
         ignoreQuit: searchParams.get("ignoreQuit") !== null
     };

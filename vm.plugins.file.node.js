@@ -70,7 +70,7 @@ Object.extend(Squeak.Primitives.prototype,
         var entry = null;
         try {
             var dirEntries = fs.readdirSync(dirName);
-            if(index < 1 || index > dirEntries.length) return false;
+            if (index < 1 || index > dirEntries.length) return false;
             var dirEntry = dirEntries[index - 1];
             var stats = fs.statSync(dirName + path.sep + dirEntry);
             entry = [

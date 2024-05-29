@@ -1551,8 +1551,8 @@ Object.subclass('Squeak.Primitives',
         var rcvr = this.vm.stackValue(1);
         var sqArgCount = this.stackInteger(0);
         var homeCtxt = rcvr;
-        if(!this.vm.isContext(homeCtxt)) this.success = false;
-        if(!this.success) return rcvr;
+        if (!this.vm.isContext(homeCtxt)) this.success = false;
+        if (!this.success) return rcvr;
         if (typeof homeCtxt.pointers[Squeak.Context_method] === "number")
             // ctxt is itself a block; get the context for its enclosing method
             homeCtxt = homeCtxt.pointers[Squeak.BlockContext_home];
@@ -2144,7 +2144,7 @@ Object.subclass('Squeak.Primitives',
         this.vm.image.fullGC("snapshot");               // before cleanup so traversal works
         var buffer = this.vm.image.writeToBuffer();
         // Write snapshot if files are supported
-        if(Squeak.flushAllFiles) {
+        if (Squeak.flushAllFiles) {
             Squeak.flushAllFiles();                         // so there are no more writes pending
             Squeak.filePut(this.vm.image.name, buffer);
         }
@@ -2153,7 +2153,7 @@ Object.subclass('Squeak.Primitives',
     },
     primitiveQuit: function(argCount) {
         // Flush any files if files are supported
-        if(Squeak.flushAllFiles)
+        if (Squeak.flushAllFiles)
             Squeak.flushAllFiles();
         this.display.quitFlag = true;
         this.vm.breakNow("quit");

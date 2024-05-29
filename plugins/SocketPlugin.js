@@ -639,7 +639,7 @@ function SocketPlugin() {
           if (this.status == plugin.Socket_Connected ||
               this.status == plugin.Socket_OtherEndClosed ||
               this.status == plugin.Socket_WaitingForConnection) {
-            if(this.webSocket) {
+            if (this.webSocket) {
               this.webSocket.close();
               this.webSocket = null;
             }

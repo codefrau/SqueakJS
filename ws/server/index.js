@@ -20,9 +20,9 @@ function startServer(port) {
 			});
 			var handleIO = function() {
 				io.question("Next command: ", function(command) {
-					if(command) {
+					if (command) {
 						isClosed = isClosed || [ "quit", "exit", "bye" ].indexOf(command) >= 0;
-						if(!isClosed) {
+						if (!isClosed) {
 							ws.send(command);
 						} else {
 							ws.close();
@@ -35,7 +35,7 @@ function startServer(port) {
 			};
 
 			// Handle events
-			var isClosed = false; 
+			var isClosed = false;
 			ws
 				.on("message", function(message) {
 					console.log("Message received: " + message);

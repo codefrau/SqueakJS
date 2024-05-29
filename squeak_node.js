@@ -37,11 +37,11 @@ var path = require("path");
 // Retrieve image name and parameters from command line
 var processArgs = process.argv.slice(2);
 var ignoreQuit = processArgs[0] === "-ignoreQuit";
-if(ignoreQuit) {
+if (ignoreQuit) {
     processArgs = processArgs.slice(1);
 }
 var fullName = processArgs[0];
-if(!fullName) {
+if (!fullName) {
     console.error("No image name specified.");
     console.log("Usage (simplified): " + path.basename(process.argv0) + path.basename(process.argv[1]) + " [-ignoreQuit] <image filename>");
     process.exit(1);
@@ -122,7 +122,7 @@ Object.extend(Squeak.Primitives.prototype, {
 
 // Read raw image
 fs.readFile(root + imageName + ".image", function(error, data) {
-    if(error) {
+    if (error) {
         console.error("Failed to read image", error);
         return;
     }
@@ -140,7 +140,7 @@ fs.readFile(root + imageName + ".image", function(error, data) {
 
                     // Ignore display.quitFlag when requested.
                     // Some Smalltalk images quit when no display is found.
-                    if(ignoreQuit || !display.quitFlag) {
+                    if (ignoreQuit || !display.quitFlag) {
                         setTimeout(run, ms === "sleep" ? 10 : ms);
                     }
                 });

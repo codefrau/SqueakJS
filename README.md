@@ -1,3 +1,34 @@
+V2 BRANCH
+=========
+This is the work-in-progress branch for SqueakJS 2.0. Things I want to change:
+
+* each fixed inst var gets its own property instead for direct access instead of being indexed in `pointers[]`. There will be a compatibility accessor for primitives that use indexed access.
+
+  Still need to decide between named inst vars (using inst var names from image) or suffixed (like `p0`, `p1`, ...)
+
+  The goal is faster access than via the `pointers[]` array.
+  Also, nicer debuggability if we use actual names.
+
+* new high-performance JIT without context allocation but direct function calls, args passed directly via function parameters, and direct instance var access (see above)
+
+  The goal is to make the jitted methods look as close to "normal" JavaScript functions as possible, so that the JS JIT can optimize them, even with inlining etc.
+
+* (maybe) use `WeakRef` and `WeakMap`? All JS runtimes now support weak objects (`WeakRef` is still pretty new, since 2021).
+
+  The goal would be to have faster GCs while still supporting object enumeration.
+
+* (maybe) `BigInt` for large integer primitives? Supported in browsers since 2020 (and allowed to fail if not available). Need to measure fastest way to convert from/to `Uint8Array` representation.
+
+  The goal is faster LargeInteger calculations.
+
+* (maybe) no more `.oop` property: it's not needed at runtime, and updating it makes the GC slower.
+
+  Goal: faster GC
+
+* (maybe) export as 64 bit image: on load, 64-bit images are converted to 32 bits. On export, we could store them as 64 bits (and if we get rid of the `.oop` as mentioned above it may actually be almost as fast as snapshotting in 32 bits)
+
+  The goal here is compatibility with other VMs, which on some systems only run 64 bit images
+
 SqueakJS: A Squeak VM for the Web and Node.js
 =============================================
 

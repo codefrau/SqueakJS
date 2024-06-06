@@ -9,13 +9,17 @@ This is the work-in-progress branch for SqueakJS 2.0. Things I want to change:
   The goal is faster access than via the `pointers[]` array.
   Also, nicer debuggability if we use actual names.
 
-* new high-performance JIT without context allocation but direct function calls, args passed directly via function parameters, and direct instance var access (see above)
+* new high-performance JIT without per-frame context allocation, but instead using direct function calls, function temps as stack, args passed directly via function parameters, and direct instance var access (see above). Contexts would only be allocated if needed
 
   The goal is to make the jitted methods look as close to "normal" JavaScript functions as possible, so that the JS JIT can optimize them, even with inlining etc.
 
 * (maybe) use `WeakRef` and `WeakMap`? All JS runtimes now support weak objects (`WeakRef` is still pretty new, since 2021).
 
   The goal would be to have faster GCs while still supporting object enumeration.
+
+* (maybe) use WASM for BitBlt etc. To avoid copying in and out of the WASM heap, we could use binary arrays allocated via WASM (but would need to implement GC for that)
+
+   Goal: speed
 
 * (maybe) `BigInt` for large integer primitives? Supported in browsers since 2020 (and allowed to fail if not available). Need to measure fastest way to convert from/to `Uint8Array` representation.
 

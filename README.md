@@ -33,6 +33,8 @@ This is the work-in-progress branch for SqueakJS 2.0. Things I want to change:
 
   The goal here is compatibility with other VMs, which on some systems only run 64 bit images
 
+Feedback and ideas: please comment on the [Pull Request](https://github.com/codefrau/SqueakJS/pull/168) or use the [vm-dev](http://lists.squeak.org/mailman/listinfo/vm-dev) mailing list and `#squeakjs` channel on the [Squeak Slack](https://join.slack.com/t/squeak/shared_invite/zt-2ahdbewgl-56nPdkf1hYACBmc8xCOXRQ).
+
 SqueakJS: A Squeak VM for the Web and Node.js
 =============================================
 

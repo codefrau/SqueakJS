@@ -9,7 +9,7 @@ This is the work-in-progress branch for SqueakJS 2.0. Things I want to change:
   The goal is faster access than via the `pointers[]` array.
   Also, nicer debuggability if we use actual names.
 
-* new high-performance JIT without per-frame context allocation, but instead using direct function calls, function temps as stack, args passed directly via function parameters, and direct instance var access (see above). Contexts would only be allocated if needed
+* new high-performance JIT without per-frame context allocation, but instead using direct function calls, function temps as stack, args passed directly via function parameters, and direct instance var access (see above). Contexts would only be allocated if needed (also see my [JIT experiments](https://squeak.js.org/docs/jit.md.html))
 
   The goal is to make the jitted methods look as close to "normal" JavaScript functions as possible, so that the JS JIT can optimize them, even with inlining etc.
 

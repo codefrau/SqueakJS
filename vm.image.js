@@ -324,12 +324,8 @@ Object.subclass('Squeak.Image',
                 var stop = done + (this.oldSpaceCount / 20 | 0);    // do it in 20 chunks
                 while (obj && done < stop) {
                     obj.installFromImage(oopMap, rawBits, compactClasses, floatClass, littleEndian, nativeFloats, is64Bit && {
-                            makeFloat: function makeFloat(bits) {
-                                return this.instantiateFloat(bits);
-                            }.bind(this),
-                            makeLargeFromSmall: function makeLargeFromSmall(hi, lo) {
-                                return this.instantiateLargeFromSmall(hi, lo);
-                            }.bind(this),
+                            makeFloat: bits => this.instantiateFloat(bits),
+                            makeLargeFromSmall: (hi, lo) => this.instantiateLargeFromSmall(hi, lo),
                         });
                     obj = obj.nextObject;
                     done++;

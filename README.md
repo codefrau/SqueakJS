@@ -9,7 +9,7 @@ This is the work-in-progress branch for SqueakJS 2.0. Things I want to change:
   The goal is faster access than via the `pointers[]` array.
   Also, nicer debuggability if we use actual names.
 
-* new high-performance JIT without per-frame context allocation, but instead using direct function calls, function temps as stack, args passed directly via function parameters, and direct instance var access (see above). Contexts would only be allocated if needed (also see my [JIT experiments](https://squeak.js.org/docs/jit.md.html))
+* new high-performance JIT without per-frame context allocation, but instead using direct function calls, function temps as stack, args passed directly via function parameters, and direct instance var access (see above). Contexts would only be allocated if needed (also see the existing [discussion](https://github.com/codefrau/SqueakJS/issues/121) and my [JIT experiments](https://squeak.js.org/docs/jit.md.html))
 
   The goal is to make the jitted methods look as close to "normal" JavaScript functions as possible, so that the JS JIT can optimize them, even with inlining etc.
 
@@ -21,7 +21,7 @@ This is the work-in-progress branch for SqueakJS 2.0. Things I want to change:
 
    Goal: speed
 
-* (maybe) `BigInt` for large integer primitives? Supported in browsers since 2020 (and allowed to fail if not available). Need to measure fastest way to convert from/to `Uint8Array` representation.
+* (maybe) `BigInt` for large integer primitives? Supported in browsers since 2020 (and allowed to fail if not available). Need to measure fastest way to convert from/to `Uint8Array` representation. (this is actually independent of v2, see the existing [discussion](https://github.com/codefrau/SqueakJS/issues/37))
 
   The goal is faster LargeInteger calculations.
 

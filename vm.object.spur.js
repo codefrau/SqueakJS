@@ -64,7 +64,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
 // 16-23 = 8-bit indexable                    (plus three odd bits, one unused in 32-bits)
 // 24-31 = compiled methods (CompiledMethod)  (plus three odd bits, one unused in 32-bits)
     },
-    installFromImage: function(oopMap, rawBits, classTable, floatClass, littleEndian, getCharacter, is64Bit) {
+    installFromBits: function(oopMap, rawBits, classTable, floatClass, littleEndian, getCharacter, is64Bit) {
         //Install this object by decoding format, and rectifying pointers
         var classID = this.sqClass;
         if (classID < 32) throw Error("Invalid class ID: " + classID);
@@ -268,7 +268,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         // this._format |= -indexableSize & 3;       //deferred to writeTo()
         this.bytes = new Uint8Array(size);
     },
-    classNameFromImage: function(oopMap, rawBits) {
+    classNameFromBits: function(oopMap, rawBits) {
         var name = oopMap[rawBits[this.oop][Squeak.Class_name]];
         if (name && name._format >= 16 && name._format < 24) {
             var bits = rawBits[name.oop],
@@ -277,10 +277,10 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         }
         return "Class";
     },
-    renameFromImage: function(oopMap, rawBits, classTable) {
+    renameFromBits: function(oopMap, rawBits, classTable) {
         var classObj = classTable[this.sqClass];
         if (!classObj) return this;
-        var instProto = classObj.instProto || classObj.classInstProto(classObj.classNameFromImage(oopMap, rawBits));
+        var instProto = classObj.instProto || classObj.classInstProto(classObj.classNameFromBits(oopMap, rawBits));
         if (!instProto) return this;
         var renamedObj = new instProto; // Squeak.SpurObject
         renamedObj.oop = this.oop;

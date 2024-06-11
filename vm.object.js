@@ -78,14 +78,14 @@ Object.subclass('Squeak.Object',
             if (original.bytes) this.bytes = new Uint8Array(original.bytes);     // copy
         }
     },
-    initFromImage: function(oop, cls, fmt, hsh) {
+    initFromBits: function(oop, cls, fmt, hsh) {
         // initial creation from Image, with unmapped data
         this.oop = oop;
         this.sqClass = cls;
         this._format = fmt;
         this.hash = hsh;
     },
-    classNameFromImage: function(oopMap, rawBits) {
+    classNameFromBits: function(oopMap, rawBits) {
         var name = oopMap[rawBits[this.oop][Squeak.Class_name]];
         if (name && name._format >= 8 && name._format < 12) {
             var bits = rawBits[name.oop],
@@ -94,10 +94,10 @@ Object.subclass('Squeak.Object',
         }
         return "Class";
     },
-    renameFromImage: function(oopMap, rawBits, ccArray) {
+    renameFromBits: function(oopMap, rawBits, ccArray) {
         var classObj = this.sqClass < 32 ? oopMap[ccArray[this.sqClass-1]] : oopMap[this.sqClass];
         if (!classObj) return this;
-        var instProto = classObj.instProto || classObj.classInstProto(classObj.classNameFromImage(oopMap, rawBits));
+        var instProto = classObj.instProto || classObj.classInstProto(classObj.classNameFromBits(oopMap, rawBits));
         if (!instProto) return this;
         var renamedObj = new instProto; // Squeak.Object
         renamedObj.oop = this.oop;
@@ -106,7 +106,7 @@ Object.subclass('Squeak.Object',
         renamedObj.hash = this.hash;
         return renamedObj;
     },
-    installFromImage: function(oopMap, rawBits, ccArray, floatClass, littleEndian, nativeFloats) {
+    installFromBits: function(oopMap, rawBits, ccArray, floatClass, littleEndian, nativeFloats) {
         //Install this object by decoding format, and rectifying pointers
         var ccInt = this.sqClass;
         // map compact classes

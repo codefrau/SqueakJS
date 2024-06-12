@@ -126,7 +126,8 @@ Object.subclass('Squeak.Object',
         const ownInstVarNames = [];
         const myBits = rawBits[this.oop];
         if (Squeak.Class_instVars > 0) {
-            const varNamesArray = rawBits[myBits[Squeak.Class_instVars]];
+            const varNames = oopMap[myBits[Squeak.Class_instVars]];
+            const varNamesArray = rawBits[varNames.oop];
             for (let i = 0; i < varNamesArray.length; i++) {
                 const varName = oopMap[varNamesArray[i]];
                 const varStr = varName.stringFromBits(rawBits);

@@ -317,6 +317,9 @@ Object.subclass('Squeak.Image',
             nativeFloats = this.getCharacter.bind(this);
             this.initSpurOverrides();
         }
+        // figure out if Class_instVars is 3 or 4 or unknown
+        Squeak.Class_instVars = this.detectClassInstVarIndex(splObs, oopMap, rawBits);
+        // now "install" the objects, i.e. decode the bits into proper references, etc.
         var obj = this.firstOldObject,
             done = 0;
         var mapSomeObjects = function() {
@@ -359,6 +362,27 @@ Object.subclass('Squeak.Image',
         } else {
             self.setTimeout(mapSomeObjectsAsync, 0);
         }
+    },
+    detectClassInstVarIndex: function(splObs, oopMap, rawBits) {
+        // the VM really should only make assumptions about inst vars 0-2
+        // but we want to use the actual instance variable names
+        // which are at index 3 or 4 in the class
+        var classPoint = oopMap[rawBits[splObs.oop][Squeak.splOb_ClassPoint]];
+        var classBits = rawBits[classPoint.oop];
+        // we check if the array #(x y) is anywhere in the Point class
+        // starting at index 3 (indices 0-2 are known to the VM)
+        for (var index = 3; index < classBits.length; index++) {
+            var names = oopMap[classBits[index]]; if (!names) continue;
+            var namesBits = rawBits[names.oop]; if (namesBits.length !== 2) continue;
+            var x = oopMap[namesBits[0]];
+            var xBits = rawBits[x.oop];
+            if (String.fromCharCode(xBits[0]) !== 'x') continue;
+            var y = oopMap[namesBits[1]];
+            var yBits = rawBits[y.oop];
+            if (String.fromCharCode(yBits[0]) !== 'y') continue;
+            return index;
+        }
+        return 0; // unknown
     },
     decorateKnownObjects: function() {
         var splObjs = this.specialObjectsArray.pointers;

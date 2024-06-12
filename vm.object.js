@@ -137,10 +137,10 @@ Object.subclass('Squeak.Object',
         }
         return ownInstVarNames;
     },
-    classAllInstVarNamesFromBits: function(oopMap, rawBits) {
+    classAllInstVarNamesFromBits: function(oopMap, rawBits, is64Bit) {
         if (this._classAllInstVarNames) return this._classAllInstVarNames;
         let names;
-        const instSize = this.classInstSizeFromBits(rawBits);
+        const instSize = this.classInstSizeFromBits(rawBits, is64Bit);
         if (instSize === 0) {
             names = [];
         } else if (Squeak.Class_instVars > 0) {
@@ -149,7 +149,7 @@ Object.subclass('Squeak.Object',
                 names = ownInstVarNames;
             } else {
                 const superclass = oopMap[rawBits[this.oop][Squeak.Class_superclass]];
-                const superInstVarNames = superclass.classAllInstVarNamesFromBits(oopMap, rawBits);
+                const superInstVarNames = superclass.classAllInstVarNamesFromBits(oopMap, rawBits, is64Bit);
                 names = superInstVarNames.concat(ownInstVarNames);
             }
             if (instSize !== names.length) throw Error("allInstVarNames: wrong number of inst vars");

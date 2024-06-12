@@ -96,7 +96,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                 if (nWords > 0) {
                     var oops = bits; // endian conversion was already done
                     var pointers = this.decodePointers(nWords, oops, oopMap, getCharacter, is64Bit);
-                    var instVarNames = this.sqClass.classAllInstVarNamesFromBits(oopMap, rawBits);
+                    var instVarNames = this.sqClass.classAllInstVarNamesFromBits(oopMap, rawBits, is64Bit);
                     for (var i = 0; i < instVarNames.length; i++) {
                         this[instVarNames[i]] = pointers[i];
                     }
@@ -303,8 +303,8 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             bytes = this.decodeBytes(bits.length, bits, 0, this._format & 7);
         return Squeak.bytesAsString(bytes);
     },
-    classInstSizeFromBits: function(rawBits) {
-        var format = rawBits[this.oop][Squeak.Class_format] >> 1;
+    classInstSizeFromBits: function(rawBits, is64Bit) {
+        var format = rawBits[this.oop][Squeak.Class_format] >> (is64Bit ? 3 : 1);
         return format & 0xFFFF;
     },
     renameFromBits: function(oopMap, rawBits, classTable) {

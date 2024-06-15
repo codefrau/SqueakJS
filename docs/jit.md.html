@@ -239,7 +239,7 @@ TODO: design this invalidation housekeeping. Maybe keep a list of all send sites
 
 Beyond a straight one-to-one mapping of bytecodes to JS instructions we could apply more optimizations. That's what most compilers nowadays do, and it is very much desirable to have for SqueakJS, too.
 
-But all optimizations have a cost. Our current SqueakJS JIT is optimized for simplicity and execution speed. It is single-pass, and simply concatenates template strings for every bytecode. No analysis is performed.
+But all optimizations have a cost. Our current SqueakJS JIT is optimized for simplicity and compilation speed. It is single-pass, and simply concatenates template strings for every bytecode. No analysis is performed.
 
 However, we are not compiling to low-level machine code that will be executed as-is. We are targetting the Javascript JIT compiler, which will apply its own arsenal of optimizations to the code we give it. We just need to make it possible for it to do so.
 
@@ -978,6 +978,12 @@ Bytecodes:
 
 The second invocation of `has42` does find a 42, it successfully does a non-local return, proving that the scheme is viable.
 
+### Optimizing Control Flow – no `switch`
+
+All the JITs so far have used the same control flow as the current JIT. It uses a switch statement nested inside a while loop, where each case corresponds to a byte code. The switch can dispatch control flow to any case / bytecode by setting the program counter (`pc`) end doing a `continue`. This is a very direct translation of the byte code dispatch loop in the interpreter. But it's not exactly the most efficient way to do control flow in JavaScript.
+
+An alternative would be to reconstruct the original control flow graph of the method, and use that to generate JS control statements like `if`, `while`, `until` etc. This would be more efficient, but also more complex. It would require a separate analysis of the method to find the basic blocks and the control flow between them, similar to how the Decompiler reconstructs the original. This would, however, lose the ability to jump to any bytecode in the method, which the current JIT uses to continure execution that was interrupted.
+
 ### Performance estimate
 
 _Update Nov 2023:_ To see how this idea (and some more optimizations) would perform, I implemented a [mockup of benchFib](jit-perf.html) (click that link to see it running in this browser). The code is at https://github.com/codefrau/SqueakJS/blob/gh-pages/docs/jit-perf.js
@@ -986,13 +992,13 @@ On my machine (this is a newer machine than above, so the numbers are not direct
 
 | Chrome MSends/s | Safari MSends/s | FireFox MSends/s |
 |--------|--------|--------|---------
-|  3     |   7    |   4    |  current JIT
-| 88     |  48    |  62    |  JIT idea
-| 99     |  49    |  85    |  no array: use locals for inline cache
-|172     |  61    |  70    |  no switch: convert jumps to control flow
-|187     |  64    | 106    |  no switch, no array
-|308     |  76    | 175    |  no switch, no array, no type checks: assume an unsafe bytecode (SISTA) that does not require type checks
-|_339_   | _626_  | _260_  |  _plain JS (not a JIT mockup)_
+|    3   |    7   |    4   |  current JIT
+|   88   |   48   |   62   |  JIT idea
+|   99   |   49   |   85   |  no array: use locals for inline cache
+|  172   |   61   |   70   |  no switch: convert jumps to control flow
+|  187   |   64   |  106   |  no switch, no array
+|  308   |   76   |  175   |  no switch, no array, no type checks: assume an unsafe bytecode (SISTA) that does not require type checks
+| _339_  | _626_  | _260_  |  _plain JS (not a JIT mockup)_
 
 For comparison, Eliot's Cog VM does about *310 MSends/s* on the same machine. That is pretty much identical to the full Chrome JavaScript performance, only Safari gets 2x that speed (then again, this is an Apple-silicon Mac). For the JIT mockups, Safari does a lot worse, where Chrome comes out way ahead. The numbers are promising, even if they're not entirely realistic, they show that a lot more performance is possible.
 
@@ -1040,7 +1046,7 @@ _TODO: implement this on codepen_
 
 ## Primitive calls
 
-Non-inlined primitives expect the arguments on a stack. They will have to be rewritten to take advantage of direct argument passing.
+Non-inlined primitives expect the arguments on a stack. They will have to be rewritten to take advantage of direct argument passing for full speed. An intermediate solution could be to copy the arguments to a stack for most primitives, and only optimize the performance-criticl ones.
 
 ## Object representation
 
@@ -1054,8 +1060,12 @@ Also, all primitives accessing inst vars would need to be changed.
 # What next?
 
 I'll gather feedback from people, ~~and will try to implement a mockup of this. Maybe by hand-coding a version of `benchFib`.~~
-(Update: mockups added above)
+(Update Nov 2023: mockups added above)
 
-For feedback, maybe use this [issue](https://github.com/codefrau/SqueakJS/issues/121) on the bug tracker. Happy to discuss elsewhere, too ([email](http://lists.squeak.org/mailman/listinfo/vm-dev) / [twitter](https://twitter.com/codefrau)).
+~~For feedback, use [issue 121](https://github.com/codefrau/SqueakJS/issues/121) on the bug tracker.~~
+
+Update June 2024: I started implementing this in the [v2 branch](https://github.com/codefrau/SqueakJS/blob/v2/README.md). Follow [pull request #168](https://github.com/codefrau/SqueakJS/pull/168) for updates and feedback.
+
+Happy to discuss on the [mailing list](http://lists.squeak.org/mailman/listinfo/vm-dev), too.
 
 <!-- Markdeep: --><style class="fallback">body{visibility:hidden;white-space:pre;font-family:monospace}</style><script src="markdeep.min.js" charset="utf-8"></script><script src="https://morgan3d.github.io/markdeep/latest/markdeep.min.js" charset="utf-8"></script><script>window.alreadyProcessedMarkdeep||(document.body.style.visibility="visible")</script>

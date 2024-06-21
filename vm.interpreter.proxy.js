@@ -235,8 +235,8 @@ Object.subclass('Squeak.InterpreterProxy',
     },
     stObjectatput: function(array, index, obj) {
         if (array.sqClass !== this.classArray()) throw Error("Array expected");
-        if (index < 1 || index >= array.pointers.length) return this.successFlag = false;
-        array.pointers[index] = obj;
+        if (index < 1 || index > array.pointers.length) return this.successFlag = false;
+        array.pointers[index-1] = obj;
     },
 },
 'constant access',

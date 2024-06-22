@@ -116,8 +116,8 @@
     Object.extend(Squeak,
     "version", {
         // system attributes
-        vmVersion: "SqueakJS 1.2.1",
-        vmDate: "2024-05-27",               // Maybe replace at build time?
+        vmVersion: "SqueakJS 1.2.2",
+        vmDate: "2024-06-22",               // Maybe replace at build time?
         vmBuild: "unknown",                 // or replace at runtime by last-modified?
         vmPath: "unknown",                  // Replace at runtime
         vmFile: "vm.js",
@@ -4912,8 +4912,8 @@
         },
         stObjectatput: function(array, index, obj) {
             if (array.sqClass !== this.classArray()) throw Error("Array expected");
-            if (index < 1 || index >= array.pointers.length) return this.successFlag = false;
-            array.pointers[index] = obj;
+            if (index < 1 || index > array.pointers.length) return this.successFlag = false;
+            array.pointers[index-1] = obj;
         },
     },
     'constant access',
@@ -10071,14 +10071,39 @@
     Object.extend(Squeak.Primitives.prototype,
     'input', {
         primitiveClipboardText: function(argCount) {
+            // There are two ways this primitive is invoked:
+            // 1: via the DOM keyboard event thandler in squeak.js that intercepts cmd-c/cmd-v,
+            //    reads/writes the system clipboard from/to display.clipboardString
+            //    and then the interpreter calls the primitive
+            // 2: via the image code e.g. a menu copy/paste item, which calls the primitive
+            //    and we try to read/write the system clipboard directly.
+            //    To support this, squeak.js keeps running the interpreter for 100 ms within
+            //    the DOM event 'mouseup' handler so the code below runs in the click-handler context,
+            //    (otherwise the browser would block access to the clipboard)
             if (argCount === 0) { // read from clipboard
-                if (typeof(this.display.clipboardString) !== 'string') return false;
-                this.vm.popNandPush(1, this.makeStString(this.display.clipboardString));
+                // Try to read from system clipboard, which is async if available.
+                // It will likely fail outside of an event handler.
+                var clipBoardPromise = null;
+                if (this.display.readFromSystemClipboard) clipBoardPromise = this.display.readFromSystemClipboard();
+                if (clipBoardPromise) {
+                    var unfreeze = this.vm.freeze();
+                    clipBoardPromise
+                        .then(() => this.vm.popNandPush(1, this.makeStString(this.display.clipboardString)))
+                        .catch(() => this.vm.popNandPush(1, this.vm.nilObj))
+                        .finally(() => unfreeze());
+                } else {
+                    if (typeof(this.display.clipboardString) !== 'string') return false;
+                    this.vm.popNandPush(1, this.makeStString(this.display.clipboardString));
+                }
             } else if (argCount === 1) { // write to clipboard
                 var stringObj = this.vm.top();
                 if (stringObj.bytes) {
                     this.display.clipboardString = stringObj.bytesAsString();
-                    this.display.clipboardStringChanged = true;
+                    this.display.clipboardStringChanged = true; // means it should be written to system clipboard
+                    if (this.display.writeToSystemClipboard) {
+                        // no need to wait for the promise
+                        this.display.writeToSystemClipboard();
+                    }
                 }
                 this.vm.pop();
             }
@@ -56270,11 +56295,8 @@
                 display.signalInputEvent();
         }
         display.idle = 0;
-        if (what == 'mouseup') {
-            if (display.runFor) display.runFor(100); // maybe we catch the fullscreen flag change
-        } else {
-            if (display.runNow) display.runNow();   // don't wait for timeout to run
-        }
+        if (what === 'mouseup') display.runFor(100, what); // process copy/paste or fullscreen flag change
+        else display.runNow(what);   // don't wait for timeout to run
     }
 
     function recordWheelEvent(evt, display) {
@@ -56297,6 +56319,7 @@
         if (display.signalInputEvent)
             display.signalInputEvent();
         display.idle = 0;
+        if (display.runNow) display.runNow('wheel'); // don't wait for timeout to run
     }
 
     // Squeak traditional keycodes are MacRoman
@@ -56348,7 +56371,7 @@
             display.keys.push(modifiersAndKey);
         }
         display.idle = 0;
-        if (display.runNow) display.runNow(); // don't wait for timeout to run
+        if (display.runNow) display.runNow('keyboard'); // don't wait for timeout to run
     }
 
     function recordDragDropEvent(type, evt, canvas, display) {
@@ -56365,6 +56388,8 @@
         ]);
         if (display.signalInputEvent)
             display.signalInputEvent();
+        display.idle = 0;
+        if (display.runNow) display.runNow('drag-drop'); // don't wait for timeout to run
     }
 
     function fakeCmdOrCtrlKey(key, timestamp, display) {
@@ -56404,6 +56429,7 @@
             eventQueue: null, // only used if image uses event primitives
             clipboardString: '',
             clipboardStringChanged: false,
+            handlingEvent: '',  // set to 'mouse' or 'keyboard' while handling an event
             cursorCanvas: options.cursor !== false && document.getElementById("sqCursor") || document.createElement("canvas"),
             cursorOffsetX: 0,
             cursorOffsetY: 0,
@@ -56490,7 +56516,7 @@
             ctx.fillStyle = style.color || "#F90";
             ctx.fillRect(x, y, w * value, h);
         };
-        display.executeClipboardPaste = function(text, timestamp) {
+        display.executeClipboardPasteKey = function(text, timestamp) {
             if (!display.vm) return true;
             try {
                 display.clipboardString = text;
@@ -56500,7 +56526,7 @@
                 console.error("paste error " + err);
             }
         };
-        display.executeClipboardCopy = function(key, timestamp) {
+        display.executeClipboardCopyKey = function(key, timestamp) {
             if (!display.vm) return true;
             // simulate copy event for Squeak so it places its text in clipboard
             display.clipboardStringChanged = false;
@@ -56906,18 +56932,18 @@
                 switch (evt.key) {
                     case "c":
                     case "x":
-                        if (!navigator.clipboard?.writeText) return; // fire document.oncopy/oncut
-                        var text = display.executeClipboardCopy(evt.key, evt.timeStamp);
+                        if (!navigator.clipboard) return; // fire document.oncopy/oncut
+                        var text = display.executeClipboardCopyKey(evt.key, evt.timeStamp);
                         if (typeof text === 'string') {
                             navigator.clipboard.writeText(text)
                                 .catch(function(err) { console.error("display: copy error " + err.message); });
                         }
                         return evt.preventDefault();
                     case "v":
-                        if (!navigator.clipboard?.readText) return; // fire document.onpaste
+                        if (!navigator.clipboard) return; // fire document.onpaste
                         navigator.clipboard.readText()
                             .then(function(text) {
-                                display.executeClipboardPaste(text, evt.timeStamp);
+                                display.executeClipboardPasteKey(text, evt.timeStamp);
                             })
                             .catch(function(err) { console.error("display: paste error " + err.message); });
                         return evt.preventDefault();
@@ -56935,10 +56961,25 @@
             if (!display.vm) return true;
             recordModifiers(evt, display);
         };
-        // copy/paste old-style
-        if (!navigator.clipboard?.writeText) {
+        // more copy/paste
+        if (navigator.clipboard) {
+            // new-style copy/paste (all modern browsers)
+            display.readFromSystemClipboard = () => navigator.clipboard.readText()
+                .then(text => display.clipboardString = text)
+                .catch(err => {
+                    if (!display.handlingEvent) console.warn("reading from clipboard outside event handler");
+                    console.error("readFromSystemClipboard" + err.message);
+                });
+            display.writeToSystemClipboard = () => navigator.clipboard.writeText(display.clipboardString)
+                .then(() => display.clipboardStringChanged = false)
+                .catch(err => {
+                    if (!display.handlingEvent) console.warn("writing to clipboard outside event handler");
+                    console.error("writeToSystemClipboard" + err.message);
+                });
+        } else {
+            // old-style copy/paste
             document.oncopy = function(evt, key) {
-                var text = display.executeClipboardCopy(key, evt.timeStamp);
+                var text = display.executeClipboardCopyKey(key, evt.timeStamp);
                 if (typeof text === 'string') {
                     evt.clipboardData.setData("Text", text);
                 }
@@ -56948,11 +56989,9 @@
                 if (!display.vm) return true;
                 document.oncopy(evt, 'x');
             };
-        }
-        if (!navigator.clipboard?.readText) {
             document.onpaste = function(evt) {
                 var text = evt.clipboardData.getData('Text');
-                display.executeClipboardPaste(text, evt.timeStamp);
+                display.executeClipboardPasteKey(text, evt.timeStamp);
                 evt.preventDefault();
             };
         }
@@ -57155,15 +57194,17 @@
                         alert(error);
                     }
                 }
-                display.runNow = function() {
+                display.runNow = function(event) {
                     window.clearTimeout(loop);
+                    display.handlingEvent = event;
                     run();
+                    display.handlingEvent = '';
                 };
-                display.runFor = function(milliseconds) {
+                display.runFor = function(milliseconds, event) {
                     var stoptime = Date.now() + milliseconds;
                     do {
                         if (display.quitFlag) return;
-                        display.runNow();
+                        display.runNow(event);
                     } while (Date.now() < stoptime);
                 };
                 if (options.onStart) options.onStart(vm, display, options);

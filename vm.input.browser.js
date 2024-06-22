@@ -24,14 +24,39 @@
 Object.extend(Squeak.Primitives.prototype,
 'input', {
     primitiveClipboardText: function(argCount) {
+        // There are two ways this primitive is invoked:
+        // 1: via the DOM keyboard event thandler in squeak.js that intercepts cmd-c/cmd-v,
+        //    reads/writes the system clipboard from/to display.clipboardString
+        //    and then the interpreter calls the primitive
+        // 2: via the image code e.g. a menu copy/paste item, which calls the primitive
+        //    and we try to read/write the system clipboard directly.
+        //    To support this, squeak.js keeps running the interpreter for 100 ms within
+        //    the DOM event 'mouseup' handler so the code below runs in the click-handler context,
+        //    (otherwise the browser would block access to the clipboard)
         if (argCount === 0) { // read from clipboard
-            if (typeof(this.display.clipboardString) !== 'string') return false;
-            this.vm.popNandPush(1, this.makeStString(this.display.clipboardString));
+            // Try to read from system clipboard, which is async if available.
+            // It will likely fail outside of an event handler.
+            var clipBoardPromise = null;
+            if (this.display.readFromSystemClipboard) clipBoardPromise = this.display.readFromSystemClipboard();
+            if (clipBoardPromise) {
+                var unfreeze = this.vm.freeze();
+                clipBoardPromise
+                    .then(() => this.vm.popNandPush(1, this.makeStString(this.display.clipboardString)))
+                    .catch(() => this.vm.popNandPush(1, this.vm.nilObj))
+                    .finally(() => unfreeze());
+            } else {
+                if (typeof(this.display.clipboardString) !== 'string') return false;
+                this.vm.popNandPush(1, this.makeStString(this.display.clipboardString));
+            }
         } else if (argCount === 1) { // write to clipboard
             var stringObj = this.vm.top();
             if (stringObj.bytes) {
                 this.display.clipboardString = stringObj.bytesAsString();
-                this.display.clipboardStringChanged = true;
+                this.display.clipboardStringChanged = true; // means it should be written to system clipboard
+                if (this.display.writeToSystemClipboard) {
+                    // no need to wait for the promise
+                    this.display.writeToSystemClipboard();
+                }
             }
             this.vm.pop();
         }

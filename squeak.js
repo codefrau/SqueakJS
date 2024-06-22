@@ -226,11 +226,8 @@ function recordMouseEvent(what, evt, canvas, display, options) {
             display.signalInputEvent();
     }
     display.idle = 0;
-    if (what == 'mouseup') {
-        if (display.runFor) display.runFor(100); // maybe we catch the fullscreen flag change
-    } else {
-        if (display.runNow) display.runNow();   // don't wait for timeout to run
-    }
+    if (what === 'mouseup') display.runFor(100, what); // process copy/paste or fullscreen flag change
+    else display.runNow(what);   // don't wait for timeout to run
 }
 
 function recordWheelEvent(evt, display) {
@@ -253,6 +250,7 @@ function recordWheelEvent(evt, display) {
     if (display.signalInputEvent)
         display.signalInputEvent();
     display.idle = 0;
+    if (display.runNow) display.runNow('wheel'); // don't wait for timeout to run
 }
 
 // Squeak traditional keycodes are MacRoman
@@ -304,7 +302,7 @@ function recordKeyboardEvent(unicode, timestamp, display) {
         display.keys.push(modifiersAndKey);
     }
     display.idle = 0;
-    if (display.runNow) display.runNow(); // don't wait for timeout to run
+    if (display.runNow) display.runNow('keyboard'); // don't wait for timeout to run
 }
 
 function recordDragDropEvent(type, evt, canvas, display) {
@@ -321,6 +319,8 @@ function recordDragDropEvent(type, evt, canvas, display) {
     ]);
     if (display.signalInputEvent)
         display.signalInputEvent();
+    display.idle = 0;
+    if (display.runNow) display.runNow('drag-drop'); // don't wait for timeout to run
 }
 
 function fakeCmdOrCtrlKey(key, timestamp, display) {
@@ -360,6 +360,7 @@ function createSqueakDisplay(canvas, options) {
         eventQueue: null, // only used if image uses event primitives
         clipboardString: '',
         clipboardStringChanged: false,
+        handlingEvent: '',  // set to 'mouse' or 'keyboard' while handling an event
         cursorCanvas: options.cursor !== false && document.getElementById("sqCursor") || document.createElement("canvas"),
         cursorOffsetX: 0,
         cursorOffsetY: 0,
@@ -446,7 +447,7 @@ function createSqueakDisplay(canvas, options) {
         ctx.fillStyle = style.color || "#F90";
         ctx.fillRect(x, y, w * value, h);
     };
-    display.executeClipboardPaste = function(text, timestamp) {
+    display.executeClipboardPasteKey = function(text, timestamp) {
         if (!display.vm) return true;
         try {
             display.clipboardString = text;
@@ -456,7 +457,7 @@ function createSqueakDisplay(canvas, options) {
             console.error("paste error " + err);
         }
     };
-    display.executeClipboardCopy = function(key, timestamp) {
+    display.executeClipboardCopyKey = function(key, timestamp) {
         if (!display.vm) return true;
         // simulate copy event for Squeak so it places its text in clipboard
         display.clipboardStringChanged = false;
@@ -863,18 +864,18 @@ function createSqueakDisplay(canvas, options) {
             switch (evt.key) {
                 case "c":
                 case "x":
-                    if (!navigator.clipboard?.writeText) return; // fire document.oncopy/oncut
-                    var text = display.executeClipboardCopy(evt.key, evt.timeStamp);
+                    if (!navigator.clipboard) return; // fire document.oncopy/oncut
+                    var text = display.executeClipboardCopyKey(evt.key, evt.timeStamp);
                     if (typeof text === 'string') {
                         navigator.clipboard.writeText(text)
                             .catch(function(err) { console.error("display: copy error " + err.message); });
                     }
                     return evt.preventDefault();
                 case "v":
-                    if (!navigator.clipboard?.readText) return; // fire document.onpaste
+                    if (!navigator.clipboard) return; // fire document.onpaste
                     navigator.clipboard.readText()
                         .then(function(text) {
-                            display.executeClipboardPaste(text, evt.timeStamp);
+                            display.executeClipboardPasteKey(text, evt.timeStamp);
                         })
                         .catch(function(err) { console.error("display: paste error " + err.message); });
                     return evt.preventDefault();
@@ -892,10 +893,25 @@ function createSqueakDisplay(canvas, options) {
         if (!display.vm) return true;
         recordModifiers(evt, display);
     };
-    // copy/paste old-style
-    if (!navigator.clipboard?.writeText) {
+    // more copy/paste
+    if (navigator.clipboard) {
+        // new-style copy/paste (all modern browsers)
+        display.readFromSystemClipboard = () => navigator.clipboard.readText()
+            .then(text => display.clipboardString = text)
+            .catch(err => {
+                if (!display.handlingEvent) console.warn("reading from clipboard outside event handler");
+                console.error("readFromSystemClipboard" + err.message);
+            });
+        display.writeToSystemClipboard = () => navigator.clipboard.writeText(display.clipboardString)
+            .then(() => display.clipboardStringChanged = false)
+            .catch(err => {
+                if (!display.handlingEvent) console.warn("writing to clipboard outside event handler");
+                console.error("writeToSystemClipboard" + err.message);
+            });
+    } else {
+        // old-style copy/paste
         document.oncopy = function(evt, key) {
-            var text = display.executeClipboardCopy(key, evt.timeStamp);
+            var text = display.executeClipboardCopyKey(key, evt.timeStamp);
             if (typeof text === 'string') {
                 evt.clipboardData.setData("Text", text);
             }
@@ -905,11 +921,9 @@ function createSqueakDisplay(canvas, options) {
             if (!display.vm) return true;
             document.oncopy(evt, 'x');
         };
-    }
-    if (!navigator.clipboard?.readText) {
         document.onpaste = function(evt) {
             var text = evt.clipboardData.getData('Text');
-            display.executeClipboardPaste(text, evt.timeStamp);
+            display.executeClipboardPasteKey(text, evt.timeStamp);
             evt.preventDefault();
         };
     }
@@ -1113,15 +1127,17 @@ SqueakJS.runImage = function(buffer, name, display, options) {
                     alert(error);
                 }
             }
-            display.runNow = function() {
+            display.runNow = function(event) {
                 window.clearTimeout(loop);
+                display.handlingEvent = event;
                 run();
+                display.handlingEvent = '';
             };
-            display.runFor = function(milliseconds) {
+            display.runFor = function(milliseconds, event) {
                 var stoptime = Date.now() + milliseconds;
                 do {
                     if (display.quitFlag) return;
-                    display.runNow();
+                    display.runNow(event);
                 } while (Date.now() < stoptime);
             };
             if (options.onStart) options.onStart(vm, display, options);

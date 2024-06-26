@@ -752,7 +752,7 @@ function createSqueakDisplay(canvas, options) {
     input.style.opacity = "0";
     input.style.pointerEvents = "none";
     canvas.parentElement.appendChild(input);
-    // touch-keyboard buttons
+    // touch-keyboard buttons and mouse emulation
     if ('ontouchstart' in document) {
         // button to show on-screen keyboard
         var keyboardButton = document.createElement('div');
@@ -769,16 +769,6 @@ function createSqueakDisplay(canvas, options) {
         var cmdButton = document.createElement('div');
         cmdButton.innerHTML = '⌘';
         cmdButton.setAttribute('style', 'position:fixed;left:0;background-color:rgba(128,128,128,0.5);width:50px;height:50px;font-size:30px;text-align:center;vertical-align:middle;line-height:50px;border-radius:5px');
-        if (window.visualViewport) {
-            // fix position of button when virtual keyboard is shown
-            const vv = window.visualViewport;
-            const fixPosition = () => cmdButton.style.top = `${vv.height}px`;
-            vv.addEventListener('resize', fixPosition);
-            cmdButton.style.transform = `translateY(-100%)`;
-            fixPosition();
-        } else {
-            cmdButton.style.bottom = '0';
-        }
         canvas.parentElement.appendChild(cmdButton);
         cmdButton.ontouchstart = function(evt) {
             display.cmdButtonTouched = evt.changedTouches[0].identifier;
@@ -793,6 +783,83 @@ function createSqueakDisplay(canvas, options) {
             evt.stopPropagation();
         }
         cmdButton.ontouchcancel = cmdButton.ontouchend;
+        // knob to emulate mouse events
+        var knob = document.createElement('div');
+        knob.innerHTML = '<svg viewBox="-10 -10 120 120" xmlns="http://www.w3.org/2000/svg"><path d="m63.165 78.853h-26.366c-3.003 0-4.05 1.438-4.391 2.293-.355.847-.642 2.594 1.488 4.715l10.994 11.002c1.356 1.356 3.158 2.111 5.097 2.111 1.93 0 3.731-.755 5.088-2.111l10.993-11.003c2.139-2.13 1.865-3.877 1.511-4.724-.347-.855-1.389-2.283-4.414-2.283zm.209 4.304-10.98 11.003c-1.274 1.256-3.536 1.256-4.787 0l-11.003-11.003c-.173-.164-.292-.31-.392-.446.164-.018.364-.036.601-.036h26.366c.245 0 .45.019.601.036-.11.128-.242.282-.406.446z"/><path d="m96.897 44.858-11.011-10.994c-1.156-1.156-2.33-1.748-3.504-1.748-1.611 0-3.495 1.22-3.495 4.65v26.376c0 3.432 1.884 4.651 3.495 4.651 1.174 0 2.348-.583 3.504-1.748l11.012-10.994c1.356-1.354 2.102-3.165 2.102-5.096 0-1.93-.746-3.741-2.103-5.097zm-2.703 7.492-11.003 10.994c-.173.173-.305.301-.455.4-.019-.154-.027-.354-.027-.601v-26.385c0-.237.009-.437.027-.592.137.1.282.219.455.392l11.003 10.994c.638.637.983 1.474.983 2.394.001.921-.35 1.767-.983 2.404z"/><path d="m36.799 21.05h26.366c3.021 0 4.067-1.42 4.414-2.257.354-.865.628-2.603-1.511-4.742l-10.99-10.985c-2.693-2.721-7.476-2.721-10.188 0l-10.994 10.985c-2.125 2.129-1.843 3.877-1.488 4.732.341.847 1.383 2.267 4.391 2.267zm-.209-4.296 11.003-10.994c1.261-1.265 3.513-1.265 4.782 0l10.994 10.994c.164.173.296.319.392.455-.154.019-.354.037-.601.037h-26.366c-.237 0-.437-.018-.601-.037.11-.136.224-.282.397-.455z"/><path d="m17.586 32.117c-1.174 0-2.348.591-3.504 1.748l-10.979 10.993c-1.366 1.356-2.103 3.167-2.103 5.097 0 1.931.737 3.743 2.103 5.098l10.98 10.994c1.156 1.165 2.33 1.748 3.504 1.748 1.147 0 2.189-.601 2.808-1.63.473-.782.696-1.793.696-3.021v-26.377c-.001-3.44-1.889-4.65-3.505-4.65zm-.314 31.027c0 .246-.018.455-.036.601-.127-.091-.287-.218-.451-.4l-10.989-10.995c-1.32-1.319-1.32-3.469 0-4.789l10.989-10.994c.164-.154.319-.291.451-.391.018.155.036.355.036.591z"/><path d="m49.986 29.559c-11.249 0-20.396 9.156-20.396 20.405 0 11.26 9.146 20.397 20.396 20.397 11.24 0 20.387-9.138 20.387-20.397 0-11.249-9.146-20.405-20.387-20.405zm0 36.98c-9.146 0-16.582-7.436-16.582-16.575 0-9.146 7.436-16.591 16.582-16.591 9.138 0 16.587 7.445 16.587 16.591-.01 9.14-7.449 16.575-16.587 16.575z"/></svg>';
+        knob.setAttribute('style', 'position:fixed;left:55px;background-color:rgba(128,128,128,0.5);width:50px;height:50px;font-size:30px;text-align:center;vertical-align:middle;line-height:50px;border-radius:5px');
+        canvas.parentElement.appendChild(knob);
+        knob.ontouchstart = function(evt) {
+            knob.style.backgroundColor = 'rgba(255,255,255,0.5)';
+            // emulate mouse events
+            var touch = evt.changedTouches[0];
+            var finger = touch.identifier;
+            var kx0 = touch.clientX, ky0 = touch.clientY;
+            var kx = 0, ky = 0;
+            var mx = display.mouseX / canvas.width * canvas.offsetWidth + canvas.offsetLeft;
+            var my = display.mouseY / canvas.height * canvas.offsetHeight + canvas.offsetTop;
+            var pressed = true;
+            var t0 = evt.timeStamp;
+            var animFrame = function(t) {
+                var dt = t - t0;
+                t0 = t;
+                if (kx || ky) {
+                    var limit = 5;
+                    var x = mx + Math.max(-limit, Math.min(limit, (kx * dt / 1000)));
+                    var y = my + Math.max(-limit, Math.min(limit, (ky * dt / 1000)));
+                    if (x !== mx || y !== my) {
+                        recordMouseEvent('mousemove', {timeStamp: t, offsetX: x, offsetY: y, button: 0}, canvas, display, options);
+                        mx = x;
+                        my = y;
+                    }
+                }
+                if (pressed) window.requestAnimationFrame(animFrame);
+            }
+            var move = function(evt) {
+                for (var i = 0; i < evt.changedTouches.length; i++) {
+                    var touch = evt.changedTouches[i];
+                    if (touch.identifier === finger) {
+                        kx = touch.clientX - kx0;
+                        ky = touch.clientY - ky0;
+                        evt.preventDefault();
+                        break;
+                    }
+                }
+            };
+            var up = function(evt) {
+                for (var i = 0; i < evt.changedTouches.length; i++) {
+                    if (evt.changedTouches[i].identifier === finger) {
+                        knob.style.backgroundColor = 'rgba(128,128,128,0.5)';
+                        pressed = false;
+                        knob.ontouchmove = null;
+                        knob.ontouchend = null;
+                        knob.ontouchcancel = null;
+                        evt.preventDefault();
+                        break;
+                    }
+                }
+            };
+            knob.ontouchmove = move;
+            knob.ontouchend = up;
+            knob.ontouchcancel = up;
+            window.requestAnimationFrame(animFrame);
+            evt.preventDefault();
+        }
+        // keep buttons in view
+        if (window.visualViewport) {
+            // fix position of button when virtual keyboard is shown
+            const vv = window.visualViewport;
+            const fixPosition = () => {
+                cmdButton.style.top = `${vv.height}px`;
+                knob.style.top = `${vv.height}px`;
+            };
+            vv.addEventListener('resize', fixPosition);
+            cmdButton.style.transform = `translateY(-100%)`;
+            knob.style.transform = `translateY(-100%)`;
+            fixPosition();
+        } else {
+            cmdButton.style.bottom = '0';
+            knob.style.bottom = '0';
+        }
     } else {
         // keep focus on input field
         input.onblur = function() { input.focus(); };

@@ -43,7 +43,7 @@ Object.extend(Squeak.Primitives.prototype,
                 clipBoardPromise
                     .then(() => this.vm.popNandPush(1, this.makeStString(this.display.clipboardString)))
                     .catch(() => this.vm.popNandPush(1, this.vm.nilObj))
-                    .finally(() => unfreeze());
+                    .finally(unfreeze);
             } else {
                 if (typeof(this.display.clipboardString) !== 'string') return false;
                 this.vm.popNandPush(1, this.makeStString(this.display.clipboardString));

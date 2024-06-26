@@ -896,18 +896,14 @@ function createSqueakDisplay(canvas, options) {
     // more copy/paste
     if (navigator.clipboard) {
         // new-style copy/paste (all modern browsers)
-        display.readFromSystemClipboard = () => navigator.clipboard.readText()
+        display.readFromSystemClipboard = () => display.handlingEvent &&
+            navigator.clipboard.readText()
             .then(text => display.clipboardString = text)
-            .catch(err => {
-                if (!display.handlingEvent) console.warn("reading from clipboard outside event handler");
-                console.error("readFromSystemClipboard" + err.message);
-            });
-        display.writeToSystemClipboard = () => navigator.clipboard.writeText(display.clipboardString)
+            .catch(err => console.error("readFromSystemClipboard " + err.message));
+        display.writeToSystemClipboard = () => display.handlingEvent &&
+            navigator.clipboard.writeText(display.clipboardString)
             .then(() => display.clipboardStringChanged = false)
-            .catch(err => {
-                if (!display.handlingEvent) console.warn("writing to clipboard outside event handler");
-                console.error("writeToSystemClipboard" + err.message);
-            });
+            .catch(err => console.error("writeToSystemClipboard " + err.message));
     } else {
         // old-style copy/paste
         document.oncopy = function(evt, key) {

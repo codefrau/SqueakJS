@@ -1191,7 +1191,8 @@ Object.subclass('Squeak.Primitives',
     allInstancesOf: function(clsObj) {
         var instances = this.vm.image.allInstancesOf(clsObj);
         var array = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassArray], instances.length);
-        array.pointers = instances;
+        array.$$ = instances;
+        array.pointers = array.$$;
         return array;
     },
     identityHash: function(obj) {
@@ -1429,10 +1430,11 @@ Object.subclass('Squeak.Primitives',
         var bytecodeCount = this.stackInteger(1);
         if (!this.success) return 0;
         var method = this.vm.instantiateClass(this.vm.stackValue(2), bytecodeCount);
-        method.pointers = [header];
+        method.$$ = [header];
+        method.pointers = method.$$;
         var litCount = method.methodNumLits();
         for (var i = 0; i < litCount; i++)
-            method.pointers.push(this.vm.nilObj);
+            method.$$.push(this.vm.nilObj);
         this.vm.popNandPush(1+argCount, method);
         if (this.vm.breakOnNewMethod)               // break on doit
             this.vm.breakOnMethod = method;

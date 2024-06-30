@@ -33,8 +33,19 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         this._format = format;
         if (format < 12) {
             if (format < 10) {
-                if (instSize + indexableSize > 0)
-                    this.pointers = this.fillArray(instSize + indexableSize, nilObj);
+                if (instSize > 0) {
+                    const vars = aClass.allInstVarNames();
+                    for (var i = 0; i < vars.length; i++) {
+                        this[vars[i]] = nilObj;
+                    }
+                    this.pointers = indexableSize > 0
+                        ? this.instVarAndIndexableProxy(vars)
+                        : this.instVarProxy(vars);
+                }
+                if (indexableSize > 0) {
+                    this.$$ = this.fillArray(indexableSize, nilObj);
+                    if (!this.pointers) this.pointers = this.$$;
+                }
             } else // Words
                 if (indexableSize > 0)
                     if (aClass.isFloatClass) {
@@ -64,7 +75,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
 // 16-23 = 8-bit indexable                    (plus three odd bits, one unused in 32-bits)
 // 24-31 = compiled methods (CompiledMethod)  (plus three odd bits, one unused in 32-bits)
     },
-    installFromImage: function(oopMap, rawBits, classTable, floatClass, littleEndian, getCharacter, is64Bit) {
+    installFromBits: function(oopMap, rawBits, classTable, floatClass, littleEndian, getCharacter, is64Bit) {
         //Install this object by decoding format, and rectifying pointers
         var classID = this.sqClass;
         if (classID < 32) throw Error("Invalid class ID: " + classID);
@@ -84,7 +95,24 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             case 5: // only inst vars (weak)
                 if (nWords > 0) {
                     var oops = bits; // endian conversion was already done
-                    this.pointers = this.decodePointers(nWords, oops, oopMap, getCharacter, is64Bit);
+                    var pointers = this.decodePointers(nWords, oops, oopMap, getCharacter, is64Bit);
+                    var instVarNames = this.sqClass.classAllInstVarNamesFromBits(oopMap, rawBits, is64Bit);
+                    for (var i = 0; i < instVarNames.length; i++) {
+                        this[instVarNames[i]] = pointers[i];
+                    }
+                    if (pointers.length === instVarNames.length) {
+                        // only inst vars, no indexable fields
+                        this.pointers = this.instVarProxy(instVarNames);
+                    } else {
+                        if (instVarNames.length === 0) {
+                            // no inst vars, only indexable fields
+                            this.$$ = pointers;
+                            this.pointers = this.$$; // no proxy needed
+                        } else {
+                            this.$$ = pointers.slice(instVarNames.length);
+                            this.pointers = this.instVarAndIndexableProxy(instVarNames);
+                        }
+                    }
                 }
                 break;
             case 11: // 32 bit array (odd length in 64 bits)
@@ -134,9 +162,10 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                       ? this.decodeWords64(numLits+1, bits, littleEndian)
                       : this.decodeWords(numLits+1, bits, littleEndian),
                     ptrWords = is64Bit ? (numLits + 1) * 2 : numLits + 1;
-                this.pointers = this.decodePointers(numLits+1, oops, oopMap, getCharacter, is64Bit); //header+lits
+                this.$$ = this.decodePointers(numLits+1, oops, oopMap, getCharacter, is64Bit); //header+lits
                 this.bytes = this.decodeBytes(nWords-ptrWords, bits, ptrWords, this._format & 3);
-                if (is64Bit) this.pointers[0] = (bits[1] & 0x80000000) | intHeader; // fix header
+                if (is64Bit) this.$$[0] = (bits[1] & 0x80000000) | intHeader; // fix header
+                this.pointers = this.$$;
                 break;
             default:
                 throw Error("Unknown object format: " + this._format);
@@ -268,19 +297,20 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         // this._format |= -indexableSize & 3;       //deferred to writeTo()
         this.bytes = new Uint8Array(size);
     },
-    classNameFromImage: function(oopMap, rawBits) {
-        var name = oopMap[rawBits[this.oop][Squeak.Class_name]];
-        if (name && name._format >= 16 && name._format < 24) {
-            var bits = rawBits[name.oop],
-                bytes = name.decodeBytes(bits.length, bits, 0, name._format & 7);
-            return Squeak.bytesAsString(bytes);
-        }
-        return "Class";
+    stringFromBits: function(rawBits) {
+        if (this._format < 16 || this._format >= 24) return '';
+        var bits = rawBits[this.oop],
+            bytes = this.decodeBytes(bits.length, bits, 0, this._format & 7);
+        return Squeak.bytesAsString(bytes);
     },
-    renameFromImage: function(oopMap, rawBits, classTable) {
+    classInstSizeFromBits: function(rawBits, is64Bit) {
+        var format = rawBits[this.oop][Squeak.Class_format] >> (is64Bit ? 3 : 1);
+        return format & 0xFFFF;
+    },
+    renameFromBits: function(oopMap, rawBits, classTable) {
         var classObj = classTable[this.sqClass];
         if (!classObj) return this;
-        var instProto = classObj.instProto || classObj.classInstProto(classObj.classNameFromImage(oopMap, rawBits));
+        var instProto = classObj.instProto || classObj.classInstProto(classObj.classNameFromBits(oopMap, rawBits));
         if (!instProto) return this;
         var renamedObj = new instProto; // Squeak.SpurObject
         renamedObj.oop = this.oop;

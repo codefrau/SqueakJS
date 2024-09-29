@@ -827,7 +827,7 @@ function createSqueakDisplay(canvas, options) {
                 deadChars = deadChars.concat(chars);
             }
         }
-        if (!deadChars.length) input.value = "";  // clear input
+        if (!deadChars.length) resetInput();
     };
     input.onkeydown = function(evt) {
         checkFullscreen();
@@ -890,6 +890,32 @@ function createSqueakDisplay(canvas, options) {
         if (!display.vm) return true;
         recordModifiers(evt, display);
     };
+    function resetInput() {
+        input.value = "**";
+        input.selectionStart = 1;
+        input.selectionEnd = 1;
+    }
+    resetInput();
+    // hack to generate arrow keys when moving the cursor (e.g. via spacebar on iPhone)
+    // we're not getting any events for that but the cursor (selection) changes
+    if ('ontouchstart' in document) {
+        let count = 0; // count how often the interval has run after the first move
+        setInterval(() => {
+            const direction = input.selectionStart - 1;
+            if (direction === 0) {
+                count = 0;
+                return;
+            }
+            // move cursor once, then not for 500ms, then every 250ms
+            if (count === 0 || count > 2) {
+                const key = direction < 1 ? 28 : 29; // arrow left or right
+                recordKeyboardEvent(key, Date.now(), display);
+            }
+            input.selectionStart = 1;
+            input.selectionEnd = 1;
+            count++;
+        }, 250);
+    }
     // more copy/paste
     if (navigator.clipboard) {
         // new-style copy/paste (all modern browsers)

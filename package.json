@@ -1,6 +1,6 @@
 {
   "name": "@codefrau/squeakjs",
-  "version": "1.2.1",
+  "version": "1.2.3",
   "description": "Virtual Machine for Squeak Smalltalk and derivatives",
   "author": "Vanessa Freudenberg <vanessa@codefrau.net> (https://twitter.com/codefrau)",
   "repository": "https://github.com/codefrau/SqueakJS",

@@ -116,8 +116,8 @@
     Object.extend(Squeak,
     "version", {
         // system attributes
-        vmVersion: "SqueakJS 1.2.2",
-        vmDate: "2024-06-22",               // Maybe replace at build time?
+        vmVersion: "SqueakJS 1.2.3",
+        vmDate: "2024-09-28",               // Maybe replace at build time?
         vmBuild: "unknown",                 // or replace at runtime by last-modified?
         vmPath: "unknown",                  // Replace at runtime
         vmFile: "vm.js",
@@ -10090,7 +10090,7 @@
                     clipBoardPromise
                         .then(() => this.vm.popNandPush(1, this.makeStString(this.display.clipboardString)))
                         .catch(() => this.vm.popNandPush(1, this.vm.nilObj))
-                        .finally(() => unfreeze());
+                        .finally(unfreeze);
                 } else {
                     if (typeof(this.display.clipboardString) !== 'string') return false;
                     this.vm.popNandPush(1, this.makeStString(this.display.clipboardString));
@@ -10140,7 +10140,6 @@
             this.display.signalInputEvent = function() {
                 this.signalSemaphoreWithIndex(this.inputEventSemaIndex);
             }.bind(this);
-            this.display.signalInputEvent();
             return this.popNIfOK(argCount);
         },
         primitiveInputWord: function(argCount) {
@@ -56815,10 +56814,7 @@
         input.setAttribute("autocapitalize", "off");
         input.setAttribute("spellcheck", "false");
         input.style.position = "absolute";
-        input.style.width = "0";
-        input.style.height = "0";
-        input.style.opacity = "0";
-        input.style.pointerEvents = "none";
+        input.style.left = "-1000px";
         canvas.parentElement.appendChild(input);
         // touch-keyboard buttons
         if ('ontouchstart' in document) {
@@ -56829,7 +56825,7 @@
             canvas.parentElement.appendChild(keyboardButton);
             keyboardButton.onmousedown = function(evt) {
                 // show on-screen keyboard
-                input.focus();
+                input.focus({ preventScroll: true });
                 evt.preventDefault();
             };
             keyboardButton.ontouchstart = keyboardButton.onmousedown;
@@ -56863,8 +56859,8 @@
             cmdButton.ontouchcancel = cmdButton.ontouchend;
         } else {
             // keep focus on input field
-            input.onblur = function() { input.focus(); };
-            input.focus();
+            input.onblur = function() { input.focus({ preventScroll: true }); };
+            input.focus({ preventScroll: true });
         }
         display.isMac = navigator.userAgent.includes("Mac");
         // emulate keypress events
@@ -56898,7 +56894,7 @@
                     deadChars = deadChars.concat(chars);
                 }
             }
-            if (!deadChars.length) input.value = "";  // clear input
+            if (!deadChars.length) resetInput();
         };
         input.onkeydown = function(evt) {
             checkFullscreen();
@@ -56961,21 +56957,43 @@
             if (!display.vm) return true;
             recordModifiers(evt, display);
         };
+        function resetInput() {
+            input.value = "**";
+            input.selectionStart = 1;
+            input.selectionEnd = 1;
+        }
+        resetInput();
+        // hack to generate arrow keys when moving the cursor (e.g. via spacebar on iPhone)
+        // we're not getting any events for that but the cursor (selection) changes
+        if ('ontouchstart' in document) {
+            let count = 0; // count how often the interval has run after the first move
+            setInterval(() => {
+                const direction = input.selectionStart - 1;
+                if (direction === 0) {
+                    count = 0;
+                    return;
+                }
+                // move cursor once, then not for 500ms, then every 250ms
+                if (count === 0 || count > 2) {
+                    const key = direction < 1 ? 28 : 29; // arrow left or right
+                    recordKeyboardEvent(key, Date.now(), display);
+                }
+                input.selectionStart = 1;
+                input.selectionEnd = 1;
+                count++;
+            }, 250);
+        }
         // more copy/paste
         if (navigator.clipboard) {
             // new-style copy/paste (all modern browsers)
-            display.readFromSystemClipboard = () => navigator.clipboard.readText()
+            display.readFromSystemClipboard = () => display.handlingEvent &&
+                navigator.clipboard.readText()
                 .then(text => display.clipboardString = text)
-                .catch(err => {
-                    if (!display.handlingEvent) console.warn("reading from clipboard outside event handler");
-                    console.error("readFromSystemClipboard" + err.message);
-                });
-            display.writeToSystemClipboard = () => navigator.clipboard.writeText(display.clipboardString)
+                .catch(err => console.error("readFromSystemClipboard " + err.message));
+            display.writeToSystemClipboard = () => display.handlingEvent &&
+                navigator.clipboard.writeText(display.clipboardString)
                 .then(() => display.clipboardStringChanged = false)
-                .catch(err => {
-                    if (!display.handlingEvent) console.warn("writing to clipboard outside event handler");
-                    console.error("writeToSystemClipboard" + err.message);
-                });
+                .catch(err => console.error("writeToSystemClipboard " + err.message));
         } else {
             // old-style copy/paste
             document.oncopy = function(evt, key) {

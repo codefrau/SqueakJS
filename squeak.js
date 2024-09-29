@@ -747,10 +747,7 @@ function createSqueakDisplay(canvas, options) {
     input.setAttribute("autocapitalize", "off");
     input.setAttribute("spellcheck", "false");
     input.style.position = "absolute";
-    input.style.width = "0";
-    input.style.height = "0";
-    input.style.opacity = "0";
-    input.style.pointerEvents = "none";
+    input.style.left = "-1000px";
     canvas.parentElement.appendChild(input);
     // touch-keyboard buttons
     if ('ontouchstart' in document) {
@@ -761,7 +758,7 @@ function createSqueakDisplay(canvas, options) {
         canvas.parentElement.appendChild(keyboardButton);
         keyboardButton.onmousedown = function(evt) {
             // show on-screen keyboard
-            input.focus();
+            input.focus({ preventScroll: true });
             evt.preventDefault();
         }
         keyboardButton.ontouchstart = keyboardButton.onmousedown;
@@ -795,8 +792,8 @@ function createSqueakDisplay(canvas, options) {
         cmdButton.ontouchcancel = cmdButton.ontouchend;
     } else {
         // keep focus on input field
-        input.onblur = function() { input.focus(); };
-        input.focus();
+        input.onblur = function() { input.focus({ preventScroll: true }); };
+        input.focus({ preventScroll: true });
     }
     display.isMac = navigator.userAgent.includes("Mac");
     // emulate keypress events

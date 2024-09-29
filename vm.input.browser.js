@@ -93,7 +93,6 @@ Object.extend(Squeak.Primitives.prototype,
         this.display.signalInputEvent = function() {
             this.signalSemaphoreWithIndex(this.inputEventSemaIndex);
         }.bind(this);
-        this.display.signalInputEvent();
         return this.popNIfOK(argCount);
     },
     primitiveInputWord: function(argCount) {

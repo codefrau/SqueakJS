@@ -109,7 +109,7 @@ Object.extend(Squeak,
     Class_superclass: 0,
     Class_mdict: 1,
     Class_format: 2,
-    Class_instVars: null,   // 3 or 4 depending on image, see instVarNames()
+    Class_instVars: null,   // 3 or 4 or unknown depending on image, see detectClassInstVarIndex()
     Class_name: 6,
     // ClassBinding layout:
     ClassBinding_value: 1,

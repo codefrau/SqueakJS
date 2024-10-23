@@ -1,3 +1,40 @@
+V2 BRANCH
+=========
+This is the work-in-progress branch for SqueakJS 2.0. Things I want to change:
+
+* each fixed inst var gets its own property instead for direct access instead of being indexed in `pointers[]`. There will be a compatibility accessor for primitives that use indexed access.
+
+  Still need to decide between named inst vars (using inst var names from image) or suffixed (like `p0`, `p1`, ...)
+
+  The goal is faster access than via the `pointers[]` array.
+  Also, nicer debuggability if we use actual names.
+
+* new high-performance JIT without per-frame context allocation, but instead using direct function calls, function temps as stack, args passed directly via function parameters, and direct instance var access (see above). Contexts would only be allocated if needed (also see the existing [discussion](https://github.com/codefrau/SqueakJS/issues/121) and my [JIT experiments](https://squeak.js.org/docs/jit.md.html))
+
+  The goal is to make the jitted methods look as close to "normal" JavaScript functions as possible, so that the JS JIT can optimize them, even with inlining etc.
+
+* (maybe) use `WeakRef` and `WeakMap`? All JS runtimes now support weak objects (`WeakRef` is still pretty new, since 2021).
+
+  The goal would be to have faster GCs while still supporting object enumeration.
+
+* (maybe) use WASM for BitBlt etc. To avoid copying in and out of the WASM heap, we could use binary arrays allocated via WASM (but would need to implement GC for that)
+
+   Goal: speed
+
+* (maybe) `BigInt` for large integer primitives? Supported in browsers since 2020 (and allowed to fail if not available). Need to measure fastest way to convert from/to `Uint8Array` representation. (this is actually independent of v2, see the existing [discussion](https://github.com/codefrau/SqueakJS/issues/37))
+
+  The goal is faster LargeInteger calculations.
+
+* (maybe) no more `.oop` property: it's not needed at runtime, and updating it makes the GC slower.
+
+  Goal: faster GC
+
+* (maybe) export as 64 bit image: on load, 64-bit images are converted to 32 bits. On export, we could store them as 64 bits (and if we get rid of the `.oop` as mentioned above it may actually be almost as fast as snapshotting in 32 bits)
+
+  The goal here is compatibility with other VMs, which on some systems only run 64 bit images
+
+Feedback and ideas: please comment on the [Pull Request](https://github.com/codefrau/SqueakJS/pull/168) or use the [vm-dev](http://lists.squeak.org/mailman/listinfo/vm-dev) mailing list and `#squeakjs` channel on the [Squeak Slack](https://join.slack.com/t/squeak/shared_invite/zt-2ahdbewgl-56nPdkf1hYACBmc8xCOXRQ).
+
 SqueakJS: A Squeak VM for the Web and Node.js
 =============================================
 

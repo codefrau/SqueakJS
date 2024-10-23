@@ -188,7 +188,7 @@ Object.subclass('Squeak.Image',
                     hash = (header>>>17) & 4095,
                     bits = readBits(nWords, format < 5);
                 var object = new Squeak.Object();
-                object.initFromImage(oop, classInt, format, hash);
+                object.initFromBits(oop, classInt, format, hash);
                 if (classInt < 32) object.hash |= 0x10000000;    // see fixCompactOops()
                 if (prevObj) prevObj.nextObject = object;
                 this.oldSpaceCount++;
@@ -236,7 +236,7 @@ Object.subclass('Squeak.Image',
                     // low class ids are internal to Spur
                     if (classID >= 32) {
                         var object = new Squeak.ObjectSpur();
-                        object.initFromImage(oop, classID, format, hash);
+                        object.initFromBits(oop, classID, format, hash);
                         if (prevObj) prevObj.nextObject = object;
                         this.oldSpaceCount++;
                         prevObj = object;
@@ -296,7 +296,7 @@ Object.subclass('Squeak.Image',
             prevObj = null;
             while (object) {
                 prevObj = renamedObj;
-                renamedObj = object.renameFromImage(oopMap, rawBits, cc);
+                renamedObj = object.renameFromBits(oopMap, rawBits, cc);
                 if (prevObj) prevObj.nextObject = renamedObj;
                 else this.firstOldObject = renamedObj;
                 oopMap[oldBaseAddr + object.oop] = renamedObj;
@@ -310,26 +310,25 @@ Object.subclass('Squeak.Image',
         var splObs         = oopMap[specialObjectsOopInt];
         var compactClasses = rawBits[oopMap[rawBits[splObs.oop][Squeak.splOb_CompactClasses]].oop];
         var floatClass     = oopMap[rawBits[splObs.oop][Squeak.splOb_ClassFloat]];
-        // Spur needs different arguments for installFromImage()
+        // Spur needs different arguments for installFromBits()
         if (this.isSpur) {
             this.initImmediateClasses(oopMap, rawBits, splObs);
             compactClasses = this.spurClassTable(oopMap, rawBits, classPages, splObs);
             nativeFloats = this.getCharacter.bind(this);
             this.initSpurOverrides();
         }
+        // figure out if Class_instVars is 3 or 4 or unknown
+        Squeak.Class_instVars = this.detectClassInstVarIndex(splObs, oopMap, rawBits);
+        // now "install" the objects, i.e. decode the bits into proper references, etc.
         var obj = this.firstOldObject,
             done = 0;
         var mapSomeObjects = function() {
             if (obj) {
                 var stop = done + (this.oldSpaceCount / 20 | 0);    // do it in 20 chunks
                 while (obj && done < stop) {
-                    obj.installFromImage(oopMap, rawBits, compactClasses, floatClass, littleEndian, nativeFloats, is64Bit && {
-                            makeFloat: function makeFloat(bits) {
-                                return this.instantiateFloat(bits);
-                            }.bind(this),
-                            makeLargeFromSmall: function makeLargeFromSmall(hi, lo) {
-                                return this.instantiateLargeFromSmall(hi, lo);
-                            }.bind(this),
+                    obj.installFromBits(oopMap, rawBits, compactClasses, floatClass, littleEndian, nativeFloats, is64Bit && {
+                            makeFloat: bits => this.instantiateFloat(bits),
+                            makeLargeFromSmall: (hi, lo) => this.instantiateLargeFromSmall(hi, lo),
                         });
                     obj = obj.nextObject;
                     done++;
@@ -363,6 +362,27 @@ Object.subclass('Squeak.Image',
         } else {
             self.setTimeout(mapSomeObjectsAsync, 0);
         }
+    },
+    detectClassInstVarIndex: function(splObs, oopMap, rawBits) {
+        // the VM really should only make assumptions about inst vars 0-2
+        // but we want to use the actual instance variable names
+        // which are at index 3 or 4 in the class
+        var classPoint = oopMap[rawBits[splObs.oop][Squeak.splOb_ClassPoint]];
+        var classBits = rawBits[classPoint.oop];
+        // we check if the array #(x y) is anywhere in the Point class
+        // starting at index 3 (indices 0-2 are known to the VM)
+        for (var index = 3; index < classBits.length; index++) {
+            var names = oopMap[classBits[index]]; if (!names) continue;
+            var namesBits = rawBits[names.oop]; if (namesBits.length !== 2) continue;
+            var x = oopMap[namesBits[0]];
+            var xBits = rawBits[x.oop];
+            if (String.fromCharCode(xBits[0]) !== 'x') continue;
+            var y = oopMap[namesBits[1]];
+            var yBits = rawBits[y.oop];
+            if (String.fromCharCode(yBits[0]) !== 'y') continue;
+            return index;
+        }
+        return 0; // unknown
     },
     decorateKnownObjects: function() {
         var splObjs = this.specialObjectsArray.pointers;
@@ -1140,7 +1160,7 @@ Object.subclass('Squeak.Image',
                 bits = readBits(nWords, format);
 
             var object = new Squeak.Object();
-            object.initFromImage(oop + oopOffset, classInt, format, hash);
+            object.initFromBits(oop + oopOffset, classInt, format, hash);
             prevObj.nextObject = object;
             this.oldSpaceCount++;
             prevObj = object;
@@ -1164,7 +1184,7 @@ Object.subclass('Squeak.Image',
             floatClass = this.specialObjectsArray.pointers[Squeak.splOb_ClassFloat],
             obj = roots;
         do {
-            obj.installFromImage(oopMap, rawBits, compactClassOops, floatClass, littleEndian, nativeFloats);
+            obj.installFromBits(oopMap, rawBits, compactClassOops, floatClass, littleEndian, nativeFloats);
             obj = obj.nextObject;
         } while (obj !== endMarker);
         return roots;

@@ -421,7 +421,7 @@ function createSqueakDisplay(canvas, options) {
         document.title = title;
     };
     display.showBanner = function(msg, style) {
-        style = style || {};
+        style = style || display.context.canvas.style || {};
         var ctx = display.context;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = style.color || "#F90";
@@ -433,7 +433,7 @@ function createSqueakDisplay(canvas, options) {
         ctx.fillText(msg, canvas.width / 2, canvas.height / 2);
     };
     display.showProgress = function(value, style) {
-        style = style || {};
+        style = style || display.context.canvas.style || {};
         var ctx = display.context,
             w = (canvas.width / 3) | 0,
             h = 24,
@@ -442,9 +442,9 @@ function createSqueakDisplay(canvas, options) {
         ctx.fillStyle = style.background || "#000";
         ctx.fillRect(x, y, w, h);
         ctx.lineWidth = 2;
-        ctx.strokeStyle = style.color || "#F90";
+        ctx.strokeStyle = style.stroke || "#F90";
         ctx.strokeRect(x, y, w, h);
-        ctx.fillStyle = style.color || "#F90";
+        ctx.fillStyle = style.fill || "#F90";
         ctx.fillRect(x, y, w * value, h);
     };
     display.executeClipboardPasteKey = function(text, timestamp) {

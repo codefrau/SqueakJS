@@ -913,7 +913,7 @@ Object.subclass('Squeak.Interpreter',
         var lookupClass;
         if (doSuper) {
             lookupClass = this.method.methodClassForSuper();
-            lookupClass = lookupClass.pointers[Squeak.Class_superclass];
+            lookupClass = lookupClass.superclass();
         } else {
             lookupClass = this.getClass(newRcvr);
         }
@@ -926,7 +926,7 @@ Object.subclass('Squeak.Interpreter',
         this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
     },
     sendSuperDirected: function(selector, argCount) {
-        var lookupClass = this.pop().pointers[Squeak.Class_superclass];
+        var lookupClass = this.pop().superclass();
         var newRcvr = this.stackValue(argCount);
         var entry = this.findSelectorInClass(selector, argCount, lookupClass);
         if (entry.primIndex) {
@@ -1197,7 +1197,7 @@ Object.subclass('Squeak.Interpreter',
         if (supered) { // verify that lookupClass is in fact in superclass chain of receiver;
             var cls = this.getClass(rcvr);
             while (cls !== lookupClass) {
-                cls = cls.pointers[Squeak.Class_superclass];
+                cls = cls.superclass();
                 if (cls.isNil) return false;
             }
         }

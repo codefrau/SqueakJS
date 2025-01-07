@@ -873,7 +873,7 @@ Object.subclass('Squeak.Primitives',
         var theClass = typeof knownClass === "number" ? this.vm.specialObjects[knownClass] : knownClass;
         while (!classOrSuper.isNil) {
             if (classOrSuper === theClass) return true;
-            classOrSuper = classOrSuper.pointers[Squeak.Class_superclass];
+            classOrSuper = classOrSuper.superclass();
         }
         return false;
     },
@@ -883,8 +883,8 @@ Object.subclass('Squeak.Primitives',
         // we know the Processor binding is "like" an association, but in newer images it's
         // actually a Binding object, which only shares the superclass LookupKey with Association
         var lookupKeyClass = this.vm.specialObjects[Squeak.splOb_SchedulerAssociation].sqClass;
-        while (lookupKeyClass.pointers[Squeak.Class_superclass].classInstSize() > 0)
-            lookupKeyClass = lookupKeyClass.pointers[Squeak.Class_superclass];
+        while (lookupKeyClass.superclass().classInstSize() > 0)
+            lookupKeyClass = lookupKeyClass.superclass();
         var isAssociation = this.isKindOf(obj, lookupKeyClass);
         if (isAssociation) this.associationClass = obj.sqClass; // cache for next time
         return isAssociation;

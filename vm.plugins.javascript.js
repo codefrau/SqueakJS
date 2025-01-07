@@ -186,7 +186,7 @@ Object.extend(Squeak.Primitives.prototype,
         throw Error("asJSArgument needed for " + obj);  // image recognizes error string and will try again
     },
     js_fromStArray: function(objs, maybeDict) {
-        if (objs.length > 0 && maybeDict && this.isAssociation(objs[0]))
+        if (objs.length > 0 && maybeDict && objs.every(obj => this.isAssociation(obj)))
             return this.js_fromStDict(objs);
         var jsArray = [];
         for (var i = 0; i < objs.length; i++)

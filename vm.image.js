@@ -153,8 +153,8 @@ Object.subclass('Squeak.Image',
         }
         var firstSegSize = readWord();
         var prevObj;
-        var oopMap = {};
-        var rawBits = {};
+        var oopMap = new Map();
+        var rawBits = new Map();
         var headerSize = fileHeaderSize + imageHeaderSize;
         pos = headerSize;
         if (!this.isSpur) {
@@ -194,11 +194,11 @@ Object.subclass('Squeak.Image',
                 this.oldSpaceCount++;
                 prevObj = object;
                 //oopMap is from old oops to actual objects
-                oopMap[oldBaseAddr + oop] = object;
+                oopMap.set(oldBaseAddr + oop, object);
                 //rawBits holds raw content bits for objects
-                rawBits[oop] = bits;
+                rawBits.set(oop, bits);
             }
-            this.firstOldObject = oopMap[oldBaseAddr+4];
+            this.firstOldObject = oopMap.get(oldBaseAddr+4);
             this.lastOldObject = object;
             this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
             this.oldSpaceBytes = objectMemorySize;
@@ -241,9 +241,9 @@ Object.subclass('Squeak.Image',
                         this.oldSpaceCount++;
                         prevObj = object;
                         //oopMap is from old oops to actual objects
-                        oopMap[oldBaseAddr + oop] = object;
+                        oopMap.set(oldBaseAddr + oop, object);
                         //rawBits holds raw content bits for objects
-                        rawBits[oop] = bits;
+                        rawBits.set(oop, bits);
                         oopAdjust[oop] = skippedBytes;
                         // account for size difference of 32 vs 64 bit oops
                         if (is64Bit) {
@@ -259,7 +259,7 @@ Object.subclass('Squeak.Image',
                     } else {
                         skippedBytes += pos - objPos;
                         if (classID === 16 && !classPages) classPages = bits;
-                        if (classID) oopMap[oldBaseAddr + oop] = bits;  // used in spurClassTable()
+                        if (classID) oopMap.set(oldBaseAddr + oop, bits);  // used in spurClassTable()
                     }
                 }
                 if (pos !== segmentEnd - 16) throw Error("invalid segment");
@@ -278,7 +278,7 @@ Object.subclass('Squeak.Image',
                 }
             }
             this.oldSpaceBytes -= skippedBytes;
-            this.firstOldObject = oopMap[oldBaseAddr];
+            this.firstOldObject = oopMap.get(oldBaseAddr);
             this.lastOldObject = object;
             this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
         }
@@ -288,9 +288,9 @@ Object.subclass('Squeak.Image',
 
         if (true) {
             // For debugging: re-create all objects from named prototypes
-            var _splObs = oopMap[specialObjectsOopInt],
+            var _splObs = oopMap.get(specialObjectsOopInt),
                 cc = this.isSpur ? this.spurClassTable(oopMap, rawBits, classPages, _splObs)
-                    : rawBits[oopMap[rawBits[_splObs.oop][Squeak.splOb_CompactClasses]].oop];
+                    : rawBits.get(oopMap.get(rawBits.get(_splObs.oop)[Squeak.splOb_CompactClasses]).oop);
             var renamedObj = null;
             object = this.firstOldObject;
             prevObj = null;
@@ -299,7 +299,7 @@ Object.subclass('Squeak.Image',
                 renamedObj = object.renameFromImage(oopMap, rawBits, cc);
                 if (prevObj) prevObj.nextObject = renamedObj;
                 else this.firstOldObject = renamedObj;
-                oopMap[oldBaseAddr + object.oop] = renamedObj;
+                oopMap.set(oldBaseAddr + object.oop, renamedObj);
                 object = object.nextObject;
             }
             this.lastOldObject = renamedObj;
@@ -307,9 +307,9 @@ Object.subclass('Squeak.Image',
         }
 
         // properly link objects by mapping via oopMap
-        var splObs         = oopMap[specialObjectsOopInt];
-        var compactClasses = rawBits[oopMap[rawBits[splObs.oop][Squeak.splOb_CompactClasses]].oop];
-        var floatClass     = oopMap[rawBits[splObs.oop][Squeak.splOb_ClassFloat]];
+        var splObs         = oopMap.get(specialObjectsOopInt);
+        var compactClasses = rawBits.get(oopMap.get(rawBits.get(splObs.oop)[Squeak.splOb_CompactClasses]).oop);
+        var floatClass     = oopMap.get(rawBits.get(splObs.oop)[Squeak.splOb_ClassFloat]);
         // Spur needs different arguments for installFromImage()
         if (this.isSpur) {
             this.initImmediateClasses(oopMap, rawBits, splObs);
@@ -1144,18 +1144,18 @@ Object.subclass('Squeak.Image',
             prevObj.nextObject = object;
             this.oldSpaceCount++;
             prevObj = object;
-            oopMap[oop] = object;
-            rawBits[oop + oopOffset] = bits;
+            oopMap.get(oop) = object;
+            rawBits.set(oop + oopOffset, bits);
         }
         object.nextObject = endMarker;
         // add outPointers to oopMap
         for (var i = 0; i < outPointerArray.pointers.length; i++)
-            oopMap[0x80000004 + i * 4] = outPointerArray.pointers[i];
+            oopMap.set(0x80000004 + i * 4, outPointerArray.pointers[i]);
         // add compactClasses to oopMap
         var compactClasses = this.specialObjectsArray.pointers[Squeak.splOb_CompactClasses].pointers,
             fakeClsOop = 0, // make up a compact-classes array with oops, as if loading an image
             compactClassOops = compactClasses.map(function(cls) {
-                oopMap[--fakeClsOop] = cls; return fakeClsOop; });
+                oopMap.set(--fakeClsOop, cls); return fakeClsOop; });
         // truncate segmentWordArray array to one element
         segmentWordArray.words = new Uint32Array([segmentWordArray.words[0]]);
         delete segmentWordArray.uint8Array; // in case it was a view onto words
@@ -1183,10 +1183,10 @@ Object.subclass('Squeak.Image',
             nil = this.firstOldObject;
         // read class table pages
         for (var p = 0; p < 4096; p++) {
-            var page = oopMap[classPages[p]];
-            if (page.oop) page = rawBits[page.oop]; // page was not properly hidden
+            var page = oopMap.get(classPages[p]);
+            if (page.oop) page = rawBits.get(page.oop); // page was not properly hidden
             if (page.length === 1024) for (var i = 0; i < 1024; i++) {
-                var entry = oopMap[page[i]];
+                var entry = oopMap.get(page[i]);
                 if (!entry) throw Error("Invalid class table entry (oop " + page[i] + ")");
                 if (entry !== nil) {
                     var classIndex = p * 1024 + i;
@@ -1197,7 +1197,7 @@ Object.subclass('Squeak.Image',
         // add known classes which may not be in the table
         for (var key in Squeak) {
             if (/^splOb_Class/.test(key)) {
-                var knownClass = oopMap[rawBits[splObjs.oop][Squeak[key]]];
+                var knownClass = oopMap.get(rawBits.get(splObjs.oop)[Squeak[key]]);
                 if (knownClass !== nil) {
                     var classIndex = knownClass.hash;
                     if (classIndex > 0 && classIndex < 1024)
@@ -1226,11 +1226,11 @@ Object.subclass('Squeak.Image',
         return null;
     },
     initImmediateClasses: function(oopMap, rawBits, splObs) {
-        var special = rawBits[splObs.oop];
-        this.characterClass = oopMap[special[Squeak.splOb_ClassCharacter]];
-        this.floatClass = oopMap[special[Squeak.splOb_ClassFloat]];
-        this.largePosIntClass = oopMap[special[Squeak.splOb_ClassLargePositiveInteger]];
-        this.largeNegIntClass = oopMap[special[Squeak.splOb_ClassLargeNegativeInteger]];
+        var special = rawBits.get(splObs.oop);
+        this.characterClass = oopMap.get(special[Squeak.splOb_ClassCharacter]);
+        this.floatClass = oopMap.get(special[Squeak.splOb_ClassFloat]);
+        this.largePosIntClass = oopMap.get(special[Squeak.splOb_ClassLargePositiveInteger]);
+        this.largeNegIntClass = oopMap.get(special[Squeak.splOb_ClassLargeNegativeInteger]);
         // init named prototypes
         this.characterClass.classInstProto("Character");
         this.floatClass.classInstProto("BoxedFloat64");

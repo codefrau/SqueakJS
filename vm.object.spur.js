@@ -70,7 +70,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         if (classID < 32) throw Error("Invalid class ID: " + classID);
         this.sqClass = classTable[classID];
         if (!this.sqClass) throw Error("Class ID not in class table: " + classID);
-        var bits = rawBits[this.oop],
+        var bits = rawBits.get(this.oop),
             nWords = bits.length;
         switch (this._format) {
             case 0: // zero sized object
@@ -183,7 +183,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             } else if (is64Bit && (oop & 7) === 4) {   // SmallFloat
                 ptrs[i] = this.decodeSmallFloat((oop - (oop >>> 0)) / 0x100000000 >>> 0, oop >>> 0, is64Bit);
             } else {                        // Object
-                ptrs[i] = oopMap[oop] || 42424242;
+                ptrs[i] = oopMap.get(oop) || 42424242;
                 // when loading a context from image segment, there is
                 // garbage beyond its stack pointer, resulting in the oop
                 // not being found in oopMap. We just fill in an arbitrary
@@ -269,9 +269,9 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         this.bytes = new Uint8Array(size);
     },
     classNameFromImage: function(oopMap, rawBits) {
-        var name = oopMap[rawBits[this.oop][Squeak.Class_name]];
+        var name = oopMap.get(rawBits.get(this.oop)[Squeak.Class_name]);
         if (name && name._format >= 16 && name._format < 24) {
-            var bits = rawBits[name.oop],
+            var bits = rawBits.get(name.oop),
                 bytes = name.decodeBytes(bits.length, bits, 0, name._format & 7);
             return Squeak.bytesAsString(bytes);
         }

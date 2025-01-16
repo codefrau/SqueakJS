@@ -86,16 +86,16 @@ Object.subclass('Squeak.Object',
         this.hash = hsh;
     },
     classNameFromImage: function(oopMap, rawBits) {
-        var name = oopMap[rawBits[this.oop][Squeak.Class_name]];
+        var name = oopMap.get(rawBits.get(this.oop)[Squeak.Class_name]);
         if (name && name._format >= 8 && name._format < 12) {
-            var bits = rawBits[name.oop],
+            var bits = rawBits.get(name.oop),
                 bytes = name.decodeBytes(bits.length, bits, 0, name._format & 3);
             return Squeak.bytesAsString(bytes);
         }
         return "Class";
     },
     renameFromImage: function(oopMap, rawBits, ccArray) {
-        var classObj = this.sqClass < 32 ? oopMap[ccArray[this.sqClass-1]] : oopMap[this.sqClass];
+        var classObj = this.sqClass < 32 ? oopMap.get(ccArray[this.sqClass-1]) : oopMap.get(this.sqClass);
         if (!classObj) return this;
         var instProto = classObj.instProto || classObj.classInstProto(classObj.classNameFromImage(oopMap, rawBits));
         if (!instProto) return this;
@@ -111,10 +111,10 @@ Object.subclass('Squeak.Object',
         var ccInt = this.sqClass;
         // map compact classes
         if ((ccInt>0) && (ccInt<32))
-            this.sqClass = oopMap[ccArray[ccInt-1]];
+            this.sqClass = oopMap.get(ccArray[ccInt-1]);
         else
-            this.sqClass = oopMap[ccInt];
-        var bits = rawBits[this.oop],
+            this.sqClass = oopMap.get(ccInt);
+        var bits = rawBits.get(this.oop),
             nWords = bits.length;
         if (this._format < 5) {
             //Formats 0...4 -- Pointer fields
@@ -151,7 +151,7 @@ Object.subclass('Squeak.Object',
             if ((oop & 1) === 1) {          // SmallInteger
                 ptrs[i] = oop >> 1;
             } else {                        // Object
-                ptrs[i] = oopMap[oop] || 42424242;
+                ptrs[i] = oopMap.get(oop) || 42424242;
                 // when loading a context from image segment, there is
                 // garbage beyond its stack pointer, resulting in the oop
                 // not being found in oopMap. We just fill in an arbitrary

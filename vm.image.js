@@ -1144,7 +1144,7 @@ Object.subclass('Squeak.Image',
             prevObj.nextObject = object;
             this.oldSpaceCount++;
             prevObj = object;
-            oopMap.get(oop) = object;
+            oopMap.set(oop, object);
             rawBits.set(oop + oopOffset, bits);
         }
         object.nextObject = endMarker;

@@ -1108,8 +1108,8 @@ Object.subclass('Squeak.Image',
         var prevObj = segmentWordArray,
             endMarker = prevObj.nextObject,
             oopOffset = segmentWordArray.oop,
-            oopMap = {},
-            rawBits = {};
+            oopMap = new Map(),
+            rawBits = new Map();
         while (pos < segment.byteLength) {
             var nWords = 0,
                 classInt = 0,

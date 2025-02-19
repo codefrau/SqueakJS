@@ -2,3 +2,4 @@
 node_modules/
 gh-pages
 dist/*.min.js*
+*.code-workspace

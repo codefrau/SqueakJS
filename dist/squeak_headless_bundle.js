@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2024 Vanessa Freudenberg
+ * Copyright (c) 2013-2025 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -89,7 +89,7 @@ if (!Function.prototype.subclass) {
 }
 
 /*
- * Copyright (c) 2013-2024 Vanessa Freudenberg
+ * Copyright (c) 2013-2025 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -113,8 +113,8 @@ if (!Function.prototype.subclass) {
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 1.2.3",
-    vmDate: "2024-09-28",               // Maybe replace at build time?
+    vmVersion: "SqueakJS 1.2.4",
+    vmDate: "2025-02-19",               // Maybe replace at build time?
     vmBuild: "unknown",                 // or replace at runtime by last-modified?
     vmPath: "unknown",                  // Replace at runtime
     vmFile: "vm.js",
@@ -327,7 +327,7 @@ Object.extend(Squeak,
 });
 
 /*
- * Copyright (c) 2013-2024 Vanessa Freudenberg
+ * Copyright (c) 2013-2025 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -413,16 +413,16 @@ Object.subclass('Squeak.Object',
         this.hash = hsh;
     },
     classNameFromImage: function(oopMap, rawBits) {
-        var name = oopMap[rawBits[this.oop][Squeak.Class_name]];
+        var name = oopMap.get(rawBits.get(this.oop)[Squeak.Class_name]);
         if (name && name._format >= 8 && name._format < 12) {
-            var bits = rawBits[name.oop],
+            var bits = rawBits.get(name.oop),
                 bytes = name.decodeBytes(bits.length, bits, 0, name._format & 3);
             return Squeak.bytesAsString(bytes);
         }
         return "Class";
     },
     renameFromImage: function(oopMap, rawBits, ccArray) {
-        var classObj = this.sqClass < 32 ? oopMap[ccArray[this.sqClass-1]] : oopMap[this.sqClass];
+        var classObj = this.sqClass < 32 ? oopMap.get(ccArray[this.sqClass-1]) : oopMap.get(this.sqClass);
         if (!classObj) return this;
         var instProto = classObj.instProto || classObj.classInstProto(classObj.classNameFromImage(oopMap, rawBits));
         if (!instProto) return this;
@@ -438,10 +438,10 @@ Object.subclass('Squeak.Object',
         var ccInt = this.sqClass;
         // map compact classes
         if ((ccInt>0) && (ccInt<32))
-            this.sqClass = oopMap[ccArray[ccInt-1]];
+            this.sqClass = oopMap.get(ccArray[ccInt-1]);
         else
-            this.sqClass = oopMap[ccInt];
-        var bits = rawBits[this.oop],
+            this.sqClass = oopMap.get(ccInt);
+        var bits = rawBits.get(this.oop),
             nWords = bits.length;
         if (this._format < 5) {
             //Formats 0...4 -- Pointer fields
@@ -478,7 +478,7 @@ Object.subclass('Squeak.Object',
             if ((oop & 1) === 1) {          // SmallInteger
                 ptrs[i] = oop >> 1;
             } else {                        // Object
-                ptrs[i] = oopMap[oop] || 42424242;
+                ptrs[i] = oopMap.get(oop) || 42424242;
                 // when loading a context from image segment, there is
                 // garbage beyond its stack pointer, resulting in the oop
                 // not being found in oopMap. We just fill in an arbitrary
@@ -889,7 +889,7 @@ Object.subclass('Squeak.Object',
 });
 
 /*
- * Copyright (c) 2013-2024 Vanessa Freudenberg
+ * Copyright (c) 2013-2025 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -959,7 +959,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         if (classID < 32) throw Error("Invalid class ID: " + classID);
         this.sqClass = classTable[classID];
         if (!this.sqClass) throw Error("Class ID not in class table: " + classID);
-        var bits = rawBits[this.oop],
+        var bits = rawBits.get(this.oop),
             nWords = bits.length;
         switch (this._format) {
             case 0: // zero sized object
@@ -1072,7 +1072,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             } else if (is64Bit && (oop & 7) === 4) {   // SmallFloat
                 ptrs[i] = this.decodeSmallFloat((oop - (oop >>> 0)) / 0x100000000 >>> 0, oop >>> 0, is64Bit);
             } else {                        // Object
-                ptrs[i] = oopMap[oop] || 42424242;
+                ptrs[i] = oopMap.get(oop) || 42424242;
                 // when loading a context from image segment, there is
                 // garbage beyond its stack pointer, resulting in the oop
                 // not being found in oopMap. We just fill in an arbitrary
@@ -1158,9 +1158,9 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         this.bytes = new Uint8Array(size);
     },
     classNameFromImage: function(oopMap, rawBits) {
-        var name = oopMap[rawBits[this.oop][Squeak.Class_name]];
+        var name = oopMap.get(rawBits.get(this.oop)[Squeak.Class_name]);
         if (name && name._format >= 16 && name._format < 24) {
-            var bits = rawBits[name.oop],
+            var bits = rawBits.get(name.oop),
                 bytes = name.decodeBytes(bits.length, bits, 0, name._format & 7);
             return Squeak.bytesAsString(bytes);
         }
@@ -1348,7 +1348,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
 });
 
 /*
- * Copyright (c) 2013-2024 Vanessa Freudenberg
+ * Copyright (c) 2013-2025 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -1500,8 +1500,8 @@ Object.subclass('Squeak.Image',
         }
         var firstSegSize = readWord();
         var prevObj;
-        var oopMap = {};
-        var rawBits = {};
+        var oopMap = new Map();
+        var rawBits = new Map();
         var headerSize = fileHeaderSize + imageHeaderSize;
         pos = headerSize;
         if (!this.isSpur) {
@@ -1541,11 +1541,11 @@ Object.subclass('Squeak.Image',
                 this.oldSpaceCount++;
                 prevObj = object;
                 //oopMap is from old oops to actual objects
-                oopMap[oldBaseAddr + oop] = object;
+                oopMap.set(oldBaseAddr + oop, object);
                 //rawBits holds raw content bits for objects
-                rawBits[oop] = bits;
+                rawBits.set(oop, bits);
             }
-            this.firstOldObject = oopMap[oldBaseAddr+4];
+            this.firstOldObject = oopMap.get(oldBaseAddr+4);
             this.lastOldObject = object;
             this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
             this.oldSpaceBytes = objectMemorySize;
@@ -1588,9 +1588,9 @@ Object.subclass('Squeak.Image',
                         this.oldSpaceCount++;
                         prevObj = object;
                         //oopMap is from old oops to actual objects
-                        oopMap[oldBaseAddr + oop] = object;
+                        oopMap.set(oldBaseAddr + oop, object);
                         //rawBits holds raw content bits for objects
-                        rawBits[oop] = bits;
+                        rawBits.set(oop, bits);
                         oopAdjust[oop] = skippedBytes;
                         // account for size difference of 32 vs 64 bit oops
                         if (is64Bit) {
@@ -1606,7 +1606,7 @@ Object.subclass('Squeak.Image',
                     } else {
                         skippedBytes += pos - objPos;
                         if (classID === 16 && !classPages) classPages = bits;
-                        if (classID) oopMap[oldBaseAddr + oop] = bits;  // used in spurClassTable()
+                        if (classID) oopMap.set(oldBaseAddr + oop, bits);  // used in spurClassTable()
                     }
                 }
                 if (pos !== segmentEnd - 16) throw Error("invalid segment");
@@ -1625,7 +1625,7 @@ Object.subclass('Squeak.Image',
                 }
             }
             this.oldSpaceBytes -= skippedBytes;
-            this.firstOldObject = oopMap[oldBaseAddr];
+            this.firstOldObject = oopMap.get(oldBaseAddr);
             this.lastOldObject = object;
             this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
         }
@@ -1635,9 +1635,9 @@ Object.subclass('Squeak.Image',
 
         {
             // For debugging: re-create all objects from named prototypes
-            var _splObs = oopMap[specialObjectsOopInt],
+            var _splObs = oopMap.get(specialObjectsOopInt),
                 cc = this.isSpur ? this.spurClassTable(oopMap, rawBits, classPages, _splObs)
-                    : rawBits[oopMap[rawBits[_splObs.oop][Squeak.splOb_CompactClasses]].oop];
+                    : rawBits.get(oopMap.get(rawBits.get(_splObs.oop)[Squeak.splOb_CompactClasses]).oop);
             var renamedObj = null;
             object = this.firstOldObject;
             prevObj = null;
@@ -1646,7 +1646,7 @@ Object.subclass('Squeak.Image',
                 renamedObj = object.renameFromImage(oopMap, rawBits, cc);
                 if (prevObj) prevObj.nextObject = renamedObj;
                 else this.firstOldObject = renamedObj;
-                oopMap[oldBaseAddr + object.oop] = renamedObj;
+                oopMap.set(oldBaseAddr + object.oop, renamedObj);
                 object = object.nextObject;
             }
             this.lastOldObject = renamedObj;
@@ -1654,9 +1654,9 @@ Object.subclass('Squeak.Image',
         }
 
         // properly link objects by mapping via oopMap
-        var splObs         = oopMap[specialObjectsOopInt];
-        var compactClasses = rawBits[oopMap[rawBits[splObs.oop][Squeak.splOb_CompactClasses]].oop];
-        var floatClass     = oopMap[rawBits[splObs.oop][Squeak.splOb_ClassFloat]];
+        var splObs         = oopMap.get(specialObjectsOopInt);
+        var compactClasses = rawBits.get(oopMap.get(rawBits.get(splObs.oop)[Squeak.splOb_CompactClasses]).oop);
+        var floatClass     = oopMap.get(rawBits.get(splObs.oop)[Squeak.splOb_ClassFloat]);
         // Spur needs different arguments for installFromImage()
         if (this.isSpur) {
             this.initImmediateClasses(oopMap, rawBits, splObs);
@@ -2452,8 +2452,8 @@ Object.subclass('Squeak.Image',
         var prevObj = segmentWordArray,
             endMarker = prevObj.nextObject,
             oopOffset = segmentWordArray.oop,
-            oopMap = {},
-            rawBits = {};
+            oopMap = new Map(),
+            rawBits = new Map();
         while (pos < segment.byteLength) {
             var nWords = 0,
                 classInt = 0,
@@ -2488,18 +2488,18 @@ Object.subclass('Squeak.Image',
             prevObj.nextObject = object;
             this.oldSpaceCount++;
             prevObj = object;
-            oopMap[oop] = object;
-            rawBits[oop + oopOffset] = bits;
+            oopMap.set(oop, object);
+            rawBits.set(oop + oopOffset, bits);
         }
         object.nextObject = endMarker;
         // add outPointers to oopMap
         for (var i = 0; i < outPointerArray.pointers.length; i++)
-            oopMap[0x80000004 + i * 4] = outPointerArray.pointers[i];
+            oopMap.set(0x80000004 + i * 4, outPointerArray.pointers[i]);
         // add compactClasses to oopMap
         var compactClasses = this.specialObjectsArray.pointers[Squeak.splOb_CompactClasses].pointers,
             fakeClsOop = 0, // make up a compact-classes array with oops, as if loading an image
             compactClassOops = compactClasses.map(function(cls) {
-                oopMap[--fakeClsOop] = cls; return fakeClsOop; });
+                oopMap.set(--fakeClsOop, cls); return fakeClsOop; });
         // truncate segmentWordArray array to one element
         segmentWordArray.words = new Uint32Array([segmentWordArray.words[0]]);
         delete segmentWordArray.uint8Array; // in case it was a view onto words
@@ -2527,10 +2527,10 @@ Object.subclass('Squeak.Image',
             nil = this.firstOldObject;
         // read class table pages
         for (var p = 0; p < 4096; p++) {
-            var page = oopMap[classPages[p]];
-            if (page.oop) page = rawBits[page.oop]; // page was not properly hidden
+            var page = oopMap.get(classPages[p]);
+            if (page.oop) page = rawBits.get(page.oop); // page was not properly hidden
             if (page.length === 1024) for (var i = 0; i < 1024; i++) {
-                var entry = oopMap[page[i]];
+                var entry = oopMap.get(page[i]);
                 if (!entry) throw Error("Invalid class table entry (oop " + page[i] + ")");
                 if (entry !== nil) {
                     var classIndex = p * 1024 + i;
@@ -2541,7 +2541,7 @@ Object.subclass('Squeak.Image',
         // add known classes which may not be in the table
         for (var key in Squeak) {
             if (/^splOb_Class/.test(key)) {
-                var knownClass = oopMap[rawBits[splObjs.oop][Squeak[key]]];
+                var knownClass = oopMap.get(rawBits.get(splObjs.oop)[Squeak[key]]);
                 if (knownClass !== nil) {
                     var classIndex = knownClass.hash;
                     if (classIndex > 0 && classIndex < 1024)
@@ -2570,11 +2570,11 @@ Object.subclass('Squeak.Image',
         return null;
     },
     initImmediateClasses: function(oopMap, rawBits, splObs) {
-        var special = rawBits[splObs.oop];
-        this.characterClass = oopMap[special[Squeak.splOb_ClassCharacter]];
-        this.floatClass = oopMap[special[Squeak.splOb_ClassFloat]];
-        this.largePosIntClass = oopMap[special[Squeak.splOb_ClassLargePositiveInteger]];
-        this.largeNegIntClass = oopMap[special[Squeak.splOb_ClassLargeNegativeInteger]];
+        var special = rawBits.get(splObs.oop);
+        this.characterClass = oopMap.get(special[Squeak.splOb_ClassCharacter]);
+        this.floatClass = oopMap.get(special[Squeak.splOb_ClassFloat]);
+        this.largePosIntClass = oopMap.get(special[Squeak.splOb_ClassLargePositiveInteger]);
+        this.largeNegIntClass = oopMap.get(special[Squeak.splOb_ClassLargeNegativeInteger]);
         // init named prototypes
         this.characterClass.classInstProto("Character");
         this.floatClass.classInstProto("BoxedFloat64");
@@ -2754,7 +2754,7 @@ Object.subclass('Squeak.Image',
 });
 
 /*
- * Copyright (c) 2013-2024 Vanessa Freudenberg
+ * Copyright (c) 2013-2025 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -3663,7 +3663,7 @@ Object.subclass('Squeak.Interpreter',
         var lookupClass;
         if (doSuper) {
             lookupClass = this.method.methodClassForSuper();
-            lookupClass = lookupClass.pointers[Squeak.Class_superclass];
+            lookupClass = lookupClass.superclass();
         } else {
             lookupClass = this.getClass(newRcvr);
         }
@@ -3676,7 +3676,7 @@ Object.subclass('Squeak.Interpreter',
         this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
     },
     sendSuperDirected: function(selector, argCount) {
-        var lookupClass = this.pop().pointers[Squeak.Class_superclass];
+        var lookupClass = this.pop().superclass();
         var newRcvr = this.stackValue(argCount);
         var entry = this.findSelectorInClass(selector, argCount, lookupClass);
         if (entry.primIndex) {
@@ -3947,7 +3947,7 @@ Object.subclass('Squeak.Interpreter',
         if (supered) { // verify that lookupClass is in fact in superclass chain of receiver;
             var cls = this.getClass(rcvr);
             while (cls !== lookupClass) {
-                cls = cls.pointers[Squeak.Class_superclass];
+                cls = cls.superclass();
                 if (cls.isNil) return false;
             }
         }
@@ -4674,7 +4674,7 @@ Object.subclass('Squeak.Interpreter',
 });
 
 /*
- * Copyright (c) 2013-2024 Vanessa Freudenberg
+ * Copyright (c) 2013-2025 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -4986,7 +4986,7 @@ Object.subclass('Squeak.InterpreterProxy',
 });
 
 /*
- * Copyright (c) 2013-2024 Vanessa Freudenberg
+ * Copyright (c) 2013-2025 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -5125,7 +5125,7 @@ Object.subclass('Squeak.InstructionStream',
 });
 
 /*
- * Copyright (c) 2013-2024 Vanessa Freudenberg
+ * Copyright (c) 2013-2025 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -5292,7 +5292,7 @@ Squeak.InstructionStream.subclass('Squeak.InstructionStreamSista',
 });
 
 /*
- * Copyright (c) 2013-2024 Vanessa Freudenberg
+ * Copyright (c) 2013-2025 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -5473,7 +5473,7 @@ Object.subclass('Squeak.InstructionPrinter',
 });
 
 /*
- * Copyright (c) 2013-2024 Vanessa Freudenberg
+ * Copyright (c) 2013-2025 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -6342,15 +6342,24 @@ Object.subclass('Squeak.Primitives',
     },
     isKindOf: function(obj, knownClass) {
         var classOrSuper = obj.sqClass;
-        var theClass = this.vm.specialObjects[knownClass];
+        var theClass = typeof knownClass === "number" ? this.vm.specialObjects[knownClass] : knownClass;
         while (!classOrSuper.isNil) {
             if (classOrSuper === theClass) return true;
-            classOrSuper = classOrSuper.pointers[Squeak.Class_superclass];
+            classOrSuper = classOrSuper.superclass();
         }
         return false;
     },
     isAssociation: function(obj) {
-        return typeof obj !== "number" && obj.pointersSize() == 2;
+        if (this.associationClass && obj.sqClass === this.associationClass) return true;
+        if (!obj.pointers || obj.pointers.length !== 2) return false;
+        // we know the Processor binding is "like" an association, but in newer images it's
+        // actually a Binding object, which only shares the superclass LookupKey with Association
+        var lookupKeyClass = this.vm.specialObjects[Squeak.splOb_SchedulerAssociation].sqClass;
+        while (lookupKeyClass.superclass().classInstSize() > 0)
+            lookupKeyClass = lookupKeyClass.superclass();
+        var isAssociation = this.isKindOf(obj, lookupKeyClass);
+        if (isAssociation) this.associationClass = obj.sqClass; // cache for next time
+        return isAssociation;
     },
     ensureSmallInt: function(number) {
         if (number === (number|0) && this.vm.canBeSmallInt(number))
@@ -7710,7 +7719,7 @@ Object.subclass('Squeak.Primitives',
 });
 
 /*
- * Copyright (c) 2014-2024 Vanessa Freudenberg
+ * Copyright (c) 2014-2025 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -8538,7 +8547,7 @@ to single-step.
             case 0x0: // at:
                 this.needsVar['stack'] = true;
                 this.source.push(
-                    "var a, b; if ((a=stack[vm.sp-1]).sqClass === vm.specialObjects[7] && typeof (b=stack[vm.sp]) === 'number' && b>0 && b<=a.pointers.length) {\n",
+                    "var a, b; if ((a=stack[vm.sp-1]).sqClass === vm.specialObjects[7] && a.pointers && typeof (b=stack[vm.sp]) === 'number' && b>0 && b<=a.pointers.length) {\n",
                     "  stack[--vm.sp] = a.pointers[b-1];",
                     "} else { var c = vm.primHandler.objectAt(true,true,false); if (vm.primHandler.success) stack[--vm.sp] = c; else {\n",
                     "  vm.pc = ", this.pc, "; vm.sendSpecial(16); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return; }}\n");
@@ -8547,7 +8556,7 @@ to single-step.
             case 0x1: // at:put:
                 this.needsVar['stack'] = true;
                 this.source.push(
-                    "var a, b; if ((a=stack[vm.sp-2]).sqClass === vm.specialObjects[7] && typeof (b=stack[vm.sp-1]) === 'number' && b>0 && b<=a.pointers.length) {\n",
+                    "var a, b; if ((a=stack[vm.sp-2]).sqClass === vm.specialObjects[7] && a.pointers && typeof (b=stack[vm.sp-1]) === 'number' && b>0 && b<=a.pointers.length) {\n",
                     "  var c = stack[vm.sp]; stack[vm.sp-=2] = a.pointers[b-1] = c; a.dirty = true;",
                     "} else { vm.primHandler.objectAtPut(true,true,false); if (vm.primHandler.success) stack[vm.sp-=2] = c; else {\n",
                     "  vm.pc = ", this.pc, "; vm.sendSpecial(17); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return; }}\n");
@@ -8879,7 +8888,7 @@ to single-step.
 });
 
 /*
- * Copyright (c) 2013-2024 Vanessa Freudenberg
+ * Copyright (c) 2013-2025 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -8933,7 +8942,7 @@ Object.extend(Squeak.Primitives.prototype,
 });
 
 /*
- * Copyright (c) 2013-2024 Vanessa Freudenberg
+ * Copyright (c) 2013-2025 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -8978,7 +8987,7 @@ Object.extend(Squeak.Primitives.prototype,
 });
 
 /*
- * Copyright (c) 2013-2024 Vanessa Freudenberg
+ * Copyright (c) 2013-2025 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -9038,7 +9047,7 @@ Object.extend(Squeak,
 });
 
 /*
- * Copyright (c) 2013-2024 Vanessa Freudenberg
+ * Copyright (c) 2013-2025 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -9078,7 +9087,7 @@ Object.extend(Squeak.Primitives.prototype,
 });
 
 /*
- * Copyright (c) 2013-2024 Vanessa Freudenberg
+ * Copyright (c) 2013-2025 Vanessa Freudenberg
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal

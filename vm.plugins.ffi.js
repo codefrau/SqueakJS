@@ -424,6 +424,33 @@ Object.extend(Squeak.Primitives.prototype,
         }
         return this.popNandPushIfOK(argCount + 1, result);
     },
+    ffi_primitiveFFIIntegerAtPut: function(argCount) {
+        var data = this.ffiDataFromStack(4),
+            byteOffset = this.stackInteger(3),
+            value = this.stackSigned53BitInt(2), // good up to int32 / uint32
+            byteSize = this.stackInteger(1),
+            isSigned = this.stackBoolean(0);
+        if (!this.success) return false;
+        byteOffset--; // 1-based indexing
+        if (byteOffset < 0 || byteSize < 1 || byteSize > 8 ||
+            (byteSize & (byteSize - 1)) !== 0) return false;
+        if (byteSize === 4) {
+            if (( isSigned && (value < -0x80000000 || value > 0x7FFFFFFF)) ||
+                (!isSigned && (value < 0 || value > 0xFFFFFFFF))) return false;
+            if (data instanceof Uint32Array) {
+                data[byteOffset] = value >>> 0;   // storage is always unsigned
+            } else if (data instanceof Uint8Array) {
+                new DataView(data.buffer).setUint32(data.byteOffset + byteOffset, value >>> 0, true);
+            } else {
+                this.vm.warnOnce("FFI: expected Uint32Array, got " + typeof data);
+                return false;
+            }
+        } else {
+            this.vm.warnOnce("FFI: unimplemented integer type size: " + byteSize + " signed: " + isSigned);
+            return false;
+        }
+        return this.popNandPushIfOK(argCount + 1, value);
+    },
     ffi_primitiveFFIDoubleAtPut: function(argCount) {
         var data = this.ffiDataFromStack(2),
             byteOffset = this.stackInteger(1),

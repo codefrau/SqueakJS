@@ -98,7 +98,11 @@
     function afterImport(imageName) {
         setTimeout(() => drop.style.borderColor = "", 500);
         if (!imageName) showFiles();
-        else runSqueak(imageName);
+        else {
+            const hash = '#' + paramsForImage(imageName);
+            if (location.hash !== hash) history.pushState({}, "", hash);
+            runSqueak(imageName);
+        }
     }
     function exportFile(a) {
         var path = Squeak.splitFilePath(a.innerText);
@@ -107,6 +111,11 @@
             FileSaver_saveAs(blob, path.basename, true);
         }, alert);
         return false;
+    }
+    function paramsForImage(imageName) {
+        var params = new URLSearchParams(location.hash.slice(1));
+        params.set("image", imageName);
+        return params.toString();
     }
     function showFiles() {
         var imgList = [],
@@ -122,7 +131,7 @@
                 var entry = entries[f],
                     path = dir + '/' + f;
                 if (!entry[3] && f.match(/\.image$/))
-                    imgList.push('<li><a href="#image=' + path + '">' + path + '</a> (' + (entry[4]/1000000).toFixed(1) + ' MB)</li>');
+                    imgList.push('<li><a href="#' + paramsForImage(path) + '">' + path + '</a> (' + (entry[4]/1000000).toFixed(1) + ' MB)</li>');
                 if (entry[3]) {
                     dirs.push(path);
                     nDirs++;

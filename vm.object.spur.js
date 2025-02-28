@@ -358,6 +358,8 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         // body size includes header size that is always present
         var nWords =
             this.isFloat ? 2 :
+            this.words64 ? this.words64.length * 2 :
+            this.words16 ? (this.words16.length + 1) >>> 1 :
             this.words ? this.words.length :
             this.pointers ? this.pointers.length : 0;
         // methods have both pointers and bytes
@@ -371,11 +373,17 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
     writeTo: function(data, pos, littleEndian, objToOop) {
         var nWords =
             this.isFloat ? 2 :
-            this.words ? this.words.length :
             this.pointers ? this.pointers.length : 0;
         if (this.bytes) {
             nWords += (this.bytes.length + 3) >>> 2;
             this._format |= -this.bytes.length & 3;
+        } else if (this.words16) {
+            nWords += (this.words16.length + 1) >>> 1;
+            this._format |= -this.words16.length & 1;
+        } else if (this.words64) {
+            nWords += this.words64.length * 2;
+        } else if (this.words) {
+            nWords += this.words.length;
         }
         var beforePos = pos,
             formatAndClass = (this._format << 24) | (this.sqClass.hash & 0x003FFFFF),
@@ -392,6 +400,16 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         // now write body, if any
         if (this.isFloat) {
             data.setFloat64(pos, this.float, littleEndian); pos += 8;
+        } else if (this.words64) {
+            for (var i = 0; i < this.words64.length; i++) {
+                data.setBigUint64(pos, this.words64[i], littleEndian); pos += 8;
+            }
+        } else if (this.words16) {
+            for (var i = 0; i < this.words16.length; i++) {
+                data.setUint16(pos, this.words16[i], littleEndian); pos += 2;
+            }
+            // skip to next word
+            pos += (this.words16.length & 1) * 2;
         } else if (this.words) {
             for (var i = 0; i < this.words.length; i++) {
                 data.setUint32(pos, this.words[i], littleEndian); pos += 4;

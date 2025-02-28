@@ -41,9 +41,9 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             } else {
                 var bitWidth = this.bitWidth();
                 if (bitWidth === 32) this.words = new Uint32Array(indexableSize);
-                else if (bitWidth === 64) this.words64 = new BigUint64Array(indexableSize);
+                else if (bitWidth === 8) this.bytes = new Uint8Array(indexableSize);
                 else if (bitWidth === 16) this.words16 = new Uint16Array(indexableSize);
-                else this.bytes = new Uint8Array(indexableSize);
+                else this.words64 = new BigUint64Array(indexableSize);
             }
         }
         return this;
@@ -103,10 +103,9 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                         }
                     }
                     this.words64 = new BigUint64Array(words.buffer);
-                    console.log("64 bit array", this.words64, this.words64.buffer, new Float64Array(this.words64.buffer));
                     Object.defineProperty(this, "words", {
-                        get: function() {  debugger; throw Error("64 bit array implementation incomplete"); },
-                        set: function() { debugger; throw Error("64 bit array implementation incomplete"); },
+                        get: function() {  debugger; throw Error("obj.words accessed instead of obj.words64"); },
+                        set: function() { debugger; throw Error("obj.words accessed instead of obj.words64"); },
                     });
                 }
                 break;
@@ -124,17 +123,15 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                 break;
             case 14: // 16 bit array (odd length in 64 bits)
             case 15: // 16 bit array (odd length in 64 bits)
-                console.log("16 bit array", this._format, nWords);
                 nWords--;
                 this._format -= 2;
             case 12: // 16 bit array
             case 13: // 16 bit array (odd length)
                 if (nWords > 0) {
                     this.words16 = this.decodeShorts(nWords, bits, this._format & 1);
-                    console.log("16 bit array", this._format, nWords, bits, this.words16, new Int16Array(this.words16.buffer));
                     Object.defineProperty(this, "words", {
-                        get: function() { debugger; throw Error("16 bit array implementation incomplete"); },
-                        set: function() { debugger; throw Error("16 bit array implementation incomplete"); },
+                        get: function() { debugger; throw Error("obj.words accessed instead of obj.words16"); },
+                        set: function() { debugger; throw Error("obj.words accessed instead of obj.words16"); },
                     });
                 }
                 break;

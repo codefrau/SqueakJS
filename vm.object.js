@@ -457,9 +457,9 @@ Object.subclass('Squeak.Object',
         var spec = this.pointers[Squeak.Class_format];
         return ((spec >> 10) & 0xC0) + ((spec >> 1) & 0x3F) - 1;
     },
-    classInstIsBytes: function() {
+    classInstBitWidth: function() {
         var fmt = this.classInstFormat();
-        return fmt >= 8 && fmt <= 11;
+        fmt >= 8 && fmt <= 11 ? 8 : 32;
     },
     classInstIsPointers: function() {
         return this.classInstFormat() <= 4;

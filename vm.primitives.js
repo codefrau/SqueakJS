@@ -1399,24 +1399,34 @@ Object.subclass('Squeak.Primitives',
             if (rcvr.sqClass.classInstSize() !== cls.classInstSize())
                 return false;
         } else {
-            if (classInstIsPointers) return false;
-            var hasBytes = rcvr.isBytes(),
-                needBytes = cls.classInstIsBytes();
-            if (hasBytes && !needBytes) {
-                if (rcvr.bytes) {
-                    if (rcvr.bytes.length & 3) return false;
-                    rcvr.words = new Uint32Array(rcvr.bytes.buffer);
-                    delete rcvr.bytes;
-                }
-            } else if (!hasBytes && needBytes) {
-                if (rcvr.words) {
-                    rcvr.bytes = new Uint8Array(rcvr.words.buffer);
-                    delete rcvr.words;
+            if (classInstIsPointers || rcvr.isFloat) return false;
+            var rcvrBitWidth = rcvr.bitWidth()
+                wantBitWidth = cls.classInstBitWidth();
+            if (rcvrBitWidth !== wantBitWidth) {
+                var array = rcvr.bytes || rcvr.words16 || rcvr.words64 || rcvr.words;
+                if (array) {
+                    var buffer = array.buffer;
+                    if (wantBitWidth === 8) {
+                        if (buffer.byteLength & 3) return false;
+                        rcvr.bytes = new Uint8Array(buffer);
+                    } else if (wantBitWidth === 16) {
+                        if (buffer.byteLength & 1) return false;
+                        rcvr.words16 = new Uint16Array(buffer);
+                    } else if (wantBitWidth === 32) {
+                        rcvr.words = new Uint32Array(buffer);
+                    } else if (wantBitWidth === 64) {
+                        rcvr.words64 = new BigInt64Array(buffer);
+                    }
+                    if (rcvrBitWidth === 8) delete rcvr.bytes;
+                    else if (rcvrBitWidth === 16) delete rcvr.words16;
+                    else if (rcvrBitWidth === 32) delete rcvr.words;
+                    else if (rcvrBitWidth === 64) delete rcvr.words64;
                 }
             }
         }
         rcvr._format = cls.classInstFormat();
         rcvr.sqClass = cls;
+        rcvr.dirty = true;
         return true;
     },
     primitiveDoPrimitiveWithArgs: function(argCount) {

@@ -1592,33 +1592,41 @@ Object.subclass('Squeak.Primitives',
             for (var i = 0; i < count; i++)
                 dst.pointers[dstPos + i] = src.pointers[srcPos + i];
             return dst;
-        } else if (src.isWords()) { //words type objects
-            var totalLength = src.wordsSize();
-            if ((srcPos < 0) || (srcPos + count) > totalLength)
-                {this.success = false; return dst;} //would go out of bounds
-            totalLength = dst.wordsSize();
-            if ((dstPos < 0) || (dstPos + count) > totalLength)
-                {this.success = false; return dst;} //would go out of bounds
-            if (src.isFloat && dst.isFloat)
-                dst.float = src.float;
-            else if (src.isFloat)
-                dst.wordsAsFloat64Array()[dstPos] = src.float;
-            else if (dst.isFloat)
-                dst.float = src.wordsAsFloat64Array()[srcPos];
-            else for (var i = 0; i < count; i++)
-                dst.words[dstPos + i] = src.words[srcPos + i];
-            return dst;
-        } else { //bytes type objects
-            var totalLength = src.bytesSize();
-            if ((srcPos < 0) || (srcPos + count) > totalLength)
-                {this.success = false; return dst;} //would go out of bounds
-            totalLength = dst.bytesSize();
-            if ((dstPos < 0) || (dstPos + count) > totalLength)
-                {this.success = false; return dst;} //would go out of bounds
-            for (var i = 0; i < count; i++)
-                dst.bytes[dstPos + i] = src.bytes[srcPos + i];
-            return dst;
         }
+        // words type objects
+        var totalLength = src.indexableSize();
+        if ((srcPos < 0) || (srcPos + count) > totalLength)
+            {this.success = false; return dst;} //would go out of bounds
+        totalLength = dst.indexableSize();
+        if ((dstPos < 0) || (dstPos + count) > totalLength)
+            {this.success = false; return dst;} //would go out of bounds
+        switch (src.bitWidth()) {
+            case 32: // words type objects
+                if (src.isFloat && dst.isFloat)
+                    dst.float = src.float;
+                else if (src.isFloat)
+                    dst.wordsAsFloat64Array()[dstPos] = src.float;
+                else if (dst.isFloat)
+                    dst.float = src.wordsAsFloat64Array()[srcPos];
+                else for (var i = 0; i < count; i++)
+                    dst.words[dstPos + i] = src.words[srcPos + i];
+                break;
+            case 8: // bytes type objects
+                for (var i = 0; i < count; i++)
+                    dst.bytes[dstPos + i] = src.bytes[srcPos + i];
+                break;
+            case 16: // shorts type objects
+                for (var i = 0; i < count; i++)
+                    dst.words16[dstPos + i] = src.words16[srcPos + i];
+                break;
+            case 64: // double words type objects
+                for (var i = 0; i < count; i++)
+                    dst.words64[dstPos + i] = src.words64[srcPos + i];
+                break;
+            default:
+                this.success = false;
+        }
+        return dst;
     },
     primitiveCopyObject: function(argCount) {
         var rcvr = this.stackNonInteger(1),

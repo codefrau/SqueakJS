@@ -702,6 +702,44 @@ Object.subclass('Squeak.Primitives',
         this.success = false;
         return 0;
     },
+    stackPos64BitBigInt: function(nDeep) {
+        var stackVal = this.vm.stackValue(nDeep);
+        if (typeof stackVal === "number") {   // SmallInteger
+            if (stackVal >= 0) return BigInt(stackVal);
+            this.success = false;
+            return 0;
+        }
+        var n = stackVal.bytesSize();
+        if (n <= 8) {
+            var bytes = stackVal.bytes,
+                value = 0n;
+            for (var i = 0, f = 1n; i < n; i++, f *= 256n)
+                value += BigInt(bytes[i]) * f;
+            if (this.isA(stackVal, Squeak.splOb_ClassLargePositiveInteger) && value <= 0xFFFFFFFFFFFFFFFFn)
+                return value;
+        }
+        this.success = false;
+        return 0;
+    },
+    stackSigned64BitBigInt: function(nDeep) {
+        var stackVal = this.vm.stackValue(nDeep);
+        if (typeof stackVal === "number") {   // SmallInteger
+            return BigInt(stackVal);
+        }
+        var n = stackVal.bytesSize();
+        if (n <= 8) {
+            var bytes = stackVal.bytes,
+                value = 0n;
+            for (var i = 0, f = 1n; i < n; i++, f *= 256n)
+                value += BigInt(bytes[i]) * f;
+            if (this.isA(stackVal, Squeak.splOb_ClassLargePositiveInteger) && value <= 0x7FFFFFFFFFFFFFFFn)
+                return value;
+            if (this.isA(stackVal, Squeak.splOb_ClassLargeNegativeInteger) && -value >= -0x8000000000000000n)
+                return -value;
+        }
+        this.success = false;
+        return 0;
+    },
 },
 'numbers', {
     doBitAnd: function() {
@@ -927,6 +965,22 @@ Object.subclass('Squeak.Primitives',
         if (integer > 0xFFFFFFFF) throw Error("large large ints not implemented yet");
         return this.pos32BitIntFor(integer);
     },
+    makeLargeFromBigInt: function(bigInt) {
+        var num = Number(bigInt);
+        if (this.vm.canBeSmallInt(num)) return num;
+        var negative = bigInt < 0n;
+        if (negative) bigInt = -bigInt;
+        var size = 0;
+        for (var i = bigInt; i > 0n; i >>= 8n) size++;
+        var lgIntClass = negative ? Squeak.splOb_ClassLargeNegativeInteger : Squeak.splOb_ClassLargePositiveInteger,
+            lgIntObj = this.vm.instantiateClass(this.vm.specialObjects[lgIntClass], size),
+            bytes = lgIntObj.bytes;
+        for (var i = 0; i < size; i++) {
+            bytes[i] = Number(bigInt & 0xFFn);
+            bigInt >>= 8n;
+        }
+        return lgIntObj;
+    },
     makePointWithXandY: function(x, y) {
         var pointClass = this.vm.specialObjects[Squeak.splOb_ClassPoint];
         var newPoint = this.vm.instantiateClass(pointClass, 0);
@@ -1037,12 +1091,18 @@ Object.subclass('Squeak.Primitives',
             return array.pointers[index-1];
         if (array.isPointers())   //pointers...   normal at:
             return array.pointers[index-1+info.ivarOffset];
-        if (array.isWords()) // words...
+        var bitWidth = array.bitWidth();
+        if (bitWidth === 32) // words...
             if (info.convertChars) return this.charFromInt(array.words[index-1] & 0x3FFFFFFF);
             else return this.pos32BitIntFor(array.words[index-1]);
-        if (array.isBytes()) // bytes...
+        if (bitWidth === 8) // bytes...
             if (info.convertChars) return this.charFromInt(array.bytes[index-1] & 0xFF);
             else return array.bytes[index-1] & 0xFF;
+        if (bitWidth === 64) // double words...
+            return this.makeLargeFromBigInt(array.words64[index-1]);
+        if (bitWidth === 16) // shorts...
+            if (info.convertChars) return this.charFromInt(array.words16[index-1] & 0xFFFF);
+            else return array.words16[index-1];
         // methods must simulate Squeak's method indexing
         var offset = array.pointersSize() * 4;
         if (index-1-offset < 0) {this.success = false; return array;} //reading lits as bytes
@@ -1080,7 +1140,8 @@ Object.subclass('Squeak.Primitives',
             return array.pointers[index-1+info.ivarOffset] = objToPut;
         }
         var intToPut;
-        if (array.isWords()) {  // words...
+        var bitWidth = array.bitWidth();
+        if (bitWidth === 32) {  // words...
             if (convertChars) {
                 // put a character...
                 if (objToPut.sqClass !== this.vm.specialObjects[Squeak.splOb_ClassCharacter])
@@ -1091,6 +1152,25 @@ Object.subclass('Squeak.Primitives',
                 intToPut = this.stackPos32BitInt(0);
             }
             if (this.success) array.words[index-1] = intToPut;
+            return objToPut;
+        }
+        if (bitWidth === 64) {  // double words...
+            var bigIntToPut = this.stackPos64BitBigInt(0);
+            if (!this.success) return objToPut;
+            array.words64[index-1] = bigIntToPut;
+            return objToPut;
+        }
+        if (bitWidth === 16) {  // shorts...
+            if (convertChars) {
+                // put a character...
+                if (objToPut.sqClass !== this.vm.specialObjects[Squeak.splOb_ClassCharacter])
+                    {this.success = false; return objToPut;}
+                intToPut = this.charToInt(objToPut);
+            }  else intToPut = objToPut;
+            if (typeof intToPut !== "number" || intToPut < 0 || intToPut > 65535) {
+                this.success = false; return objToPut;
+            }
+            if (this.success) array.words16[index-1] = intToPut;
             return objToPut;
         }
         // bytes...
@@ -1403,14 +1483,23 @@ Object.subclass('Squeak.Primitives',
     primitiveIntegerAtAndPut:  function(argCount) {
         var rcvr = this.stackNonInteger(argCount),
             index = this.stackInteger(argCount-1) - 1, // make zero-based
-            array = rcvr.wordsAsInt32Array();
+            bitWidth = rcvr.bitWidth(),
+            array = bitWidth === 32 ? rcvr.wordsAsInt32Array() // most common case first
+                : bitWidth === 16 ? rcvr.wordsAsInt16Array()
+                : bitWidth === 8 ? rcvr.wordsAsInt8Array()
+                : bitWidth === 64 ? rcvr.wordsAsInt64Array()   // most expensive case last
+                : null;
         if (!this.success || !array || index < 0 || index >= array.length)
             return false;
         var value;
         if (argCount < 2) { // integerAt:
-            value = this.signed32BitIntegerFor(array[index]);
+            value = bitWidth === 32 ? this.signed32BitIntegerFor(array[index]) // make large if needed
+                : bitWidth === 64 ? this.makeLargeFromBigInt(array[index]) // convert from BigInt
+                : array[index]; // 16 or 8 bit fits in SmallInteger
         } else { // integerAt:put:
-            value = this.stackSigned32BitInt(0);
+            value = bitWidth === 32 ? this.stackSigned32BitInt(0)
+                : bitWidth === 64 ? this.stackSigned64BitBigInt(0)
+                : this.stackInteger(0);
             if (!this.success)
                 return false;
             array[index] = value;
@@ -1420,16 +1509,15 @@ Object.subclass('Squeak.Primitives',
     },
     primitiveConstantFill:  function(argCount) {
         var rcvr = this.stackNonInteger(1),
-            value = this.stackPos32BitInt(0);
-        if (!this.success || !rcvr.isWordsOrBytes())
+            array = rcvr.words || rcvr.bytes || rcvr.words64 || rcvr.words16,
+            bitWidth = rcvr.bitWidth();
+        if (!this.success || !array || bitWidth < 0)
             return false;
-        var array = rcvr.words || rcvr.bytes;
-        if (array) {
-            if (array === rcvr.bytes && value > 255)
-                return false;
-            for (var i = 0; i < array.length; i++)
-                array[i] = value;
-        }
+        var value = bitWidth <= 32 ? this.stackPos32BitInt(0) : this.stackPos64BitBigInt(0);
+        if (!this.success) return false; // checked for 32 and 64 bit ints
+        if ((bitWidth === 8 && value > 255) || (bitWidth === 16 && value > 65535)) return false;
+        for (var i = 0; i < array.length; i++)
+            array[i] = value;
         this.vm.popN(argCount);
         return true;
     },

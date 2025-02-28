@@ -76,6 +76,8 @@ Object.subclass('Squeak.Object',
             if (original.pointers) this.pointers = original.pointers.slice(0);   // copy
             if (original.words) this.words = new Uint32Array(original.words);    // copy
             if (original.bytes) this.bytes = new Uint8Array(original.bytes);     // copy
+            if (original.words16) this.words16 = new Uint16Array(original.words16); // copy
+            if (original.words64) this.words64 = new BigInt64Array(original.words64); // copy
         }
     },
     initFromImage: function(oop, cls, fmt, hsh) {
@@ -174,6 +176,13 @@ Object.subclass('Squeak.Object',
             bytes = new Uint8Array(nBytes);
         bytes.set(wordsAsBytes);
         return bytes;
+    },
+    decodeShorts: function (nWords, theBits, fmtLowBits) {
+        var nShorts = (nWords * 2) - fmtLowBits,
+            wordsAsShorts = new Uint16Array(theBits.buffer, theBits.byteOffset, nShorts),
+            shorts = new Uint16Array(nShorts);
+        shorts.set(wordsAsShorts);
+        return shorts;
     },
     decodeFloat: function(theBits, littleEndian, nativeFloats) {
         var data = new DataView(theBits.buffer, theBits.byteOffset);
@@ -289,8 +298,17 @@ Object.subclass('Squeak.Object',
     bytesSize: function() {
         return this.bytes ? this.bytes.length : 0;
     },
+    words16Size: function() {
+        return this.words16 ? this.words16.length : 0;
+    },
     wordsSize: function() {
         return this.isFloat ? 2 : this.words ? this.words.length : 0;
+    },
+    words64Size: function() {
+        return this.words64 ? this.words64.length : 0;
+    },
+    bitWidth: function() {
+        return this._format < 8 ? 32 : 8;
     },
     instSize: function() {//same as class.classInstSize, but faster from format
         var fmt = this._format;
@@ -322,7 +340,16 @@ Object.subclass('Squeak.Object',
     },
     wordsAsFloat64Array: function() {
         return this.float64Array
-            || (this.words && (this.float64Array = new Float64Array(this.words.buffer)));
+            || (this.words64 && (this.float64Array = new Float64Array(this.words64.buffer))
+            || (this.words && (this.float64Array = new Float64Array(this.words.buffer))));
+    },
+    wordsAsFloat32Or64Array: function() {
+        return this.bitWidth() === 32 ? this.wordsAsFloat32Array() : this.wordsAsFloat64Array();
+    },
+    wordsAsInt64Array: function() {
+        return this.int64Array
+            || (this.words64 && (this.int64Array = new BigInt64Array(this.words64.buffer))
+            || (this.words && (this.int64Array = new BigInt64Array(this.words.buffer))));
     },
     wordsAsInt32Array: function() {
         return this.int32Array
@@ -330,6 +357,7 @@ Object.subclass('Squeak.Object',
     },
     wordsAsInt16Array: function() {
         return this.int16Array
+            || (this.words16 && (this.int16Array = new Int16Array(this.words16.buffer)))
             || (this.words && (this.int16Array = new Int16Array(this.words.buffer)));
     },
     wordsAsUint16Array: function() {

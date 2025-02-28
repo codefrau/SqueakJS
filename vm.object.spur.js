@@ -31,22 +31,23 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             instSize = instSpec & 0xFFFF,
             format = (instSpec>>16) & 0x1F
         this._format = format;
-        if (format < 12) {
-            if (format < 10) {
-                if (instSize + indexableSize > 0)
-                    this.pointers = this.fillArray(instSize + indexableSize, nilObj);
-            } else // Words
-                if (indexableSize > 0)
-                    if (aClass.isFloatClass) {
-                        this.isFloat = true;
-                        this.float = 0.0;
-                    } else
-                        this.words = new Uint32Array(indexableSize);
-        } else // Bytes
-            if (indexableSize > 0) {
-                // this._format |= -indexableSize & 3;       //deferred to writeTo()
-                this.bytes = new Uint8Array(indexableSize);  //Methods require further init of pointers
+        if (format < 8) {
+            if (instSize + indexableSize > 0)
+                this.pointers = this.fillArray(instSize + indexableSize, nilObj);
+        } else if (indexableSize > 0) {
+            if (aClass.isFloatClass) {
+                this.isFloat = true;
+                this.float = 0.0;
+            } else {
+                var bitWidth = this.bitWidth();
+                if (bitWidth === 32) this.words = new Uint32Array(indexableSize);
+                else if (bitWidth === 64) this.words64 = new BigUint64Array(indexableSize);
+                else if (bitWidth === 16) this.words16 = new Uint16Array(indexableSize);
+                else this.bytes = new Uint8Array(indexableSize);
             }
+        }
+        return this;
+
 //      Definition of Spur's format code...
 //
 //     0 = 0 sized objects (UndefinedObject True False et al)
@@ -87,6 +88,28 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                     this.pointers = this.decodePointers(nWords, oops, oopMap, getCharacter, is64Bit);
                 }
                 break;
+            case 9: // 64 bit array
+                if (nWords > 0) {
+                    // assume float array for now
+                    var words = new Uint32Array(nWords * 2);
+                    for (var i = 0; i < nWords; i++) {
+                        var hiLoOrValue = bits[i];    // values > 53 bits are read as [hi, lo], see word64FromUint32
+                        if (typeof hiLoOrValue === "number") {
+                            words[i*2] = hiLoOrValue >>> 0;
+                            words[i*2+1] = hiLoOrValue / 0x100000000 >>> 0;
+                        } else {
+                            words[i*2] = hiLoOrValue[1];
+                            words[i*2+1] = hiLoOrValue[0];
+                        }
+                    }
+                    this.words64 = new BigUint64Array(words.buffer);
+                    console.log("64 bit array", this.words64, this.words64.buffer, new Float64Array(this.words64.buffer));
+                    Object.defineProperty(this, "words", {
+                        get: function() {  debugger; throw Error("64 bit array implementation incomplete"); },
+                        set: function() { debugger; throw Error("64 bit array implementation incomplete"); },
+                    });
+                }
+                break;
             case 11: // 32 bit array (odd length in 64 bits)
                 nWords--;
                 this._format = 10;
@@ -99,9 +122,22 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                     this.words = this.decodeWords(nWords, bits, littleEndian);
                 }
                 break;
+            case 14: // 16 bit array (odd length in 64 bits)
+            case 15: // 16 bit array (odd length in 64 bits)
+                console.log("16 bit array", this._format, nWords);
+                nWords--;
+                this._format -= 2;
             case 12: // 16 bit array
             case 13: // 16 bit array (odd length)
-                throw Error("16 bit arrays not supported yet");
+                if (nWords > 0) {
+                    this.words16 = this.decodeShorts(nWords, bits, this._format & 1);
+                    console.log("16 bit array", this._format, nWords, bits, this.words16, new Int16Array(this.words16.buffer));
+                    Object.defineProperty(this, "words", {
+                        get: function() { debugger; throw Error("16 bit array implementation incomplete"); },
+                        set: function() { debugger; throw Error("16 bit array implementation incomplete"); },
+                    });
+                }
+                break;
             case 20: // 8 bit array, length-4 (64 bit image)
             case 21: // ... length-5
             case 22: // ... length-6
@@ -291,6 +327,15 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
     },
 },
 'accessing', {
+    bitWidth: function() {
+        var fmt = this._format;
+        if (fmt < 9) return -1; // pointers or not indexable
+        if (fmt === 9) return 64;
+        if (fmt < 12) return 32;
+        if (fmt < 16) return 16;
+        if (fmt < 24) return 8;
+        return -1; // compiled methods
+    },
     instSize: function() {//same as class.classInstSize, but faster from format
         if (this._format < 2) return this.pointersSize(); //fixed fields only
         return this.sqClass.classInstSize();
@@ -301,8 +346,10 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         if (fmt === 3 && primHandler.vm.isContext(this))
             return this.pointers[Squeak.Context_stackPointer]; // no access beyond top of stacks
         if (fmt < 6) return this.pointersSize() - this.instSize(); // pointers
+        if (fmt < 9) return -1; // not indexable
+        if (fmt === 9) return this.words64Size(); // 64 bit words
         if (fmt < 12) return this.wordsSize(); // words
-        if (fmt < 16) return this.shortsSize(); // shorts
+        if (fmt < 16) return this.words16Size(); // shorts
         if (fmt < 24) return this.bytesSize(); // bytes
         return 4 * this.pointersSize() + this.bytesSize(); // methods
     },
@@ -387,6 +434,10 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
     },
     isWords: function() {
         return this._format === 10;
+    },
+    isWords32Or64: function() {
+        var fmt = this._format;
+        return fmt === 10 || (fmt === 9);
     },
     isWordsOrBytes: function() {
         var fmt = this._format;

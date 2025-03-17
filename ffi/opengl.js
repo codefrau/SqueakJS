@@ -150,7 +150,7 @@ function OpenGL() {
                 alphaTest: false,
                 alphaFunc: null,
                 alphaRef: 0,
-                extensions: "ARB_texture_non_power_of_two SGIS_generate_mipmap",
+                extensions: "GL_ARB_texture_non_power_of_two GL_SGIS_generate_mipmap GL_ARB_transpose_matrix",
                 color: new Float32Array(4),
                 normal: new Float32Array([0, 0, 1]),
                 texCoord: new Float32Array(2),
@@ -1622,6 +1622,14 @@ function OpenGL() {
             DEBUG > 1 && console.log("glLoadMatrixf", GL_Symbol(gl.matrixMode), Array.from(m));
         },
 
+        glLoadTransposeMatrixf: function(m) {
+            if (gl.listMode && this.addToList("glLoadTransposeMatrixf", [m])) return;
+            var t = new Float32Array(m);
+            transposeMatrix(t);
+            gl.matrix.set(t);
+            DEBUG > 1 && console.log("glLoadTransposeMatrixf", GL_Symbol(gl.matrixMode), Array.from(m));
+        },
+
         glMaterialf: function(face, pname, param) {
             if (gl.listMode && this.addToList("glMaterialf", [face, pname, param])) return;
             switch (pname) {
@@ -1684,6 +1692,14 @@ function OpenGL() {
             if (gl.listMode && this.addToList("glMultMatrixf", [m])) return;
             multMatrix(gl.matrix, m);
             DEBUG > 1 && console.log("glMultMatrixf", GL_Symbol(gl.matrixMode), Array.from(m), "=>", Array.from(gl.matrix));
+        },
+
+        glMultTransposeMatrixf: function(m) {
+            if (gl.listMode && this.addToList("glMultTransposeMatrixf", [m])) return;
+            var t = new Float32Array(m);
+            transposeMatrix(t);
+            multMatrix(gl.matrix, t);
+            DEBUG > 1 && console.log("glMultTransposeMatrixf", GL_Symbol(gl.matrixMode), Array.from(m), "=>", Array.from(gl.matrix));
         },
 
         glNewList: function(list, mode) {

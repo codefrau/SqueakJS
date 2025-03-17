@@ -103,6 +103,7 @@ function OpenGL() {
 
         setInterpreter: function(anInterpreterProxy) {
             this.vm = anInterpreterProxy.vm;
+            this.ffi = this.vm.primHandler;
             return true;
         },
 
@@ -2174,6 +2175,17 @@ function OpenGL() {
             gl.viewport[1] = y;
             gl.viewport[2] = width;
             gl.viewport[3] = height;
+        },
+
+        glXGetProcAddressARB: function(procName) {
+            procName = Squeak.bytesAsString(procName);
+            DEBUG > 1 && console.log("glXGetProcAddressARB", procName);
+            var handle = this.ffi.ffiLookupFunc(this, procName);
+            if (!handle) {
+                if (DEBUG) console.warn("UNIMPLEMENTED EXT FUNC", procName);
+                else this.vm.warnOnce("OpenGL: UNIMPLEMENTED EXT FUNC" + procName);
+            }
+            return handle;
         },
 
         pushVertex: function(position) {

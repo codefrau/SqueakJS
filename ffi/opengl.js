@@ -194,6 +194,9 @@ function OpenGL() {
                     program: null,
                     locations: {},
                 }, // shader for glBitmap
+                vendor: "Codefrau",
+                renderer: "SqueakJS",
+                version: "1.0",
                 viewport: new Int32Array([0, 0, 0, 0]),
                 depthRange: new Float32Array([0, 1]),
             };
@@ -1491,6 +1494,15 @@ function OpenGL() {
 
         glGetString: function(name) {
             switch (name) {
+                case GL.VERSION:
+                    DEBUG > 1 && console.log("glGetString GL_VERSION");
+                    return gl.version;
+                case GL.VENDOR:
+                    DEBUG > 1 && console.log("glGetString GL_VENDOR");
+                    return gl.vendor;
+                case GL.RENDERER:
+                    DEBUG > 1 && console.log("glGetString GL_RENDERER");
+                    return gl.renderer;
                 case GL.EXTENSIONS:
                     DEBUG > 1 && console.log("glGetString GL_EXTENSIONS");
                     return gl.extensions;

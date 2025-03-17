@@ -103,14 +103,43 @@ Object.extend(Squeak.Primitives.prototype,
 
     ffiModules: {}, // map library name to module name
 
+    ffiFuncs: [], // functions loaded via dlsym (index + 1 is handle)
+
+    // create an external address as handle for a function dynamically
+    // this is a hook for other modules equivalent to dlsym() in C.
+    // Later we can retrieve the module and func by handle
+    ffiLookupFunc: function(mod, funcName) {
+        var handle = this.ffiFuncs.findIndex(func => func.funcName === funcName) + 1;
+        if (!handle) {
+            if (!mod[funcName]) return 0;
+            // we could keep a reverse map, but this is not time-critical
+            var modName = Object.keys(this.loadedModules).find(name => this.loadedModules[name] === mod);
+            if (modName === undefined) throw Error("FFI: module not loaded?! " + mod.getModuleName());
+            var libName = Object.keys(this.ffiModules).find(name => this.ffiModules[name] === modName);
+            if (libName === undefined) throw Error("FFI: library not found?! " +  mod.getModuleName());
+            this.ffiFuncs.push({libName: libName, modName: modName, funcName: funcName});
+            handle = this.ffiFuncs.length;
+        }
+        return handle;
+    },
+
     ffiDoCallout: function(argCount, extLibFunc, stArgs) {
         this.ffi_lastError = Squeak.FFIErrorGenericError;
         var libName = extLibFunc.pointers[Squeak.ExtLibFunc_module].bytesAsString();
         var funcName = extLibFunc.pointers[Squeak.ExtLibFunc_name].bytesAsString();
+        var funcAddr = extLibFunc.pointers[Squeak.ExtLibFunc_handle].wordsOrBytes()[0];
+        var modName = this.ffiModules[libName];
+
+        if (funcAddr) {
+            var func = this.ffiFuncs[funcAddr];
+            if (!func) throw Error("FFI: not a valid External Address: " + funcAddr);
+            libName = func.libName;
+            modName = func.modName;
+            funcName = func.funcName;
+        }
 
         if (!libName) libName = "libc"; // default to libc
 
-        var modName = this.ffiModules[libName];
         if (modName === undefined) {
             if (!Squeak.externalModules[libName]) {
                 var prefixes = ["", "lib"];

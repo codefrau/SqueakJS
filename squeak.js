@@ -1189,6 +1189,11 @@ function processOptions(options) {
     Squeak.dirCreate(root, true);
     if (!/\/$/.test(root)) root += "/";
     options.root = root;
+    if (options.w) options.fixedWidth = options.w;
+    if (options.h) options.fixedHeight = options.h;
+    if (options.fixedWidth && !options.fixedHeight) options.fixedHeight = options.fixedWidth * 3 / 4 | 0;
+    if (options.fixedHeight && !options.fixedWidth) options.fixedWidth = options.fixedHeight * 4 / 3 | 0;
+    if (options.fixedWidth && options.fixedHeight) options.fullscreen = true;
     SqueakJS.options = options;
 }
 

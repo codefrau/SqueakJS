@@ -5,9 +5,9 @@ SqueakJS is a runtime engine for [Squeak][squeak]</a> Smalltalk written in pure 
 
 Embedding a Smalltalk application in your webpage can be as simple as:
 
-    SqueakJS.runSqueak(imageUrl, canvas);
+    SqueakJS.runSqueak(imageUrl);
 
-There are options to configure screen sizes etc.
+but you probably want to give it some more options (refer to the examples).
 
 The interpreter core is divided in a number of `vm.*.js` modules, internal plugins in `vm.plugins.*.js` modules and external plugins in the "plugins" directory. The Just-in-Time compiler is optional ("jit.js") and can be replaced with your own.
 
@@ -127,6 +127,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2025-03-28: 1.3.0 add OpenGL support, canvas is optional, fix socket plugin bug
     2025-02-19: 1.2.4 fix isAssociation for JS Bridge, optimize loading image with many objects
     2024-09-28: 1.2.3 fix primitiveInputSemaphore, fix iOS keyboard
     2024-06-22: 1.2.2 make copy/paste work on mobile

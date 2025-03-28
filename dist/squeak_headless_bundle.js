@@ -113,9 +113,9 @@ if (!Function.prototype.subclass) {
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 1.2.4",
-    vmDate: "2025-02-19",               // Maybe replace at build time?
-    vmBuild: "unknown",                 // or replace at runtime by last-modified?
+    vmVersion: "SqueakJS 1.3.0",
+    vmDate: "2025-03-28",               // Maybe replace at build time?
+    vmBuild: "unknown",                 // this too?
     vmPath: "unknown",                  // Replace at runtime
     vmFile: "vm.js",
     vmMakerVersion: "[VMMakerJS-bf.17 VMMaker-bf.353]", // for Smalltalk vmVMMakerVersion
@@ -267,9 +267,9 @@ Object.extend(Squeak,
     WeakFinalizerItem_next: 1,
 },
 "constants", {
-    MinSmallInt: -0x40000000,
+    MinSmallInt: -1073741824,
     MaxSmallInt:  0x3FFFFFFF,
-    NonSmallInt: -0x50000000,           // non-small and neg (so non pos32 too)
+    NonSmallInt: -1342177280,           // non-small and neg (so non pos32 too)
     MillisecondClockMask: 0x1FFFFFFF,
 },
 "error codes", {
@@ -1062,7 +1062,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             } else if ((oop & 1) === 1) {          // SmallInteger
                 if (is64Bit) {
                     // if it fits in a 31 bit SmallInt ...
-                    ptrs[i] = (oop >= 0 ? oop <= 0x1FFFFFFFF : oop >= -0x200000000)
+                    ptrs[i] = (oop >= 0 ? oop <= 0x1FFFFFFFF : oop >= -8589934592)
                         ? oop / 4 >> 1  // ... then convert directly, otherwise make large
                         : is64Bit.makeLargeFromSmall((oop - (oop >>> 0)) / 0x100000000 >>> 0, oop >>> 0);
                 } else ptrs[i] = oop >> 1;
@@ -1111,7 +1111,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         var words64 = 0;
         if (this._format <= 5) {
             // pointer objects
-            overhead = bits.length & ~1; // each oop occupied 2 words instead of 1 ...
+            overhead = bits.length & -2; // each oop occupied 2 words instead of 1 ...
             // ... but odd lengths get padded so we subtract 1
             // words32 === words64 because same number of oops
         } else if (this._format >= 24) {
@@ -1122,7 +1122,7 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             var oddBytes = this._format >= 28;
             // ... odd-word lengths would get padded so we subtract 1,
             // but if there is also odd-word bytecodes it cancels out so we save 1 word instead
-            if (oddOops) overhead += oddBytes ? +1 : -1;
+            if (oddOops) overhead += oddBytes ? 1 : -1;
             words64 = bits.length / 2;
             words32 = bits.length - overhead;
         } else {
@@ -3411,7 +3411,7 @@ Object.subclass('Squeak.Interpreter',
         throw Error("Oh No!");
     },
     forceInterruptCheck: function() {
-        this.interruptCheckCounter = -1000;
+        this.interruptCheckCounter = -1e3;
     },
     checkForInterrupts: function() {
         //Check for interrupts at sends and backward jumps
@@ -4199,7 +4199,7 @@ Object.subclass('Squeak.Interpreter',
                 this.popNandPush(2, numResult);
                 return true;
             }
-            if (numResult >= -0xFFFFFFFF && numResult <= 0xFFFFFFFF) {
+            if (numResult >= -4294967295 && numResult <= 0xFFFFFFFF) {
                 var negative = numResult < 0,
                     unsigned = negative ? -numResult : numResult,
                     lgIntClass = negative ? Squeak.splOb_ClassLargeNegativeInteger : Squeak.splOb_ClassLargePositiveInteger,
@@ -4427,7 +4427,7 @@ Object.subclass('Squeak.Interpreter',
         var extra = 200;
         if (contexts.length > limit + extra) {
             if (!ctx.isNil) contexts.push('...'); // over hard limit
-            contexts = contexts.slice(0, limit).concat(['...']).concat(contexts.slice(-extra));
+            contexts = contexts.slice(0, limit).concat(['...']).concat(contexts.slice(-200));
         }
         var stack = [],
             i = contexts.length,
@@ -4821,7 +4821,7 @@ Object.subclass('Squeak.InterpreterProxy',
         return typeof obj !== "number" && obj.isPointers();
     },
     isIntegerValue: function(obj) {
-        return typeof obj === "number" && obj >= -0x40000000 && obj <= 0x3FFFFFFF;
+        return typeof obj === "number" && obj >= -1073741824 && obj <= 0x3FFFFFFF;
     },
     isArray: function(obj) {
         return obj.sqClass === this.vm.specialObjects[Squeak.splOb_ClassArray];
@@ -6130,7 +6130,7 @@ Object.subclass('Squeak.Primitives',
             value += bytes[i] * f;
         if (this.isA(stackVal, Squeak.splOb_ClassLargePositiveInteger) && value <= 0x7FFFFFFF)
             return value;
-        if (this.isA(stackVal, Squeak.splOb_ClassLargeNegativeInteger) && -value >= -0x80000000)
+        if (this.isA(stackVal, Squeak.splOb_ClassLargeNegativeInteger) && -value >= -2147483648)
             return -value;
         this.success = false;
         return 0;

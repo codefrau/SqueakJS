@@ -24,9 +24,9 @@
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 1.2.4",
-    vmDate: "2025-02-25",               // Maybe replace at build time?
-    vmBuild: "unknown",                 // or replace at runtime by last-modified?
+    vmVersion: "SqueakJS 1.3.0",
+    vmDate: "2025-03-28",               // Maybe replace at build time?
+    vmBuild: "unknown",                 // this too?
     vmPath: "unknown",                  // Replace at runtime
     vmFile: "vm.js",
     vmMakerVersion: "[VMMakerJS-bf.17 VMMaker-bf.353]", // for Smalltalk vmVMMakerVersion

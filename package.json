@@ -29,8 +29,8 @@
   },
   "devDependencies": {
     "http-server": "^14.1.1",
-    "rimraf": "^5.0.5",
-    "rollup": "^4.9.4",
-    "uglify-js": "^3.17.4"
+    "rimraf": "^6.0.1",
+    "rollup": "^4.37.0",
+    "uglify-js": "^3.19.3"
   }
 }

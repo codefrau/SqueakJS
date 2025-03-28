@@ -674,7 +674,7 @@ function SocketPlugin() {
 
         recv: function(count) {
           if (this.response === null) return [];
-          var data = this.response[0];
+          var data = this.response[0] || new Uint8Array(0);
           if (data.length > count) {
             var rest = data.subarray(count);
             if (rest) {

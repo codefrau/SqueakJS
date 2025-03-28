@@ -1341,7 +1341,16 @@ function fetchFiles(files, display, options, thenDo) {
     getNextFile();
 }
 
-SqueakJS.runSqueak = function(imageUrl, canvas, options) {
+SqueakJS.runSqueak = function(imageUrl, canvas, options={}) {
+    if (!canvas) {
+        canvas = document.createElement("canvas");
+        canvas.style.position = "absolute";
+        canvas.style.left = "0";
+        canvas.style.top = "0";
+        canvas.style.width = "100%";
+        canvas.style.height = "100%";
+        document.body.appendChild(canvas);
+    }
     // we need to fetch all files first, then run the image
     processOptions(options);
     if (!imageUrl && options.image) imageUrl = options.image;

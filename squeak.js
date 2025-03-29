@@ -1366,6 +1366,11 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options={}) {
     }
     // we need to fetch all files first, then run the image
     processOptions(options);
+    if (imageUrl && imageUrl.endsWith(".zip")) {
+        options.zip = imageUrl.match(/[^\/]*$/)[0];
+        options.url = imageUrl.replace(/[^\/]*$/, "");
+        imageUrl = null;
+    }
     if (!imageUrl && options.image) imageUrl = options.image;
     var baseUrl = options.url || "";
     if (!baseUrl && imageUrl && imageUrl.replace(/[^\/]*$/, "")) {

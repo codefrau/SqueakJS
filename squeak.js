@@ -130,6 +130,8 @@ function setupFullscreen(display, canvas, options) {
         display.fullscreen = fullscreen;
         var fullwindow = fullscreen || options.fullscreen;
         box.style.background = fullwindow ? 'black' : '';
+        box.style.border = fullwindow ? 'none' : '';
+        box.style.borderRadius = fullwindow ? '0px' : '';
         setTimeout(onresize, 0);
     }
 
@@ -185,10 +187,12 @@ function updateMousePos(evt, canvas, display) {
         display.cursorCanvas.style.top = (evtY + canvas.offsetTop + display.cursorOffsetY) + "px";
     }
     var x = (evtX * canvas.width / canvas.offsetWidth) | 0,
-        y = (evtY * canvas.height / canvas.offsetHeight) | 0;
+        y = (evtY * canvas.height / canvas.offsetHeight) | 0,
+        w = display.width || canvas.width,
+        h = display.height || canvas.height;
     // clamp to display size
-    display.mouseX = Math.max(0, Math.min(display.width, x));
-    display.mouseY = Math.max(0, Math.min(display.height, y));
+    display.mouseX = Math.max(0, Math.min(w, x));
+    display.mouseY = Math.max(0, Math.min(h, y));
 }
 
 function recordMouseEvent(what, evt, canvas, display, options) {
@@ -345,6 +349,8 @@ function createSqueakDisplay(canvas, options) {
     if (options.fullscreen) {
         document.body.style.margin = 0;
         document.body.style.backgroundColor = 'black';
+        canvas.style.border = 'none';
+        canvas.style.borderRadius = '0px';
         document.ontouchmove = function(evt) { evt.preventDefault(); };
     }
     var display = {
@@ -1073,8 +1079,10 @@ function createSqueakDisplay(canvas, options) {
         );
     };
 
-    onresize();
-    window.onresize = onresize;
+    if (!options.embedded) {
+        onresize();
+        window.onresize = onresize;
+    }
 
     return display;
 }

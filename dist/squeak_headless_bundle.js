@@ -113,8 +113,8 @@ if (!Function.prototype.subclass) {
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 1.3.0",
-    vmDate: "2025-03-28",               // Maybe replace at build time?
+    vmVersion: "SqueakJS 1.3.1",
+    vmDate: "2025-03-29",               // Maybe replace at build time?
     vmBuild: "unknown",                 // this too?
     vmPath: "unknown",                  // Replace at runtime
     vmFile: "vm.js",
@@ -2904,8 +2904,7 @@ Object.subclass('Squeak.Interpreter',
     },
     hackImage: function() {
         // hack methods to make work / speed up
-        var opts = typeof location === 'object' ? location.hash : "",
-            sista = this.method.methodSignFlag();
+        var sista = this.method.methodSignFlag();
         [
             // Etoys fallback for missing translation files is hugely inefficient.
             // This speeds up opening a viewer by 10x (!)
@@ -2915,7 +2914,9 @@ Object.subclass('Squeak.Interpreter',
             // 64 bit Squeak does not flush word size on snapshot
             {method: "SmalltalkImage>>wordSize", literal: {index: 1, old: 8, hack: 4}, enabled: true},
             // Squeak 5.3 disable wizard by replacing #open send with pop
-            {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: opts.includes("wizard=false")},
+            {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: !sista & this.options.wizard===false},
+            // Squeak 6.0 disable wizard by replacing #open send with pop
+            {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {closure: 9, pc: 5, old: 0x81, hack: 0xD8}, enabled: sista & this.options.wizard===false},
             // Squeak source file should use UTF8 not MacRoman (both V3 and Sista)
             {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 53, old: 0x45, hack: 0x49}, enabled: !this.image.isSpur},
             {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 38, old: 0x16, hack: 0x13}, enabled: this.image.isSpur && sista},
@@ -2928,6 +2929,7 @@ Object.subclass('Squeak.Interpreter',
                         byte = each.bytecode,
                         lit = each.literal,
                         hacked = true;
+                    if (byte && byte.closure) m = m.pointers[byte.closure];
                     if (prim) m.pointers[0] |= prim;
                     else if (byte && m.bytes[byte.pc] === byte.old) m.bytes[byte.pc] = byte.hack;
                     else if (byte && m.bytes[byte.pc] === byte.hack) hacked = false; // already there

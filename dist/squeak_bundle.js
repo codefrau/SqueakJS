@@ -116,8 +116,8 @@
     Object.extend(Squeak,
     "version", {
         // system attributes
-        vmVersion: "SqueakJS 1.3.0",
-        vmDate: "2025-03-28",               // Maybe replace at build time?
+        vmVersion: "SqueakJS 1.3.1",
+        vmDate: "2025-03-29",               // Maybe replace at build time?
         vmBuild: "unknown",                 // this too?
         vmPath: "unknown",                  // Replace at runtime
         vmFile: "vm.js",
@@ -2907,8 +2907,7 @@
         },
         hackImage: function() {
             // hack methods to make work / speed up
-            var opts = typeof location === 'object' ? location.hash : "",
-                sista = this.method.methodSignFlag();
+            var sista = this.method.methodSignFlag();
             [
                 // Etoys fallback for missing translation files is hugely inefficient.
                 // This speeds up opening a viewer by 10x (!)
@@ -2918,7 +2917,9 @@
                 // 64 bit Squeak does not flush word size on snapshot
                 {method: "SmalltalkImage>>wordSize", literal: {index: 1, old: 8, hack: 4}, enabled: true},
                 // Squeak 5.3 disable wizard by replacing #open send with pop
-                {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: opts.includes("wizard=false")},
+                {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: !sista & this.options.wizard===false},
+                // Squeak 6.0 disable wizard by replacing #open send with pop
+                {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {closure: 9, pc: 5, old: 0x81, hack: 0xD8}, enabled: sista & this.options.wizard===false},
                 // Squeak source file should use UTF8 not MacRoman (both V3 and Sista)
                 {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 53, old: 0x45, hack: 0x49}, enabled: !this.image.isSpur},
                 {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 38, old: 0x16, hack: 0x13}, enabled: this.image.isSpur && sista},
@@ -2931,6 +2932,7 @@
                             byte = each.bytecode,
                             lit = each.literal,
                             hacked = true;
+                        if (byte && byte.closure) m = m.pointers[byte.closure];
                         if (prim) m.pointers[0] |= prim;
                         else if (byte && m.bytes[byte.pc] === byte.old) m.bytes[byte.pc] = byte.hack;
                         else if (byte && m.bytes[byte.pc] === byte.hack) hacked = false; // already there
@@ -20580,6 +20582,7 @@
                 canvas.classList.add("b3daccel");
                 canvas.width = w;
                 canvas.height = h;
+                canvas.style.position = "absolute";
                 canvas.style.backgroundColor = "transparent";
                 canvas.style.pointerEvents = "none";
                 canvas.style.cursor = "normal";
@@ -59619,6 +59622,8 @@
             display.fullscreen = fullscreen;
             var fullwindow = fullscreen || options.fullscreen;
             box.style.background = fullwindow ? 'black' : '';
+            box.style.border = fullwindow ? 'none' : '';
+            box.style.borderRadius = fullwindow ? '0px' : '';
             setTimeout(onresize, 0);
         }
 
@@ -59674,10 +59679,12 @@
             display.cursorCanvas.style.top = (evtY + canvas.offsetTop + display.cursorOffsetY) + "px";
         }
         var x = (evtX * canvas.width / canvas.offsetWidth) | 0,
-            y = (evtY * canvas.height / canvas.offsetHeight) | 0;
+            y = (evtY * canvas.height / canvas.offsetHeight) | 0,
+            w = display.width || canvas.width,
+            h = display.height || canvas.height;
         // clamp to display size
-        display.mouseX = Math.max(0, Math.min(display.width, x));
-        display.mouseY = Math.max(0, Math.min(display.height, y));
+        display.mouseX = Math.max(0, Math.min(w, x));
+        display.mouseY = Math.max(0, Math.min(h, y));
     }
 
     function recordMouseEvent(what, evt, canvas, display, options) {
@@ -59834,6 +59841,8 @@
         if (options.fullscreen) {
             document.body.style.margin = 0;
             document.body.style.backgroundColor = 'black';
+            canvas.style.border = 'none';
+            canvas.style.borderRadius = '0px';
             document.ontouchmove = function(evt) { evt.preventDefault(); };
         }
         var display = {
@@ -60560,8 +60569,10 @@
                 h - paddingY
             );
         }
-        onresize();
-        window.onresize = onresize;
+        if (!options.embedded) {
+            onresize();
+            window.onresize = onresize;
+        }
 
         return display;
     }
@@ -60676,6 +60687,11 @@
         Squeak.dirCreate(root, true);
         if (!/\/$/.test(root)) root += "/";
         options.root = root;
+        if (options.w) options.fixedWidth = options.w;
+        if (options.h) options.fixedHeight = options.h;
+        if (options.fixedWidth && !options.fixedHeight) options.fixedHeight = options.fixedWidth * 3 / 4 | 0;
+        if (options.fixedHeight && !options.fixedWidth) options.fixedWidth = options.fixedHeight * 4 / 3 | 0;
+        if (options.fixedWidth && options.fixedHeight) options.fullscreen = true;
         SqueakJS.options = options;
     }
 
@@ -60840,6 +60856,11 @@
         }
         // we need to fetch all files first, then run the image
         processOptions(options);
+        if (imageUrl && imageUrl.endsWith(".zip")) {
+            options.zip = imageUrl.match(/[^\/]*$/)[0];
+            options.url = imageUrl.replace(/[^\/]*$/, "");
+            imageUrl = null;
+        }
         if (!imageUrl && options.image) imageUrl = options.image;
         var baseUrl = options.url || "";
         if (!baseUrl && imageUrl && imageUrl.replace(/[^\/]*$/, "")) {

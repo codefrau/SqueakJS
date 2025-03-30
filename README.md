@@ -127,6 +127,7 @@ There's a gazillion exciting things to do :)
 
 Changelog
 ---------
+    2025-03-29: 1.3.1 add 'w', 'h', 'embedded' canvas options, minor fixes
     2025-03-28: 1.3.0 add OpenGL support, canvas is optional, fix socket plugin bug
     2025-02-19: 1.2.4 fix isAssociation for JS Bridge, optimize loading image with many objects
     2024-09-28: 1.2.3 fix primitiveInputSemaphore, fix iOS keyboard

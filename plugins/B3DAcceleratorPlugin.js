@@ -151,6 +151,7 @@ function B3DAcceleratorPlugin() {
             canvas.classList.add("b3daccel");
             canvas.width = w;
             canvas.height = h;
+            canvas.style.position = "absolute";
             canvas.style.backgroundColor = "transparent";
             canvas.style.pointerEvents = "none";
             canvas.style.cursor = "normal";

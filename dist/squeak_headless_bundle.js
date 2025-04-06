@@ -113,8 +113,8 @@ if (!Function.prototype.subclass) {
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 1.3.1",
-    vmDate: "2025-03-29",               // Maybe replace at build time?
+    vmVersion: "SqueakJS 1.3.2",
+    vmDate: "2025-04-06",               // Maybe replace at build time?
     vmBuild: "unknown",                 // this too?
     vmPath: "unknown",                  // Replace at runtime
     vmFile: "vm.js",
@@ -124,6 +124,7 @@ Object.extend(Squeak,
     platformSubtype: "unknown",         // Replace at runtime
     osVersion: "unknown",               // Replace at runtime
     windowSystem: "unknown",            // Replace at runtime
+    defaultCORSProxy: "https://cors.codefrau.workers.dev/",
 },
 "object header", {
     // object headers
@@ -2912,11 +2913,13 @@ Object.subclass('Squeak.Interpreter',
             //{method: "String>>translated", primitive: returnSelf, enabled: true},
             //{method: "String>>translatedInAllDomains", primitive: returnSelf, enabled: true},
             // 64 bit Squeak does not flush word size on snapshot
-            {method: "SmalltalkImage>>wordSize", literal: {index: 1, old: 8, hack: 4}, enabled: true},
+            {method: "SmalltalkImage>>wordSize", literal: {index: 1, old: 8, hack: 4, skip: this.nilObj}, enabled: true},
             // Squeak 5.3 disable wizard by replacing #open send with pop
             {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: !sista & this.options.wizard===false},
-            // Squeak 6.0 disable wizard by replacing #open send with pop
+            // Squeak 6.0 disable wizard by replacing #openWelcomeWorkspacesWith: send with pop
             {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {closure: 9, pc: 5, old: 0x81, hack: 0xD8}, enabled: sista & this.options.wizard===false},
+            // Squeak 6.0 disable welcome workspace by replacing #open send with pop
+            {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {closure: 9, pc: 2, old: 0x90, hack: 0xD8}, enabled: sista & this.options.welcome===false},
             // Squeak source file should use UTF8 not MacRoman (both V3 and Sista)
             {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 53, old: 0x45, hack: 0x49}, enabled: !this.image.isSpur},
             {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 38, old: 0x16, hack: 0x13}, enabled: this.image.isSpur && sista},
@@ -2933,6 +2936,7 @@ Object.subclass('Squeak.Interpreter',
                     if (prim) m.pointers[0] |= prim;
                     else if (byte && m.bytes[byte.pc] === byte.old) m.bytes[byte.pc] = byte.hack;
                     else if (byte && m.bytes[byte.pc] === byte.hack) hacked = false; // already there
+                    else if (lit && m.pointers[lit.index].pointers[1] === lit.skip) hacked = false; // not needed
                     else if (lit && m.pointers[lit.index].pointers[1] === lit.old) m.pointers[lit.index].pointers[1] = lit.hack;
                     else if (lit && m.pointers[lit.index].pointers[1] === lit.hack) hacked = false; // already there
                     else { hacked = false; console.warn("Not hacking " + each.method); }

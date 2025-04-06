@@ -341,9 +341,8 @@ Object.extend(Squeak.Primitives.prototype,
         return this.popNandPushIfOK(argCount+1, this.makePointWithXandY(w, h));
     },
     primitiveScreenScaleFactor: function(argCount) {
-        var scale = this.display.scale || 1.0,
-            scaleFactor = Math.min(1.0 / scale, window.devicePixelRatio || 1.0);
-        return this.popNandPushIfOK(argCount+1, this.makeFloat(scaleFactor));
+        var scaleFactor = (this.display.highdpi ? window.devicePixelRatio : 1) || 1;
+        return this.popNandPushIfOK(argCount+1, scaleFactor);
     },
     primitiveSetFullScreen: function(argCount) {
         var flag = this.stackBoolean(0);

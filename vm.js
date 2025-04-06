@@ -35,6 +35,7 @@ Object.extend(Squeak,
     platformSubtype: "unknown",         // Replace at runtime
     osVersion: "unknown",               // Replace at runtime
     windowSystem: "unknown",            // Replace at runtime
+    defaultCORSProxy: "https://cors.codefrau.workers.dev/",
 },
 "object header", {
     // object headers

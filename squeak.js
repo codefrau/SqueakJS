@@ -1320,7 +1320,7 @@ function downloadFile(file, display, options, thenDo) {
             console.error(Squeak.bytesAsString(new Uint8Array(this.response)));
             return alert("Failed to download:\n" + file.url);
         }
-        var proxy = 'https://corsproxy.io/?',
+        var proxy = Squeak.defaultCORSProxy,
             retry = new XMLHttpRequest();
         console.warn('Retrying with CORS proxy: ' + proxy + file.url);
         retry.open('GET', proxy + file.url);

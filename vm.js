@@ -25,16 +25,16 @@ Object.extend(Squeak,
 "version", {
     // system attributes
     vmVersion: "SqueakJS 1.3.2",
-    vmDate: "2025-04-06",               // Maybe replace at build time?
+    vmDate: "2025-05-04",               // Maybe replace at build time?
     vmBuild: "unknown",                 // this too?
-    vmPath: "unknown",                  // Replace at runtime
+    vmPath: "unknown",                  // Replaced at runtime
     vmFile: "vm.js",
     vmMakerVersion: "[VMMakerJS-bf.17 VMMaker-bf.353]", // for Smalltalk vmVMMakerVersion
     vmInterpreterVersion: "JSInterpreter VMMaker.js-codefrau.1", // for Smalltalk interpreterVMMakerVersion
     platformName: "JS",
-    platformSubtype: "unknown",         // Replace at runtime
-    osVersion: "unknown",               // Replace at runtime
-    windowSystem: "unknown",            // Replace at runtime
+    platformSubtype: "unknown",         // Replaced at runtime
+    osVersion: "unknown",               // Replaced at runtime
+    windowSystem: "unknown",            // Replaced at runtime
     defaultCORSProxy: "https://cors.codefrau.workers.dev/",
 },
 "object header", {

@@ -2043,6 +2043,7 @@ function OpenGL() {
                     return;
             }
             webgl.texImage2D(target, level, internalformat, width, height, border, format, type, pixels);
+            if (gl.texture.generateMipmapSGIS) webgl.generateMipmap(target);
         },
 
         debugTexture: function(texture) {
@@ -2107,6 +2108,13 @@ function OpenGL() {
         glTexParameteri: function(target, pname, param) {
             if (gl.listMode && this.addToList("glTexParameteri", [target, pname, param])) return;
             DEBUG > 1 && console.log("glTexParameteri", GL_Symbol(target), GL_Symbol(pname), GL_Symbol(param));
+            if (pname === GL.GENERATE_MIPMAP_SGIS) {
+                // WebGL does not support GL_GENERATE_MIPMAP_SGIS. Emulate it
+                gl.texture.generateMipmapSGIS = param;
+                // if an image has been uploaded already, generate mipmaps now
+                if (param && gl.texture.width > 1) webgl.generateMipmap(target);
+                return;
+            }
             webgl.texParameteri(target, pname, param);
         },
 
@@ -2157,6 +2165,7 @@ function OpenGL() {
                     return;
             }
             webgl.texSubImage2D(target, level, xoffset, yoffset, width, height, format, type, pixels);
+            if (gl.texture.generateMipmapSGIS) webgl.generateMipmap(target);
         },
 
         glVertex2f: function(x, y) {
@@ -3007,6 +3016,8 @@ function initGLConstants() {
         COLOR_ARRAY:                 0x8076,
         INDEX_ARRAY:                 0x8077,
         TEXTURE_COORD_ARRAY:         0x8078,
+        GENERATE_MIPMAP_SGIS:        0x8191,
+        GENERATE_MIPMAP_HINT_SGIS:   0x8192,
         TEXTURE_COMPRESSED:          0x86A1,
         CURRENT_BIT:                0x00001,
         POINT_BIT:                  0x00002,

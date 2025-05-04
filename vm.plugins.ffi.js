@@ -237,6 +237,8 @@ Object.extend(Squeak.Primitives.prototype,
                     case Squeak.FFITypeUnsignedChar32:
                         // we ignore the signedness and size of the integer for now
                         if (typeof stObj === "number") return stObj;
+                        if (stObj.isTrue) return 1;
+                        if (stObj.isFalse) return 0;
                         throw Error("FFI: expected integer, got " + stObj);
                     case Squeak.FFITypeSingleFloat:
                     case Squeak.FFITypeDoubleFloat:

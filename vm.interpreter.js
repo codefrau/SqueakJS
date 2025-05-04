@@ -173,6 +173,8 @@ Object.subclass('Squeak.Interpreter',
             {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 53, old: 0x45, hack: 0x49}, enabled: !this.image.isSpur},
             {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 38, old: 0x16, hack: 0x13}, enabled: this.image.isSpur && sista},
             {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 50, old: 0x44, hack: 0x48}, enabled: this.image.isSpur && !sista},
+            // New FFI can't detect platform – pretend to be 32 bit intel
+            {method: "FFIPlatformDescription>>abi", literal: { index: 21, old_str: 'UNKNOWN_ABI', new_str: 'IA32'}, enabled: sista},
         ].forEach(function(each) {
             try {
                 var m = each.enabled && this.findMethod(each.method);
@@ -185,9 +187,10 @@ Object.subclass('Squeak.Interpreter',
                     if (prim) m.pointers[0] |= prim;
                     else if (byte && m.bytes[byte.pc] === byte.old) m.bytes[byte.pc] = byte.hack;
                     else if (byte && m.bytes[byte.pc] === byte.hack) hacked = false; // already there
-                    else if (lit && m.pointers[lit.index].pointers[1] === lit.skip) hacked = false; // not needed
-                    else if (lit && m.pointers[lit.index].pointers[1] === lit.old) m.pointers[lit.index].pointers[1] = lit.hack;
-                    else if (lit && m.pointers[lit.index].pointers[1] === lit.hack) hacked = false; // already there
+                    else if (lit && lit.old_str && m.pointers[lit.index].bytesAsString() === lit.old_str) m.pointers[lit.index] = this.primHandler.makeStString(lit.new_str);
+                    else if (lit && m.pointers[lit.index].pointers?.[1] === lit.skip) hacked = false; // not needed
+                    else if (lit && m.pointers[lit.index].pointers?.[1] === lit.old) m.pointers[lit.index].pointers[1] = lit.hack;
+                    else if (lit && m.pointers[lit.index].pointers?.[1] === lit.hack) hacked = false; // already there
                     else { hacked = false; console.warn("Not hacking " + each.method); }
                     if (hacked) console.warn("Hacking " + each.method);
                 }

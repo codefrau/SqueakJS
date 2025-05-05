@@ -15,12 +15,12 @@
 // https://javagl.github.io/GLConstantsTranslator/GLConstantsTranslator.html
 
 // TODO
-// [ ] implement draw arrays
+// [X] implement draw arrays
 // [X] implement draw elements
 // [ ] implement vertex buffer objects
 // [X] implement material + lighting
 // [X] implement clip planes
-// [ ] implement fog
+// [X] implement fog
 // [ ] implement tex coord gen
 // [ ] fix glBitmap for size other than 640x480 (also, make pixel perfect)
 // [ ] optimize list compilation glBegin/glEnd
@@ -373,7 +373,7 @@ function OpenGL() {
                         varying vec2 v_texcoord;
                         void main() {
                             vec2 raster = u_raster.xy * u_rasterScale + u_rasterOffset;
-                            vec2 pos = (a_position + raster) * u_scale + u_translate;
+                            vec2 pos = raster + a_position * u_scale + u_translate;
                             gl_Position = vec4(pos, u_raster.z, 1);
                             v_texcoord = a_position;
                         }
@@ -426,13 +426,17 @@ function OpenGL() {
                 webgl.vertexAttribPointer(shader.locations.a_position, 2, webgl.FLOAT, false, 0, 0);
                 webgl.uniform1i(shader.locations.u_texture, 0);
                 webgl.uniform4fv(shader.locations.u_color, gl.rasterColor);
-                // these seem to work for 640x480... I can't figure out the right transform yet
-                if (!this.bitmapScale) this.bitmapScale = [0.0311, 0.0419];
-                if (!this.bitmapTranslate) this.bitmapTranslate = [-1, -1];
-                if (!this.bitmapRasterOffset) this.bitmapRasterOffset = [0, 0];
-                if (!this.bitmapRasterScale) this.bitmapRasterScale = [0.1, 0.1];
-                // these properties allow intereactive debugging
-                webgl.uniform3f(shader.locations.u_raster, gl.rasterPos[0] + xorig, gl.rasterPos[1] + yorig, gl.rasterPos[2]);
+                var w = webgl.drawingBufferWidth;
+                var h = webgl.drawingBufferHeight;
+                // this still isn't pixel perfect. Appears to work best for 640x480
+                // but not when changing the extent?! Weird. Also, some letters are still
+                // cut off (like "m").
+                if (!this.bitmapRasterScale) this.bitmapRasterScale = [2/w, 2/h];
+                if (!this.bitmapScale) this.bitmapScale = [2*width/w, 2*height/h];
+                if (!this.bitmapTranslate) this.bitmapTranslate = [0, 0];
+                if (!this.bitmapRasterOffset) this.bitmapRasterOffset = [-1, -1];
+                // the properties above are written to allow intereactive debugging
+                webgl.uniform3f(shader.locations.u_raster, gl.rasterPos[0] - xorig, gl.rasterPos[1] - yorig, gl.rasterPos[2]);
                 webgl.uniform2fv(shader.locations.u_rasterOffset, this.bitmapRasterOffset);
                 webgl.uniform2fv(shader.locations.u_rasterScale, this.bitmapRasterScale);
                 webgl.uniform2fv(shader.locations.u_translate, this.bitmapTranslate);

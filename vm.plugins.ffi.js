@@ -131,7 +131,8 @@ Object.extend(Squeak.Primitives.prototype,
         var modName = this.ffiModules[libName];
 
         if (funcAddr) {
-            var func = this.ffiFuncs[funcAddr];
+            // this func was looked up originally via ffiLookupFunc
+            var func = this.ffiFuncs[funcAddr - 1];
             if (!func) throw Error("FFI: not a valid External Address: " + funcAddr);
             libName = func.libName;
             modName = func.modName;

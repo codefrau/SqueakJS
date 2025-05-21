@@ -831,10 +831,10 @@ function OpenGL() {
                     var max = Math.max.apply(null, indices32);
                     if (max > 0xFFFF) console.warn("OpenGL: glDrawElements with indices > 65535 not supported, truncating", max);
                     if (max <= 0xFF) {
-                        indices = new Uint8Array(indices32.length);
+                        indices = new Uint8Array(count);
                         type = GL.UNSIGNED_BYTE;
                     } else {
-                        indices = new Uint16Array(indices32.length);
+                        indices = new Uint16Array(count);
                         type = GL.UNSIGNED_SHORT;
                     }
                     for (var i = 0; i < count; i++) indices[i] = indices32[i];
@@ -843,6 +843,24 @@ function OpenGL() {
                     if (DEBUG) console.log("UNIMPLEMENTED glDrawElements type", GL_Symbol(type));
                     else this.vm.warnOnce("OpenGL: UNIMPLEMENTED glDrawElements type " + GL_Symbol(type));
                     return;
+            }
+
+            // convert quads to triangles
+            if (mode === GL.QUADS) {
+                var arrayClass = indices.constructor;
+                var newIndices = new arrayClass(count * 6 / 4);
+                var j = 0;
+                for (var i = 0; i < count; i += 4) {
+                    newIndices[j++] = indices[i];
+                    newIndices[j++] = indices[i + 1];
+                    newIndices[j++] = indices[i + 2];
+                    newIndices[j++] = indices[i];
+                    newIndices[j++] = indices[i + 2];
+                    newIndices[j++] = indices[i + 3];
+                }
+                indices = newIndices;
+                count = newIndices.length;
+                mode = GL.TRIANGLES;
             }
 
             var geometryFlags = 0;

@@ -204,6 +204,7 @@ function OpenGL() {
             // set initial state
             gl.matrices[GL.MODELVIEW] = [new Float32Array(identity)];
             gl.matrices[GL.PROJECTION] = [new Float32Array(identity)];
+            gl.matrices[GL.TEXTURE] = [new Float32Array(identity)];
             gl.matrixMode = GL.MODELVIEW;
             gl.matrix = gl.matrices[gl.matrixMode][0];
             gl.color.set([1, 1, 1, 1]);
@@ -1210,6 +1211,10 @@ function OpenGL() {
                 DEBUG > 2 && console.log("uColor", Array.from(color));
                 webgl.uniform4fv(loc['uColor'], color);
             }
+            if (loc['uTextureMatrix']) {
+                DEBUG > 2 && console.log("uTextureMatrix", Array.from(gl.matrices[GL.TEXTURE][0]));
+                webgl.uniformMatrix4fv(loc['uTextureMatrix'], false, gl.matrices[GL.TEXTURE][0]);
+            }
             if (loc['uTexCoord']) {
                 DEBUG > 2 && console.log("uTexCoord", Array.from(gl.texCoord));
                 webgl.uniform2fv(loc['uTexCoord'], gl.texCoord);
@@ -1496,6 +1501,10 @@ function OpenGL() {
                     DEBUG > 1 && console.log("glGetFloatv GL_PROJECTION_MATRIX");
                     params.set(gl.matrices[GL.PROJECTION][0]);
                     break;
+                case GL.TEXTURE_MATRIX:
+                    DEBUG > 1 && console.log("glGetFloatv GL_TEXTURE_MATRIX");
+                    params.set(gl.matrices[GL.TEXTURE][0]);
+                    break;
                 default:
                     if (DEBUG) console.log("UNIMPLEMENTED glGetFloatv", GL_Symbol(pname));
                     else this.vm.warnOnce("OpenGL: UNIMPLEMENTED glGetFloatv " + GL_Symbol(pname));
@@ -1713,7 +1722,7 @@ function OpenGL() {
 
         glMatrixMode: function(mode) {
             if (gl.listMode && this.addToList("glMatrixMode", [mode])) return;
-            if (mode !== GL.MODELVIEW && mode !== GL.PROJECTION) {
+            if (mode !== GL.MODELVIEW && mode !== GL.PROJECTION && mode !== GL.TEXTURE) {
                 if (DEBUG) console.warn("UNIMPLEMENTED glMatrixMode", GL_Symbol(mode));
                 else this.vm.warnOnce("OpenGL: UNIMPLEMENTED glMatrixMode " + GL_Symbol(mode));
             } else DEBUG > 1 && console.log("glMatrixMode", GL_Symbol(mode));
@@ -2292,7 +2301,8 @@ function OpenGL() {
             if (shaderFlags & (HAS_COLOR | ANY_LIGHTS)) {
                 src.push("varying vec4 vColor;");
             }
-            if (shaderFlags & HAS_TEXCOORD) {
+            if (shaderFlags & HAS_TEXCOORD && shaderFlags & USE_TEXTURE) {
+                src.push("uniform mat4 uTextureMatrix;");
                 src.push("attribute vec2 aTexCoord;");
                 src.push("varying vec2 vTexCoord;");
             }
@@ -2380,8 +2390,9 @@ function OpenGL() {
                 src.push("    vClipDist[i] = dot(position, uClipPlanes[i]);");
                 src.push("  }");
             }
-            if (shaderFlags & HAS_TEXCOORD) {
-                src.push("  vTexCoord = aTexCoord;");
+            if (shaderFlags & HAS_TEXCOORD && shaderFlags & USE_TEXTURE) {
+                src.push("  vec4 texCoord = uTextureMatrix * vec4(aTexCoord, 0.0, 1.0);");
+                src.push("  vTexCoord = texCoord.xy / texCoord.w;");
             }
             if (fog !== NO_FOG) {
                 src.push("  vFogDist = -position.z;");
@@ -2442,11 +2453,11 @@ function OpenGL() {
             }
             if (shaderFlags & USE_TEXTURE) {
                 if (shaderFlags & HAS_TEXCOORD) {
-                    src.push("  vec2 texCord = vTexCoord;");
+                    src.push("  vec2 texCoord = vTexCoord;");
                 } else {
-                    src.push("  vec2 texCord = uTexCoord;");
+                    src.push("  vec2 texCoord = uTexCoord;");
                 }
-                src.push("  color *= texture2D(uSampler, texCord).bgra;");
+                src.push("  color *= texture2D(uSampler, texCoord).bgra;");
             }
             if (fog !== NO_FOG) {
                 switch (fog) {
@@ -2476,6 +2487,7 @@ function OpenGL() {
             locations.aPosition = webgl.getAttribLocation(program, "aPosition");
             if (shaderFlags & USE_TEXTURE) {
                 if (shaderFlags & HAS_TEXCOORD) {
+                    locations.uTextureMatrix = webgl.getUniformLocation(program, "uTextureMatrix");
                     locations.aTexCoord = webgl.getAttribLocation(program, "aTexCoord");
                 } else {
                     locations.uTexCoord = webgl.getUniformLocation(program, "uTexCoord");

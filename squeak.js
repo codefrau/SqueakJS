@@ -206,7 +206,7 @@ function recordMouseEvent(what, evt, canvas, display, options) {
                 case 1: buttons = Squeak.Mouse_Yellow; break;   // middle
                 case 2: buttons = Squeak.Mouse_Blue; break;     // right
             }
-            if (buttons === Squeak.Mouse_Red && (evt.altKey || evt.metaKey))
+            if (buttons === Squeak.Mouse_Red && (evt.altKey || evt.metaKey) || display.cmdButtonTouched)
                 buttons = Squeak.Mouse_Yellow; // emulate middle-click
             if (options.swapButtons)
                 if (buttons == Squeak.Mouse_Yellow) buttons = Squeak.Mouse_Blue;

@@ -1235,9 +1235,16 @@ function processFile(file, display, options, thenDo) {
 }
 
 function processZip(file, display, options, thenDo) {
-    JSZip().loadAsync(file.data).then(function(zip) {
+    display.showBanner("Analyzing " + file.name);
+    JSZip.loadAsync(file.data, { createFolders: true }).then(function(zip) {
         var todo = [];
-        zip.forEach(function(filename){
+        zip.forEach(function(filename, meta) {
+            if (filename.startsWith("__MACOSX/") || filename.endsWith(".DS_Store")) return; // skip macOS metadata
+            if (meta.dir) {
+                filename = filename.replace(/\/$/, "");
+                Squeak.dirCreate(options.root + filename, true);
+                return;
+            }
             if (!options.image.name && filename.match(/\.image$/))
                 options.image.name = filename;
             if (options.forceDownload || !Squeak.fileExists(options.root + filename)) {
@@ -1427,7 +1434,7 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options={}) {
         var image = options.image;
         if (!image.name) return alert("could not find an image");
         if (!image.data) return alert("could not find image " + image.name);
-        SqueakJS.appName = options.appName || image.name.replace(/\.image$/, "");
+        SqueakJS.appName = options.appName || image.name.replace(/(.*\/|\.image$)/g, "");
         SqueakJS.runImage(image.data, options.root + image.name, display, options);
     });
     return display;

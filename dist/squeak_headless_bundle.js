@@ -113,17 +113,17 @@ if (!Function.prototype.subclass) {
 Object.extend(Squeak,
 "version", {
     // system attributes
-    vmVersion: "SqueakJS 1.3.2",
-    vmDate: "2025-04-06",               // Maybe replace at build time?
+    vmVersion: "SqueakJS 1.3.3",
+    vmDate: "2025-06-03",               // Maybe replace at build time?
     vmBuild: "unknown",                 // this too?
-    vmPath: "unknown",                  // Replace at runtime
+    vmPath: "unknown",                  // Replaced at runtime
     vmFile: "vm.js",
     vmMakerVersion: "[VMMakerJS-bf.17 VMMaker-bf.353]", // for Smalltalk vmVMMakerVersion
     vmInterpreterVersion: "JSInterpreter VMMaker.js-codefrau.1", // for Smalltalk interpreterVMMakerVersion
     platformName: "JS",
-    platformSubtype: "unknown",         // Replace at runtime
-    osVersion: "unknown",               // Replace at runtime
-    windowSystem: "unknown",            // Replace at runtime
+    platformSubtype: "unknown",         // Replaced at runtime
+    osVersion: "unknown",               // Replaced at runtime
+    windowSystem: "unknown",            // Replaced at runtime
     defaultCORSProxy: "https://cors.codefrau.workers.dev/",
 },
 "object header", {
@@ -2924,6 +2924,8 @@ Object.subclass('Squeak.Interpreter',
             {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 53, old: 0x45, hack: 0x49}, enabled: !this.image.isSpur},
             {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 38, old: 0x16, hack: 0x13}, enabled: this.image.isSpur && sista},
             {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 50, old: 0x44, hack: 0x48}, enabled: this.image.isSpur && !sista},
+            // New FFI can't detect platform – pretend to be 32 bit intel
+            {method: "FFIPlatformDescription>>abi", literal: { index: 21, old_str: 'UNKNOWN_ABI', new_str: 'IA32'}, enabled: sista},
         ].forEach(function(each) {
             try {
                 var m = each.enabled && this.findMethod(each.method);
@@ -2936,9 +2938,10 @@ Object.subclass('Squeak.Interpreter',
                     if (prim) m.pointers[0] |= prim;
                     else if (byte && m.bytes[byte.pc] === byte.old) m.bytes[byte.pc] = byte.hack;
                     else if (byte && m.bytes[byte.pc] === byte.hack) hacked = false; // already there
-                    else if (lit && m.pointers[lit.index].pointers[1] === lit.skip) hacked = false; // not needed
-                    else if (lit && m.pointers[lit.index].pointers[1] === lit.old) m.pointers[lit.index].pointers[1] = lit.hack;
-                    else if (lit && m.pointers[lit.index].pointers[1] === lit.hack) hacked = false; // already there
+                    else if (lit && lit.old_str && m.pointers[lit.index].bytesAsString() === lit.old_str) m.pointers[lit.index] = this.primHandler.makeStString(lit.new_str);
+                    else if (lit && m.pointers[lit.index].pointers?.[1] === lit.skip) hacked = false; // not needed
+                    else if (lit && m.pointers[lit.index].pointers?.[1] === lit.old) m.pointers[lit.index].pointers[1] = lit.hack;
+                    else if (lit && m.pointers[lit.index].pointers?.[1] === lit.hack) hacked = false; // already there
                     else { hacked = false; console.warn("Not hacking " + each.method); }
                     if (hacked) console.warn("Hacking " + each.method);
                 }
@@ -5754,7 +5757,7 @@ Object.subclass('Squeak.Primitives',
                 else return this.popNandPushIfOK(argCount+1, this.stackNonInteger(0).hash); //primitiveImmediateAsInteger
             case 172: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStop', argCount);
                 this.vm.warnOnce("missing primitive: 172 (primitiveFetchMourner)");
-                return this.popNandPushIfOK(argCount, this.vm.nilObj); // do not fail
+                return this.popNandPushIfOK(argCount+1, this.vm.nilObj); // do not fail
             case 173: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundAvailableSpace', argCount);
                 else return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,true)); // slotAt:
             case 174: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySamples', argCount);

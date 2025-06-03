@@ -116,17 +116,17 @@
     Object.extend(Squeak,
     "version", {
         // system attributes
-        vmVersion: "SqueakJS 1.3.2",
-        vmDate: "2025-04-06",               // Maybe replace at build time?
+        vmVersion: "SqueakJS 1.3.3",
+        vmDate: "2025-06-03",               // Maybe replace at build time?
         vmBuild: "unknown",                 // this too?
-        vmPath: "unknown",                  // Replace at runtime
+        vmPath: "unknown",                  // Replaced at runtime
         vmFile: "vm.js",
         vmMakerVersion: "[VMMakerJS-bf.17 VMMaker-bf.353]", // for Smalltalk vmVMMakerVersion
         vmInterpreterVersion: "JSInterpreter VMMaker.js-codefrau.1", // for Smalltalk interpreterVMMakerVersion
         platformName: "JS",
-        platformSubtype: "unknown",         // Replace at runtime
-        osVersion: "unknown",               // Replace at runtime
-        windowSystem: "unknown",            // Replace at runtime
+        platformSubtype: "unknown",         // Replaced at runtime
+        osVersion: "unknown",               // Replaced at runtime
+        windowSystem: "unknown",            // Replaced at runtime
         defaultCORSProxy: "https://cors.codefrau.workers.dev/",
     },
     "object header", {
@@ -2927,6 +2927,8 @@
                 {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 53, old: 0x45, hack: 0x49}, enabled: !this.image.isSpur},
                 {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 38, old: 0x16, hack: 0x13}, enabled: this.image.isSpur && sista},
                 {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 50, old: 0x44, hack: 0x48}, enabled: this.image.isSpur && !sista},
+                // New FFI can't detect platform – pretend to be 32 bit intel
+                {method: "FFIPlatformDescription>>abi", literal: { index: 21, old_str: 'UNKNOWN_ABI', new_str: 'IA32'}, enabled: sista},
             ].forEach(function(each) {
                 try {
                     var m = each.enabled && this.findMethod(each.method);
@@ -2939,9 +2941,10 @@
                         if (prim) m.pointers[0] |= prim;
                         else if (byte && m.bytes[byte.pc] === byte.old) m.bytes[byte.pc] = byte.hack;
                         else if (byte && m.bytes[byte.pc] === byte.hack) hacked = false; // already there
-                        else if (lit && m.pointers[lit.index].pointers[1] === lit.skip) hacked = false; // not needed
-                        else if (lit && m.pointers[lit.index].pointers[1] === lit.old) m.pointers[lit.index].pointers[1] = lit.hack;
-                        else if (lit && m.pointers[lit.index].pointers[1] === lit.hack) hacked = false; // already there
+                        else if (lit && lit.old_str && m.pointers[lit.index].bytesAsString() === lit.old_str) m.pointers[lit.index] = this.primHandler.makeStString(lit.new_str);
+                        else if (lit && m.pointers[lit.index].pointers?.[1] === lit.skip) hacked = false; // not needed
+                        else if (lit && m.pointers[lit.index].pointers?.[1] === lit.old) m.pointers[lit.index].pointers[1] = lit.hack;
+                        else if (lit && m.pointers[lit.index].pointers?.[1] === lit.hack) hacked = false; // already there
                         else { hacked = false; console.warn("Not hacking " + each.method); }
                         if (hacked) console.warn("Hacking " + each.method);
                     }
@@ -5757,7 +5760,7 @@
                     else return this.popNandPushIfOK(argCount+1, this.stackNonInteger(0).hash); //primitiveImmediateAsInteger
                 case 172: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundStop', argCount);
                     this.vm.warnOnce("missing primitive: 172 (primitiveFetchMourner)");
-                    return this.popNandPushIfOK(argCount, this.vm.nilObj); // do not fail
+                    return this.popNandPushIfOK(argCount+1, this.vm.nilObj); // do not fail
                 case 173: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundAvailableSpace', argCount);
                     else return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,true)); // slotAt:
                 case 174: if (this.oldPrims) return this.namedPrimitive('SoundPlugin', 'primitiveSoundPlaySamples', argCount);
@@ -10360,7 +10363,8 @@
             var modName = this.ffiModules[libName];
 
             if (funcAddr) {
-                var func = this.ffiFuncs[funcAddr];
+                // this func was looked up originally via ffiLookupFunc
+                var func = this.ffiFuncs[funcAddr - 1];
                 if (!func) throw Error("FFI: not a valid External Address: " + funcAddr);
                 libName = func.libName;
                 modName = func.modName;
@@ -10466,6 +10470,8 @@
                         case Squeak.FFITypeUnsignedChar32:
                             // we ignore the signedness and size of the integer for now
                             if (typeof stObj === "number") return stObj;
+                            if (stObj.isTrue) return 1;
+                            if (stObj.isFalse) return 0;
                             throw Error("FFI: expected integer, got " + stObj);
                         case Squeak.FFITypeSingleFloat:
                         case Squeak.FFITypeDoubleFloat:
@@ -11333,7 +11339,10 @@
                 if (Squeak.debugFiles) console.log("Directory not found: " + path.fullname);
                 return false;
             }
-            var entry = fileName === "." ? [".", 0, 0, true, 0] : entries[fileName];
+            var entry = fileName === "." ? [".", 0, 0, true, 0] // current directory
+                : fileName === ".." ? ["..", 0, 0, true, 0] // parent directory
+                : fileName === "/" && dirName === "/" ? [sqFileName, 0, 0, true, 0] // fake top-level dir
+                : entries[fileName];
             this.popNandPushIfOK(argCount+1, this.makeStObject(entry));  // entry or nil
             return true;
         },
@@ -43712,12 +43721,12 @@
     // https://javagl.github.io/GLConstantsTranslator/GLConstantsTranslator.html
 
     // TODO
-    // [ ] implement draw arrays
+    // [X] implement draw arrays
     // [X] implement draw elements
     // [ ] implement vertex buffer objects
     // [X] implement material + lighting
     // [X] implement clip planes
-    // [ ] implement fog
+    // [X] implement fog
     // [ ] implement tex coord gen
     // [ ] fix glBitmap for size other than 640x480 (also, make pixel perfect)
     // [ ] optimize list compilation glBegin/glEnd
@@ -43896,6 +43905,7 @@
                 // set initial state
                 gl.matrices[GL.MODELVIEW] = [new Float32Array(identity)];
                 gl.matrices[GL.PROJECTION] = [new Float32Array(identity)];
+                gl.matrices[GL.TEXTURE] = [new Float32Array(identity)];
                 gl.matrixMode = GL.MODELVIEW;
                 gl.matrix = gl.matrices[gl.matrixMode][0];
                 gl.color.set([1, 1, 1, 1]);
@@ -44059,7 +44069,7 @@
                         varying vec2 v_texcoord;
                         void main() {
                             vec2 raster = u_raster.xy * u_rasterScale + u_rasterOffset;
-                            vec2 pos = (a_position + raster) * u_scale + u_translate;
+                            vec2 pos = raster + a_position * u_scale + u_translate;
                             gl_Position = vec4(pos, u_raster.z, 1);
                             v_texcoord = a_position;
                         }
@@ -44112,13 +44122,17 @@
                     webgl.vertexAttribPointer(shader.locations.a_position, 2, webgl.FLOAT, false, 0, 0);
                     webgl.uniform1i(shader.locations.u_texture, 0);
                     webgl.uniform4fv(shader.locations.u_color, gl.rasterColor);
-                    // these seem to work for 640x480... I can't figure out the right transform yet
-                    if (!this.bitmapScale) this.bitmapScale = [0.0311, 0.0419];
-                    if (!this.bitmapTranslate) this.bitmapTranslate = [-1, -1];
-                    if (!this.bitmapRasterOffset) this.bitmapRasterOffset = [0, 0];
-                    if (!this.bitmapRasterScale) this.bitmapRasterScale = [0.1, 0.1];
-                    // these properties allow intereactive debugging
-                    webgl.uniform3f(shader.locations.u_raster, gl.rasterPos[0] + xorig, gl.rasterPos[1] + yorig, gl.rasterPos[2]);
+                    var w = webgl.drawingBufferWidth;
+                    var h = webgl.drawingBufferHeight;
+                    // this still isn't pixel perfect. Appears to work best for 640x480
+                    // but not when changing the extent?! Weird. Also, some letters are still
+                    // cut off (like "m").
+                    if (!this.bitmapRasterScale) this.bitmapRasterScale = [2/w, 2/h];
+                    if (!this.bitmapScale) this.bitmapScale = [2*width/w, 2*height/h];
+                    if (!this.bitmapTranslate) this.bitmapTranslate = [0, 0];
+                    if (!this.bitmapRasterOffset) this.bitmapRasterOffset = [-1, -1];
+                    // the properties above are written to allow intereactive debugging
+                    webgl.uniform3f(shader.locations.u_raster, gl.rasterPos[0] - xorig, gl.rasterPos[1] - yorig, gl.rasterPos[2]);
                     webgl.uniform2fv(shader.locations.u_rasterOffset, this.bitmapRasterOffset);
                     webgl.uniform2fv(shader.locations.u_rasterScale, this.bitmapRasterScale);
                     webgl.uniform2fv(shader.locations.u_translate, this.bitmapTranslate);
@@ -44469,10 +44483,10 @@
                         var max = Math.max.apply(null, indices32);
                         if (max > 0xFFFF) console.warn("OpenGL: glDrawElements with indices > 65535 not supported, truncating", max);
                         if (max <= 0xFF) {
-                            indices = new Uint8Array(indices32.length);
+                            indices = new Uint8Array(count);
                             type = GL.UNSIGNED_BYTE;
                         } else {
-                            indices = new Uint16Array(indices32.length);
+                            indices = new Uint16Array(count);
                             type = GL.UNSIGNED_SHORT;
                         }
                         for (var i = 0; i < count; i++) indices[i] = indices32[i];
@@ -44480,6 +44494,24 @@
                     default:
                         this.vm.warnOnce("OpenGL: UNIMPLEMENTED glDrawElements type " + GL_Symbol(type));
                         return;
+                }
+
+                // convert quads to triangles
+                if (mode === GL.QUADS) {
+                    var arrayClass = indices.constructor;
+                    var newIndices = new arrayClass(count * 6 / 4);
+                    var j = 0;
+                    for (var i = 0; i < count; i += 4) {
+                        newIndices[j++] = indices[i];
+                        newIndices[j++] = indices[i + 1];
+                        newIndices[j++] = indices[i + 2];
+                        newIndices[j++] = indices[i];
+                        newIndices[j++] = indices[i + 2];
+                        newIndices[j++] = indices[i + 3];
+                    }
+                    indices = newIndices;
+                    count = newIndices.length;
+                    mode = GL.TRIANGLES;
                 }
 
                 var geometryFlags = 0;
@@ -44795,6 +44827,9 @@
                     if (gl.textureEnvMode === GL.REPLACE) color = [1, 1, 1, 1]; // HACK
                     webgl.uniform4fv(loc['uColor'], color);
                 }
+                if (loc['uTextureMatrix']) {
+                    webgl.uniformMatrix4fv(loc['uTextureMatrix'], false, gl.matrices[GL.TEXTURE][0]);
+                }
                 if (loc['uTexCoord']) {
                     webgl.uniform2fv(loc['uTexCoord'], gl.texCoord);
                 }
@@ -45038,6 +45073,9 @@
                     case GL.PROJECTION_MATRIX:
                         params.set(gl.matrices[GL.PROJECTION][0]);
                         break;
+                    case GL.TEXTURE_MATRIX:
+                        params.set(gl.matrices[GL.TEXTURE][0]);
+                        break;
                     default:
                         this.vm.warnOnce("OpenGL: UNIMPLEMENTED glGetFloatv " + GL_Symbol(pname));
                 }
@@ -45217,7 +45255,7 @@
 
             glMatrixMode: function(mode) {
                 if (gl.listMode && this.addToList("glMatrixMode", [mode])) return;
-                if (mode !== GL.MODELVIEW && mode !== GL.PROJECTION) {
+                if (mode !== GL.MODELVIEW && mode !== GL.PROJECTION && mode !== GL.TEXTURE) {
                     this.vm.warnOnce("OpenGL: UNIMPLEMENTED glMatrixMode " + GL_Symbol(mode));
                 }
                 gl.matrixMode = mode;
@@ -45506,6 +45544,7 @@
                         return;
                 }
                 webgl.texImage2D(target, level, internalformat, width, height, border, format, type, pixels);
+                if (gl.texture.generateMipmapSGIS) webgl.generateMipmap(target);
             },
 
             debugTexture: function(texture) {
@@ -45565,6 +45604,13 @@
 
             glTexParameteri: function(target, pname, param) {
                 if (gl.listMode && this.addToList("glTexParameteri", [target, pname, param])) return;
+                if (pname === GL.GENERATE_MIPMAP_SGIS) {
+                    // WebGL does not support GL_GENERATE_MIPMAP_SGIS. Emulate it
+                    gl.texture.generateMipmapSGIS = param;
+                    // if an image has been uploaded already, generate mipmaps now
+                    if (param && gl.texture.width > 1) webgl.generateMipmap(target);
+                    return;
+                }
                 webgl.texParameteri(target, pname, param);
             },
 
@@ -45611,6 +45657,7 @@
                         return;
                 }
                 webgl.texSubImage2D(target, level, xoffset, yoffset, width, height, format, type, pixels);
+                if (gl.texture.generateMipmapSGIS) webgl.generateMipmap(target);
             },
 
             glVertex2f: function(x, y) {
@@ -45707,7 +45754,8 @@
                 if (shaderFlags & (HAS_COLOR | ANY_LIGHTS)) {
                     src.push("varying vec4 vColor;");
                 }
-                if (shaderFlags & HAS_TEXCOORD) {
+                if (shaderFlags & HAS_TEXCOORD && shaderFlags & USE_TEXTURE) {
+                    src.push("uniform mat4 uTextureMatrix;");
                     src.push("attribute vec2 aTexCoord;");
                     src.push("varying vec2 vTexCoord;");
                 }
@@ -45795,8 +45843,9 @@
                     src.push("    vClipDist[i] = dot(position, uClipPlanes[i]);");
                     src.push("  }");
                 }
-                if (shaderFlags & HAS_TEXCOORD) {
-                    src.push("  vTexCoord = aTexCoord;");
+                if (shaderFlags & HAS_TEXCOORD && shaderFlags & USE_TEXTURE) {
+                    src.push("  vec4 texCoord = uTextureMatrix * vec4(aTexCoord, 0.0, 1.0);");
+                    src.push("  vTexCoord = texCoord.xy / texCoord.w;");
                 }
                 if (fog !== NO_FOG) {
                     src.push("  vFogDist = -position.z;");
@@ -45856,11 +45905,11 @@
                 }
                 if (shaderFlags & USE_TEXTURE) {
                     if (shaderFlags & HAS_TEXCOORD) {
-                        src.push("  vec2 texCord = vTexCoord;");
+                        src.push("  vec2 texCoord = vTexCoord;");
                     } else {
-                        src.push("  vec2 texCord = uTexCoord;");
+                        src.push("  vec2 texCoord = uTexCoord;");
                     }
-                    src.push("  color *= texture2D(uSampler, texCord).bgra;");
+                    src.push("  color *= texture2D(uSampler, texCoord).bgra;");
                 }
                 if (fog !== NO_FOG) {
                     switch (fog) {
@@ -45889,6 +45938,7 @@
                 locations.aPosition = webgl.getAttribLocation(program, "aPosition");
                 if (shaderFlags & USE_TEXTURE) {
                     if (shaderFlags & HAS_TEXCOORD) {
+                        locations.uTextureMatrix = webgl.getUniformLocation(program, "uTextureMatrix");
                         locations.aTexCoord = webgl.getAttribLocation(program, "aTexCoord");
                     } else {
                         locations.uTexCoord = webgl.getUniformLocation(program, "uTexCoord");
@@ -46448,6 +46498,8 @@
             COLOR_ARRAY:                 0x8076,
             INDEX_ARRAY:                 0x8077,
             TEXTURE_COORD_ARRAY:         0x8078,
+            GENERATE_MIPMAP_SGIS:        0x8191,
+            GENERATE_MIPMAP_HINT_SGIS:   0x8192,
             TEXTURE_COMPRESSED:          0x86A1,
             CURRENT_BIT:                0x00001,
             POINT_BIT:                  0x00002,
@@ -59701,7 +59753,7 @@
                     case 1: buttons = Squeak.Mouse_Yellow; break;   // middle
                     case 2: buttons = Squeak.Mouse_Blue; break;     // right
                 }
-                if (buttons === Squeak.Mouse_Red && (evt.altKey || evt.metaKey))
+                if (buttons === Squeak.Mouse_Red && (evt.altKey || evt.metaKey) || display.cmdButtonTouched)
                     buttons = Squeak.Mouse_Yellow; // emulate middle-click
                 if (options.swapButtons)
                     if (buttons == Squeak.Mouse_Yellow) buttons = Squeak.Mouse_Blue;
@@ -60728,9 +60780,16 @@
     }
 
     function processZip(file, display, options, thenDo) {
-        JSZip().loadAsync(file.data).then(function(zip) {
+        display.showBanner("Analyzing " + file.name);
+        JSZip.loadAsync(file.data, { createFolders: true }).then(function(zip) {
             var todo = [];
-            zip.forEach(function(filename){
+            zip.forEach(function(filename, meta) {
+                if (filename.startsWith("__MACOSX/") || filename.endsWith(".DS_Store")) return; // skip macOS metadata
+                if (meta.dir) {
+                    filename = filename.replace(/\/$/, "");
+                    Squeak.dirCreate(options.root + filename, true);
+                    return;
+                }
                 if (!options.image.name && filename.match(/\.image$/))
                     options.image.name = filename;
                 if (options.forceDownload || !Squeak.fileExists(options.root + filename)) {
@@ -60920,7 +60979,7 @@
             var image = options.image;
             if (!image.name) return alert("could not find an image");
             if (!image.data) return alert("could not find image " + image.name);
-            SqueakJS.appName = options.appName || image.name.replace(/\.image$/, "");
+            SqueakJS.appName = options.appName || image.name.replace(/(.*\/|\.image$)/g, "");
             SqueakJS.runImage(image.data, options.root + image.name, display, options);
         });
         return display;

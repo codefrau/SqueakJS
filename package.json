@@ -1,6 +1,6 @@
 {
   "name": "@codefrau/squeakjs",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "Virtual Machine for Squeak Smalltalk and derivatives",
   "author": "Vanessa Freudenberg <vanessa@codefrau.net> (https://twitter.com/codefrau)",
   "repository": "https://github.com/codefrau/SqueakJS",
@@ -22,6 +22,7 @@
   },
   "scripts": {
     "start": "http-server -o run/",
+    "dev": "http-server",
     "build:cleanup": "rimraf dist",
     "build:bundle": "rollup squeak.js --file dist/squeak_bundle.js --format iife && rollup squeak_headless.js --file dist/squeak_headless_bundle.js",
     "build:minify": "uglifyjs dist/squeak_bundle.js -o dist/squeak_bundle.min.js -c -m --source-map && uglifyjs dist/squeak_headless_bundle.js -o dist/squeak_headless_bundle.min.js -c -m --source-map",

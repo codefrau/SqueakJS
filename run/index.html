@@ -98,7 +98,11 @@
     function afterImport(imageName) {
         setTimeout(() => drop.style.borderColor = "", 500);
         if (!imageName) showFiles();
-        else runSqueak(imageName);
+        else {
+            const hash = '#' + paramsForImage(imageName);
+            if (location.hash !== hash) history.pushState({}, "", hash);
+            runSqueak(imageName);
+        }
     }
     function exportFile(a) {
         var path = Squeak.splitFilePath(a.innerText);
@@ -107,6 +111,11 @@
             FileSaver_saveAs(blob, path.basename, true);
         }, alert);
         return false;
+    }
+    function paramsForImage(imageName) {
+        var params = new URLSearchParams(location.hash.slice(1));
+        params.set("image", imageName);
+        return params.toString();
     }
     function showFiles() {
         var imgList = [],
@@ -122,7 +131,7 @@
                 var entry = entries[f],
                     path = dir + '/' + f;
                 if (!entry[3] && f.match(/\.image$/))
-                    imgList.push('<li><a href="#image=' + path + '">' + path + '</a> (' + (entry[4]/1000000).toFixed(1) + ' MB)</li>');
+                    imgList.push('<li><a href="#' + paramsForImage(path) + '">' + path + '</a> (' + (entry[4]/1000000).toFixed(1) + ' MB)</li>');
                 if (entry[3]) {
                     dirs.push(path);
                     nDirs++;
@@ -227,13 +236,14 @@
         <li>Squeak 2.8 (2000) <a href="#url=https://freudenbergs.de/vanessa/squeakjs&files=[Squeak2.8.image,Squeak2.8.changes,SqueakV2.sources]&swapButtons=true">link</a></li>
         <li>Squeak 3.8 (2006) <a href="#url=https://freudenbergs.de/vanessa/squeakjs&files=[Squeak3.8.1-6747full.image,Squeak3.8.1-6747full.changes,SqueakV3.sources]&swapButtons=true">link</a></li>
         <li>Squeak 3.9 (2008) <a href="#url=https://freudenbergs.de/vanessa/squeakjs&files=[Squeak3.9.1-final-7075.image,Squeak3.9.1-final-7075.changes,SqueakV39.sources]&swapButtons=true">link</a></li>
+        <li>Pharo 1.0 (2010) <a href="#unix&zip=[https://files.pharo.org/image/10/latest.zip,https://files.pharo.org/sources/PharoV10.sources.zip]">link</a></li>
         <li>Squeak 4.5 (2014) <a href="#url=https://freudenbergs.de/vanessa/squeakjs&files=[Squeak4.5-13680.image,Squeak4.5-13680.changes,SqueakV41.sources]">link</a></li>
         <li>Squeak 5.0 (2015) <a href="#url=https://freudenbergs.de/vanessa/squeakjs&zip=[Squeak5.0-15113.zip,SqueakV50.sources.zip]">link</a></li>
         <li>SpeechPlugin Demo (2016) <a href="#zip=https://www.hpi.uni-potsdam.de/hirschfeld/artefacts/squeakjs/SpeechPluginDemo.zip">link</a></li>
-        <li>Squeak 6.0 64 bit (2022) <a href="#zip=https://files.squeak.org/6.0/Squeak6.0-22104-64bit/Squeak6.0-22104-64bit.zip">link</a></li>
+        <li>Squeak 6.0 64 bit (2022) <a href="#zip=https://files.squeak.org/6.0/Squeak6.0-22104-64bit/Squeak6.0-22104-64bit.zip&wizard=false">link</a></li>
         <li>Cuis 6.2 (2023) <a href="#highdpi&url=https://cdn.jsdelivr.net/gh/Cuis-Smalltalk/Cuis6-2@6f984e8c/CuisImage&files=[32BitImages/Cuis6.2-32.image,32BitImages/Cuis6.2-32.changes,Cuis6.2.sources]">link</a></li>
-        <li>Squeak Trunk 6.1α (2024) <a href="#zip=https://files.squeak.org/6.1alpha/Squeak6.1alpha-22998-32bit/Squeak6.1alpha-22998-32bit.zip">link</a></li>
-        <li>Squeak Trunk 6.1α (hi-res: save image after first load for faster startup) <a href="#highdpi&zip=https://files.squeak.org/6.1alpha/Squeak6.1alpha-22998-32bit/Squeak6.1alpha-22998-32bit.zip">link</a></li>
+        <li>Squeak Trunk 6.1α (2024) <a href="#zip=https://files.squeak.org/6.1alpha/Squeak6.1alpha-22998-32bit/Squeak6.1alpha-22998-32bit.zip&wizard=false">link</a></li>
+        <li>Squeak Trunk 6.1α (hi-res: save image after first load for faster startup) <a href="#highdpi&zip=https://files.squeak.org/6.1alpha/Squeak6.1alpha-22998-32bit/Squeak6.1alpha-22998-32bit.zip&wizard=false">link</a></li>
         </ul>
         On the first run these will be stored locally. Subsequent starts are much faster since there is no download.
 

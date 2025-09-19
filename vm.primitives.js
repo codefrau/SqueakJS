@@ -983,7 +983,12 @@ Object.subclass('Squeak.Primitives',
     },
     pointsTo: function(rcvr, arg) {
         if (!rcvr.pointers) return false;
-        return rcvr.pointers.indexOf(arg) >= 0;
+        if (rcvr.$$ && rcvr.$$.indexOf(arg) >= 0) return true;
+        const instSize = rcvr.sqClass.classInstSize();
+        for (var i = 0; i < instSize; i++) {
+            if (rcvr['$' + i] === arg) return true;
+        }
+        return false;
     },
     asUint8Array: function(buffer) {
         // A direct test of the buffer's constructor doesn't work on Safari 10.0.
@@ -1200,7 +1205,8 @@ Object.subclass('Squeak.Primitives',
     allInstancesOf: function(clsObj) {
         var instances = this.vm.image.allInstancesOf(clsObj);
         var array = this.vm.instantiateClass(this.vm.specialObjects[Squeak.splOb_ClassArray], instances.length);
-        array.pointers = instances;
+        array.$$ = instances;
+        array.pointers = array.$$;
         return array;
     },
     identityHash: function(obj) {
@@ -1438,10 +1444,11 @@ Object.subclass('Squeak.Primitives',
         var bytecodeCount = this.stackInteger(1);
         if (!this.success) return 0;
         var method = this.vm.instantiateClass(this.vm.stackValue(2), bytecodeCount);
-        method.pointers = [header];
+        method.$$ = [header];
+        method.pointers = method.$$;
         var litCount = method.methodNumLits();
         for (var i = 0; i < litCount; i++)
-            method.pointers.push(this.vm.nilObj);
+            method.$$.push(this.vm.nilObj);
         this.vm.popNandPush(1+argCount, method);
         if (this.vm.breakOnNewMethod)               // break on doit
             this.vm.breakOnMethod = method;

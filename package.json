@@ -2,7 +2,7 @@
   "name": "@codefrau/squeakjs",
   "version": "1.3.3",
   "description": "Virtual Machine for Squeak Smalltalk and derivatives",
-  "author": "Vanessa Freudenberg <vanessa@codefrau.net> (https://twitter.com/codefrau)",
+  "author": "Vanessa Freudenberg <vanessa@codefrau.net>",
   "repository": "https://github.com/codefrau/SqueakJS",
   "license": "MIT",
   "browser": "squeak.js",

@@ -84,10 +84,9 @@ version of the generated JavaScript code:
     6 <21> pushConst: 42
     7 <7C> return: topOfStack
 
-    context = vm.activeContext
     while (true) switch (vm.pc) {
     case 0:
-        stack[++vm.sp] = inst[0];
+        stack[++vm.sp] = rcvr.$0;
         vm.pc = 2; vm.send(#selector); // activate new method
         return; // return to main loop
         // Main loop will execute the activated method. When
@@ -233,11 +232,10 @@ to single-step.
         if (optClass && optSel)
             this.source.push("// ", optClass, ">>", optSel, "\n");
         this.instVarNames = optInstVarNames;
-        this.allVars = ['context', 'stack', 'rcvr', 'inst[', 'temp[', 'lit['];
+        this.allVars = ['context', 'stack', 'rcvr', 'temp[', 'lit['];
         this.sourcePos['context']    = this.source.length; this.source.push("var context = vm.activeContext;\n");
         this.sourcePos['stack']      = this.source.length; this.source.push("var stack = context.pointers;\n");
         this.sourcePos['rcvr']       = this.source.length; this.source.push("var rcvr = vm.receiver;\n");
-        this.sourcePos['inst[']      = this.source.length; this.source.push("var inst = rcvr.pointers;\n");
         this.sourcePos['temp[']      = this.source.length; this.source.push("var temp = vm.homeContext.pointers;\n");
         this.sourcePos['lit[']       = this.source.length; this.source.push("var lit = vm.method.pointers;\n");
         this.sourcePos['loop-start'] = this.source.length; this.source.push("while (true) switch (vm.pc) {\ncase 0:\n");
@@ -263,7 +261,7 @@ to single-step.
             switch (byte & 0xF8) {
                 // load inst var
                 case 0x00: case 0x08:
-                    this.generatePush("inst[", byte & 0x0F, "]");
+                    this.generatePush("rcvr", ".$", byte & 0x0F);
                     break;
                 // load temp var
                 case 0x10: case 0x18:
@@ -279,7 +277,7 @@ to single-step.
                     break;
                 // storeAndPop inst var
                 case 0x60:
-                    this.generatePopInto("inst[", byte & 0x07, "]");
+                    this.generatePopInto("rcvr", ".$", byte & 0x07);
                     break;
                 // storeAndPop temp var
                 case 0x68:
@@ -360,7 +358,7 @@ to single-step.
             case 0x80:
                 byte2 = this.method.bytes[this.pc++];
                 switch (byte2 >> 6) {
-                    case 0: this.generatePush("inst[", byte2 & 0x3F, "]"); return;
+                    case 0: this.generatePush("rcvr", ".$", byte2 & 0x3F); return;
                     case 1: this.generatePush("temp[", 6 + (byte2 & 0x3F), "]"); return;
                     case 2: this.generatePush("lit[", 1 + (byte2 & 0x3F), "]"); return;
                     case 3: this.generatePush("lit[", 1 + (byte2 & 0x3F), "].pointers[1]"); return;
@@ -369,7 +367,7 @@ to single-step.
             case 0x81:
                 byte2 = this.method.bytes[this.pc++];
                 switch (byte2 >> 6) {
-                    case 0: this.generateStoreInto("inst[", byte2 & 0x3F, "]"); return;
+                    case 0: this.generateStoreInto("rcvr", ".$", byte2 & 0x3F); return;
                     case 1: this.generateStoreInto("temp[", 6 + (byte2 & 0x3F), "]"); return;
                     case 2: throw Error("illegal store into literal");
                     case 3: this.generateStoreInto("lit[", 1 + (byte2 & 0x3F), "].pointers[1]"); return;
@@ -379,7 +377,7 @@ to single-step.
             case 0x82:
                 byte2 = this.method.bytes[this.pc++];
                 switch (byte2 >> 6) {
-                    case 0: this.generatePopInto("inst[", byte2 & 0x3F, "]"); return;
+                    case 0: this.generatePopInto("rcvr", ".$", byte2 & 0x3F); return;
                     case 1: this.generatePopInto("temp[", 6 + (byte2 & 0x3F), "]"); return;
                     case 2: throw Error("illegal pop into literal");
                     case 3: this.generatePopInto("lit[", 1 + (byte2 & 0x3F), "].pointers[1]"); return;
@@ -396,11 +394,11 @@ to single-step.
                 switch (byte2 >> 5) {
                     case 0: this.generateSend("lit[", 1 + byte3, "]", byte2 & 31, false); return;
                     case 1: this.generateSend("lit[", 1 + byte3, "]", byte2 & 31, true); return;
-                    case 2: this.generatePush("inst[", byte3, "]"); return;
+                    case 2: this.generatePush("rcvr", ".$", byte3); return;
                     case 3: this.generatePush("lit[", 1 + byte3, "]"); return;
                     case 4: this.generatePush("lit[", 1 + byte3, "].pointers[1]"); return;
-                    case 5: this.generateStoreInto("inst[", byte3, "]"); return;
-                    case 6: this.generatePopInto("inst[", byte3, "]"); return;
+                    case 5: this.generateStoreInto("rcvr", ".$", byte3); return;
+                    case 6: this.generatePopInto("rcvr", ".$", byte3); return;
                     case 7: this.generateStoreInto("lit[", 1 + byte3, "].pointers[1]"); return;
                 }
             // Single extended send to super
@@ -486,7 +484,7 @@ to single-step.
                 // load receiver variable
                 case 0x00: case 0x01: case 0x02: case 0x03: case 0x04: case 0x05: case 0x06: case 0x07:
                 case 0x08: case 0x09: case 0x0A: case 0x0B: case 0x0C: case 0x0D: case 0x0E: case 0x0F:
-                    this.generatePush("inst[", b & 0x0F, "]");
+                    this.generatePush("rcvr", ".$", b & 0x0F);
                     break;
                 // load literal variable
                 case 0x10: case 0x11: case 0x12: case 0x13: case 0x14: case 0x15: case 0x16: case 0x17:
@@ -574,7 +572,7 @@ to single-step.
                     this.generateJumpIf(false, (b & 0x07) + 1);
                     break;
                 case 0xC8: case 0xC9: case 0xCA: case 0xCB: case 0xCC: case 0xCD: case 0xCE: case 0xCF:
-                    this.generatePopInto("inst[", b & 0x07, "]");
+                    this.generatePopInto("rcvr", ".$", b & 0x07);
                     break;
                 case 0xD0: case 0xD1: case 0xD2: case 0xD3: case 0xD4: case 0xD5: case 0xD6: case 0xD7:
                     this.generatePopInto("temp[", 6 + (b & 0x07), "]");
@@ -597,7 +595,7 @@ to single-step.
                     continue;
                 case 0xE2:
                     b2 = bytes[this.pc++];
-                    this.generatePush("inst[", b2 + extA * 256, "]");
+                    this.generatePush("rcvr", ".$", b2 + extA * 256);
                     break;
                 case 0xE3:
                     b2 = bytes[this.pc++];
@@ -654,7 +652,7 @@ to single-step.
                     break;
                 case 0xF0:
                     b2 = bytes[this.pc++];
-                    this.generatePopInto("inst[", b2 + extA * 256, "]");
+                    this.generatePopInto("rcvr", ".$", b2 + extA * 256);
                     break;
                 case 0xF1:
                     b2 = bytes[this.pc++];
@@ -666,7 +664,7 @@ to single-step.
                     break;
                 case 0xF3:
                     b2 = bytes[this.pc++];
-                    this.generateStoreInto("inst[", b2 + extA * 256, "]");
+                    this.generateStoreInto("rcvr", ".$", b2 + extA * 256);
                     break;
                 case 0xF4:
                     b2 = bytes[this.pc++];
@@ -1083,9 +1081,9 @@ to single-step.
     },
     generateDirty: function(target, arg, suffix) {
         switch(target) {
-            case "inst[": this.source.push("rcvr.dirty = true;\n"); break;
+            case "rcvr": this.source.push("rcvr.dirty = true;\n"); break;
             case "lit[": this.source.push(target, arg, "].dirty = true;\n"); break;
-            case "temp[": if (suffix !== "]") this.source.push(target, arg, "].dirty = true;\n"); break;
+            case "temp[": /* activeContext is always marked dirty */ break;
             default:
                 throw Error("unexpected target " + target);
         }
@@ -1116,11 +1114,14 @@ to single-step.
                 case 'vm.nilObj':    this.source.push('nil'); break;
                 case 'vm.trueObj':   this.source.push('true'); break;
                 case 'vm.falseObj':  this.source.push('false'); break;
-                case 'rcvr':         this.source.push('self'); break;
                 case 'stack[vm.sp]': this.source.push('top of stack'); break;
-                case 'inst[':
-                    if (!this.instVarNames) this.source.push('inst var ', arg1);
-                    else this.source.push(this.instVarNames[arg1]);
+                case 'rcvr':
+                    if (!arg1) {
+                        this.source.push('self');
+                    } else { // "rcvr", ".$", index
+                        if (!this.instVarNames) this.source.push('inst var ', suffix1);
+                        else this.source.push(this.instVarNames[suffix1]);
+                    }
                     break;
                 case 'temp[':
                     this.source.push('tmp', arg1 - 6);
@@ -1159,7 +1160,6 @@ to single-step.
     },
     deleteUnneededVariables: function() {
         if (this.needsVar['stack']) this.needsVar['context'] = true;
-        if (this.needsVar['inst[']) this.needsVar['rcvr'] = true;
         for (var i = 0; i < this.allVars.length; i++) {
             var v = this.allVars[i];
             if (!this.needsVar[v])

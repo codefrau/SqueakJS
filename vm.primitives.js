@@ -216,19 +216,24 @@ Object.subclass('Squeak.Primitives',
                 if (pos >= lim) return false;
                 var index = pos + 1; // Smalltalk is 1-based
                 var value;
+                var isTextual = arr && this.isKindOf(arr, Squeak.splOb_ClassString);
                 if (arr.isPointers && arr.isPointers()) {
                     value = arr.pointers[index - 1];
                 } else if (arr.isWords && arr.isWords()) {
-                    value = this.pos32BitIntFor(arr.words[index - 1]);
+                    if (isTextual) {
+                        value = this.charFromInt(arr.words[index - 1] & 0x3FFFFFFF);
+                    } else {
+                        value = this.pos32BitIntFor(arr.words[index - 1]);
+                    }
                 } else if (arr.isBytes && arr.isBytes()) {
-                    if (this.isA(arr, Squeak.splOb_ClassString))
+                    if (isTextual)
                         value = this.charFromInt(arr.bytes[index - 1] & 0xFF);
                     else
                         value = arr.bytes[index - 1] & 0xFF;
                 } else {
                     this.vm.push(arr);
                     this.vm.push(index);
-                    value = this.objectAt(false, this.isA(arr, Squeak.splOb_ClassString), false);
+                    value = this.objectAt(false, isTextual, false);
                     if (!this.success) return false;
                     this.vm.pop(); // remove index
                     this.vm.pop(); // remove array
@@ -250,16 +255,24 @@ Object.subclass('Squeak.Primitives',
                 if (pos >= lim) return false;
                 var index = pos + 1;
                 if (this._vmdbgLog) this._vmdbgLog({site:"prim66",op:"write",spur:this.vm.image.isSpur,rcvrClass: rcvr && rcvr.sqClass ? rcvr.sqClass.className() : null, arrClass: arr && arr.sqClass ? arr.sqClass.className() : null, index: index, valueType: typeof value, pos: pos, lim: lim, ok: this.success}, true);
+                var isTextual = arr && this.isKindOf(arr, Squeak.splOb_ClassString);
                 if (arr.isPointers && arr.isPointers()) {
                     arr.pointers[index - 1] = value;
                     arr.dirty = true;
                 } else if (arr.isWords && arr.isWords()) {
-                    var w = this.stackSigned32BitInt(0); // may fail if not int
-                    if (!this.success) { this.success = true; return false; }
-                    arr.words[index - 1] = w;
+                    var wordValue;
+                    if (isTextual) {
+                        if (!(value && value.sqClass === this.vm.specialObjects[Squeak.splOb_ClassCharacter])) return false;
+                        wordValue = this.charToInt(value);
+                        if (typeof wordValue !== "number") return false;
+                    } else {
+                        wordValue = this.stackSigned32BitInt(0); // may fail if not int
+                        if (!this.success) { this.success = true; return false; }
+                    }
+                    arr.words[index - 1] = wordValue;
                 } else if (arr.isBytes && arr.isBytes()) {
                     var byte;
-                    if (this.isA(arr, Squeak.splOb_ClassString)) {
+                    if (isTextual) {
                         if (!(value && value.sqClass === this.vm.specialObjects[Squeak.splOb_ClassCharacter])) return false;
                         byte = this.charToInt(value) & 0xFF;
                     } else {
@@ -277,7 +290,7 @@ Object.subclass('Squeak.Primitives',
                     this.vm.push(arr);
                     this.vm.push(index);
                     this.vm.push(value);
-                    var res = this.objectAtPut(false, this.isA(arr, Squeak.splOb_ClassString), false);
+                    var res = this.objectAtPut(false, isTextual, false);
                     if (!this.success) return false;
                     this.vm.pop(); this.vm.pop(); this.vm.pop();
                 }

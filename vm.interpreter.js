@@ -1,3 +1,8 @@
+import { getExecutionBackendForVM, configureExecutionBackendForVM } from "./vm.execution.js";
+import { markSharedHeapDirty } from "./vm.execution.state.js";
+import { startMemoryTelemetry } from "./vm.memory.telemetry.js";
+import { startAdaptiveMemoryManager } from "./vm.memory.adaptive.js";
+
 "use strict";
 /*
  * Copyright (c) 2013-2025 Vanessa Freudenberg
@@ -35,6 +40,8 @@ Object.subclass('Squeak.Interpreter',
         this.loadInitialContext();
         this.hackImage();
         this.initCompiler();
+        this.memoryTelemetry = startMemoryTelemetry(this, this.options || {});
+        this.memoryAdaptive = startAdaptiveMemoryManager(this, this.options || {});
         console.log('squeak: ready');
     },
     loadImageState: function() {
@@ -60,6 +67,12 @@ Object.subclass('Squeak.Interpreter',
         this.interruptChecksEveryNms = 3;
         this.lowSpaceThreshold = 1000000;
         this.signalLowSpace = false;
+        if (this.image && this.image.memoryPolicy && typeof this.image.memoryPolicy.lowSpaceBytes === "number") {
+            var configuredLowSpace = this.image.memoryPolicy.lowSpaceBytes;
+            if (isFinite(configuredLowSpace) && configuredLowSpace >= 0) {
+                this.lowSpaceThreshold = configuredLowSpace;
+            }
+        }
         this.nextPollTick = 0;
         this.nextWakeupTick = 0;
         this.lastTick = 0;
@@ -658,7 +671,7 @@ Object.subclass('Squeak.Interpreter',
         }
         throw Error("not a bytecode: " + b);
     },
-    interpret: function(forMilliseconds, thenDo) {
+    _interpretSliceJS: function(forMilliseconds, thenDo) {
         // run for a couple milliseconds (but only until idle or break)
         // answer milliseconds to sleep (until next timer wakeup)
         // or 'break' if reached breakpoint
@@ -681,8 +694,19 @@ Object.subclass('Squeak.Interpreter',
             : !this.isIdle ? 0
             : !this.nextWakeupTick ? 'sleep'        // all processes waiting
             : Math.max(1, this.nextWakeupTick - this.primHandler.millisecondClockValue());
+        markSharedHeapDirty(this);
         if (thenDo) thenDo(result);
         return result;
+    },
+    interpret: function(forMilliseconds, thenDo) {
+        var backend = getExecutionBackendForVM(this);
+        return backend.interpret(forMilliseconds, thenDo);
+    },
+    setExecutionBackend: function(name) {
+        return configureExecutionBackendForVM(this, name);
+    },
+    getExecutionBackendName: function() {
+        return getExecutionBackendForVM(this).name;
     },
     goIdle: function() {
         // make sure we tend to pending delays

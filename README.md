@@ -156,6 +156,95 @@ Using (self contained) bundled files
 * use the appropriate file (`squeak_bundle.js` resp. `squeak_headless_bundle.js`) from the [Distribution][dist] directory
 * you can also build minified bundles using `npm run build`
 
+WebAssembly prototype artifacts
+--------------------------------
+* `npm run build` now also writes WebAssembly artifacts into `dist/wasm/`:
+  * `interpreter-prototype.wasm` (binary)
+  * `interpreter-prototype.wat` (text form)
+  * `interpreter-prototype.json` (metadata)
+* Host these files alongside your bundles and serve them with the `application/wasm` MIME type so browsers can use streaming compilation.
+* The loader automatically detects Cache Storage support and will cache the binary for subsequent loads. You can override the asset location at runtime via `Squeak.Execution.assets.configureWasmPrototypeAsset({ baseURL: "/my/custom/path/" })`.
+* Content-Security-Policy headers must allow WebAssembly compilation. Add either `wasm-unsafe-eval` (preferred) or `unsafe-eval` to the relevant `script-src` directive when the prototype backend is enabled.
+
+Memory configuration
+--------------------
+SqueakJS images can now tune their memory budget without rebuilding the VM. Memory options may be supplied in several ways:
+
+* Query parameters that use dotted keys, for example:<br>`?memory.headroomMB=256&memory.youngPercent=20&memory.gcThresholdMB=16`
+* A JSON blob in the query string:<br>`?memory={"headroomMB":256,"youngSpaceBytes":16777216,"gcThresholdMB":8}`
+* Programmatic callers (including `WorkerVMController`) can pass a `memory` object alongside the usual VM options.
+
+Supported fields:
+
+* `headroomMB`, `headroomBytes`, or `headroom` &mdash; increases the heap headroom beyond the image size (defaults to 100 MB). Values can be numbers or strings with `kb/mb/gb` suffixes.
+* `youngSpaceRatio`, `youngRatio`, `youngPercent`, or `youngSpacePercent` &mdash; sets the fraction (up to 0.5) of total memory that the allocator may use for new objects before triggering a partial GC. You can also force an absolute limit via `youngSpaceBytes` / `youngSpaceMB`.
+* `gcThresholdMB`, `gcThresholdBytes`, `lowSpaceMB`, or `lowSpaceBytes` &mdash; adjusts the low-space warning threshold that raises the image semaphore (defaults to 1 MB).
+
+The VM tracks new and young allocations against these limits. When the configured budget is exceeded it schedules a partial GC from JavaScript, and the interpreter uses the updated low-space threshold when notifying the Smalltalk image. All memory counters reported through `vmParameterAt:` and `primitiveBytesLeft` reflect the new accounting so tooling inside the image stays in sync.
+
+Memory telemetry
+----------------
+Memory usage snapshots are now collected while the VM runs. Telemetry is enabled by default in both browser and worker configurations and can be tuned (or disabled) via the same option sources as the memory budget:
+
+* `memoryTelemetry=false` &mdash; disables periodic sampling entirely.
+* `memoryTelemetry.intervalMs` &mdash; sampling cadence in milliseconds (defaults to 2000). Set to `0` to keep telemetry available without scheduling an interval.
+* `memoryTelemetry.maxSamples` &mdash; cap on the in-memory history buffer (defaults to 120 samples).
+* `memoryTelemetry.logEvery` &mdash; write a console summary every _N_ samples (defaults to 30, set to `0` to disable logging).
+* `memoryTelemetry.lowSpaceWarnMultiple`, `memoryTelemetry.freeWarnRatio`, `memoryTelemetry.heapWarnRatio` &mdash; thresholds that control when browser warnings are emitted as the VM approaches its configured limits.
+
+Smalltalk code can query the data via `vmParameterAt:`:
+
+* `Smalltalk vmParameterAt: 68` &mdash; returns the latest snapshot as an Array.
+* `Smalltalk vmParameterAt: 69` &mdash; returns the bounded history as an Array of Arrays (most recent sample last).
+
+Each snapshot array follows this layout:
+
+Streaming image loading
+-----------------------
+Large images no longer require a full download before the VM begins bootstrapping. When the host supports Fetch streaming, SqueakJS consumes the response as an async iterator, hydrates objects while bytes arrive, and reuses the same flow when the VM runs inside a worker.
+
+* Streaming is enabled by default for `.image` downloads. Disable it with `streamImages=false` if you need the legacy XHR path.
+* The loader falls back to XHR automatically when Fetch streaming is unavailable or a request fails mid-flight.
+* A secondary tee stream persists the image into the browser file store after it finishes downloading so subsequent launches can reuse the cached buffer.
+
+1. Timestamp (milliseconds since epoch)
+2. `totalBytes`
+3. `oldSpaceBytes`
+4. `youngSpaceBytes`
+5. `newSpaceBytes`
+6. `usedBytes`
+7. `freeBytes`
+8. `youngAllocatedBytes`
+9. Configured `headroomBytes` (or nil)
+10. Configured `lowSpaceBytes` (or nil)
+11. Configured `newSpaceLimit` (or nil)
+12. Configured `youngSpaceRatio` (or nil)
+13. Explicit young-space byte limit (or nil)
+14. Browser `usedJSHeapSize` (if `performance.memory` is available)
+15. Browser `totalJSHeapSize` (if available)
+16. Browser `jsHeapSizeLimit` (if available)
+17. `navigator.deviceMemory` in gigabytes (if available)
+18. Sample reason (string)
+
+When telemetry is active the VM emits warnings as it nears configured low-space thresholds or when the host JavaScript heap approaches its limit, helping large images react before browser GC intervention.
+
+Adaptive memory management
+--------------------------
+The VM now monitors free space and host heap pressure to adjust its allocation headroom on the fly. When enabled, the adaptive manager expands the JavaScript-side heap when free space becomes tight and the browser still has headroom, and contracts the allocation budget when the browser heap approaches its quota so the image can shed memory before the tab is terminated.
+
+Adaptive behaviour is on by default and can be tuned (or disabled) alongside the other memory options:
+
+* `memoryAdaptive=false` &mdash; disables adaptive headroom management entirely.
+* `memoryAdaptive.intervalMs` &mdash; evaluation cadence in milliseconds (defaults to 2500). Set to `0` to only react when `poke`d manually.
+* `memoryAdaptive.growStepMB` / `memoryAdaptive.shrinkStepMB` &mdash; size of each expansion or contraction step (defaults to 8 MB / 6 MB).
+* `memoryAdaptive.minimumFreeMB` &mdash; guard space that must remain available for new allocations after a shrink (defaults to 2 MB).
+* `memoryAdaptive.hostPressureRatio` / `memoryAdaptive.hostCriticalRatio` &mdash; browser heap usage ratios that trigger shrink decisions or mandatory partial GCs (defaults to 0.88 / 0.94).
+* `memoryAdaptive.hostUsageCapRatio` &mdash; maximum fraction of the browser heap the VM will claim, ensuring at least ~10 % remains free for the host runtime (defaults to 0.9).
+* `memoryAdaptive.hostReserveRatio` / `memoryAdaptive.hostReserveBytes` &mdash; extra guard bands that are always kept free in addition to the usage cap.
+* `memoryAdaptive.maxHeadroomMB` / `memoryAdaptive.minHeadroomMB` &mdash; absolute bounds the adaptive manager will respect, useful for images with known working-set limits.
+
+Each adjustment records its latest decision on `vm.memoryAdaptive.lastDecision`, making it easy to diagnose why the VM grew or shrank the heap during long-running sessions or when running automated regression suites.
+
 How to modify it
 ----------------
 * use any text editor

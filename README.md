@@ -45,8 +45,33 @@ Server-side
 - LOG_TUNNEL prints WebSocket tunnel attach/upgrade and connection lifecycle.
 
 
+Character/Byte coercion semantics
+=====================================
+- String and subclasses:
+  - Reads return Character elements in textual access.
+  - Writes require Character; SmallInteger writes are rejected.
+- ByteString and other byte arrays:
+  - Reads return SmallInteger 0..255 unless convertChars is requested; with convertChars, return Character.
+  - Writes accept Character or SmallInteger in [0..255]; out-of-range fails.
+- Stream primitives align to these rules:
+  - primitiveNext (65): returns Character for String and its subclasses; for ByteString, returns SmallInteger unless routing via convertChars.
+  - primitiveNextPut: requires Character for String and its subclasses; for ByteString, accepts Character or 0..255 integer.
+- VM behavior now uses isKindOf(String) semantics when deciding textual behavior, not exact class equality.
+
+How to validate coercion behavior manually
+- Start the demo server:
+  - npm install
+  - npm start
+- In browser console before loading an image:
+  - window.SqueakDebugVM = true
+  - window.SqueakDebugStream = true
+- Load Squeak 5.0 or 6.0 image and run Update.
+- Expect:
+  - No “Unknown token type”, “MessageNotUnderstood: ByteString>>charCode”, or “Improper store into indexable object” during parser activity.
+  - [VMDBG] prim65/prim66/objectAt/objectAtPut logs show Character when accessing String and its subclasses.
+
 SqueakJS: A Squeak VM for the Web and Node.js
-=============================================
+ =============================================
 
 SqueakJS is a runtime engine for [Squeak][squeak]</a> Smalltalk written in pure JavaScript. It also works for many other OpenSmalltalk-compatible images.
 

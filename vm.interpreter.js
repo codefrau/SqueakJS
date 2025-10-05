@@ -216,6 +216,22 @@ Object.subclass('Squeak.Interpreter',
         } catch (_) {}
     }
 },
+'parserdebug', {
+    _vmdbgEnabledParser: function() {
+        try {
+            if (typeof window !== "undefined" && (window.SqueakDebugParser || window.SqueakDebugVM)) return true;
+            if (typeof process !== "undefined" && process && process.env && (process.env.SQUEAK_DEBUG_PARSER || process.env.SQUEAK_DEBUG_VM)) return true;
+        } catch (_) {}
+        return false;
+    },
+    _vmdbgLogParser: function(obj) {
+        try {
+            if (!this._vmdbgEnabledParser()) return;
+            if (typeof console !== "undefined" && console.debug) console.debug("[VMDBG] " + JSON.stringify(obj));
+            else if (typeof console !== "undefined" && console.log) console.log("[VMDBG] " + JSON.stringify(obj));
+        } catch (_) {}
+    }
+},
 'interpreting', {
     interpretOne: function(singleStep) {
         if (this.method.compiled) {
@@ -233,6 +249,29 @@ Object.subclass('Squeak.Interpreter',
             return this.interpretOneSistaWithExtensions(singleStep, 0, 0);
         }
         var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively
+        if (this._vmdbgEnabledParser && this._vmdbgEnabledParser()) {
+            try {
+                var nxt = this.nextSendSelector && this.nextSendSelector();
+                if (nxt && (nxt === 'charCode' || nxt === 'typeTableAt:' || nxt === 'scanToken' || nxt === 'scanTokens:' || nxt === 'next')) {
+                    var sendInfo = this.findSendBeforePC(this.method, this.pc + 1) || {argCount: 0};
+                    var nArgs = typeof sendInfo.argCount === "number" ? sendInfo.argCount : 0;
+                    var rcvr = this.stackValue(nArgs);
+                    var args = [];
+                    for (var ai = nArgs - 1; ai >= 0; ai--) args.push(this.stackValue(ai));
+                    var mClass = (this.method && this.method.methodClass && this.method.methodClass().className) ? this.method.methodClass().className() : null;
+                    function clsName(vm, obj) {
+                        try {
+                            var c = vm.getClass ? vm.getClass(obj) : null;
+                            return c && c.className ? c.className() : null;
+                        } catch(_) { return null; }
+                    }
+                    var rcvrClass = clsName(this, rcvr);
+                    var argClasses = [];
+                    for (var k = 0; k < args.length; k++) argClasses.push(clsName(this, args[k]));
+                    if (this._vmdbgLogParser) this._vmdbgLogParser({site:"send", selector:nxt, pc:this.pc, methodClass:mClass, rcvrClass:rcvrClass, argClasses:argClasses});
+                }
+            } catch(_) {}
+        }
         var b, b2;
         this.byteCodeCount++;
         b = this.nextByte();
@@ -1279,6 +1318,20 @@ Object.subclass('Squeak.Interpreter',
         this.arrayCopy(stack, selectorIndex+1, stack, selectorIndex, trueArgCount);
         this.sp--; // adjust sp accordingly
         } else {
+            if (this._vmdbgEnabledParser && this._vmdbgEnabledParser()) {
+                try {
+                    var selStr = selector && selector.bytesAsString ? selector.bytesAsString() : null;
+                    var rcvrClsObj = this.getClass(rcvr);
+                    var rcvrCls = rcvrClsObj && rcvrClsObj.className ? rcvrClsObj.className() : null;
+                    var argClasses = [];
+                    for (var i = 0; i < trueArgCount; i++) {
+                        var a = this.stackValue(trueArgCount - i - 1);
+                        var cObj = this.getClass(a);
+                        argClasses.push(cObj && cObj.className ? cObj.className() : null);
+                    }
+                    if (this._vmdbgLogParser) this._vmdbgLogParser({site:"dnuPerform", selector: selStr, rcvrClass: rcvrCls, argClasses: argClasses});
+                } catch(_) {}
+            }
             // stack has already been arranged for #doesNotUnderstand:/#cannotInterpret:
             rcvr = this.stackValue(entry.argCount);
         }
@@ -1312,6 +1365,20 @@ Object.subclass('Squeak.Interpreter',
         this.arrayCopy(args.pointers, 0, stack, selectorIndex, trueArgCount);
             this.sp += trueArgCount - argCount; // pop old args then push new args
         } else {
+            if (this._vmdbgEnabledParser && this._vmdbgEnabledParser()) {
+                try {
+                    var selStr2 = selector && selector.bytesAsString ? selector.bytesAsString() : null;
+                    var rcvrClsObj2 = this.getClass(rcvr);
+                    var rcvrCls2 = rcvrClsObj2 && rcvrClsObj2.className ? rcvrClsObj2.className() : null;
+                    var argClasses2 = [];
+                    for (var j = 0; j < trueArgCount; j++) {
+                        var aj = args.pointers[j];
+                        var cj = this.getClass(aj);
+                        argClasses2.push(cj && cj.className ? cj.className() : null);
+                    }
+                    if (this._vmdbgLogParser) this._vmdbgLogParser({site:"dnuPerformWithArgs", selector: selStr2, rcvrClass: rcvrCls2, argClasses: argClasses2});
+                } catch(_) {}
+            }
             // stack has already been arranged for #doesNotUnderstand: or #cannotInterpret:
             rcvr = this.stackValue(entry.argCount);
         }

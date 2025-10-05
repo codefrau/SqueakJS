@@ -1,3 +1,30 @@
+VM debugging flags
+==================
+The VM has gated runtime logging for targeted diagnosis. Logs are off by default and only appear when you enable the flags below in the browser console before loading the image:
+- window.SqueakDebugVM = true           // enable all VM debug logs
+- window.SqueakDebugStream = true       // focus on stream/indexed and primitive-failure logs
+- window.SqueakDebugParser = true       // new: logs targeted sends and DNU in parser/scanner paths (charCode, typeTableAt:, scanToken, scanTokens:, next)
+
+Examples
+- Enable only parser/scanner logs:
+  window.SqueakDebugParser = true
+- Enable broader VM logs:
+  window.SqueakDebugVM = true
+
+What gets logged with SqueakDebugParser
+- site:"send" records with selector, receiver class, argument classes, pc, and method class for:
+  - charCode
+  - typeTableAt:
+  - scanToken
+  - scanTokens:
+  - next
+- site:"dnuPerform" and site:"dnuPerformWithArgs" for doesNotUnderstand routes with receiver/argument classes
+
+Node/headless environment
+- You can also set environment variables before starting a headless run:
+  - SQUEAK_DEBUG_VM=1
+  - SQUEAK_DEBUG_PARSER=1
+
 Debugging network issues
 ========================
 

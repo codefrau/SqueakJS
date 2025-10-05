@@ -101,19 +101,113 @@ Object.subclass('Squeak.Primitives',
         }
         return false;
     },
+    tryAcceleratedSmallIntegerPrimitive: function(primitiveIndex, lhs, rhs, resultType) {
+        if (!this.success) return null;
+        try {
+            var exec = globalThis.Squeak && Squeak.Execution;
+            if (!exec || typeof exec.invokeIntegerBinaryOpAccelerator !== "function") return null;
+            var response = exec.invokeIntegerBinaryOpAccelerator(this.vm, {
+                kind: "smallint-primitive",
+                primitiveIndex: primitiveIndex,
+                lhs: lhs,
+                rhs: rhs,
+                type: resultType,
+            });
+            if (!response || response.handled !== true) return null;
+            if (response.type !== resultType) return null;
+            return response.value;
+        } catch (error) {
+            if (this.vm && typeof this.vm.warnOnce === "function") {
+                this.vm.warnOnce("integer accelerator error: " + error, "accelerator:" + primitiveIndex);
+            }
+            return null;
+        }
+    },
     doPrimitive: function(index, argCount, primMethod) {
         this.success = true;
         switch (index) {
             // Integer Primitives (0-19)
-            case 1: return this.popNandPushIntIfOK(argCount+1,this.stackInteger(1) + this.stackInteger(0));  // Integer.add
-            case 2: return this.popNandPushIntIfOK(argCount+1,this.stackInteger(1) - this.stackInteger(0));  // Integer.subtract
-            case 3: return this.popNandPushBoolIfOK(argCount+1, this.stackInteger(1) < this.stackInteger(0));   // Integer.less
-            case 4: return this.popNandPushBoolIfOK(argCount+1, this.stackInteger(1) > this.stackInteger(0));   // Integer.greater
-            case 5: return this.popNandPushBoolIfOK(argCount+1, this.stackInteger(1) <= this.stackInteger(0));  // Integer.leq
-            case 6: return this.popNandPushBoolIfOK(argCount+1, this.stackInteger(1) >= this.stackInteger(0));  // Integer.geq
-            case 7: return this.popNandPushBoolIfOK(argCount+1, this.stackInteger(1) === this.stackInteger(0)); // Integer.equal
-            case 8: return this.popNandPushBoolIfOK(argCount+1, this.stackInteger(1) !== this.stackInteger(0)); // Integer.notequal
-            case 9: return this.popNandPushIntIfOK(argCount+1,this.stackInteger(1) * this.stackInteger(0));  // Integer.multiply *
+            case 1: {
+                var addL = this.stackInteger(1), addR = this.stackInteger(0);
+                if (!this.success) return false;
+                var addAccelerated = this.tryAcceleratedSmallIntegerPrimitive(1, addL, addR, "int");
+                if (addAccelerated !== null && addAccelerated !== undefined) {
+                    return this.popNandPushIntIfOK(argCount+1, addAccelerated);
+                }
+                return this.popNandPushIntIfOK(argCount+1, addL + addR);
+            }
+            case 2: {
+                var subL = this.stackInteger(1), subR = this.stackInteger(0);
+                if (!this.success) return false;
+                var subAccelerated = this.tryAcceleratedSmallIntegerPrimitive(2, subL, subR, "int");
+                if (subAccelerated !== null && subAccelerated !== undefined) {
+                    return this.popNandPushIntIfOK(argCount+1, subAccelerated);
+                }
+                return this.popNandPushIntIfOK(argCount+1, subL - subR);
+            }
+            case 3: {
+                var ltL = this.stackInteger(1), ltR = this.stackInteger(0);
+                if (!this.success) return false;
+                var ltAccelerated = this.tryAcceleratedSmallIntegerPrimitive(3, ltL, ltR, "bool");
+                if (ltAccelerated !== null && ltAccelerated !== undefined) {
+                    return this.popNandPushBoolIfOK(argCount+1, !!ltAccelerated);
+                }
+                return this.popNandPushBoolIfOK(argCount+1, ltL < ltR);
+            }
+            case 4: {
+                var gtL = this.stackInteger(1), gtR = this.stackInteger(0);
+                if (!this.success) return false;
+                var gtAccelerated = this.tryAcceleratedSmallIntegerPrimitive(4, gtL, gtR, "bool");
+                if (gtAccelerated !== null && gtAccelerated !== undefined) {
+                    return this.popNandPushBoolIfOK(argCount+1, !!gtAccelerated);
+                }
+                return this.popNandPushBoolIfOK(argCount+1, gtL > gtR);
+            }
+            case 5: {
+                var leL = this.stackInteger(1), leR = this.stackInteger(0);
+                if (!this.success) return false;
+                var leAccelerated = this.tryAcceleratedSmallIntegerPrimitive(5, leL, leR, "bool");
+                if (leAccelerated !== null && leAccelerated !== undefined) {
+                    return this.popNandPushBoolIfOK(argCount+1, !!leAccelerated);
+                }
+                return this.popNandPushBoolIfOK(argCount+1, leL <= leR);
+            }
+            case 6: {
+                var geL = this.stackInteger(1), geR = this.stackInteger(0);
+                if (!this.success) return false;
+                var geAccelerated = this.tryAcceleratedSmallIntegerPrimitive(6, geL, geR, "bool");
+                if (geAccelerated !== null && geAccelerated !== undefined) {
+                    return this.popNandPushBoolIfOK(argCount+1, !!geAccelerated);
+                }
+                return this.popNandPushBoolIfOK(argCount+1, geL >= geR);
+            }
+            case 7: {
+                var eqL = this.stackInteger(1), eqR = this.stackInteger(0);
+                if (!this.success) return false;
+                var eqAccelerated = this.tryAcceleratedSmallIntegerPrimitive(7, eqL, eqR, "bool");
+                if (eqAccelerated !== null && eqAccelerated !== undefined) {
+                    return this.popNandPushBoolIfOK(argCount+1, !!eqAccelerated);
+                }
+                return this.popNandPushBoolIfOK(argCount+1, eqL === eqR);
+            }
+            case 8: {
+                var neL = this.stackInteger(1), neR = this.stackInteger(0);
+                if (!this.success) return false;
+                var neAccelerated = this.tryAcceleratedSmallIntegerPrimitive(8, neL, neR, "bool");
+                if (neAccelerated !== null && neAccelerated !== undefined) {
+                    return this.popNandPushBoolIfOK(argCount+1, !!neAccelerated);
+                }
+                return this.popNandPushBoolIfOK(argCount+1, neL !== neR);
+            }
+            case 9: {
+                var mulL = this.stackInteger(1), mulR = this.stackInteger(0);
+                if (!this.success) return false;
+                var mulAccelerated = this.tryAcceleratedSmallIntegerPrimitive(9, mulL, mulR, "int");
+                if (mulAccelerated !== null && mulAccelerated !== undefined) {
+                    return this.popNandPushIntIfOK(argCount+1, mulAccelerated);
+                }
+                return this.popNandPushIntIfOK(argCount+1, mulL * mulR);
+            }
             case 10: return this.popNandPushIntIfOK(argCount+1,this.vm.quickDivide(this.stackInteger(1),this.stackInteger(0)));  // Integer.divide /  (fails unless exact)
             case 11: return this.popNandPushIntIfOK(argCount+1,this.vm.mod(this.stackInteger(1),this.stackInteger(0)));  // Integer.mod \\
             case 12: return this.popNandPushIntIfOK(argCount+1,this.vm.div(this.stackInteger(1),this.stackInteger(0)));  // Integer.div //
@@ -1443,7 +1537,7 @@ Object.subclass('Squeak.Primitives',
         console.log("    old space: " + this.vm.image.oldSpaceBytes.toLocaleString() + " bytes, " +
             "young space: " + youngSpaceBytes.toLocaleString() + " bytes, " +
             "total: " + (this.vm.image.oldSpaceBytes + youngSpaceBytes).toLocaleString() + " bytes");
-        var bytes = this.vm.image.bytesLeft() - youngSpaceBytes;
+        var bytes = this.vm.image.bytesLeft();
         return this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(bytes));
     },
     primitiveMakePoint: function(argCount, checkNumbers) {
@@ -2323,7 +2417,8 @@ Object.subclass('Squeak.Primitives',
             // 66   the byte size of a stack page in the stack zone  (read-only; Cog VMs only)
             // 67   the maximum allowed size of old space in bytes, 0 implies no internal limit (Spur VMs only).
             case 67: return this.vm.image.totalMemory;
-            // 68 - 69 reserved for more Cog-related info
+            case 68: return this.vm.image.latestMemorySnapshotArray(); // browser memory telemetry snapshot
+            case 69: return this.vm.image.memoryTelemetryHistoryArrays(); // recent telemetry samples
             // 70   the value of VM_PROXY_MAJOR (the interpreterProxy major version number)
             // 71   the value of VM_PROXY_MINOR (the interpreterProxy minor version number)
             // 72   total milliseconds in full GCs Mark phase since startup (read-only)

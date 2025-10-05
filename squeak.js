@@ -33,6 +33,7 @@ import "./vm.object.spur.js";
 import "./vm.image.js";
 import "./vm.interpreter.js";
 import "./vm.interpreter.proxy.js";
+import "./vm.interpreter.wasm.js";
 import "./vm.instruction.stream.js";
 import "./vm.instruction.stream.sista.js";
 import "./vm.instruction.printer.js";
@@ -44,6 +45,7 @@ import "./vm.display.browser.js";
 import "./vm.files.browser.js";
 import "./vm.input.js";
 import "./vm.input.browser.js";
+import { WorkerVMController } from "./vm.worker.host.js";
 import "./vm.plugins.js";
 import "./vm.plugins.ffi.js";
 import "./vm.plugins.javascript.js";
@@ -94,6 +96,7 @@ Object.extend(Squeak, {
 
 // UI namespace
 window.SqueakJS = {};
+window.SqueakJS.WorkerVMController = WorkerVMController;
 
 //////////////////////////////////////////////////////////////////////////////
 // display & event setup
@@ -357,6 +360,8 @@ function createSqueakDisplay(canvas, options) {
     }
     var display = {
         context: canvas.getContext("2d"),
+        canvas: canvas,
+        container: canvas.parentElement || document.body,
         fullscreen: false,
         width: 0,   // if 0, VM uses canvas.width
         height: 0,  // if 0, VM uses canvas.height
@@ -388,6 +393,10 @@ function createSqueakDisplay(canvas, options) {
         display.eventQueue = null;
         display.signalInputEvent = null;
         display.lastTick = 0;
+        if (display.telemetryPanel && display.telemetryPanel.parentNode) {
+            display.telemetryPanel.parentNode.removeChild(display.telemetryPanel);
+        }
+        display.telemetryPanel = null;
         display.getNextEvent = function(firstEvtBuf, firstOffset) {
             // might be called from VM to get queued event
             display.eventQueue = []; // create queue on first call
@@ -1125,6 +1134,12 @@ function updateSpinner(spinner, idleMS, vm, display) {
 var loop; // holds timeout for main loop
 
 SqueakJS.runImage = function(buffer, name, display, options) {
+    options = options || {};
+    var memoryOptions = options.memory || (options.vm && options.vm.memory);
+    if (memoryOptions) {
+        if (!options.vm || typeof options.vm !== "object") options.vm = {};
+        if (!options.vm.memory) options.vm.memory = memoryOptions;
+    }
     window.onbeforeunload = function(evt) {
         var msg = SqueakJS.appName + " is still running";
         evt.returnValue = msg;
@@ -1136,8 +1151,8 @@ SqueakJS.runImage = function(buffer, name, display, options) {
     display.showBanner("Loading " + SqueakJS.appName);
     display.showProgress(0);
     window.setTimeout(function readImageAsync() {
-        var image = new Squeak.Image(name);
-        image.readFromBuffer(buffer, function startRunning() {
+        var image = new Squeak.Image(name, memoryOptions);
+        function startRunning() {
             display.quitFlag = false;
             var vm = new Squeak.Interpreter(image, display, options);
             SqueakJS.vm = vm;
@@ -1145,13 +1160,25 @@ SqueakJS.runImage = function(buffer, name, display, options) {
             display.clear();
             display.showBanner("Starting " + SqueakJS.appName);
             var spinner = setupSpinner(vm, options);
+            var telemetry = setupMainLoopTelemetry(display, options);
+            var timestampNow = telemetry && telemetry.now ||
+                (typeof performance !== "undefined" && performance.now ? function() { return performance.now(); }
+                    : function() { return Date.now(); });
             function run() {
                 try {
+                    var loopStart = timestampNow();
                     if (display.quitFlag) SqueakJS.onQuit(vm, display, options);
                     else vm.interpret(50, function runAgain(ms) {
-                        if (ms == "sleep") ms = 200;
-                        if (spinner) updateSpinner(spinner, ms, vm, display);
-                        loop = window.setTimeout(run, ms);
+                        var wait = ms;
+                        if (wait == "sleep") wait = 200;
+                        var loopEnd = timestampNow();
+                        if (telemetry) telemetry.record({
+                            start: loopStart,
+                            end: loopEnd,
+                            sleepMs: typeof wait === "number" ? wait : null,
+                        });
+                        if (spinner) updateSpinner(spinner, wait, vm, display);
+                        loop = window.setTimeout(run, wait);
                     });
                 } catch(error) {
                     console.error(error);
@@ -1173,14 +1200,138 @@ SqueakJS.runImage = function(buffer, name, display, options) {
             };
             if (options.onStart) options.onStart(vm, display, options);
             run();
-        },
-        function readProgress(value) {display.showProgress(value);});
+        }
+        var streamDescriptor = Squeak.normalizeImageStreamSource(buffer);
+        var progressHandler = function(value) { display.showProgress(value); };
+        if (streamDescriptor) {
+            image.readFromStream(streamDescriptor, startRunning, progressHandler);
+        } else {
+            image.readFromBuffer(buffer, startRunning, progressHandler);
+        }
     }, 0);
 };
+
+function setupMainLoopTelemetry(display, options) {
+    options = options || {};
+    if (options.vmTelemetry === false) return null;
+    if (typeof document === "undefined") return null;
+
+    var nowFn = typeof performance !== "undefined" && performance.now ? function() { return performance.now(); }
+        : function() { return Date.now(); };
+    var history = [];
+    var maxSamples = options.vmTelemetryWindow || 120;
+    var logInterval = options.vmTelemetryLogInterval || 60;
+    var sampleCount = 0;
+    var lastStart = null;
+    var host = display.container || (display.canvas && display.canvas.parentElement) || document.body;
+    if (!host) return null;
+
+    var panel = document.createElement("div");
+    panel.className = "squeakjs-telemetry-panel";
+    panel.style.position = "absolute";
+    panel.style.right = "12px";
+    panel.style.bottom = "12px";
+    panel.style.padding = "8px 10px";
+    panel.style.borderRadius = "6px";
+    panel.style.background = "rgba(0, 0, 0, 0.65)";
+    panel.style.color = "#fff";
+    panel.style.fontFamily = "monospace";
+    panel.style.fontSize = "12px";
+    panel.style.lineHeight = "1.4";
+    panel.style.pointerEvents = "none";
+    panel.style.whiteSpace = "pre";
+    panel.style.zIndex = 10000;
+    panel.textContent = "VM Loop Telemetry\nwaiting for samples";
+    host.appendChild(panel);
+    display.telemetryPanel = panel;
+
+    function summarize(samples) {
+        var execTotal = 0;
+        var intervalTotal = 0;
+        var execMax = 0;
+        var intervalMax = 0;
+        var sleepTotal = 0;
+        var sleepCount = 0;
+        for (var i = 0; i < samples.length; i++) {
+            var sample = samples[i];
+            execTotal += sample.exec;
+            intervalTotal += sample.interval;
+            if (sample.exec > execMax) execMax = sample.exec;
+            if (sample.interval > intervalMax) intervalMax = sample.interval;
+            if (typeof sample.sleep === "number") {
+                sleepTotal += sample.sleep;
+                sleepCount++;
+            }
+        }
+        return {
+            avgExec: samples.length ? execTotal / samples.length : 0,
+            avgInterval: samples.length ? intervalTotal / samples.length : 0,
+            maxExec: execMax,
+            maxInterval: intervalMax,
+            avgSleep: sleepCount ? sleepTotal / sleepCount : null,
+        };
+    }
+
+    function updatePanel(lastSample) {
+        var stats = summarize(history);
+        var lines = [
+            "VM Loop Telemetry",
+            "samples: " + history.length + " (" + sampleCount + " total)",
+            "last exec: " + lastSample.exec.toFixed(2) + " ms",
+            "avg exec: " + stats.avgExec.toFixed(2) + " ms (max " + stats.maxExec.toFixed(2) + " ms)",
+            "last interval: " + lastSample.interval.toFixed(2) + " ms",
+            "avg interval: " + stats.avgInterval.toFixed(2) + " ms (max " + stats.maxInterval.toFixed(2) + " ms)",
+        ];
+        if (typeof lastSample.sleep === "number") {
+            lines.push("last sleep: " + lastSample.sleep.toFixed(0) + " ms");
+        }
+        if (stats.avgSleep !== null) {
+            lines.push("avg sleep: " + stats.avgSleep.toFixed(0) + " ms");
+        }
+        panel.textContent = lines.join("\n");
+    }
+
+    return {
+        now: nowFn,
+        record: function(details) {
+            var exec = details.end - details.start;
+            var interval = lastStart === null ? 0 : details.start - lastStart;
+            lastStart = details.start;
+            var sample = {
+                exec: exec,
+                interval: interval,
+                sleep: details.sleepMs,
+            };
+            history.push(sample);
+            if (history.length > maxSamples) history.shift();
+            sampleCount++;
+            updatePanel(sample);
+            if (logInterval && sampleCount % logInterval === 0) {
+                var stats = summarize(history);
+                console.log("[SqueakJS][telemetry] frames=" + sampleCount +
+                    " avgExec=" + stats.avgExec.toFixed(2) + "ms" +
+                    " avgInterval=" + stats.avgInterval.toFixed(2) + "ms" +
+                    " maxExec=" + stats.maxExec.toFixed(2) + "ms");
+            }
+        },
+    };
+}
 
 function processOptions(options) {
     var search = (location.hash || location.search).slice(1),
         args = search && search.split("&");
+    function assignNestedOption(target, dottedKey, value) {
+        var parts = dottedKey.split(".");
+        var cursor = target;
+        for (var p = 0; p < parts.length - 1; p++) {
+            var part = parts[p];
+            if (typeof cursor[part] !== "object" || cursor[part] === null) {
+                cursor[part] = {};
+            }
+            cursor = cursor[part];
+        }
+        cursor[parts[parts.length - 1]] = value;
+    }
     if (args) for (var i = 0; i < args.length; i++) {
         var keyAndVal = args[i].split("="),
             key = keyAndVal[0],
@@ -1193,7 +1344,19 @@ function processOptions(options) {
                     // if not JSON use string itself
                 }
         }
-        options[key] = val;
+        if (key.indexOf(".") >= 0) assignNestedOption(options, key, val);
+        else options[key] = val;
+    }
+    if (typeof options.executionBackend !== "string") {
+        if (typeof options.vmBackend === "string" && !options.executionBackend) {
+            options.executionBackend = options.vmBackend;
+        } else if (typeof options.backend === "string" && !options.executionBackend) {
+            options.executionBackend = options.backend;
+        }
+    }
+    if (options.executionBackend) {
+        if (!options.vm || typeof options.vm !== "object") options.vm = {};
+        if (!options.vm.executionBackend) options.vm.executionBackend = options.executionBackend;
     }
     var root = Squeak.splitFilePath(options.root || "/").fullname;
     Squeak.dirCreate(root, true);
@@ -1308,6 +1471,118 @@ function checkExisting(file, display, options, ifExists, ifNotExists) {
 }
 
 function downloadFile(file, display, options, thenDo) {
+    if (file.image && shouldStreamImage(options, file)) {
+        if (attemptImageStream(file, display, options, thenDo)) return;
+    }
+    downloadFileXHR(file, display, options, thenDo);
+}
+
+function shouldStreamImage(options, file) {
+    if (options && options.streamImages === false) return false;
+    if (file && file.zip) return false;
+    return typeof fetch === "function" && typeof ReadableStream !== "undefined";
+}
+
+function attemptImageStream(file, display, options, thenDo) {
+    try {
+        var proxy = options.proxy || "";
+        display.showBanner("Streaming " + file.name);
+        display.showProgress(0);
+        fetch(proxy + file.url, options.ajax ? { headers: { "X-Requested-With": "XMLHttpRequest" } } : undefined)
+            .then(function(response) {
+                if (!response || !response.ok || !response.body) throw Error(response && response.statusText || "stream failed");
+                var totalBytes = parseInt(response.headers.get("content-length"), 10);
+                if (!isFinite(totalBytes)) totalBytes = null;
+                var body = response.body;
+                var cacheStream = null;
+                if (typeof body.tee === "function") {
+                    var branches = body.tee();
+                    body = branches[0];
+                    cacheStream = branches[1];
+                }
+                var reader = body.getReader();
+                file.stream = createStreamDescriptor(reader, totalBytes, display);
+                if (cacheStream) bufferStreamToFile(cacheStream.getReader(), file, options);
+                thenDo();
+            })
+            .catch(function(error) {
+                console.warn('streaming image failed, falling back to XHR', error);
+                downloadFileXHR(file, display, options, thenDo);
+            });
+        return true;
+    } catch (err) {
+        console.warn('streaming initialization failed', err);
+        return false;
+    }
+}
+
+function createStreamDescriptor(reader, totalBytes, display) {
+    var finished = false;
+    var fetched = 0;
+    return {
+        iterator: {
+            next: async function() {
+                if (finished) return { done: true };
+                var result = await reader.read();
+                if (result.done) {
+                    finished = true;
+                    if (reader.releaseLock) reader.releaseLock();
+                    if (display && display.showProgress) display.showProgress(0.7);
+                    return { done: true };
+                }
+                if (result.value && typeof result.value.byteLength === "number") {
+                    fetched += result.value.byteLength;
+                    if (display && display.showProgress && totalBytes) {
+                        var fraction = fetched / totalBytes;
+                        display.showProgress(Math.min(0.7, fraction * 0.7));
+                    }
+                }
+                return { done: false, value: result.value };
+            }
+        },
+        totalBytes: totalBytes,
+    };
+}
+
+function bufferStreamToFile(reader, file, options) {
+    var chunks = [];
+    var total = 0;
+    function pump() {
+        return reader.read().then(function(result) {
+            if (result.done) {
+                if (total === 0) return;
+                var buffer = new Uint8Array(total);
+                var offset = 0;
+                for (var i = 0; i < chunks.length; i++) {
+                    var chunk = chunks[i];
+                    buffer.set(chunk, offset);
+                    offset += chunk.byteLength;
+                }
+                file.data = buffer.buffer;
+                Squeak.filePut(options.root + file.name, file.data, function() {});
+                return;
+            }
+            var chunk = normalizeFetchChunk(result.value);
+            if (chunk && chunk.byteLength) {
+                chunks.push(chunk);
+                total += chunk.byteLength;
+            }
+            return pump();
+        });
+    }
+    pump().catch(function(error) {
+        console.warn('caching streamed image failed', error);
+    });
+}
+
+function normalizeFetchChunk(value) {
+    if (value instanceof Uint8Array) return value;
+    if (value instanceof ArrayBuffer) return new Uint8Array(value);
+    if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    return null;
+}
+
+function downloadFileXHR(file, display, options, thenDo) {
     display.showBanner("Downloading " + file.name);
     var rq = new XMLHttpRequest(),
         proxy = options.proxy || "";
@@ -1435,9 +1710,10 @@ SqueakJS.runSqueak = function(imageUrl, canvas, options={}) {
         Squeak.fsck(); // will run async
         var image = options.image;
         if (!image.name) return alert("could not find an image");
-        if (!image.data) return alert("could not find image " + image.name);
+        if (!image.data && !image.stream) return alert("could not find image " + image.name);
         SqueakJS.appName = options.appName || image.name.replace(/(.*\/|\.image$)/g, "");
-        SqueakJS.runImage(image.data, options.root + image.name, display, options);
+        var source = image.stream || image.data;
+        SqueakJS.runImage(source, options.root + image.name, display, options);
     });
     return display;
 };

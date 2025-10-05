@@ -1,3 +1,5 @@
+import { normalizeMemoryOptions, deriveYoungSpaceLimit } from "./vm.memory.config.js";
+
 "use strict";
 /*
  * Copyright (c) 2013-2025 Vanessa Freudenberg
@@ -70,8 +72,9 @@ Object.subclass('Squeak.Image',
     }
 },
 'initializing', {
-    initialize: function(name) {
-        this.headRoom = 100000000; // TODO: pass as option
+    initialize: function(name, memoryOptions) {
+        this.memoryPolicy = normalizeMemoryOptions(memoryOptions);
+        this.headRoom = this.memoryPolicy.headroomBytes;
         this.totalMemory = 0;
         this.headerFlags = 0;
         this.name = name;
@@ -85,6 +88,12 @@ Object.subclass('Squeak.Image',
         this.youngSpaceCount = 0;
         this.newSpaceCount = 0;
         this.hasNewInstances = {};
+        this.newSpaceBytes = 0;
+        this.youngSpaceBytes = 0;
+        this._partialGCInProgress = false;
+        this.memoryPolicy.newSpaceLimit = 0;
+        this.extraVMMemory = 0;
+        this.memoryTelemetry = null;
     },
     readFromBuffer: function(arraybuffer, thenDo, progressDo) {
         console.log('squeak: reading ' + this.name + ' (' + arraybuffer.byteLength + ' bytes)');
@@ -283,60 +292,81 @@ Object.subclass('Squeak.Image',
             this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
         }
 
+        var finalizeContext = {
+            oopMap: oopMap,
+            rawBits: rawBits,
+            classPages: classPages,
+            specialObjectsOopInt: specialObjectsOopInt,
+            littleEndian: littleEndian,
+            nativeFloats: nativeFloats,
+            is64Bit: is64Bit,
+            oopAdjust: oopAdjust,
+            oldBaseAddr: oldBaseAddr,
+        };
+        this._finalizeImageLoad(finalizeContext, thenDo, progressDo);
+    },
+    _finalizeImageLoad: function(context, thenDo, progressDo) {
+        var oopMap = context.oopMap,
+            rawBits = context.rawBits,
+            classPages = context.classPages,
+            specialObjectsOopInt = context.specialObjectsOopInt,
+            littleEndian = context.littleEndian,
+            nativeFloats = context.nativeFloats,
+            is64Bit = context.is64Bit,
+            oopAdjust = context.oopAdjust || {},
+            oldBaseAddr = context.oldBaseAddr || 0;
+
         this.totalMemory = this.oldSpaceBytes + this.headRoom;
         this.totalMemory = Math.ceil(this.totalMemory / 1000000) * 1000000;
+        this._finalizeMemoryPolicyAfterLoad();
 
-        if (true) {
-            // For debugging: re-create all objects from named prototypes
-            var _splObs = oopMap.get(specialObjectsOopInt),
-                cc = this.isSpur ? this.spurClassTable(oopMap, rawBits, classPages, _splObs)
-                    : rawBits.get(oopMap.get(rawBits.get(_splObs.oop)[Squeak.splOb_CompactClasses]).oop);
-            var renamedObj = null;
-            object = this.firstOldObject;
+        var _splObs = oopMap.get(specialObjectsOopInt),
+            cc = this.isSpur ? this.spurClassTable(oopMap, rawBits, classPages, _splObs)
+                : rawBits.get(oopMap.get(rawBits.get(_splObs.oop)[Squeak.splOb_CompactClasses]).oop);
+        var renamedObj = null,
+            object = this.firstOldObject,
             prevObj = null;
-            while (object) {
-                prevObj = renamedObj;
-                renamedObj = object.renameFromImage(oopMap, rawBits, cc);
-                if (prevObj) prevObj.nextObject = renamedObj;
-                else this.firstOldObject = renamedObj;
-                oopMap.set(oldBaseAddr + object.oop, renamedObj);
-                object = object.nextObject;
-            }
-            this.lastOldObject = renamedObj;
-            this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
+        while (object) {
+            prevObj = renamedObj;
+            renamedObj = object.renameFromImage(oopMap, rawBits, cc);
+            if (prevObj) prevObj.nextObject = renamedObj;
+            else this.firstOldObject = renamedObj;
+            oopMap.set(oldBaseAddr + object.oop, renamedObj);
+            object = object.nextObject;
         }
+        this.lastOldObject = renamedObj;
+        this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
 
-        // properly link objects by mapping via oopMap
         var splObs         = oopMap.get(specialObjectsOopInt);
         var compactClasses = rawBits.get(oopMap.get(rawBits.get(splObs.oop)[Squeak.splOb_CompactClasses]).oop);
         var floatClass     = oopMap.get(rawBits.get(splObs.oop)[Squeak.splOb_ClassFloat]);
-        // Spur needs different arguments for installFromImage()
         if (this.isSpur) {
             this.initImmediateClasses(oopMap, rawBits, splObs);
             compactClasses = this.spurClassTable(oopMap, rawBits, classPages, splObs);
             nativeFloats = this.getCharacter.bind(this);
             this.initSpurOverrides();
         }
+
         var obj = this.firstOldObject,
             done = 0;
         var mapSomeObjects = function() {
             if (obj) {
-                var stop = done + (this.oldSpaceCount / 20 | 0);    // do it in 20 chunks
+                var stop = done + (this.oldSpaceCount / 20 | 0);
                 while (obj && done < stop) {
                     obj.installFromImage(oopMap, rawBits, compactClasses, floatClass, littleEndian, nativeFloats, is64Bit && {
-                            makeFloat: function makeFloat(bits) {
-                                return this.instantiateFloat(bits);
-                            }.bind(this),
-                            makeLargeFromSmall: function makeLargeFromSmall(hi, lo) {
-                                return this.instantiateLargeFromSmall(hi, lo);
-                            }.bind(this),
-                        });
+                        makeFloat: function makeFloat(bits) {
+                            return this.instantiateFloat(bits);
+                        }.bind(this),
+                        makeLargeFromSmall: function makeLargeFromSmall(hi, lo) {
+                            return this.instantiateLargeFromSmall(hi, lo);
+                        }.bind(this),
+                    });
                     obj = obj.nextObject;
                     done++;
                 }
                 if (progressDo) progressDo(done / this.oldSpaceCount);
-                return true;    // do more
-            } else { // done
+                return true;
+            } else {
                 this.specialObjectsArray = splObs;
                 this.decorateKnownObjects();
                 if (this.isSpur) {
@@ -347,22 +377,46 @@ Object.subclass('Squeak.Image',
                     this.fixCompiledMethods();
                     this.fixCompactOops();
                 }
-                return false;   // don't do more
+                return false;
             }
         }.bind(this);
-        function mapSomeObjectsAsync() {
+
+        var mapSomeObjectsAsync = function() {
             if (mapSomeObjects()) {
                 self.setTimeout(mapSomeObjectsAsync, 0);
-            } else {
-                if (thenDo) thenDo();
+            } else if (thenDo) {
+                thenDo();
             }
         };
+
         if (!progressDo) {
-            while (mapSomeObjects()) {};   // do it synchronously
+            while (mapSomeObjects()) {}
             if (thenDo) thenDo();
         } else {
             self.setTimeout(mapSomeObjectsAsync, 0);
         }
+    },
+    readFromStream: function(streamSource, thenDo, progressDo) {
+        if (!streamSource) throw Error("stream source required");
+        var descriptor = Squeak.normalizeImageStreamSource(streamSource);
+        if (!descriptor || typeof descriptor.iterator !== "object") {
+            throw Error("invalid stream source");
+        }
+        var totalBytes = descriptor.totalBytes;
+        var label = totalBytes ? ' (' + totalBytes + ' bytes)' : '';
+        console.log('squeak: streaming ' + this.name + label);
+        this.startupTime = Date.now();
+        var loader = new Squeak.StreamingImageLoader(this, descriptor, progressDo);
+        var promise = loader.load().then(function(context) {
+            this._finalizeImageLoad(context, thenDo, progressDo);
+        }.bind(this));
+        if (promise && typeof promise.catch === "function") {
+            promise.catch(function(error) {
+                console.error(error);
+                throw error;
+            });
+        }
+        return promise;
     },
     decorateKnownObjects: function() {
         var splObjs = this.specialObjectsArray.pointers;
@@ -469,6 +523,9 @@ Object.subclass('Squeak.Image',
         var newObjects = this.markReachableObjects(); // technically these are young objects
         this.removeUnmarkedOldObjects();
         this.appendToOldObjects(newObjects);
+        this.youngSpaceBytes = 0;
+        this.newSpaceBytes = 0;
+        this._syncLowSpaceMonitor();
         this.finalizeWeakReferences();
         this.allocationCount += this.newSpaceCount;
         this.newSpaceCount = 0;
@@ -588,13 +645,9 @@ Object.subclass('Squeak.Image',
         this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
         this.oldSpaceCount += newObjects.length;
         this.gcTenured += newObjects.length;
-        // this is the only place that increases oldSpaceBytes / decreases bytesLeft
-        this.vm.signalLowSpaceIfNecessary(this.bytesLeft());
-        // TODO: keep track of newSpaceBytes and youngSpaceBytes, and signal low space if necessary
-        // basically, add obj.totalBytes() to newSpaceBytes when instantiating,
-        // trigger partial GC if newSpaceBytes + lowSpaceThreshold > totalMemory - (youngSpaceBytes + oldSpaceBytes)
-        // which would set newSpaceBytes to 0 and youngSpaceBytes to the actual survivors.
-        // for efficiency, only compute object size once per object and store? test impact on GC speed
+        this.youngSpaceBytes = 0;
+        this.newSpaceBytes = 0;
+        this._syncLowSpaceMonitor();
     },
     tenureIfYoung: function(object) {
         if (object.oop < 0) {
@@ -638,22 +691,35 @@ Object.subclass('Squeak.Image',
     partialGC: function(reason) {
         // make a linked list of young objects
         // and finalize weak refs
+        if (this._partialGCInProgress) return null;
+        this._partialGCInProgress = true;
         this.vm.addMessage("partialGC: " + reason);
-        var start = Date.now();
-        var previous = this.newSpaceCount;
-        var young = this.findYoungObjects();
-        this.appendToYoungSpace(young);
-        this.finalizeWeakReferences();
-        this.cleanupYoungSpace(young);
-        this.allocationCount += this.newSpaceCount - young.length;
-        this.youngSpaceCount = young.length;
-        this.newSpaceCount = this.youngSpaceCount;
-        this.pgcCount++;
-        this.pgcMilliseconds += Date.now() - start;
-        console.log("Partial GC (" + reason+ "): " + (Date.now() - start) + " ms, " +
-            "found " + this.youngRootsCount.toLocaleString() + " roots in " + this.oldSpaceCount.toLocaleString() + " old, " +
-            "kept " + this.youngSpaceCount.toLocaleString() + " young (" + (previous - this.youngSpaceCount).toLocaleString() + " gc'ed)");
-        return young[0];
+        try {
+            var start = Date.now();
+            var previous = this.newSpaceCount;
+            var young = this.findYoungObjects();
+            this.appendToYoungSpace(young);
+            this.finalizeWeakReferences();
+            this.cleanupYoungSpace(young);
+            this.allocationCount += this.newSpaceCount - young.length;
+            this.youngSpaceCount = young.length;
+            this.newSpaceCount = this.youngSpaceCount;
+            var youngBytes = 0;
+            for (var i = 0; i < young.length; i++) {
+                youngBytes += young[i].totalBytes();
+            }
+            this.youngSpaceBytes = youngBytes;
+            this.newSpaceBytes = youngBytes;
+            this.pgcCount++;
+            this.pgcMilliseconds += Date.now() - start;
+            console.log("Partial GC (" + reason+ "): " + (Date.now() - start) + " ms, " +
+                "found " + this.youngRootsCount.toLocaleString() + " roots in " + this.oldSpaceCount.toLocaleString() + " old, " +
+                "kept " + this.youngSpaceCount.toLocaleString() + " young (" + (previous - this.youngSpaceCount).toLocaleString() + " gc'ed)");
+            this._syncLowSpaceMonitor();
+            return young[0];
+        } finally {
+            this._partialGCInProgress = false;
+        }
     },
     youngRoots: function() {
         // PartialGC: Find new objects directly pointed to by old objects.
@@ -763,6 +829,7 @@ Object.subclass('Squeak.Image',
         var hash = this.registerObject(newObject);
         newObject.initInstanceOf(aClass, indexableSize, hash, filler);
         this.hasNewInstances[aClass.oop] = true;   // need GC to find all instances
+        this._recordAllocation(newObject);
         return newObject;
     },
     clone: function(object) {
@@ -770,7 +837,180 @@ Object.subclass('Squeak.Image',
         var hash = this.registerObject(newObject);
         newObject.initAsClone(object, hash);
         this.hasNewInstances[newObject.sqClass.oop] = true;   // need GC to find all instances
+        this._recordAllocation(newObject);
         return newObject;
+    },
+},
+'memory', {
+    _finalizeMemoryPolicyAfterLoad: function() {
+        if (!this.memoryPolicy) return;
+        var limit = deriveYoungSpaceLimit(this.totalMemory, this.memoryPolicy);
+        var availableHeadroom = this.totalMemory - this.oldSpaceBytes;
+        if (!isFinite(availableHeadroom) || availableHeadroom < 0) availableHeadroom = 0;
+        if (limit > availableHeadroom) limit = availableHeadroom;
+        this.memoryPolicy.newSpaceLimit = limit > 0 ? limit : 0;
+    },
+    _applyHeadroomAdjustment: function(bytes) {
+        if (!this.memoryPolicy) return false;
+        if (typeof bytes !== "number" || !isFinite(bytes) || bytes < 0) return false;
+        var target = Math.round(bytes);
+        if (target < 0) target = 0;
+        if (target === this.headRoom) return false;
+        this.headRoom = target;
+        this.memoryPolicy.headroomBytes = target;
+        this.totalMemory = this.oldSpaceBytes + target;
+        this._finalizeMemoryPolicyAfterLoad();
+        this._syncLowSpaceMonitor();
+        return true;
+    },
+    _estimateFreeBytes: function() {
+        var used = this.oldSpaceBytes + this.youngSpaceBytes + this.newSpaceBytes;
+        var free = this.totalMemory - used;
+        return free > 0 ? free : 0;
+    },
+    _syncLowSpaceMonitor: function() {
+        if (this.vm && typeof this.vm.signalLowSpaceIfNecessary === "function") {
+            this.vm.signalLowSpaceIfNecessary(this._estimateFreeBytes());
+        }
+    },
+    _trackNewAllocationBytes: function(bytes) {
+        if (!bytes || !isFinite(bytes) || bytes <= 0) return;
+        this.newSpaceBytes += bytes;
+        this._syncLowSpaceMonitor();
+        this._maybeTriggerPartialGC("allocation");
+    },
+    _maybeTriggerPartialGC: function(reason) {
+        if (!this.vm || this._partialGCInProgress) return;
+        var policy = this.memoryPolicy || {};
+        var limit = policy.newSpaceLimit || 0;
+        var shouldCollect = false;
+        if (limit > 0 && this.newSpaceBytes >= limit) {
+            shouldCollect = true;
+        } else {
+            var lowSpace = (typeof policy.lowSpaceBytes === "number" && isFinite(policy.lowSpaceBytes)) ? policy.lowSpaceBytes : 0;
+            if (lowSpace > 0) {
+                var available = this.totalMemory - (this.oldSpaceBytes + this.youngSpaceBytes);
+                if (this.newSpaceBytes + lowSpace > available) {
+                    shouldCollect = true;
+                }
+            }
+        }
+        if (shouldCollect) {
+            this._triggerPartialGC(reason || "memory-budget");
+        }
+    },
+    _triggerPartialGC: function(reason) {
+        if (!this.vm || typeof this.partialGC !== "function") return null;
+        return this.partialGC(reason);
+    },
+    _recordAllocation: function(object) {
+        if (!object || typeof object.totalBytes !== "function") return;
+        var size = object.totalBytes();
+        if (size && isFinite(size) && size > 0) {
+            this._trackNewAllocationBytes(size);
+        }
+    },
+    _collectHostMemoryStats: function() {
+        var stats = {};
+        var hasStats = false;
+        if (typeof performance === "object" && performance && typeof performance.memory === "object" && performance.memory) {
+            var memory = performance.memory;
+            if (typeof memory.usedJSHeapSize === "number" && isFinite(memory.usedJSHeapSize)) {
+                stats.usedJSHeapSize = memory.usedJSHeapSize;
+                hasStats = true;
+            }
+            if (typeof memory.totalJSHeapSize === "number" && isFinite(memory.totalJSHeapSize)) {
+                stats.totalJSHeapSize = memory.totalJSHeapSize;
+                hasStats = true;
+            }
+            if (typeof memory.jsHeapSizeLimit === "number" && isFinite(memory.jsHeapSizeLimit)) {
+                stats.jsHeapSizeLimit = memory.jsHeapSizeLimit;
+                hasStats = true;
+            }
+        }
+        if (typeof navigator === "object" && navigator && typeof navigator.deviceMemory === "number" && isFinite(navigator.deviceMemory)) {
+            stats.deviceMemory = navigator.deviceMemory;
+            hasStats = true;
+        }
+        return hasStats ? stats : null;
+    },
+    captureMemorySnapshot: function(reason) {
+        var total = typeof this.totalMemory === "number" && isFinite(this.totalMemory) ? this.totalMemory : 0;
+        var free = this._estimateFreeBytes();
+        if (!isFinite(free) || free < 0) free = 0;
+        if (!isFinite(total) || total < 0) total = 0;
+        var oldBytes = typeof this.oldSpaceBytes === "number" && isFinite(this.oldSpaceBytes) ? this.oldSpaceBytes : 0;
+        var youngBytes = typeof this.youngSpaceBytes === "number" && isFinite(this.youngSpaceBytes) ? this.youngSpaceBytes : 0;
+        var newBytes = typeof this.newSpaceBytes === "number" && isFinite(this.newSpaceBytes) ? this.newSpaceBytes : 0;
+        var policy = this.memoryPolicy || {};
+        var policySnapshot = {
+            headroomBytes: typeof policy.headroomBytes === "number" && isFinite(policy.headroomBytes) ? policy.headroomBytes : null,
+            lowSpaceBytes: typeof policy.lowSpaceBytes === "number" && isFinite(policy.lowSpaceBytes) ? policy.lowSpaceBytes : null,
+            newSpaceLimit: typeof policy.newSpaceLimit === "number" && isFinite(policy.newSpaceLimit) ? policy.newSpaceLimit : null,
+            youngSpaceRatio: typeof policy.youngSpaceRatio === "number" && isFinite(policy.youngSpaceRatio) ? policy.youngSpaceRatio : null,
+            explicitYoungBytes: typeof policy.explicitYoungBytes === "number" && isFinite(policy.explicitYoungBytes) ? policy.explicitYoungBytes : null,
+        };
+        var used = total - free;
+        if (!isFinite(used) || used < 0) used = 0;
+        return {
+            timestamp: Date.now(),
+            reason: reason || "manual",
+            totalBytes: total,
+            oldSpaceBytes: oldBytes,
+            youngSpaceBytes: youngBytes,
+            newSpaceBytes: newBytes,
+            freeBytes: free,
+            usedBytes: used,
+            youngAllocatedBytes: youngBytes + newBytes,
+            policy: policySnapshot,
+            host: this._collectHostMemoryStats(),
+        };
+    },
+    memorySnapshotToArray: function(snapshot) {
+        var snap = snapshot || this.captureMemorySnapshot("array");
+        var policy = snap.policy || {};
+        var host = snap.host || {};
+        function numberOrNull(value) {
+            return (typeof value === "number" && isFinite(value)) ? value : null;
+        }
+        return [
+            snap.timestamp || Date.now(),
+            numberOrNull(snap.totalBytes) || 0,
+            numberOrNull(snap.oldSpaceBytes) || 0,
+            numberOrNull(snap.youngSpaceBytes) || 0,
+            numberOrNull(snap.newSpaceBytes) || 0,
+            numberOrNull(snap.usedBytes) || 0,
+            numberOrNull(snap.freeBytes) || 0,
+            numberOrNull(snap.youngAllocatedBytes) || 0,
+            numberOrNull(policy.headroomBytes),
+            numberOrNull(policy.lowSpaceBytes),
+            numberOrNull(policy.newSpaceLimit),
+            numberOrNull(policy.youngSpaceRatio),
+            numberOrNull(policy.explicitYoungBytes),
+            numberOrNull(host.usedJSHeapSize),
+            numberOrNull(host.totalJSHeapSize),
+            numberOrNull(host.jsHeapSizeLimit),
+            numberOrNull(host.deviceMemory),
+            snap.reason || "",
+        ];
+    },
+    latestMemorySnapshotArray: function() {
+        var telemetry = this.memoryTelemetry;
+        if (telemetry && typeof telemetry.latest === "function") {
+            var latest = telemetry.latest();
+            if (latest) return this.memorySnapshotToArray(latest);
+        }
+        return this.memorySnapshotToArray(this.captureMemorySnapshot("on-demand"));
+    },
+    memoryTelemetryHistoryArrays: function() {
+        var telemetry = this.memoryTelemetry;
+        if (telemetry && Array.isArray(telemetry.history) && telemetry.history.length) {
+            var image = this;
+            return telemetry.history.map(function(entry) {
+                return image.memorySnapshotToArray(entry);
+            });
+        }
+        return [this.memorySnapshotToArray(this.captureMemorySnapshot("on-demand"))];
     },
 },
 'operations', {
@@ -923,7 +1163,7 @@ Object.subclass('Squeak.Image',
         return obj.oop;
     },
     bytesLeft: function() {
-        return this.totalMemory - this.oldSpaceBytes;
+        return this._estimateFreeBytes();
     },
     formatVersion: function() {
         return this.isSpur ? 6521 : this.hasClosures ? 6504 : 6502;
@@ -1410,3 +1650,420 @@ Object.subclass('Squeak.Image',
         return null;
     },
 });
+
+Squeak.normalizeImageStreamSource = function(source) {
+    if (!source) return null;
+    if (typeof source[Symbol.asyncIterator] === "function") {
+        return {
+            iterator: source[Symbol.asyncIterator](),
+            totalBytes: typeof source.totalBytes === "number" ? source.totalBytes : null,
+        };
+    }
+    if (source.iterator && typeof source.iterator.next === "function") {
+        return {
+            iterator: source.iterator,
+            totalBytes: typeof source.totalBytes === "number" ? source.totalBytes : null,
+        };
+    }
+    if (source.stream && typeof source.stream[Symbol.asyncIterator] === "function") {
+        return {
+            iterator: source.stream[Symbol.asyncIterator](),
+            totalBytes: typeof source.totalBytes === "number" ? source.totalBytes : null,
+        };
+    }
+    if (typeof source.getIterator === "function") {
+        return {
+            iterator: source.getIterator(),
+            totalBytes: typeof source.totalBytes === "number" ? source.totalBytes : null,
+        };
+    }
+    return null;
+};
+
+Squeak.StreamingImageLoader = function(image, descriptor, progressDo) {
+    this.image = image;
+    this.progressDo = progressDo;
+    this.totalBytes = descriptor.totalBytes || null;
+    this.reader = new Squeak.ImageStreamCursor(descriptor.iterator, {
+        totalBytes: this.totalBytes,
+        onChunk: descriptor.onChunk,
+        onProgress: descriptor.onProgress,
+    });
+};
+
+Squeak.StreamingImageLoader.prototype.load = async function() {
+    var reader = this.reader,
+        image = this.image,
+        progressDo = this.progressDo;
+
+    await reader.ensure(516);
+    var headerProbe = reader.peek(Math.min(516, reader.bufferedSize()));
+    var headerInfo = detectImageHeader(headerProbe);
+    if (!headerInfo) throw Error("bad image version");
+    reader.drop(headerInfo.fileHeaderSize);
+
+    var littleEndian = headerInfo.littleEndian;
+    var readUint32 = async function() {
+        var bytes = await reader.read(4);
+        return new DataView(bytes.buffer, bytes.byteOffset, 4).getUint32(0, littleEndian);
+    };
+    var readUint64 = async function() {
+        var bytes = await reader.read(8);
+        var view = new DataView(bytes.buffer, bytes.byteOffset, 8);
+        var lo = view.getUint32(littleEndian ? 0 : 4, littleEndian);
+        var hi = view.getUint32(littleEndian ? 4 : 0, littleEndian);
+        return Squeak.word64FromUint32(hi, lo);
+    };
+
+    var headerBytesRead = 0;
+    var version = await readUint32();
+    headerBytesRead += 4;
+    if (version !== headerInfo.version) version = headerInfo.version;
+    image.version = version;
+    var nativeFloats = (version & 1) !== 0;
+    image.hasClosures = !([6501, 6502, 68000].indexOf(version) >= 0);
+    image.isSpur = (version & 16) !== 0;
+    var is64Bit = version >= 68000;
+    if (is64Bit && !image.isSpur) throw Error("64 bit non-spur images not supported yet");
+    var wordSize = is64Bit ? 8 : 4;
+    var readWord = is64Bit ? readUint64 : readUint32;
+
+    var imageHeaderSize = await readUint32();
+    headerBytesRead += 4;
+    var objectMemorySize = await readWord();
+    headerBytesRead += wordSize;
+    var oldBaseAddr = await readWord();
+    headerBytesRead += wordSize;
+    var specialObjectsOopInt = await readWord();
+    headerBytesRead += wordSize;
+    var lastHash = await readUint32();
+    headerBytesRead += 4;
+    if (is64Bit) {
+        await readUint32();
+        headerBytesRead += 4;
+    }
+    var savedWindowSize = await readWord();
+    headerBytesRead += wordSize;
+    image.headerFlags = await readWord();
+    headerBytesRead += wordSize;
+    image.savedHeaderWords = [lastHash, savedWindowSize, image.headerFlags];
+    for (var i = 0; i < 4; i++) {
+        image.savedHeaderWords.push(await readUint32());
+        headerBytesRead += 4;
+    }
+    var firstSegSize = await readWord();
+    headerBytesRead += wordSize;
+
+    if (headerBytesRead < imageHeaderSize) {
+        var remainder = imageHeaderSize - headerBytesRead;
+        if (remainder > 0) {
+            await reader.read(remainder);
+            headerBytesRead += remainder;
+        }
+    } else if (headerBytesRead > imageHeaderSize) {
+        throw Error("image header size mismatch");
+    }
+
+    var headerSize = headerInfo.fileHeaderSize + imageHeaderSize;
+    reader.markHeaderComplete();
+
+    var oopMap = new Map();
+    var rawBits = new Map();
+    var prevObj = null;
+    var object = null;
+    var classPages = null;
+    var oopAdjust = undefined;
+
+    image.oldSpaceCount = 0;
+    if (!image.isSpur) {
+        image.oldSpaceBytes = objectMemorySize;
+        while (reader.bytesReadSinceHeader() < objectMemorySize) {
+            var headerWord = await readWord();
+            var nWords = 0;
+            var classInt = 0;
+            switch (headerWord & Squeak.HeaderTypeMask) {
+                case Squeak.HeaderTypeSizeAndClass:
+                    nWords = headerWord >>> 2;
+                    classInt = await readWord();
+                    headerWord = await readWord();
+                    break;
+                case Squeak.HeaderTypeClass:
+                    classInt = headerWord - Squeak.HeaderTypeClass;
+                    headerWord = await readWord();
+                    nWords = (headerWord >>> 2) & 63;
+                    break;
+                case Squeak.HeaderTypeShort:
+                    nWords = (headerWord >>> 2) & 63;
+                    classInt = (headerWord >>> 12) & 31;
+                    break;
+                case Squeak.HeaderTypeFree:
+                    throw Error("Unexpected free block");
+            }
+            nWords--;
+            var objectStart = headerSize + reader.bytesReadSinceHeader() - wordSize;
+            var format = (headerWord >>> 8) & 15;
+            var hash = (headerWord >>> 17) & 4095;
+            var bits = await readBits(reader, nWords, format < 5, wordSize, littleEndian, is64Bit, readWord);
+            var oop = objectStart - headerSize;
+            object = new Squeak.Object();
+            object.initFromImage(oop, classInt, format, hash);
+            if (classInt < 32) object.hash |= 0x10000000;
+            if (prevObj) prevObj.nextObject = object;
+            else image.firstOldObject = object;
+            image.oldSpaceCount++;
+            prevObj = object;
+            oopMap.set(oldBaseAddr + oop, object);
+            rawBits.set(oop, bits);
+        }
+        image.firstOldObject = oopMap.get(oldBaseAddr + 4);
+        image.lastOldObject = object;
+        if (image.lastOldObject) image.lastOldObject.nextObject = null;
+    } else {
+        image.oldSpaceBytes = firstSegSize - 16;
+        var addressOffset = 0;
+        var skippedBytes = 0;
+        oopAdjust = {};
+        var segmentBytes = firstSegSize;
+        while (segmentBytes) {
+            var segmentStart = reader.bytesReadSinceHeader();
+            var segmentLimit = segmentStart + segmentBytes - 16;
+            while (reader.bytesReadSinceHeader() < segmentLimit) {
+                var objHeaderStart = reader.bytesReadSinceHeader();
+                var formatAndClass = await readUint32();
+                var sizeAndHash = await readUint32();
+                var size = sizeAndHash >>> 24;
+                if (size === 255) {
+                    size = formatAndClass;
+                    formatAndClass = await readUint32();
+                    sizeAndHash = await readUint32();
+                }
+                var oop = addressOffset + reader.bytesReadSinceHeader() - 8;
+                var format = (formatAndClass >>> 24) & 0x1F;
+                var classID = formatAndClass & 0x003FFFFF;
+                var hash = sizeAndHash & 0x003FFFFF;
+                var bits = await readBits(reader, size, format < 10 && classID > 0, wordSize, littleEndian, is64Bit, readWord);
+                var padding = is64Bit
+                    ? (size < 1 ? (1 - size) * 8 : 0)
+                    : (size < 2 ? (2 - size) * 4 : (size & 1) * 4);
+                if (padding > 0) await reader.read(padding);
+                if (classID >= 32) {
+                    object = new Squeak.ObjectSpur();
+                    object.initFromImage(oop, classID, format, hash);
+                    if (prevObj) prevObj.nextObject = object;
+                    else image.firstOldObject = object;
+                    image.oldSpaceCount++;
+                    prevObj = object;
+                    oopMap.set(oldBaseAddr + oop, object);
+                    rawBits.set(oop, bits);
+                    oopAdjust[oop] = skippedBytes;
+                    if (is64Bit) {
+                        var overhead = object.overhead64(bits);
+                        skippedBytes += overhead.bytes;
+                        if (overhead.sizeHeader) {
+                            oopAdjust[oop] -= 8;
+                            skippedBytes -= 8;
+                        }
+                    }
+                } else {
+                    skippedBytes += reader.bytesReadSinceHeader() - objHeaderStart;
+                    if (classID === 16 && !classPages) classPages = bits;
+                    if (classID) oopMap.set(oldBaseAddr + oop, bits);
+                }
+            }
+            var deltaWords = await readUint32();
+            var deltaWordsHi = await readUint32();
+            var nextSegmentBytes = await readUint32();
+            await readUint32(); // segmentBytesHi, unused
+            if (nextSegmentBytes !== 0) {
+                var deltaBytes = (deltaWordsHi & 0xFF000000) ? (deltaWords & 0x00FFFFFF) * 4 : 0;
+                addressOffset += deltaBytes;
+                skippedBytes += 16 + deltaBytes;
+                image.oldSpaceBytes += deltaBytes + nextSegmentBytes;
+                segmentBytes = nextSegmentBytes;
+            } else {
+                segmentBytes = 0;
+            }
+        }
+        image.oldSpaceBytes -= skippedBytes;
+        image.firstOldObject = oopMap.get(oldBaseAddr);
+        image.lastOldObject = prevObj;
+        if (image.lastOldObject) image.lastOldObject.nextObject = null;
+    }
+
+    reader.consumeRemaining();
+
+    var finalizeContext = {
+        oopMap: oopMap,
+        rawBits: rawBits,
+        classPages: classPages,
+        specialObjectsOopInt: specialObjectsOopInt,
+        littleEndian: littleEndian,
+        nativeFloats: nativeFloats,
+        is64Bit: is64Bit,
+        oopAdjust: oopAdjust,
+        oldBaseAddr: oldBaseAddr,
+    };
+    return finalizeContext;
+};
+
+function detectImageHeader(bytes) {
+    if (!bytes || bytes.byteLength < 4) return null;
+    var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    var baseVersions = [6501, 6502, 6504, 68000, 68002, 68004];
+    var baseVersionMask = 0x119EE;
+    var matches = function(word) {
+        return baseVersions.indexOf(word & baseVersionMask) >= 0;
+    };
+    var candidate = view.getUint32(0, false);
+    if (matches(candidate)) return { littleEndian: false, fileHeaderSize: 0, version: candidate };
+    candidate = view.getUint32(0, true);
+    if (matches(candidate)) return { littleEndian: true, fileHeaderSize: 0, version: candidate };
+    if (bytes.byteLength >= 516) {
+        candidate = view.getUint32(512, false);
+        if (matches(candidate)) return { littleEndian: false, fileHeaderSize: 512, version: candidate };
+        candidate = view.getUint32(512, true);
+        if (matches(candidate)) return { littleEndian: true, fileHeaderSize: 512, version: candidate };
+    }
+    return null;
+}
+
+async function readBits(reader, nWords, isPointers, wordSize, littleEndian, is64Bit, readWord) {
+    if (nWords <= 0) return isPointers ? [] : new Uint32Array(0);
+    if (isPointers) {
+        var oops = new Array(nWords);
+        for (var i = 0; i < nWords; i++) {
+            oops[i] = await readWord();
+        }
+        return oops;
+    }
+    var byteLength = nWords * wordSize;
+    var bytes = await reader.read(byteLength);
+    var buffer = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(buffer).set(bytes);
+    return new Uint32Array(buffer);
+}
+
+Squeak.ImageStreamCursor = function(iterator, options) {
+    this.iterator = iterator;
+    this.buffers = [];
+    this._buffered = 0;
+    this._consumed = 0;
+    this._headerOffset = 0;
+    this._fetched = 0;
+    this.totalBytes = options && typeof options.totalBytes === "number" ? options.totalBytes : null;
+    this.onChunk = options && typeof options.onChunk === "function" ? options.onChunk : null;
+    this.onProgress = options && typeof options.onProgress === "function" ? options.onProgress : null;
+};
+
+Squeak.ImageStreamCursor.prototype.ensure = async function(bytes) {
+    while (this._buffered < bytes) {
+        var result = await this.iterator.next();
+        if (result.done) break;
+        var chunk = normalizeChunk(result.value);
+        if (!chunk || chunk.byteLength === 0) continue;
+        if (this.onChunk) this.onChunk(chunk);
+        this.buffers.push(chunk);
+        this._buffered += chunk.byteLength;
+        this._fetched += chunk.byteLength;
+        if (this.onProgress && this.totalBytes) {
+            this.onProgress(this._fetched, this.totalBytes);
+        }
+    }
+    return this._buffered >= bytes;
+};
+
+Squeak.ImageStreamCursor.prototype.peek = function(bytes, offset) {
+    offset = offset || 0;
+    if (this._buffered < bytes + offset) throw Error("not enough buffered data");
+    var out = new Uint8Array(bytes);
+    var remaining = bytes;
+    var copyOffset = 0;
+    var skip = offset;
+    for (var i = 0; i < this.buffers.length && remaining > 0; i++) {
+        var buffer = this.buffers[i];
+        if (skip >= buffer.byteLength) {
+            skip -= buffer.byteLength;
+            continue;
+        }
+        var start = skip;
+        var take = Math.min(remaining, buffer.byteLength - start);
+        out.set(buffer.subarray(start, start + take), copyOffset);
+        copyOffset += take;
+        remaining -= take;
+        skip = 0;
+    }
+    return out;
+};
+
+Squeak.ImageStreamCursor.prototype.drop = function(bytes) {
+    var remaining = bytes;
+    while (remaining > 0) {
+        if (!this.buffers.length) throw Error("drop exceeds buffer");
+        var buffer = this.buffers[0];
+        if (remaining < buffer.byteLength) {
+            this.buffers[0] = buffer.subarray(remaining);
+            this._buffered -= remaining;
+            this._consumed += remaining;
+            return;
+        }
+        this.buffers.shift();
+        this._buffered -= buffer.byteLength;
+        this._consumed += buffer.byteLength;
+        remaining -= buffer.byteLength;
+    }
+};
+
+Squeak.ImageStreamCursor.prototype.read = async function(bytes) {
+    if (!(await this.ensure(bytes))) throw Error("unexpected end of stream");
+    var out = new Uint8Array(bytes);
+    var remaining = bytes;
+    var offset = 0;
+    while (remaining > 0) {
+        var buffer = this.buffers[0];
+        if (remaining < buffer.byteLength) {
+            out.set(buffer.subarray(0, remaining), offset);
+            this.buffers[0] = buffer.subarray(remaining);
+            this._buffered -= remaining;
+            this._consumed += remaining;
+            remaining = 0;
+        } else {
+            out.set(buffer, offset);
+            offset += buffer.byteLength;
+            remaining -= buffer.byteLength;
+            this.buffers.shift();
+            this._buffered -= buffer.byteLength;
+            this._consumed += buffer.byteLength;
+        }
+    }
+    return out;
+};
+
+Squeak.ImageStreamCursor.prototype.markHeaderComplete = function() {
+    this._headerOffset = this._consumed;
+};
+
+Squeak.ImageStreamCursor.prototype.bytesReadSinceHeader = function() {
+    return this._consumed - this._headerOffset;
+};
+
+Squeak.ImageStreamCursor.prototype.bufferedSize = function() {
+    return this._buffered;
+};
+
+Squeak.ImageStreamCursor.prototype.consumeRemaining = function() {
+    while (this.buffers.length > 0) {
+        var buffer = this.buffers.shift();
+        this._buffered -= buffer.byteLength;
+        this._consumed += buffer.byteLength;
+    }
+};
+
+function normalizeChunk(value) {
+    if (value instanceof Uint8Array) return value;
+    if (value instanceof ArrayBuffer) return new Uint8Array(value);
+    if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    if (value && value.buffer instanceof ArrayBuffer && typeof value.byteLength === "number") {
+        return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    }
+    return null;
+}

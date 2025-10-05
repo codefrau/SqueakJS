@@ -221,14 +221,14 @@ Object.subclass('Squeak.Primitives',
                 } else if (arr.isWords && arr.isWords()) {
                     value = this.pos32BitIntFor(arr.words[index - 1]);
                 } else if (arr.isBytes && arr.isBytes()) {
-                    if (arr.sqClass === this.vm.specialObjects[Squeak.splOb_ClassString])
+                    if (this.isA(arr, Squeak.splOb_ClassString))
                         value = this.charFromInt(arr.bytes[index - 1] & 0xFF);
                     else
                         value = arr.bytes[index - 1] & 0xFF;
                 } else {
                     this.vm.push(arr);
                     this.vm.push(index);
-                    value = this.objectAt(false, arr.sqClass === this.vm.specialObjects[Squeak.splOb_ClassString], false);
+                    value = this.objectAt(false, this.isA(arr, Squeak.splOb_ClassString), false);
                     if (!this.success) return false;
                     this.vm.pop(); // remove index
                     this.vm.pop(); // remove array
@@ -259,20 +259,25 @@ Object.subclass('Squeak.Primitives',
                     arr.words[index - 1] = w;
                 } else if (arr.isBytes && arr.isBytes()) {
                     var byte;
-                    if (value && value.sqClass === this.vm.specialObjects[Squeak.splOb_ClassCharacter]) {
+                    if (this.isA(arr, Squeak.splOb_ClassString)) {
+                        if (!(value && value.sqClass === this.vm.specialObjects[Squeak.splOb_ClassCharacter])) return false;
                         byte = this.charToInt(value) & 0xFF;
-                    } else if (typeof value === "number") {
-                        if (value < 0 || value > 255) return false;
-                        byte = value & 0xFF;
                     } else {
-                        return false;
+                        if (value && value.sqClass === this.vm.specialObjects[Squeak.splOb_ClassCharacter]) {
+                            byte = this.charToInt(value) & 0xFF;
+                        } else if (typeof value === "number") {
+                            if (value < 0 || value > 255) return false;
+                            byte = value & 0xFF;
+                        } else {
+                            return false;
+                        }
                     }
                     arr.bytes[index - 1] = byte;
                 } else {
                     this.vm.push(arr);
                     this.vm.push(index);
                     this.vm.push(value);
-                    var res = this.objectAtPut(false, arr.sqClass === this.vm.specialObjects[Squeak.splOb_ClassString], false);
+                    var res = this.objectAtPut(false, this.isA(arr, Squeak.splOb_ClassString), false);
                     if (!this.success) return false;
                     this.vm.pop(); this.vm.pop(); this.vm.pop();
                 }

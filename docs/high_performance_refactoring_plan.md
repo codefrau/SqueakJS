@@ -148,5 +148,86 @@ executive summary of readiness progress.
 - [x] Introduce inline cache hooks with hit/miss telemetry scaffolding (A2).
 - [x] Enumerate browser resource capabilities and expose typed capability maps (B2).
 - [x] Automate performance telemetry dashboards with regression alerting (C2).
-- [ ] Build worker/browser integration and stress suites covering throttled and denied flows (D2). _Integration harness landed; long-running stress instrumentation pending._
+- [x] Build worker/browser integration and stress suites covering throttled and denied flows (D2). _Integration harness extended with telemetry-backed stress scenarios covering throttled timers, denied permissions, and local detection failures, with dependency-injected telemetry handlers for host-specific context/tag wiring and abort-aware feature report requests so hosts can cancel pending probes without leaking timers or telemetry hooks._
+- [x] Harden JavaScript backend instrumentation and inline cache telemetry (A2). _Dispatcher hooks now surface quick-send fallbacks, primitive invocations, and handler failures to the inline cache monitor, which records evictions even when telemetry emission is suppressed so benchmarking harnesses capture consistent lookup metrics._
+
+## Iteration 3 Backlog (Planned)
+
+The third iteration focuses on eliminating the highest-risk gaps highlighted in the
+readiness assessment that remain unaddressed after Iteration 2. Each backlog item
+translates the Track roadmap into concrete, Codex-executable tasks with explicit
+deliverables and validation requirements.
+
+- [x] **Embed managed JIT replacement with defensive fallbacks (A3).** _Managed JIT controller now injects policy-aware enablement into the interpreter, consumes browser capability matrices to preempt CSP-denied dynamic code, and records telemetry-backed fallback reasons. The managed send-loop runner feeds `tools/run-managed-jit-benchmark.js`, which emits automated telemetry evidence demonstrating the >2× send target through the benchmark catalog so promotion gates can consume repeatable measurements._
+  - _Scope:_ Vendor a self-hosted SSA JIT from `jit.js`, encapsulate policy flags in
+    `vm.execution.js`, and expose denial telemetry when dynamic code generation is
+    blocked by the host.
+  - _Deliverables:_
+    - New `vm.execution.jit.manager.js` module with build- and runtime-configurable guards.
+    - Interpreter wiring that promotes the managed JIT when the capability matrix
+      reports unrestricted `Function` construction.
+    - Telemetry events routed through `vm.telemetry.channel.js` enumerating enablement
+      and fallback reasons.
+    - Benchmark harness API under `vm.execution.jit.benchmark.js` that measures send
+      throughput with and without managed JIT for CI automation, plus CLI wiring in
+      `tools/run-managed-jit-benchmark.js` for on-demand telemetry snapshots.
+  - _Validation:_
+    - Unit tests faking host policies to assert promotion, fallback, and logging flows.
+    - Benchmark harness update capturing >2× improvements on send microbenchmarks with
+      the managed JIT enabled, with CLI-driven telemetry artifacts recorded under
+      `dist/telemetry/`.
+
+- [x] **Formalize security and deterministic execution policies (B3).** _Deterministic execution is now opt-in through interpreter options that rewire clocks, randomness, and network access, with capability negotiation surfacing clock step and denial telemetry while lint automation enforces the dynamic-code policy._
+  - _Scope:_ Audit dynamic evaluation, introduce factories gated by capability policy,
+    and document deterministic runtime mode toggles to satisfy industrial hardening
+    requirements.
+  - _Deliverables:_
+    - Lint or static analysis rule codified in `tools/` that fails builds on
+      unauthorized `Function` usage.
+    - Deterministic mode configuration surfaced via `vm.capabilities.js` and
+      interpreter options, disabling time-based heuristics and network-dependent
+      fallbacks.
+    - Developer documentation describing deterministic mode activation and limits. _See `docs/deterministic_mode.md` for the current developer guide._
+  - _Validation:_
+    - Automated lint test demonstrating enforcement.
+    - Deterministic smoke test recording repeatable benchmark output snapshots.
+
+- [x] **Developer tooling enhancements for profiling and telemetry replay (C3).** _Execution profiler now emits structured send, primitive, GC, and backend events via `vm.execution.profiling.js`, with replay tooling (`tools/replay-execution-profile.js` and `npm run perf:profile`) producing summaries and flamegraph inputs documented in `docs/execution_profiling.md`._
+  - _Scope:_ Provide developer-focused instrumentation hooks that complement the
+    dashboards shipped in Iteration 2 and close the tooling deficit cited in the
+    assessment.
+  - _Deliverables:_
+    - Profiling API emitting structured events for message sends, GC cycles, and
+      backend switches.
+    - CLI utilities under `tools/` to replay telemetry logs and generate flamegraphs or
+      summary tables.
+    - Documentation updates in `docs/` describing usage patterns and integration with
+      existing dashboards.
+  - _Validation:_
+    - Unit tests covering event emission and CLI argument handling.
+    - Example telemetry replay script exercised in CI to guarantee non-regression.
+
+- [x] **Performance regression test harness (D3).** _Benchmark catalog now exercises managed JIT sends, arithmetic kernels, graphics blits, and buffer IO primitives, producing machine-readable results in `dist/telemetry/benchmarks.json` with comparison tooling that fails builds on >10% regressions._
+  - _Scope:_ Create statistically aware benchmarks spanning arithmetic, message sends,
+    graphics blits, and IO primitives, comparing JavaScript, managed JIT, and WebAssembly
+    backends where available.
+  - _Deliverables:_
+    - Benchmark catalog under `benchmark/` with machine-readable output consumed by
+      dashboards.
+    - Automated comparison script that flags >10% regressions with significance gating.
+    - CI wiring integrating the new harness alongside existing coverage and integration
+      suites.
+  - _Validation:_
+    - CI artifacts demonstrating benchmark execution across backends.
+    - Unit tests for the comparison logic to ensure gating rules fire as expected.
+
+- [x] **Complete stress instrumentation for worker/browser integration (D2 follow-up).**
+  - _Scope:_ Finish the outstanding work from Iteration 2 by adding long-running stress
+    scenarios that exercise worker queues, capability churn, and throttled timers.
+  - _Deliverables:_
+    - Stress scripts under `tests/stress/` targeting worker I/O and memory churn.
+    - Dashboard integration capturing stress metrics alongside telemetry summaries.
+  - _Validation:_
+    - CI (or scheduled) execution evidence plus documented recovery heuristics when
+      throttling is detected.
 

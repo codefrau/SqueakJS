@@ -289,6 +289,44 @@ async function detectStorageAccess(context) {
     return capability;
 }
 
+async function detectDynamicCode(context) {
+    var capability = createCapability(context, "execution.dynamicCode", "Dynamic code generation");
+    capability.permission = {
+        state: "unknown",
+        lastChecked: toISOString(context.now()),
+        source: "static",
+        reason: "dynamic-code-policy-determined-at-runtime",
+    };
+    try {
+        var FunctionCtor = context.global && typeof context.global.Function === "function"
+            ? context.global.Function
+            : Function;
+        var probe = new FunctionCtor("return 42;");
+        var result = probe();
+        capability.details = {
+            functionConstructor: true,
+            probeResult: result,
+        };
+        if (result === 42) {
+            capability.supported = true;
+        } else {
+            capability.supported = false;
+            capability.reason = "dynamic-code-unexpected-value";
+            capability.error = {
+                name: "DynamicCodeProbeError",
+                message: "Function constructor returned unexpected value",
+                expected: 42,
+                actual: result,
+            };
+        }
+    } catch (error) {
+        capability.supported = false;
+        capability.reason = "dynamic-code-blocked";
+        capability.error = formatError(error);
+    }
+    return capability;
+}
+
 const DETECTORS = [
     { group: "audio", key: "input", detector: detectAudioInput },
     { group: "audio", key: "output", detector: detectAudioOutput },
@@ -300,6 +338,7 @@ const DETECTORS = [
     { group: "notifications", key: "default", detector: detectNotifications },
     { group: "power", key: "screenWakeLock", detector: detectScreenWakeLock },
     { group: "storage", key: "access", detector: detectStorageAccess },
+    { group: "execution", key: "dynamicCode", detector: detectDynamicCode },
 ];
 
 export async function collectResourceCapabilityMatrix(options = {}) {

@@ -2,6 +2,8 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { lintDynamicCode } from "./lint-dynamic-code.js";
+import { runPerformanceBenchmarksCommand } from "./run-performance-benchmarks.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -54,11 +56,30 @@ function extractCoverageSummary(stdoutBuffer) {
 }
 
 async function run() {
+  const lintResult = lintDynamicCode({ root: projectRoot });
+  if (lintResult.violations.length > 0) {
+    console.error("Dynamic code lint violations detected:\n");
+    for (const violation of lintResult.violations) {
+      console.error(`- ${violation.file}`);
+      for (const detail of violation.violations) {
+        console.error(`  * ${detail.type}: ${detail.excerpt}`);
+      }
+    }
+    process.exitCode = 1;
+    return;
+  }
+
   prepareCoverageDirectory();
 
   const stdoutBuffer = [];
 
-  const suitePaths = ["tests/unit", "tests/integration"]
+  const suiteRoots = ["tests/unit", "tests/integration"];
+  const includeStress = process.env.RUN_STRESS_TESTS !== "0";
+  if (includeStress) {
+    suiteRoots.push("tests/stress");
+  }
+
+  const suitePaths = suiteRoots
     .map((suite) => resolve(projectRoot, suite))
     .filter((suitePath) => existsSync(suitePath));
 
@@ -126,6 +147,15 @@ async function run() {
   if (failures.length > 0) {
     console.error("\nCoverage thresholds not met:\n - " + failures.join("\n - "));
     process.exitCode = 1;
+  }
+
+  if ((process.exitCode ?? 0) === 0 && process.env.RUN_PERF_BENCHMARKS !== "0") {
+    try {
+      await runPerformanceBenchmarksCommand(["--silent"]);
+    } catch (error) {
+      console.error("Performance benchmark execution failed:\n", error);
+      process.exitCode = 1;
+    }
   }
 }
 

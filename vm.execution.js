@@ -193,9 +193,22 @@ export function getPreferredExecutionBackendName() {
 
 export function configureExecutionBackendForVM(vm, requestedName) {
     if (!vm) throw new TypeError("VM is required to configure execution backend");
-    disposeBackend(vm[backendSlot]);
+    var previous = vm[backendSlot] || null;
+    var previousName = previous && previous.name ? previous.name : null;
+    disposeBackend(previous);
     var backend = instantiateBackend(vm, requestedName, vm.options);
     vm[backendSlot] = backend;
+    if (vm.executionProfiler && typeof vm.executionProfiler.recordBackendSwitch === "function") {
+        try {
+            vm.executionProfiler.recordBackendSwitch({
+                previous: previousName,
+                next: backend && backend.name ? backend.name : null,
+                requested: requestedName || null
+            });
+        } catch (_) {
+            // ignore profiler errors
+        }
+    }
     return backend;
 }
 

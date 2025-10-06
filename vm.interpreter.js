@@ -5,6 +5,9 @@ import { startAdaptiveMemoryManager } from "./vm.memory.adaptive.js";
 import { negotiateInterpreterCapabilities } from "./vm.capabilities.js";
 import { createBytecodeDispatcher } from "./vm.execution.dispatch.js";
 import { createInlineCacheMonitor } from "./vm.execution.inline-cache.js";
+import { createManagedJITController } from "./vm.execution.jit.manager.js";
+import { createExecutionProfiler } from "./vm.execution.profiling.js";
+import { applyDeterministicMode } from "./vm.execution.deterministic.js";
 
 "use strict";
 /*
@@ -37,6 +40,13 @@ Object.subclass('Squeak.Interpreter',
         this.image = image;
         this.image.vm = this;
         this.options = options || {};
+        try {
+            applyDeterministicMode(this, this.options || {});
+        } catch (error) {
+            if (typeof console !== "undefined" && console.warn) {
+                console.warn("Deterministic mode initialization failed", error);
+            }
+        }
         this.primHandler = new Squeak.Primitives(this, display);
         this.loadImageState();
         this.initVMState();
@@ -95,6 +105,20 @@ Object.subclass('Squeak.Interpreter',
             this.methodCache[i] = {lkupClass: null, selector: null, method: null, primIndex: 0, argCount: 0, mClass: null};
         var inlineCacheOptions = (this.options && this.options.inlineCache) || {};
         this.inlineCacheMonitor = createInlineCacheMonitor(inlineCacheOptions);
+        var profilingOptions = this.options && (this.options.profiling !== undefined ? this.options.profiling : this.options.profile);
+        var profilerConfig = {};
+        if (profilingOptions === false) {
+            profilerConfig.enabled = false;
+        } else if (profilingOptions && typeof profilingOptions === "object") {
+            profilerConfig = profilingOptions;
+        }
+        this.executionProfiler = createExecutionProfiler({
+            ...profilerConfig,
+            vm: this
+        });
+        if (this.executionProfiler && typeof this.executionProfiler.setVM === "function") {
+            this.executionProfiler.setVM(this);
+        }
         this.bytecodeDispatcher = createBytecodeDispatcher(this, this._createDispatchHooks());
         this.breakOutOfInterpreter = false;
         this.breakOutTick = 0;
@@ -142,28 +166,39 @@ Object.subclass('Squeak.Interpreter',
         return function() { return []; };
     },
     initCompiler: function() {
-        if (!Squeak.Compiler)
-            return console.warn("Squeak.Compiler not loaded, using interpreter only");
-        // some JS environments disallow creating functions at runtime (e.g. FireFox OS apps)
+        var jitOptions = this.options && this.options.managedJIT ? this.options.managedJIT : {};
+        var controllerResult = null;
         try {
-            if (new Function("return 42")() !== 42)
-                return console.warn("function constructor not working, disabling JIT");
-        } catch (e) {
-            return console.warn("disabling JIT: " + e);
+            var controller = createManagedJITController({
+                vm: this,
+                policy: jitOptions.policy,
+                telemetry: jitOptions.telemetry,
+                capabilities: jitOptions.capabilities
+            });
+            controllerResult = controller.initialize();
+        } catch (error) {
+            if (typeof console !== "undefined" && console.warn) {
+                console.warn("Managed JIT initialization threw", error);
+            }
         }
-        // disable JIT on slow machines, which are likely memory-limited
-        var kObjPerSec = this.image.oldSpaceCount / (this.startupTime - this.image.startupTime);
-        if (kObjPerSec < 10)
-            return console.warn("Slow machine detected (loaded " + (kObjPerSec*1000|0) + " objects/sec), using interpreter only");
-        // compiler might decide to not handle current image
-        try {
-            console.log("squeak: initializing JIT compiler");
-            var compiler = new Squeak.Compiler(this);
-            if (compiler.compile) this.compiler = compiler;
-        } catch(e) {
-            console.warn("Compiler: " + e);
+
+        if (controllerResult && controllerResult.enabled && controllerResult.compiler) {
+            this.compiler = controllerResult.compiler;
+            if (controllerResult.message && typeof console !== "undefined" && console.log) {
+                console.log(controllerResult.message);
+            }
+        } else if (controllerResult && controllerResult.message && typeof console !== "undefined" && console.warn) {
+            var detail = controllerResult.detail && controllerResult.detail.error
+                ? controllerResult.detail.error
+                : controllerResult.detail;
+            if (detail !== undefined) {
+                console.warn(controllerResult.message, detail);
+            } else {
+                console.warn(controllerResult.message);
+            }
         }
-        if (!this.compiler) {
+
+        if (!this.compiler && typeof console !== "undefined" && console.warn) {
             console.warn("SqueakJS will be running in interpreter mode only (slow)");
         }
     },
@@ -309,13 +344,26 @@ Object.subclass('Squeak.Interpreter',
 'interpreting', {
     _createDispatchHooks: function() {
         var self = this;
+        var profilerHooks = this.executionProfiler && typeof this.executionProfiler.createDispatchHooks === "function"
+            ? this.executionProfiler.createDispatchHooks({ vm: this })
+            : null;
+        function invokeProfiler(name, event) {
+            if (!profilerHooks || typeof profilerHooks[name] !== "function") return;
+            try {
+                profilerHooks[name](event);
+            } catch (_) {
+                // ignore profiler hook failures
+            }
+        }
         return {
             beforeOpcode: function(event) {
+                invokeProfiler("beforeOpcode", event);
                 if (self.inlineCacheMonitor && self.inlineCacheMonitor.onOpcode) {
                     self.inlineCacheMonitor.onOpcode(event);
                 }
             },
             onSend: function(event) {
+                invokeProfiler("onSend", event);
                 if (!self.inlineCacheMonitor || !self.inlineCacheMonitor.recordSendSite) return;
                 var metadata = {
                     argCount: event && typeof event.argCount === "number" ? event.argCount : null,
@@ -332,12 +380,16 @@ Object.subclass('Squeak.Interpreter',
                 self.inlineCacheMonitor.recordSendSite(metadata);
             },
             onSendSpecial: function(event) {
+                invokeProfiler("onSendSpecial", event);
                 if (!self.inlineCacheMonitor || !self.inlineCacheMonitor.recordSendSite) return;
                 var metadata = {
                     selectorId: event && event.index !== undefined ? "special:" + event.index : "special",
                     opcode: event && event.opcode !== undefined ? event.opcode : null
                 };
                 self.inlineCacheMonitor.recordSendSite(metadata);
+            },
+            onPrimitiveCall: function(event) {
+                invokeProfiler("onPrimitiveCall", event);
             }
         };
     },

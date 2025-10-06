@@ -523,13 +523,14 @@ Object.subclass('Squeak.Image',
         this.youngSpaceCount = 0;
         this.hasNewInstances = {};
         this.gcCount++;
-        this.gcMilliseconds += Date.now() - start;
+        var durationMs = Date.now() - start;
+        this.gcMilliseconds += durationMs;
         var delta = previousOld - this.oldSpaceCount; // absolute change
         var survivingNew = newObjects.length;
         var survivingOld = this.oldSpaceCount - survivingNew;
         var gcedNew = previousNew - survivingNew;
         var gcedOld = previousOld - survivingOld;
-        console.log("Full GC (" + reason + "): " + (Date.now() - start) + " ms;" +
+        console.log("Full GC (" + reason + "): " + durationMs + " ms;" +
             " before: " + previousOld.toLocaleString() + " old objects;" +
             " allocated " + previousNew.toLocaleString() + " new;" +
             " surviving " + survivingOld.toLocaleString() + " old;" +
@@ -538,6 +539,24 @@ Object.subclass('Squeak.Image',
             " total now: " + this.oldSpaceCount.toLocaleString() + " (" + (delta > 0 ? "+" : "") + delta.toLocaleString() + ", "
             + this.oldSpaceBytes.toLocaleString() + " bytes)"
             );
+
+        if (this.vm && this.vm.executionProfiler && typeof this.vm.executionProfiler.recordGC === "function") {
+            try {
+                this.vm.executionProfiler.recordGC({
+                    kind: "full",
+                    reason: reason || null,
+                    durationMs: durationMs,
+                    stats: {
+                        previousNew: previousNew,
+                        previousOld: previousOld,
+                        survivingNew: survivingNew,
+                        survivingOld: survivingOld,
+                        gcedNew: gcedNew,
+                        gcedOld: gcedOld
+                    }
+                });
+            } catch (_) {}
+        }
 
         return newObjects.length > 0 ? newObjects[0] : null;
     },
@@ -702,11 +721,27 @@ Object.subclass('Squeak.Image',
             this.youngSpaceBytes = youngBytes;
             this.newSpaceBytes = youngBytes;
             this.pgcCount++;
-            this.pgcMilliseconds += Date.now() - start;
-            console.log("Partial GC (" + reason+ "): " + (Date.now() - start) + " ms, " +
+            var durationMs = Date.now() - start;
+            this.pgcMilliseconds += durationMs;
+            console.log("Partial GC (" + reason+ "): " + durationMs + " ms, " +
                 "found " + this.youngRootsCount.toLocaleString() + " roots in " + this.oldSpaceCount.toLocaleString() + " old, " +
                 "kept " + this.youngSpaceCount.toLocaleString() + " young (" + (previous - this.youngSpaceCount).toLocaleString() + " gc'ed)");
             this._syncLowSpaceMonitor();
+            if (this.vm && this.vm.executionProfiler && typeof this.vm.executionProfiler.recordGC === "function") {
+                try {
+                    this.vm.executionProfiler.recordGC({
+                        kind: "partial",
+                        reason: reason || null,
+                        durationMs: durationMs,
+                        stats: {
+                            previousNew: previous,
+                            survivingNew: this.youngSpaceCount,
+                            gcedNew: previous - this.youngSpaceCount,
+                            youngRoots: this.youngRootsCount
+                        }
+                    });
+                } catch (_) {}
+            }
             return young[0];
         } finally {
             this._partialGCInProgress = false;

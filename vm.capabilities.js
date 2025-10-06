@@ -1,5 +1,7 @@
 "use strict";
 
+import { isDeterministicModeEnabled, getDeterministicSummary } from "./vm.execution.deterministic.js";
+
 /**
  * Evaluate interpreter/image characteristics and compute the capability
  * negotiation plan. The returned structure contains the set of patches that are
@@ -66,6 +68,20 @@ export function negotiateInterpreterCapabilities(vm) {
   if (sista) {
     negotiation.optionalPatches.push(createFfiAbiPatch(vm));
     negotiation.capabilities.ffiAbiShim = true;
+  }
+
+  if (isDeterministicModeEnabled(vm)) {
+    const summary = getDeterministicSummary(vm);
+    if (summary) {
+      negotiation.capabilities.deterministicMode = {
+        clockStep: summary.clock.step,
+        networkBlocked: summary.network.blocked,
+        randomSeed: summary.random.seed
+      };
+      negotiation.diagnostics.push(
+        `capabilities: deterministic mode enabled (step=${summary.clock.step}, networkBlocked=${summary.network.blocked ? "yes" : "no"})`
+      );
+    }
   }
 
   return negotiation;

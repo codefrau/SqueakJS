@@ -1,6 +1,8 @@
 .DS_Store
 node_modules/
+coverage/
 gh-pages
 dist/*.min.js*
 dist/wasm/
+dist/telemetry/
 *.code-workspace

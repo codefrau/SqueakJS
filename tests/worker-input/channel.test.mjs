@@ -83,6 +83,8 @@ async function run() {
 
     const payload = await reportPromise;
     assert.ok(payload.report);
+    assert.ok(payload.report.resourceCapabilities);
+    assert.equal(payload.report.resourceCapabilities.version, 1);
     assert.strictEqual(controller.lastFeatureReport, payload.report);
     controller.terminate();
     assert.strictEqual(fakeWorker.terminated, true);

@@ -1,5 +1,10 @@
 "use strict";
 
+import {
+    configureTelemetryChannel,
+    emitTelemetryEvent,
+} from "./vm.telemetry.channel.js";
+
 const DEFAULT_INTERVAL_MS = 2000;
 const DEFAULT_MAX_SAMPLES = 120;
 const DEFAULT_LOG_EVERY = 30;
@@ -8,6 +13,12 @@ const DEFAULT_FREE_WARN_RATIO = 0.1;
 const DEFAULT_FREE_CRITICAL_RATIO = 0.04;
 const DEFAULT_HEAP_WARN_RATIO = 0.8;
 const DEFAULT_HEAP_CRITICAL_RATIO = 0.9;
+const MEMORY_NAMESPACE = "memory";
+
+const memoryChannel = configureTelemetryChannel(MEMORY_NAMESPACE, {
+    version: 1,
+    bufferLimit: 240,
+});
 
 function parseNumber(value) {
     if (typeof value === "number") return value;
@@ -42,6 +53,48 @@ function positiveOr(value, fallback, minimum) {
     var parsed = parseNumber(value);
     if (!isFinite(parsed) || parsed < (minimum || 0)) return fallback;
     return parsed;
+}
+
+function toFiniteOrNull(value) {
+    return (typeof value === "number" && isFinite(value)) ? value : null;
+}
+
+function summarizeSnapshotForTelemetry(snapshot, reason, sequence) {
+    if (!snapshot || typeof snapshot !== "object") {
+        return { reason: reason || "unknown", sequence: sequence };
+    }
+    var policy = snapshot.policy || {};
+    var host = snapshot.host || {};
+    var summary = {
+        reason: reason || snapshot.reason || "interval",
+        sequence: sequence,
+    };
+    var timestamp = toFiniteOrNull(snapshot.timestamp);
+    if (timestamp !== null) summary.snapshotTimestamp = timestamp;
+    var totalBytes = toFiniteOrNull(snapshot.totalBytes);
+    if (totalBytes !== null) summary.totalBytes = totalBytes;
+    var usedBytes = toFiniteOrNull(snapshot.usedBytes);
+    if (usedBytes !== null) summary.usedBytes = usedBytes;
+    var freeBytes = toFiniteOrNull(snapshot.freeBytes);
+    if (freeBytes !== null) summary.freeBytes = freeBytes;
+    var headroom = toFiniteOrNull(policy.headroomBytes);
+    if (headroom !== null) summary.headroomBytes = headroom;
+    var lowSpace = toFiniteOrNull(policy.lowSpaceBytes);
+    if (lowSpace !== null) summary.lowSpaceBytes = lowSpace;
+    var young = toFiniteOrNull(snapshot.youngSpaceBytes);
+    if (young !== null) summary.youngSpaceBytes = young;
+    var newBytes = toFiniteOrNull(snapshot.newSpaceBytes);
+    if (newBytes !== null) summary.newSpaceBytes = newBytes;
+    var hostUsed = toFiniteOrNull(host.usedJSHeapSize);
+    var hostLimit = toFiniteOrNull(host.jsHeapSizeLimit);
+    var hostTotal = toFiniteOrNull(host.totalJSHeapSize);
+    if (hostUsed !== null || hostLimit !== null || hostTotal !== null) {
+        summary.host = {};
+        if (hostUsed !== null) summary.host.usedJSHeapSize = hostUsed;
+        if (hostLimit !== null) summary.host.jsHeapSizeLimit = hostLimit;
+        if (hostTotal !== null) summary.host.totalJSHeapSize = hostTotal;
+    }
+    return summary;
 }
 
 function extractRawTelemetryOptions(options) {
@@ -175,6 +228,15 @@ function checkWarnings(snapshot, state, config) {
     state.lastWarningLevels.hostHeap = hostLevel;
 }
 
+function publishMemorySample(snapshot, reason, state) {
+    if (!state || !state.channel) return;
+    emitTelemetryEvent(MEMORY_NAMESPACE, "sample", summarizeSnapshotForTelemetry(snapshot, reason, state.sampleCount), {
+        eventName: "memory.sample",
+        consolePrefix: "[SqueakJS][memory]",
+        version: state.channel.version,
+    });
+}
+
 export function startMemoryTelemetry(vm, options) {
     if (!vm || !vm.image) return null;
     var config = normalizeTelemetryConfig(options || vm.options || {});
@@ -197,6 +259,7 @@ export function startMemoryTelemetry(vm, options) {
         timer: null,
         lastWarningLevels: { lowSpace: 0, hostHeap: 0 },
         sample: null,
+        channel: memoryChannel,
         stop: function() {
             if (this.timer) {
                 clearInterval(this.timer);
@@ -218,7 +281,11 @@ export function startMemoryTelemetry(vm, options) {
     };
 
     function record(reason) {
-        var snapshot = vm.image.captureMemorySnapshot(reason || "interval");
+        var cause = reason || "interval";
+        var snapshot = vm.image.captureMemorySnapshot(cause);
+        if (snapshot && typeof snapshot === "object" && snapshot.reason === undefined) {
+            snapshot.reason = cause;
+        }
         history.push(snapshot);
         if (history.length > config.maxSamples) history.shift();
         state.sampleCount++;
@@ -226,6 +293,7 @@ export function startMemoryTelemetry(vm, options) {
             logSnapshot(snapshot, state.sampleCount);
         }
         checkWarnings(snapshot, state, config);
+        publishMemorySample(snapshot, cause, state);
         return snapshot;
     }
 

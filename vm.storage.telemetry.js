@@ -1,30 +1,22 @@
 "use strict";
 
+import {
+    configureTelemetryChannel,
+    emitTelemetryEvent,
+    resetTelemetryChannels,
+    formatTelemetryError,
+} from "./vm.telemetry.channel.js";
+
 const STORAGE_PREFIX = "[SqueakJS][storage]";
+const STORAGE_NAMESPACE = "storage";
 
-let lastCapabilitySignature = null;
-
-function getGlobalObject() {
-    if (typeof globalThis !== "undefined") return globalThis;
-    if (typeof self !== "undefined") return self;
-    if (typeof window !== "undefined") return window;
-    if (typeof global !== "undefined") return global;
-    return {};
-}
-
-function getTelemetryEmitter() {
-    const global = getGlobalObject();
-    const squeak = global && global.Squeak;
-    const telemetry = squeak && squeakHasTelemetry(squeak) ? squeak.telemetry : null;
-    return telemetry && typeof telemetry.emit === "function" ? telemetry : null;
-}
-
-function squeakHasTelemetry(squeak) {
-    return squeak && typeof squeak.telemetry === "object";
-}
+const storageChannel = configureTelemetryChannel(STORAGE_NAMESPACE, {
+    version: 1,
+    bufferLimit: 180,
+});
 
 function ensureNamespace() {
-    const global = getGlobalObject();
+    const global = (typeof globalThis !== "undefined") ? globalThis : (typeof self !== "undefined" ? self : (typeof window !== "undefined" ? window : (typeof global !== "undefined" ? global : {})));
     if (!global.Squeak) global.Squeak = {};
     if (!global.Squeak.StorageTelemetry || typeof global.Squeak.StorageTelemetry !== "object") {
         global.Squeak.StorageTelemetry = {};
@@ -32,48 +24,13 @@ function ensureNamespace() {
     return global.Squeak.StorageTelemetry;
 }
 
-function logToConsole(level, message, payload) {
-    if (typeof console === "undefined") return;
-    const logger = console[level] || console.log;
-    if (typeof logger !== "function") return;
-    try {
-        if (payload !== undefined) {
-            logger.call(console, message, payload);
-        } else {
-            logger.call(console, message);
-        }
-    } catch (_) {}
-}
-
-function emit(eventName, payload, fallbackLevel) {
-    const emitter = getTelemetryEmitter();
-    if (emitter) {
-        try {
-            emitter.emit(eventName, payload);
-            return true;
-        } catch (error) {
-            logToConsole("warn", `${STORAGE_PREFIX} telemetry emit failed (${eventName})`, {
-                error: formatError(error),
-            });
-        }
-    }
-    logToConsole(fallbackLevel || "info", `${STORAGE_PREFIX} ${eventName}`, payload);
-    return false;
-}
-
-function formatError(error) {
-    if (!error) return null;
-    if (typeof error === "string") {
-        return { name: "Error", message: error };
-    }
-    const formatted = {
-        name: error && error.name ? error.name : "Error",
-        message: error && error.message ? error.message : String(error),
-    };
-    if (error.code !== undefined) formatted.code = error.code;
-    if (error.type !== undefined) formatted.type = error.type;
-    if (error.reason !== undefined) formatted.reason = error.reason;
-    return formatted;
+function emitStorageEvent(type, payload, options) {
+    return emitTelemetryEvent(STORAGE_NAMESPACE, type, payload, Object.assign({
+        eventName: options && options.eventName ? options.eventName : `storage.${type}`,
+        fallbackLevel: options && options.fallbackLevel ? options.fallbackLevel : "info",
+        consolePrefix: STORAGE_PREFIX,
+        version: storageChannel.version,
+    }, options));
 }
 
 function emitStorageCapabilityTelemetry(report) {
@@ -81,12 +38,14 @@ function emitStorageCapabilityTelemetry(report) {
     let signature = null;
     try {
         signature = JSON.stringify({ origin: report.origin || null, probes: report.probes || null });
-    } catch (_) {}
-    if (signature && signature === lastCapabilitySignature) {
-        return false;
+    } catch (_) {
+        signature = null;
     }
-    if (signature) lastCapabilitySignature = signature;
-    return emit("storage.capability", report, "info");
+    return emitStorageEvent("capability", report, {
+        eventName: "storage.capability",
+        dedupeKey: signature,
+        dedupeScope: "capability",
+    });
 }
 
 function emitStorageQuotaSampleTelemetry(sample) {
@@ -94,7 +53,9 @@ function emitStorageQuotaSampleTelemetry(sample) {
     const payload = Object.assign({
         type: "sample",
     }, sample);
-    return emit("storage.quota.sample", payload, "info");
+    return emitStorageEvent("quota.sample", payload, {
+        eventName: "storage.quota.sample",
+    });
 }
 
 function emitStorageQuotaEventTelemetry(event) {
@@ -103,16 +64,22 @@ function emitStorageQuotaEventTelemetry(event) {
         type: event.type || "event",
     }, event);
     const level = event.level === "critical" ? "warn" : "info";
-    return emit("storage.quota.event", payload, level);
+    return emitStorageEvent("quota.event", payload, {
+        eventName: "storage.quota.event",
+        fallbackLevel: level,
+    });
 }
 
 function emitStorageErrorTelemetry(error, context) {
     if (!error && !context) return false;
     const payload = Object.assign({
         type: "error",
-        error: formatError(error),
+        error: formatTelemetryError(error),
     }, context || {});
-    return emit("storage.error", payload, "warn");
+    return emitStorageEvent("error", payload, {
+        eventName: "storage.error",
+        fallbackLevel: "warn",
+    });
 }
 
 function emitStorageReconciliationTelemetry(report) {
@@ -121,11 +88,14 @@ function emitStorageReconciliationTelemetry(report) {
         type: "reconciliation",
     }, report);
     const hasIssues = Array.isArray(report.issues) && report.issues.length > 0;
-    return emit("storage.reconciliation", payload, hasIssues ? "warn" : "info");
+    return emitStorageEvent("reconciliation", payload, {
+        eventName: "storage.reconciliation",
+        fallbackLevel: hasIssues ? "warn" : "info",
+    });
 }
 
 function __resetStorageTelemetryForTests() {
-    lastCapabilitySignature = null;
+    resetTelemetryChannels(STORAGE_NAMESPACE);
 }
 
 const namespace = ensureNamespace();
@@ -136,6 +106,7 @@ Object.assign(namespace, {
     emitQuotaEvent: emitStorageQuotaEventTelemetry,
     emitError: emitStorageErrorTelemetry,
     emitReconciliation: emitStorageReconciliationTelemetry,
+    channel: storageChannel,
 });
 
 export {

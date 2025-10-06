@@ -63,12 +63,12 @@ Deliver a resilient startup probe that inventories browser storage capabilities 
 - Updated `squeak.js` to await `ensureStorageCapabilityReport()` before instantiating the interpreter so main-thread startup receives a normalized report and exposes it through `options.vm.storageCapabilities`.
 - Extended `vm.worker.host.js` to resolve a storage capability report ahead of launching the worker, forward it through the `load-image` payload, and consume worker-originated `storage-capability-report` messages to keep host state synchronized.
 - Updated `vm.worker.entry.js` to honour injected reports, run in-worker detection when necessary, and post capability results (or errors) back to the host before constructing the interpreter.
-- The telemetry hook now delegates to `Squeak.telemetry.emit("storage.capability", report)` when available and otherwise logs the structured report with a `[SqueakJS][storage]` prefix. This prevents duplicate console output by memoizing the last serialized report signature.
+- The telemetry hook now routes through `vm.telemetry.channel.js`, emitting a versioned `storage.capability` envelope via `Squeak.telemetry.emit` with a bounded history and a `[SqueakJS][storage]` fallback log. Duplicate console output is prevented by deduping on the serialized report signature.
 - Automated test coverage for the orchestrator remains a follow-up; the design checklist tracks this outstanding work.
 - Implementation update (2025-11-07): Introduced `vm.storage.telemetry.js` to centralize capability/quota/error emissions, updated the detection and quota modules to publish through the new channel, and landed `tests/storage/storage-telemetry.test.mjs` covering detection deduping, quota sampling, and error fallback paths.
 
 ## Telemetry & Logging
-- Leverage existing `Squeak.telemetry` emitter to log report once at `info` level with structured JSON.
+- Leverage the shared telemetry channel to emit versioned payloads once at `info` level, ensuring consumers observe consistent envelopes across memory and storage events.
 - Add optional `debug` flag to dump per-probe timings.
 - Emit warning logs if all persistent stores are unavailable, recommending enabling third-party cookies or storage access.
 

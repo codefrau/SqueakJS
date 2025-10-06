@@ -2113,6 +2113,20 @@ function downloadFileXHR(file, display, options, thenDo) {
             console.error(Squeak.bytesAsString(new Uint8Array(this.response)));
             return alert("Failed to download:\n" + file.url);
         }
+        var sameOrigin = false;
+        try {
+            var resolved = new URL(file.url, document.baseURI);
+            sameOrigin = resolved.origin === location.origin;
+        } catch (_) {}
+        var statusCode = rq && typeof rq.status === "number" ? rq.status : 0;
+        if (sameOrigin && (statusCode === 404 || statusCode === 0)) {
+            if (display && typeof display.showBanner === "function") {
+                display.showBanner("Failed to download image (not found): " + file.name);
+                if (typeof display.showProgress === "function") display.showProgress(0);
+            }
+            console.warn("Image not found locally; skipping CORS proxy retry: " + file.url);
+            return;
+        }
         var proxy = Squeak.defaultCORSProxy,
             retry = new XMLHttpRequest();
         console.warn('Retrying with CORS proxy: ' + proxy + file.url);

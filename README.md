@@ -90,6 +90,13 @@ There are a number of interfaces:
 
 For discussions, please use the [vm-dev mailing list][vm-dev]. Also, please visit the [project home page][homepage]!
 
+Documentation
+-------------
+* [Expanded Image Migration Guide](docs/expanded_image_migration_guide.md) – operating playbook for converting and running legacy images with the hardened browser VM.
+* [Clipboard Reliability Hardening Playbook](docs/clipboard_reliability_playbook.md) – roadmap for delivering dependable async clipboard operations with diagnostics.
+* [Persistent Storage Resilience Playbook](docs/persistent_storage_resilience_playbook.md) – hardening plan for storage capability detection, service worker VFS, quota policies, and reconciliation tooling.
+* [Storage Capability Detection Implementation Design](docs/storage_capability_detection_design.md) – module-level design, telemetry schema, and rollout plan for the startup probe.
+
 Running it
 ----------
 **Simplest**

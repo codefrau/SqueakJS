@@ -1,5 +1,7 @@
 "use strict";
 
+import { ensureStorageCapabilityReport, setStorageCapabilityReport, getStorageCapabilityReport } from "./vm.storage.capabilities.js";
+
 const defaultWorkerURL = new URL("./vm.worker.entry.js", import.meta.url);
 
 function normalizeBuffer(source) {
@@ -131,6 +133,16 @@ export class WorkerVMController {
                 if (data.error) resolver.reject(new Error(data.error));
                 else resolver.resolve(data);
             }
+            return;
+        }
+        if (data.type === "storage-capability-report") {
+            if (data.report !== undefined) {
+                setStorageCapabilityReport(data.report);
+            }
+            if (data.error && typeof console !== "undefined" && console.warn) {
+                console.warn("[SqueakJS][storage] worker capability detection warning", data);
+            }
+            this.emit(data.type, data);
             return;
         }
         if (data.type === "feature-report") {
@@ -300,6 +312,28 @@ export class WorkerVMController {
         if (telemetryOptions !== undefined && vmOptions.memoryTelemetry === undefined) {
             vmOptions.memoryTelemetry = telemetryOptions;
         }
+        var storageCapabilities = startOptions.storageCapabilities;
+        var detectionDisabled = startOptions.storageCapabilityDetection === false;
+        if (detectionDisabled) {
+            if (storageCapabilities === undefined) {
+                storageCapabilities = getStorageCapabilityReport() || null;
+            } else {
+                setStorageCapabilityReport(storageCapabilities);
+            }
+        } else if (storageCapabilities !== undefined) {
+            setStorageCapabilityReport(storageCapabilities);
+        } else {
+            try {
+                storageCapabilities = await ensureStorageCapabilityReport({
+                    timeoutMs: startOptions.storageCapabilityTimeoutMs,
+                });
+            } catch (error) {
+                storageCapabilities = null;
+                if (typeof console !== "undefined" && console.warn) {
+                    console.warn("[SqueakJS][storage] capability detection failed before worker start", error);
+                }
+            }
+        }
         var payload = {
             type: "load-image",
             name: startOptions.imageName || "squeak.image",
@@ -309,8 +343,15 @@ export class WorkerVMController {
                 display: prepared.options,
                 memory: memoryOptions,
                 memoryTelemetry: telemetryOptions,
+                storageCapabilities: storageCapabilities === undefined ? null : storageCapabilities,
             },
         };
+        if (detectionDisabled) {
+            payload.options.storageCapabilityDetection = false;
+        }
+        if (startOptions.storageCapabilityTimeoutMs !== undefined) {
+            payload.options.storageCapabilityTimeoutMs = startOptions.storageCapabilityTimeoutMs;
+        }
         var controller = this;
         return new Promise(function(resolve, reject) {
             controller._firstFrameDeferred = { resolve: resolve, reject: reject };

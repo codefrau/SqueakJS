@@ -55,6 +55,7 @@ import "./ffi/opengl.js";
 import "./lib/lz-string.js";
 import "./lib/sha1.js";
 import { ensureWorkerAudioFallbacks, collectWorkerFeatureReport } from "./vm.worker.runtime.js";
+import { ensureStorageCapabilityReport, setStorageCapabilityReport, getStorageCapabilityReport } from "./vm.storage.capabilities.js";
 
 var port = self;
 var workerState = {
@@ -278,25 +279,51 @@ function startVM(buffer, name, options) {
     workerState.firstFrameSent = false;
     post("status", { state: "loading" });
     var memoryOptions = options.memory || (options.vm && options.vm.memory);
+    var capabilityPromise;
+    if (options.storageCapabilityDetection === false) {
+        capabilityPromise = Promise.resolve(getStorageCapabilityReport());
+    } else if (options.storageCapabilities !== undefined) {
+        capabilityPromise = Promise.resolve(setStorageCapabilityReport(options.storageCapabilities));
+    } else {
+        capabilityPromise = ensureStorageCapabilityReport({ timeoutMs: options.storageCapabilityTimeoutMs });
+    }
+    var capabilityReadyPromise = capabilityPromise.then(function(report) {
+        workerState.options.storageCapabilities = report || null;
+        post("storage-capability-report", { report: report || null });
+        return report;
+    }).catch(function(error) {
+        var payload = {
+            error: error && error.message ? error.message : String(error),
+            name: error && error.name ? error.name : "Error",
+        };
+        post("storage-capability-report", payload);
+        workerState.options.storageCapabilities = null;
+        return null;
+    });
     var image = new Squeak.Image(name.replace(/\.image$/i, ""), memoryOptions);
     image.readFromBuffer(buffer, function onReady() {
-        try {
-            workerState.display = createDisplay(options.display || {});
-            var vmOptions = Object.assign({}, options.vm || {});
-            if (memoryOptions && !vmOptions.memory) vmOptions.memory = memoryOptions;
-            var telemetryOptions = options.memoryTelemetry !== undefined ? options.memoryTelemetry
-                : (options.vm && options.vm.memoryTelemetry !== undefined ? options.vm.memoryTelemetry : undefined);
-            if (telemetryOptions !== undefined && vmOptions.memoryTelemetry === undefined) {
-                vmOptions.memoryTelemetry = telemetryOptions;
+        capabilityReadyPromise.then(function(report) {
+            try {
+                workerState.display = createDisplay(options.display || {});
+                var vmOptions = Object.assign({}, options.vm || {});
+                if (memoryOptions && !vmOptions.memory) vmOptions.memory = memoryOptions;
+                var telemetryOptions = options.memoryTelemetry !== undefined ? options.memoryTelemetry
+                    : (options.vm && options.vm.memoryTelemetry !== undefined ? options.vm.memoryTelemetry : undefined);
+                if (telemetryOptions !== undefined && vmOptions.memoryTelemetry === undefined) {
+                    vmOptions.memoryTelemetry = telemetryOptions;
+                }
+                if (report && vmOptions.storageCapabilities === undefined) {
+                    vmOptions.storageCapabilities = report;
+                }
+                workerState.vm = new Squeak.Interpreter(image, workerState.display, vmOptions);
+                workerState.display.vm = workerState.vm;
+                workerState.display.reset();
+                post("status", { state: "running", phase: "started" });
+                runLoop();
+            } catch (error) {
+                post("error", { message: error.message, stack: error.stack });
             }
-            workerState.vm = new Squeak.Interpreter(image, workerState.display, vmOptions);
-            workerState.display.vm = workerState.vm;
-            workerState.display.reset();
-            post("status", { state: "running", phase: "started" });
-            runLoop();
-        } catch (error) {
-            post("error", { message: error.message, stack: error.stack });
-        }
+        });
     }, function onProgress(value) {
         post("status", { state: "loading", progress: value });
     });

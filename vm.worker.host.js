@@ -2,6 +2,7 @@
 
 import { ensureStorageCapabilityReport, setStorageCapabilityReport, getStorageCapabilityReport } from "./vm.storage.capabilities.js";
 import { createClipboardBridge, createClipboardRequestQueue } from "./vm.clipboard.js";
+import { ensureResourceCapabilityReport, formatResourceCapabilityError } from "./vm.resource.capabilities.js";
 
 const defaultWorkerURL = new URL("./vm.worker.entry.js", import.meta.url);
 const GESTURE_WINDOW_MS = 1200;
@@ -19,6 +20,12 @@ export class WorkerVMController {
     constructor(options = {}) {
         this.workerScript = options.workerScript || defaultWorkerURL;
         this.workerOptions = options.workerOptions || { type: "module" };
+        this._ensureResourceCapabilityReport = typeof options.ensureResourceCapabilityReport === "function"
+            ? options.ensureResourceCapabilityReport
+            : ensureResourceCapabilityReport;
+        this._formatResourceCapabilityError = typeof options.formatResourceCapabilityError === "function"
+            ? options.formatResourceCapabilityError
+            : formatResourceCapabilityError;
         this.worker = null;
         this.state = "idle";
         this._listeners = new Map();
@@ -272,18 +279,44 @@ export class WorkerVMController {
             return;
         }
         if (data.type === "feature-report") {
-            if (data.report) {
-                this._lastFeatureReport = data.report;
-            }
-            if (typeof data.requestId === "number") {
-                var pendingReport = this._pendingReports.get(data.requestId);
-                if (pendingReport) {
-                    this._pendingReports.delete(data.requestId);
-                    pendingReport.resolve(data);
-                }
-            }
-            this.emit(data.type, data);
+            this._handleFeatureReportMessage(data);
             return;
+        }
+        this.emit(data.type, data);
+    }
+
+    _handleFeatureReportMessage(data) {
+        var controller = this;
+        var ensureReport = this._ensureResourceCapabilityReport || ensureResourceCapabilityReport;
+        var formatError = this._formatResourceCapabilityError || formatResourceCapabilityError;
+        Promise.resolve().then(function() {
+            return ensureReport();
+        }).then(function(report) {
+            if (data && data.report && report) {
+                data.report.resourceCapabilities = report;
+            }
+        }).catch(function(error) {
+            var formatted = formatError(error);
+            if (formatted) {
+                if (!data.errors) data.errors = [];
+                data.errors.push(formatted);
+                data.resourceCapabilityError = formatted;
+            }
+        }).finally(function() {
+            controller._finalizeFeatureReportMessage(data);
+        });
+    }
+
+    _finalizeFeatureReportMessage(data) {
+        if (data.report) {
+            this._lastFeatureReport = data.report;
+        }
+        if (typeof data.requestId === "number") {
+            var pendingReport = this._pendingReports.get(data.requestId);
+            if (pendingReport) {
+                this._pendingReports.delete(data.requestId);
+                pendingReport.resolve(data);
+            }
         }
         this.emit(data.type, data);
     }

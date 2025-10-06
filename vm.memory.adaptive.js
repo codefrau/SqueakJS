@@ -367,15 +367,125 @@ function getHostRatio(snapshot) {
 }
 
 function maybeTriggerGC(state, reason) {
-    if (!state.canTriggerGC()) return false;
-    if (typeof state.triggerPartialGC !== "function") return false;
+    if (!state || typeof state.canTriggerGC !== "function" || !state.canTriggerGC()) return false;
+    if (!state.gcController || typeof state.gcController.trigger !== "function") return false;
     state.lastGCTime = Date.now();
     try {
-        state.triggerPartialGC(reason || "adaptive");
-        return true;
+        return state.gcController.trigger(reason || "adaptive") !== false;
     } catch (e) {
         return false;
     }
+}
+
+function createHeadroomController(image) {
+    if (!image || typeof image !== "object") {
+        return {
+            strategy: "none",
+            apply: function() { return false; },
+        };
+    }
+    if (typeof image._applyHeadroomAdjustment === "function") {
+        return {
+            strategy: "image-hook",
+            apply: function(bytes) {
+                if (typeof bytes !== "number" || !isFinite(bytes)) return false;
+                try {
+                    return image._applyHeadroomAdjustment(bytes) !== false;
+                } catch (_) {
+                    return false;
+                }
+            },
+        };
+    }
+    return {
+        strategy: "policy-fallback",
+        apply: function(bytes) {
+            if (typeof bytes !== "number" || !isFinite(bytes)) return false;
+            var target = Math.round(bytes);
+            if (target < 0) target = 0;
+            if (typeof image.headRoom === "number" && image.headRoom === target) return false;
+            image.headRoom = target;
+            if (!image.memoryPolicy || typeof image.memoryPolicy !== "object") {
+                image.memoryPolicy = { headroomBytes: target };
+            } else {
+                image.memoryPolicy.headroomBytes = target;
+            }
+            if (typeof image.oldSpaceBytes === "number" && isFinite(image.oldSpaceBytes)) {
+                image.totalMemory = image.oldSpaceBytes + target;
+            }
+            if (typeof image._finalizeMemoryPolicyAfterLoad === "function") {
+                try { image._finalizeMemoryPolicyAfterLoad(); } catch (_) {}
+            }
+            if (typeof image._syncLowSpaceMonitor === "function") {
+                try { image._syncLowSpaceMonitor(); } catch (_) {}
+            }
+            return true;
+        },
+    };
+}
+
+function createGCController(vm, image) {
+    if (!image || typeof image !== "object") {
+        return {
+            strategy: "none",
+            trigger: function() { return false; },
+        };
+    }
+    if (typeof image._triggerPartialGC === "function") {
+        return {
+            strategy: "partial-hook",
+            trigger: function(reason) {
+                try {
+                    return image._triggerPartialGC(reason) !== false;
+                } catch (_) {
+                    return false;
+                }
+            },
+        };
+    }
+    if (typeof image.partialGC === "function") {
+        return {
+            strategy: "partial-direct",
+            trigger: function(reason) {
+                try {
+                    image.partialGC(reason || "adaptive");
+                    return true;
+                } catch (_) {
+                    return false;
+                }
+            },
+        };
+    }
+    if (typeof image.fullGC === "function") {
+        return {
+            strategy: "full-image",
+            trigger: function(reason) {
+                try {
+                    image.fullGC(reason || "adaptive");
+                    return true;
+                } catch (_) {
+                    return false;
+                }
+            },
+        };
+    }
+    if (vm && typeof vm.fullGC === "function") {
+        return {
+            strategy: "full-vm",
+            trigger: function(reason) {
+                try {
+                    vm.fullGC(reason || "adaptive");
+                    return true;
+                } catch (_) {
+                    return false;
+                }
+            },
+        };
+    }
+    return {
+        strategy: "none",
+        trigger: function() { return false; },
+    };
 }
 
 function evaluateAdaptiveState(state, reason) {
@@ -386,6 +496,7 @@ function evaluateAdaptiveState(state, reason) {
     if (!snapshot) return null;
     var attempts = 0;
     var decision = null;
+    var triggeredAnyGC = false;
     while (attempts < 2) {
         attempts += 1;
         var headroom = getHeadroomFromSnapshot(state, snapshot);
@@ -417,7 +528,9 @@ function evaluateAdaptiveState(state, reason) {
         var hostUnderPressure = hostRatio !== null && hostRatio >= state.hostPressureRatio;
         var hostCritical = hostRatio !== null && hostRatio >= state.hostCriticalRatio;
         if (hostCritical) {
-            gcTriggered = maybeTriggerGC(state, "adaptive-critical") || gcTriggered;
+            var criticalTriggered = maybeTriggerGC(state, "adaptive-critical");
+            if (criticalTriggered) triggeredAnyGC = true;
+            gcTriggered = criticalTriggered || gcTriggered;
         }
         if (hostUnderPressure) {
             desired = headroom - state.shrinkStepBytes;
@@ -441,6 +554,7 @@ function evaluateAdaptiveState(state, reason) {
         var minimumRequired = Math.max(state.minHeadroomBytes, youngAllocated + state.minimumFreeBytes);
         if (desired < minimumRequired - state.headroomEpsilonBytes) {
             if (maybeTriggerGC(state, "adaptive-pre-shrink")) {
+                triggeredAnyGC = true;
                 gcTriggered = true;
                 snapshot = state.image.captureMemorySnapshot("adaptive-post-gc");
                 if (!snapshot) break;
@@ -465,7 +579,7 @@ function evaluateAdaptiveState(state, reason) {
             headroomAfter: desired,
             freeRatio: freeRatio,
             hostRatio: hostRatio,
-            gcTriggered: gcTriggered,
+            gcTriggered: triggeredAnyGC || gcTriggered,
         };
         break;
     }
@@ -499,6 +613,9 @@ export function startAdaptiveMemoryManager(vm, options) {
         maxHeadroom = Math.max(minHeadroom, Math.round(baseline * DEFAULT_MAX_HEADROOM_MULTIPLIER));
     }
 
+    var headroomController = createHeadroomController(image);
+    var gcController = createGCController(vm, image);
+
     var state = {
         enabled: true,
         vm: vm,
@@ -523,14 +640,11 @@ export function startAdaptiveMemoryManager(vm, options) {
         timer: null,
         lastDecision: null,
         applyHeadroom: function(bytes) {
-            if (typeof image._applyHeadroomAdjustment === "function") {
-                image._applyHeadroomAdjustment(bytes);
-            }
+            return headroomController.apply(bytes);
         },
-        triggerPartialGC: typeof image._triggerPartialGC === "function"
-            ? function(reason) { return image._triggerPartialGC(reason); }
-            : null,
+        gcController: gcController,
         canTriggerGC: function() {
+            if (!this.gcController || this.gcController.strategy === "none") return false;
             if (!this.gcThrottleMs) return true;
             return (Date.now() - this.lastGCTime) >= this.gcThrottleMs;
         },
@@ -547,6 +661,11 @@ export function startAdaptiveMemoryManager(vm, options) {
     };
 
     state.maxHeadroomBytes = state.maxConfiguredHeadroomBytes;
+    state.guardrails = {
+        headroomStrategy: headroomController.strategy,
+        gcStrategy: gcController.strategy,
+    };
+    state.guardrailsActive = headroomController.strategy !== "image-hook" || (gcController.strategy !== "partial-hook");
 
     if (config.intervalMs > 0) {
         state.timer = setInterval(function() {

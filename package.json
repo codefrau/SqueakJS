@@ -28,7 +28,11 @@
     "build:bundle": "rollup squeak.js --file dist/squeak_bundle.js --format iife && rollup squeak_headless.js --file dist/squeak_headless_bundle.js",
     "build:minify": "uglifyjs dist/squeak_bundle.js -o dist/squeak_bundle.min.js -c -m --source-map && uglifyjs dist/squeak_headless_bundle.js -o dist/squeak_headless_bundle.min.js -c -m --source-map",
     "build": "npm run build:cleanup && npm run build:wasm && npm run build:bundle && npm run build:minify",
-    "build:wasm": "node tools/build-wasm.mjs"
+    "build:wasm": "node tools/build-wasm.mjs",
+    "test": "node tools/run-tests-with-coverage.js",
+    "test:unit": "node --test tests/unit",
+    "perf:report": "node tools/generate-telemetry-report.js --output dist/telemetry/latest.json",
+    "perf:dashboard": "node tools/render-telemetry-dashboard.js --output dist/telemetry/dashboard.md"
   },
   "devDependencies": {
     "http-server": "^14.1.1",

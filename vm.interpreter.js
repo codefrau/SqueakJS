@@ -2,6 +2,9 @@ import { getExecutionBackendForVM, configureExecutionBackendForVM } from "./vm.e
 import { markSharedHeapDirty } from "./vm.execution.state.js";
 import { startMemoryTelemetry } from "./vm.memory.telemetry.js";
 import { startAdaptiveMemoryManager } from "./vm.memory.adaptive.js";
+import { negotiateInterpreterCapabilities } from "./vm.capabilities.js";
+import { createBytecodeDispatcher } from "./vm.execution.dispatch.js";
+import { createInlineCacheMonitor } from "./vm.execution.inline-cache.js";
 
 "use strict";
 /*
@@ -90,6 +93,9 @@ Object.subclass('Squeak.Interpreter',
         this.methodCache = [];
         for (var i = 0; i < this.methodCacheSize; i++)
             this.methodCache[i] = {lkupClass: null, selector: null, method: null, primIndex: 0, argCount: 0, mClass: null};
+        var inlineCacheOptions = (this.options && this.options.inlineCache) || {};
+        this.inlineCacheMonitor = createInlineCacheMonitor(inlineCacheOptions);
+        this.bytecodeDispatcher = createBytecodeDispatcher(this, this._createDispatchHooks());
         this.breakOutOfInterpreter = false;
         this.breakOutTick = 0;
         this.breakOnMethod = null; // method to break on
@@ -162,55 +168,110 @@ Object.subclass('Squeak.Interpreter',
         }
     },
     hackImage: function() {
-        // hack methods to make work / speed up
-        var returnSelf  = 256,
-            returnTrue  = 257,
-            returnFalse = 258,
-            returnNil   = 259,
-            sista = this.method.methodSignFlag();
-        [
-            // Etoys fallback for missing translation files is hugely inefficient.
-            // This speeds up opening a viewer by 10x (!)
-            // Remove when we added translation files.
-            //{method: "String>>translated", primitive: returnSelf, enabled: true},
-            //{method: "String>>translatedInAllDomains", primitive: returnSelf, enabled: true},
-            // 64 bit Squeak does not flush word size on snapshot
-            {method: "SmalltalkImage>>wordSize", literal: {index: 1, old: 8, hack: 4, skip: this.nilObj}, enabled: true},
-            // Squeak 5.3 disable wizard by replacing #open send with pop
-            {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: !sista & this.options.wizard===false},
-            // Squeak 6.0 disable wizard by replacing #openWelcomeWorkspacesWith: send with pop
-            {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {closure: 9, pc: 5, old: 0x81, hack: 0xD8}, enabled: sista & this.options.wizard===false},
-            // Squeak 6.0 disable welcome workspace by replacing #open send with pop
-            {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {closure: 9, pc: 2, old: 0x90, hack: 0xD8}, enabled: sista & this.options.welcome===false},
-            // Squeak source file should use UTF8 not MacRoman (both V3 and Sista)
-            {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 53, old: 0x45, hack: 0x49}, enabled: !this.image.isSpur},
-            {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 38, old: 0x16, hack: 0x13}, enabled: this.image.isSpur && sista},
-            {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 50, old: 0x44, hack: 0x48}, enabled: this.image.isSpur && !sista},
-            // New FFI can't detect platform – pretend to be 32 bit intel
-            {method: "FFIPlatformDescription>>abi", literal: { index: 21, old_str: 'UNKNOWN_ABI', new_str: 'IA32'}, enabled: sista},
-        ].forEach(function(each) {
-            try {
-                var m = each.enabled && this.findMethod(each.method);
-                if (m) {
-                    var prim = each.primitive,
-                        byte = each.bytecode,
-                        lit = each.literal,
-                        hacked = true;
-                    if (byte && byte.closure) m = m.pointers[byte.closure];
-                    if (prim) m.pointers[0] |= prim;
-                    else if (byte && m.bytes[byte.pc] === byte.old) m.bytes[byte.pc] = byte.hack;
-                    else if (byte && m.bytes[byte.pc] === byte.hack) hacked = false; // already there
-                    else if (lit && lit.old_str && m.pointers[lit.index].bytesAsString() === lit.old_str) m.pointers[lit.index] = this.primHandler.makeStString(lit.new_str);
-                    else if (lit && m.pointers[lit.index].pointers?.[1] === lit.skip) hacked = false; // not needed
-                    else if (lit && m.pointers[lit.index].pointers?.[1] === lit.old) m.pointers[lit.index].pointers[1] = lit.hack;
-                    else if (lit && m.pointers[lit.index].pointers?.[1] === lit.hack) hacked = false; // already there
-                    else { hacked = false; console.warn("Not hacking " + each.method); }
-                    if (hacked) console.warn("Hacking " + each.method);
+        var negotiation = negotiateInterpreterCapabilities(this);
+        this.negotiatedCapabilities = negotiation.capabilities;
+        this._applyCapabilityPatches(negotiation.requiredPatches, false);
+        this._applyCapabilityPatches(negotiation.optionalPatches, true);
+        if (negotiation.diagnostics && negotiation.diagnostics.length) {
+            negotiation.diagnostics.forEach(function(message) {
+                try {
+                    if (typeof console !== "undefined" && console.info) console.info(message);
+                } catch (_) {}
+            });
+        }
+    },
+    _applyCapabilityPatches: function(patches, optional) {
+        if (!patches) return;
+        for (var i = 0; i < patches.length; i++) {
+            this._applyCapabilityPatch(patches[i], optional);
+        }
+    },
+    _applyCapabilityPatch: function(patch, optional) {
+        if (!patch || !patch.method) return false;
+        var method;
+        try {
+            method = this.findMethod(patch.method);
+        } catch (error) {
+            if (!optional) console.error("Required capability missing method for " + patch.method + ": " + error);
+            return false;
+        }
+        if (!method) {
+            if (!optional) console.error("Required capability missing method for " + patch.method);
+            return false;
+        }
+        var target = method;
+        var byte = patch.bytecode;
+        var lit = patch.literal;
+        var prim = patch.primitive;
+        var applied = false;
+        try {
+            if (byte && typeof byte.closure === "number") {
+                target = method.pointers && method.pointers[byte.closure];
+                if (!target) {
+                    if (!optional) console.error("Capability closure missing for " + patch.method);
+                    return false;
                 }
-            } catch (error) {
-                console.error("Failed to hack " + each.method + " with error " + error);
             }
-        }, this);
+            if (prim) {
+                if (target.pointers && target.pointers.length) {
+                    target.pointers[0] |= prim;
+                    applied = true;
+                }
+            } else if (byte) {
+                if (!target.bytes) {
+                    if (!optional) console.error("Capability bytecode missing for " + patch.method);
+                    return false;
+                }
+                if (target.bytes[byte.pc] === byte.old) {
+                    target.bytes[byte.pc] = byte.hack;
+                    applied = true;
+                } else if (target.bytes[byte.pc] === byte.hack) {
+                    applied = false; // already patched
+                } else {
+                    if (!optional) console.error("Unexpected bytecode when applying capability for " + patch.method);
+                    return false;
+                }
+            } else if (lit) {
+                var entry = target.pointers && target.pointers[lit.index];
+                if (!entry) {
+                    if (!optional) console.error("Capability literal missing index for " + patch.method);
+                    return false;
+                }
+                if (lit.old_str && typeof entry.bytesAsString === "function") {
+                    if (entry.bytesAsString() === lit.old_str) {
+                        target.pointers[lit.index] = this.primHandler.makeStString(lit.new_str);
+                        applied = true;
+                    } else if (entry.bytesAsString() === lit.new_str) {
+                        applied = false;
+                    } else {
+                        if (!optional) console.error("Capability literal mismatch for " + patch.method);
+                        return false;
+                    }
+                } else if (entry.pointers && entry.pointers[1] === lit.skip) {
+                    applied = false; // capability not needed
+                } else if (entry.pointers && entry.pointers[1] === lit.old) {
+                    entry.pointers[1] = lit.hack;
+                    applied = true;
+                } else if (entry.pointers && entry.pointers[1] === lit.hack) {
+                    applied = false;
+                } else {
+                    if (!optional) console.error("Capability literal unexpected state for " + patch.method);
+                    return false;
+                }
+            }
+        } catch (error) {
+            if (!optional) console.error("Failed to apply capability " + patch.method + ": " + error);
+            else console.warn("Optional capability failed for " + patch.method + ": " + error);
+            return false;
+        }
+        if (applied) {
+            try {
+                if (typeof console !== "undefined" && console.warn) {
+                    console.warn("Capability " + (patch.id || patch.method) + " applied");
+                }
+            } catch (_) {}
+        }
+        return applied;
     }
 },
 'debuglog', {
@@ -246,6 +307,46 @@ Object.subclass('Squeak.Interpreter',
     }
 },
 'interpreting', {
+    _createDispatchHooks: function() {
+        var self = this;
+        return {
+            beforeOpcode: function(event) {
+                if (self.inlineCacheMonitor && self.inlineCacheMonitor.onOpcode) {
+                    self.inlineCacheMonitor.onOpcode(event);
+                }
+            },
+            onSend: function(event) {
+                if (!self.inlineCacheMonitor || !self.inlineCacheMonitor.recordSendSite) return;
+                var metadata = {
+                    argCount: event && typeof event.argCount === "number" ? event.argCount : null,
+                    super: event && !!event.super,
+                    opcode: event && event.opcode !== undefined ? event.opcode : null
+                };
+                if (event) {
+                    if (event.selector && typeof event.selector.hash === "number") {
+                        metadata.selectorHash = event.selector.hash;
+                    } else if (event.selectorId !== undefined) {
+                        metadata.selectorId = event.selectorId;
+                    }
+                }
+                self.inlineCacheMonitor.recordSendSite(metadata);
+            },
+            onSendSpecial: function(event) {
+                if (!self.inlineCacheMonitor || !self.inlineCacheMonitor.recordSendSite) return;
+                var metadata = {
+                    selectorId: event && event.index !== undefined ? "special:" + event.index : "special",
+                    opcode: event && event.opcode !== undefined ? event.opcode : null
+                };
+                self.inlineCacheMonitor.recordSendSite(metadata);
+            }
+        };
+    },
+    getInlineCacheMetrics: function() {
+        if (!this.inlineCacheMonitor || typeof this.inlineCacheMonitor.snapshot !== "function") {
+            return null;
+        }
+        return this.inlineCacheMonitor.snapshot();
+    },
     interpretOne: function(singleStep) {
         if (this.method.compiled) {
             if (singleStep) {
@@ -261,193 +362,10 @@ Object.subclass('Squeak.Interpreter',
         if (this.method.methodSignFlag()) {
             return this.interpretOneSistaWithExtensions(singleStep, 0, 0);
         }
-        var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively
-        if (this._vmdbgEnabledParser && this._vmdbgEnabledParser()) {
-            try {
-                var nxt = this.nextSendSelector && this.nextSendSelector();
-                if (nxt && (nxt === 'charCode' || nxt === 'typeTableAt:' || nxt === 'scanToken' || nxt === 'scanTokens:' || nxt === 'next')) {
-                    var sendInfo = this.findSendBeforePC(this.method, this.pc + 1) || {argCount: 0};
-                    var nArgs = typeof sendInfo.argCount === "number" ? sendInfo.argCount : 0;
-                    var rcvr = this.stackValue(nArgs);
-                    var args = [];
-                    for (var ai = nArgs - 1; ai >= 0; ai--) args.push(this.stackValue(ai));
-                    var mClass = (this.method && this.method.methodClass && this.method.methodClass().className) ? this.method.methodClass().className() : null;
-                    function clsName(vm, obj) {
-                        try {
-                            var c = vm.getClass ? vm.getClass(obj) : null;
-                            return c && c.className ? c.className() : null;
-                        } catch(_) { return null; }
-                    }
-                    var rcvrClass = clsName(this, rcvr);
-                    var argClasses = [];
-                    for (var k = 0; k < args.length; k++) argClasses.push(clsName(this, args[k]));
-                    if (this._vmdbgLogParser) this._vmdbgLogParser({site:"send", selector:nxt, pc:this.pc, methodClass:mClass, rcvrClass:rcvrClass, argClasses:argClasses});
-                }
-            } catch(_) {}
+        if (!this.bytecodeDispatcher) {
+            this.bytecodeDispatcher = createBytecodeDispatcher(this);
         }
-        var b, b2;
-        this.byteCodeCount++;
-        b = this.nextByte();
-        switch (b) { /* The Main V3 Bytecode Dispatch Loop */
-
-            // load receiver variable
-            case 0x00: case 0x01: case 0x02: case 0x03: case 0x04: case 0x05: case 0x06: case 0x07:
-            case 0x08: case 0x09: case 0x0A: case 0x0B: case 0x0C: case 0x0D: case 0x0E: case 0x0F:
-                this.push(this.receiver.pointers[b&0xF]); return;
-
-            // load temporary variable
-            case 0x10: case 0x11: case 0x12: case 0x13: case 0x14: case 0x15: case 0x16: case 0x17:
-            case 0x18: case 0x19: case 0x1A: case 0x1B: case 0x1C: case 0x1D: case 0x1E: case 0x1F:
-                this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&0xF)]); return;
-
-            // loadLiteral
-            case 0x20: case 0x21: case 0x22: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27:
-            case 0x28: case 0x29: case 0x2A: case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F:
-            case 0x30: case 0x31: case 0x32: case 0x33: case 0x34: case 0x35: case 0x36: case 0x37:
-            case 0x38: case 0x39: case 0x3A: case 0x3B: case 0x3C: case 0x3D: case 0x3E: case 0x3F:
-                this.push(this.method.methodGetLiteral(b&0x1F)); return;
-
-            // loadLiteralIndirect
-            case 0x40: case 0x41: case 0x42: case 0x43: case 0x44: case 0x45: case 0x46: case 0x47:
-            case 0x48: case 0x49: case 0x4A: case 0x4B: case 0x4C: case 0x4D: case 0x4E: case 0x4F:
-            case 0x50: case 0x51: case 0x52: case 0x53: case 0x54: case 0x55: case 0x56: case 0x57:
-            case 0x58: case 0x59: case 0x5A: case 0x5B: case 0x5C: case 0x5D: case 0x5E: case 0x5F:
-                this.push((this.method.methodGetLiteral(b&0x1F)).pointers[Squeak.Assn_value]); return;
-
-            // storeAndPop rcvr, temp
-            case 0x60: case 0x61: case 0x62: case 0x63: case 0x64: case 0x65: case 0x66: case 0x67:
-                this.receiver.dirty = true;
-                this.receiver.pointers[b&7] = this.pop(); return;
-            case 0x68: case 0x69: case 0x6A: case 0x6B: case 0x6C: case 0x6D: case 0x6E: case 0x6F:
-                this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&7)] = this.pop(); return;
-
-            // Quick push
-            case 0x70: this.push(this.receiver); return;
-            case 0x71: this.push(this.trueObj); return;
-            case 0x72: this.push(this.falseObj); return;
-            case 0x73: this.push(this.nilObj); return;
-            case 0x74: this.push(-1); return;
-            case 0x75: this.push(0); return;
-            case 0x76: this.push(1); return;
-            case 0x77: this.push(2); return;
-
-            // Quick return
-            case 0x78: this.doReturn(this.receiver); return;
-            case 0x79: this.doReturn(this.trueObj); return;
-            case 0x7A: this.doReturn(this.falseObj); return;
-            case 0x7B: this.doReturn(this.nilObj); return;
-            case 0x7C: this.doReturn(this.pop()); return;
-            case 0x7D: this.doReturn(this.pop(), this.activeContext.pointers[Squeak.BlockContext_caller]); return; // blockReturn
-            case 0x7E: this.nono(); return;
-            case 0x7F: this.nono(); return;
-            // Sundry
-            case 0x80: this.extendedPush(this.nextByte()); return;
-            case 0x81: this.extendedStore(this.nextByte()); return;
-            case 0x82: this.extendedStorePop(this.nextByte()); return;
-            // singleExtendedSend
-            case 0x83: b2 = this.nextByte(); this.send(this.method.methodGetSelector(b2&31), b2>>5, false); return;
-            case 0x84: this.doubleExtendedDoAnything(this.nextByte()); return;
-            // singleExtendedSendToSuper
-            case 0x85: b2= this.nextByte(); this.send(this.method.methodGetSelector(b2&31), b2>>5, true); return;
-            // secondExtendedSend
-            case 0x86: b2= this.nextByte(); this.send(this.method.methodGetSelector(b2&63), b2>>6, false); return;
-            case 0x87: this.pop(); return;  // pop
-            case 0x88: this.push(this.top()); return;   // dup
-            // thisContext
-            case 0x89: this.push(this.exportThisContext()); return;
-
-            // Closures
-            case 0x8A: this.pushNewArray(this.nextByte());   // create new temp vector
-                return;
-            case 0x8B: this.callPrimBytecode(0x81);
-                return;
-            case 0x8C: b2 = this.nextByte(); // remote push from temp vector
-                this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2]);
-                return;
-            case 0x8D: b2 = this.nextByte(); // remote store into temp vector
-                var vec = this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()];
-                vec.pointers[b2] = this.top();
-                vec.dirty = true;
-                return;
-            case 0x8E: b2 = this.nextByte(); // remote store and pop into temp vector
-                var vec = this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()];
-                vec.pointers[b2] = this.pop();
-                vec.dirty = true;
-                return;
-            case 0x8F: this.pushClosureCopy(); return;
-
-            // Short jmp
-            case 0x90: case 0x91: case 0x92: case 0x93: case 0x94: case 0x95: case 0x96: case 0x97:
-                this.pc += (b&7)+1; return;
-            // Short conditional jump on false
-            case 0x98: case 0x99: case 0x9A: case 0x9B: case 0x9C: case 0x9D: case 0x9E: case 0x9F:
-                this.jumpIfFalse((b&7)+1); return;
-            // Long jump, forward and back
-            case 0xA0: case 0xA1: case 0xA2: case 0xA3: case 0xA4: case 0xA5: case 0xA6: case 0xA7:
-                b2 = this.nextByte();
-                this.pc += (((b&7)-4)*256 + b2);
-                if ((b&7)<4)        // check for process switch on backward jumps (loops)
-                    if (this.interruptCheckCounter-- <= 0) this.checkForInterrupts();
-                return;
-            // Long conditional jump on true
-            case 0xA8: case 0xA9: case 0xAA: case 0xAB:
-                this.jumpIfTrue((b&3)*256 + this.nextByte()); return;
-            // Long conditional jump on false
-            case 0xAC: case 0xAD: case 0xAE: case 0xAF:
-                this.jumpIfFalse((b&3)*256 + this.nextByte()); return;
-
-            // Arithmetic Ops... + - < > <= >= = ~=    * /  @ lshift: lxor: land: lor:
-            case 0xB0: this.success = true; this.resultIsFloat = false;
-                if (!this.pop2AndPushNumResult(this.stackIntOrFloat(1) + this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // PLUS +
-            case 0xB1: this.success = true; this.resultIsFloat = false;
-                if (!this.pop2AndPushNumResult(this.stackIntOrFloat(1) - this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // MINUS -
-            case 0xB2: this.success = true;
-                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) < this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LESS <
-            case 0xB3: this.success = true;
-                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) > this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GRTR >
-            case 0xB4: this.success = true;
-                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) <= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // LEQ <=
-            case 0xB5: this.success = true;
-                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) >= this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // GEQ >=
-            case 0xB6: this.success = true;
-                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) === this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // EQU =
-            case 0xB7: this.success = true;
-                if (!this.pop2AndPushBoolResult(this.stackIntOrFloat(1) !== this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // NEQ ~=
-            case 0xB8: this.success = true; this.resultIsFloat = false;
-                if (!this.pop2AndPushNumResult(this.stackIntOrFloat(1) * this.stackIntOrFloat(0))) this.sendSpecial(b&0xF); return;  // TIMES *
-            case 0xB9: this.success = true;
-                if (!this.pop2AndPushIntResult(this.quickDivide(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide /
-            case 0xBA: this.success = true;
-                if (!this.pop2AndPushIntResult(this.mod(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // MOD \
-            case 0xBB: this.success = true;
-                if (!this.primHandler.primitiveMakePoint(1, true)) this.sendSpecial(b&0xF); return;  // MakePt int@int
-            case 0xBC: this.success = true;
-                if (!this.pop2AndPushIntResult(this.safeShift(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return; // bitShift:
-            case 0xBD: this.success = true;
-                if (!this.pop2AndPushIntResult(this.div(this.stackInteger(1),this.stackInteger(0)))) this.sendSpecial(b&0xF); return;  // Divide //
-            case 0xBE: this.success = true;
-                if (!this.pop2AndPushIntResult(this.stackInteger(1) & this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitAnd:
-            case 0xBF: this.success = true;
-                if (!this.pop2AndPushIntResult(this.stackInteger(1) | this.stackInteger(0))) this.sendSpecial(b&0xF); return; // bitOr:
-
-            // at:, at:put:, size, next, nextPut:, ...
-            case 0xC0: case 0xC1: case 0xC2: case 0xC3: case 0xC4: case 0xC5: case 0xC6: case 0xC7:
-            case 0xC8: case 0xC9: case 0xCA: case 0xCB: case 0xCC: case 0xCD: case 0xCE: case 0xCF:
-                if (!this.primHandler.quickSendOther(this.receiver, b&0xF))
-                    this.sendSpecial((b&0xF)+16); return;
-
-            // Send Literal Selector with 0, 1, and 2 args
-            case 0xD0: case 0xD1: case 0xD2: case 0xD3: case 0xD4: case 0xD5: case 0xD6: case 0xD7:
-            case 0xD8: case 0xD9: case 0xDA: case 0xDB: case 0xDC: case 0xDD: case 0xDE: case 0xDF:
-                this.send(this.method.methodGetSelector(b&0xF), 0, false); return;
-            case 0xE0: case 0xE1: case 0xE2: case 0xE3: case 0xE4: case 0xE5: case 0xE6: case 0xE7:
-            case 0xE8: case 0xE9: case 0xEA: case 0xEB: case 0xEC: case 0xED: case 0xEE: case 0xEF:
-                this.send(this.method.methodGetSelector(b&0xF), 1, false); return;
-            case 0xF0: case 0xF1: case 0xF2: case 0xF3: case 0xF4: case 0xF5: case 0xF6: case 0xF7:
-            case 0xF8: case 0xF9: case 0xFA: case 0xFB: case 0xFC: case 0xFD: case 0xFE: case 0xFF:
-                this.send(this.method.methodGetSelector(b&0xF), 2, false); return;
-        }
-        throw Error("not a bytecode: " + b);
+        return this.bytecodeDispatcher.execute(singleStep);
     },
     interpretOneSistaWithExtensions: function(singleStep, extA, extB) {
         var Squeak = this.Squeak; // avoid dynamic lookup of "Squeak" in Lively
@@ -1436,13 +1354,42 @@ Object.subclass('Squeak.Interpreter',
         this.methodCacheRandomish = (this.methodCacheRandomish + 1) & 3;
         var firstProbe = (selector.hash ^ lkupClass.hash) & this.methodCacheMask;
         var probe = firstProbe;
+        var inlineCacheMonitor = this.inlineCacheMonitor;
+        var baseMetadata = null;
+        if (inlineCacheMonitor) {
+            baseMetadata = {};
+            if (selector && typeof selector.hash === "number") {
+                baseMetadata.selectorHash = selector.hash;
+            }
+            if (lkupClass && typeof lkupClass.oop === "number") {
+                baseMetadata.classId = lkupClass.oop;
+            }
+        }
+        var probeCount = 0;
         for (var i = 0; i < 4; i++) { // 4 reprobes for now
+            probeCount++;
             entry = this.methodCache[probe];
-            if (entry.selector === selector && entry.lkupClass === lkupClass) return entry;
+            if (entry.selector === selector && entry.lkupClass === lkupClass) {
+                if (inlineCacheMonitor && inlineCacheMonitor.recordHit) {
+                    inlineCacheMonitor.recordHit(probeCount, baseMetadata);
+                }
+                return entry;
+            }
             if (i === this.methodCacheRandomish) firstProbe = probe;
             probe = (probe + selector.hash) & this.methodCacheMask;
         }
         entry = this.methodCache[firstProbe];
+        var evicted = !!(entry && entry.method);
+        if (inlineCacheMonitor && inlineCacheMonitor.recordMiss) {
+            var missMetadata = baseMetadata ? Object.assign({}, baseMetadata) : {};
+            if (evicted) {
+                missMetadata.evicted = true;
+                if (entry.selector && typeof entry.selector.hash === "number") {
+                    missMetadata.evictedSelectorHash = entry.selector.hash;
+                }
+            }
+            inlineCacheMonitor.recordMiss(probeCount, missMetadata);
+        }
         entry.lkupClass = lkupClass;
         entry.selector = selector;
         entry.method = null;
@@ -1452,6 +1399,9 @@ Object.subclass('Squeak.Interpreter',
         for (var i = 0; i < this.methodCacheSize; i++) {
             this.methodCache[i].selector = null;   // mark it free
             this.methodCache[i].method = null;  // release the method
+        }
+        if (this.inlineCacheMonitor && this.inlineCacheMonitor.reset) {
+            this.inlineCacheMonitor.reset();
         }
         return true;
     },

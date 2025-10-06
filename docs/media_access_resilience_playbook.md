@@ -81,6 +81,19 @@ preload PCM assets for the file-backed path. Diagnostics capture the active
 mode, registered file identifiers, and session-specific metadata so tooling can
 surface fallback status to operators.
 
+### Permission UX overlay
+
+`vm.media.permissions.js` introduces a lightweight overlay that appears when the
+browser blocks `getUserMedia` requests. The UI explains why the microphone was
+denied, provides actionable guidance (re-enabling the permission prompt or
+choosing a synthetic source), and offers a one-click fallback to the synthetic
+input pipeline. Each interaction records analytics entries (prompt shown,
+retry/fallback selections, dismissals) which dispatch a
+`squeak.mediaPermissionAnalytics` event for external observers. The UX can also
+be driven programmatically during automated tests through
+`Squeak.ensureMediaPermissionUX().selectPromptAction(...)`, allowing harnesses
+to simulate user choices without a DOM.
+
 ## Diagnostics & Telemetry
 
 * `Squeak.audioOutputDiagnostics()` returns a JSON snapshot reporting whether an

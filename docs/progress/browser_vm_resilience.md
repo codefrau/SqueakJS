@@ -170,9 +170,9 @@ last update metadata, and validation evidence.
 
 ### Milestone 1: Storage capability detection
 - Status: ✅ Completed
-- Last Updated: 2025-10-26
+- Last Updated: 2025-11-07
 - Commit: pending (current PR)
-- Notes: Landed `vm.storage.capabilities.js` with sequential probes, caching, and telemetry hooks. Browser and worker startup now await `ensureStorageCapabilityReport()` (`squeak.js`, `vm.worker.host.js`, `vm.worker.entry.js`) so capability reports propagate across threads and emit `storage-capability-report` messages. Automated probe unit tests remain a follow-up task captured in the playbook next steps.
+- Notes: Extended the detection pipeline with `vm.storage.telemetry.js`, which normalizes capability and quota records before emitting them through `Squeak.telemetry` with console fallbacks. `vm.storage.capabilities.js` and `vm.storage.quota.js` now publish capability reports, quota samples, threshold events, and failure diagnostics to the channel, while `tests/storage/storage-telemetry.test.mjs` exercises detection deduping, quota sampling, and error fallbacks to close the outstanding automation gap noted previously.
 
 ### Milestone 2: Service worker-backed VFS
 - Status: ✅ Completed
@@ -185,6 +185,12 @@ last update metadata, and validation evidence.
 - Last Updated: 2025-10-31
 - Commit: pending (current PR)
 - Notes: Introduced `vm.storage.quota.js` with a polling monitor that normalizes `navigator.storage.estimate` usage, mirrors the VFS manifest, and emits threshold events with optional semaphore signals for Smalltalk. The quota layer now plans LRU- and extension-aware evictions, proxies requests through the VFS queue, and records completion telemetry from the service worker. New primitives expose quota state and event drains, while `tests/storage/storage-quota.test.mjs` drives synthetic pressure to validate threshold notifications, eviction workflows, and manifest updates.
+
+### Milestone 4: Sync reconciliation
+- Status: ✅ Completed
+- Last Updated: 2025-11-08
+- Commit: pending (current PR)
+- Notes: Landed `vm.storage.reconcile.js` to schedule background audits that reconcile Cache Storage manifests with IndexedDB/localStorage-backed directory entries. The reconciler heals missing local files from cached snapshots, re-registers local-only files into the service worker manifest, emits telemetry via the storage channel, and ships with `tests/storage/storage-reconcile.test.mjs` to verify recovery, registration, and scheduled execution flows.
 
 ## 7. Media Access Fallbacks
 
@@ -207,8 +213,48 @@ last update metadata, and validation evidence.
   verifies looped playback from a registered file buffer.
 
 ### Milestone 3: Permission UX
-- Status: ☐ Not started
+- Status: ✅ Completed
+- Last Updated: 2025-11-03
+- Commit: pending (current PR)
+- Notes: Introduced `vm.media.permissions.js` with a browser overlay that explains
+  microphone denials, offers retry and synthetic-source fallbacks, and emits
+  analytics events consumable by automation. `Squeak.startAudioIn` now routes
+  permission failures through the UX so user selections trigger automatic
+  retries or fallbacks, and the media playbook documents integration details.
+  Extended `tests/media/audio-input-manager.test.mjs` to simulate a blocked
+  `getUserMedia` request, drive the prompt programmatically, and verify the
+  synthetic fallback path plus analytics hooks.
 
 ## 8. Progressive Image Loading
-- All milestones: ☐ Not started
+
+### Milestone 1: Chunk reader abstraction
+- Status: ✅ Completed
+- Last Updated: 2025-11-04
+- Commit: pending (current PR)
+- Notes: Refactored the streaming loader to wrap async iterators with a progress adapter that
+  reports byte download and object-mapping phases, enabling deterministic progress telemetry
+  and exposing the new `ImageStreamProgressAdapter` for downstream hosts. Added regression
+  coverage that streams the Etoys mini image in chunks, asserting monotonic progress updates
+  and parity with the buffer loader.
+
+### Milestone 2: Incremental object install
+- Status: ✅ Completed
+- Last Updated: 2025-11-05
+- Commit: pending (current PR)
+- Notes: Introduced an incremental image install controller that renames and installs old-space
+  objects as soon as their dependencies stream in, emitting finalize progress while the download
+  is still in-flight. The streaming loader now feeds newly parsed objects into the controller,
+  allowing hosts to observe UI responsiveness before the final chunk arrives. The chunk-loading
+  regression delays the final network chunk to verify finalize progress advances prior to
+  download completion and that streamed loads still match buffered loads byte-for-byte.
+
+### Milestone 3: Error recovery
+- Status: ✅ Completed
+- Last Updated: 2025-11-06
+- Commit: pending (current PR)
+- Notes: Hardened the streaming loader with resumable iterators that request new chunks when
+  network streams abort and abort logic that rolls back partial installs when recovery is
+  unavailable. Added regression coverage that simulates an interrupted download, verifies
+  resume attempts complete the load, and asserts failed streams leave the image in a clean
+  pre-load state.
 

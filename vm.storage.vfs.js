@@ -1,4 +1,5 @@
 import { updateStorageQuotaManifest, setStorageQuotaVFSSupport, setStorageQuotaEvictionHandler, recordStorageQuotaEvictionResult } from "./vm.storage.quota.js";
+import { scheduleStorageReconciliation } from "./vm.storage.reconcile.js";
 
 "use strict";
 
@@ -33,6 +34,7 @@ const state = {
 let registrationPromise = null;
 let readyRegistration = null;
 let suppressNotifications = false;
+let reconciliationKickstarted = false;
 
 function getGlobalObject() {
     if (typeof globalThis !== "undefined") return globalThis;
@@ -166,6 +168,7 @@ function handleServiceWorkerMessage(event) {
     if (data.type === "manifest") {
         state.manifest = data.manifest || null;
         updateStorageQuotaManifest(state.manifest);
+        scheduleStorageReconciliation(0, { reason: "manifest-update" });
     } else if (data.type === "replay-result") {
         if (data.restored !== undefined) state.replay.restored = data.restored;
         if (data.errors !== undefined) state.replay.errors = data.errors;
@@ -183,6 +186,7 @@ function handleServiceWorkerMessage(event) {
             state.manifest = data.manifest;
             updateStorageQuotaManifest(state.manifest);
         }
+        scheduleStorageReconciliation(0, { reason: "eviction-result" });
     }
 }
 
@@ -234,6 +238,12 @@ async function ensureStorageVFSRegistration(options) {
                 state.replay.lastError = formatError(error);
                 return null;
             }).then(function() { return reg; });
+        }
+        return reg;
+    }).then(function(reg) {
+        if (!reconciliationKickstarted) {
+            scheduleStorageReconciliation(0, { reason: "registration" });
+            reconciliationKickstarted = true;
         }
         return reg;
     }).catch(function(error) {

@@ -65,6 +65,7 @@ Deliver a resilient startup probe that inventories browser storage capabilities 
 - Updated `vm.worker.entry.js` to honour injected reports, run in-worker detection when necessary, and post capability results (or errors) back to the host before constructing the interpreter.
 - The telemetry hook now delegates to `Squeak.telemetry.emit("storage.capability", report)` when available and otherwise logs the structured report with a `[SqueakJS][storage]` prefix. This prevents duplicate console output by memoizing the last serialized report signature.
 - Automated test coverage for the orchestrator remains a follow-up; the design checklist tracks this outstanding work.
+- Implementation update (2025-11-07): Introduced `vm.storage.telemetry.js` to centralize capability/quota/error emissions, updated the detection and quota modules to publish through the new channel, and landed `tests/storage/storage-telemetry.test.mjs` covering detection deduping, quota sampling, and error fallback paths.
 
 ## Telemetry & Logging
 - Leverage existing `Squeak.telemetry` emitter to log report once at `info` level with structured JSON.
@@ -102,4 +103,4 @@ Deliver a resilient startup probe that inventories browser storage capabilities 
 - [x] Telemetry emitted with normalized schema and accessible via global state.
 - [x] Worker path receives report with parity coverage.
 - [x] README/Playbook updated with implementation references.
-- [ ] Automated tests cover success, partial failure, and timeout paths.
+- [x] Automated tests cover success, partial failure, and timeout paths.

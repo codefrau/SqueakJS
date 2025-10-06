@@ -46,6 +46,7 @@ module('users.SqueakJS.squeak_lively').requires().toRun(function() {
                 "vm.instruction.printer.js",
                 "vm.primitives.js",
                 "jit.js",
+                "vm.media.permissions.js",
                 "vm.audio.browser.js",
                 "vm.display.js",
                 "vm.display.browser.js",

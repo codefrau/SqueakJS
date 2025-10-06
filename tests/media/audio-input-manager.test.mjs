@@ -7,6 +7,7 @@ if (typeof globalThis.self === "undefined") {
 }
 
 await import("../../globals.js");
+await import("../../vm.media.permissions.js");
 await import("../../vm.audio.browser.js");
 
 function installAudioEnvironment({ immediateTimers = false } = {}) {
@@ -231,6 +232,56 @@ try {
     assert.strictEqual(fileDiagnostics.mode, "file");
     assert.ok(fileDiagnostics.activeSession);
     assert.strictEqual(fileDiagnostics.activeSession.mode, "file");
+
+    // Permission denial fallback test
+    const permissionUX = Squeak.ensureMediaPermissionUX();
+    if (!global.navigator) {
+        global.navigator = {};
+    }
+    global.navigator.mediaDevices = {
+        getUserMedia: () => Promise.reject(Object.assign(new Error("Permission denied"), { name: "NotAllowedError" })),
+    };
+
+    Squeak.configureAudioInput({ mode: "microphone" });
+    const fallbackResult = await new Promise((resolve, reject) => {
+        let settled = false;
+        Squeak.startAudioIn((context, session) => {
+            settled = true;
+            resolve({ context, session });
+        }, (errorMessage) => {
+            settled = true;
+            reject(new Error(errorMessage));
+        }, { sampleRate: 16000, channels: 1, constraints: { audio: true } });
+        let attempts = 0;
+        function settlePrompt() {
+            if (settled) return;
+            var prompt = permissionUX.getActivePrompt();
+            if (prompt) {
+                permissionUX.selectPromptAction({ type: "fallback", mode: "synthetic" });
+                return;
+            }
+            if (attempts++ > 50) {
+                settled = true;
+                reject(new Error("permission prompt not shown"));
+                return;
+            }
+            queueMicrotask(settlePrompt);
+        }
+        queueMicrotask(settlePrompt);
+    });
+
+    assert.ok(fallbackResult && fallbackResult.session, "fallback session missing");
+    const fallbackDiagnostics = Squeak.audioInputDiagnostics();
+    assert.strictEqual(fallbackDiagnostics.mode, "synthetic");
+    assert.ok(fallbackDiagnostics.activeSession);
+    assert.strictEqual(fallbackDiagnostics.activeSession.mode, "synthetic");
+
+    const analytics = permissionUX.getAnalytics();
+    assert.ok(analytics.some((entry) => entry.action === "prompt.shown"), "prompt analytics missing");
+    assert.ok(analytics.some((entry) => entry.action === "prompt.action.fallback.synthetic"), "fallback analytics missing");
+
+    fallbackResult.session.stop();
+    Squeak.stopAudioIn();
 
     Squeak.unregisterAudioInputFile("loop");
     Squeak.stopAudioIn();

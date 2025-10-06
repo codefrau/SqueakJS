@@ -140,13 +140,29 @@ last update metadata, and validation evidence.
   buffer and streaming pipelines with audit logging and regression coverage.
 
 ### Milestone 4: Documentation & migration guide
-- Status: ☐ Not started
+- Status: ✅ Completed
+- Last Updated: 2025-10-23
+- Commit: pending (current PR)
+- Notes: Published the end-to-end migration guide with runnable CLI examples, CI automation notes, native loader validation,
+  and troubleshooting tables. Added a README pointer so operators can discover the guide from the main documentation index.
 
 ## 5. Clipboard Reliability
-- All milestones: ☐ Not started
+
+### Milestone 1: Async Clipboard API integration
+- Status: 🚧 In progress
+- Last Updated: 2025-10-24
+- Commit: pending (current PR)
+- Notes: Authored the clipboard reliability hardening playbook outlining the async Clipboard API adoption strategy, permission gating, telemetry, and acceptance tests to kick off implementation.
+
+- Remaining milestones: ☐ Not started
 
 ## 6. Persistent Storage Resilience
-- All milestones: ☐ Not started
+
+### Milestone 1: Storage capability detection
+- Status: ✅ Completed
+- Last Updated: 2025-10-26
+- Commit: pending (current PR)
+- Notes: Landed `vm.storage.capabilities.js` with sequential probes, caching, and telemetry hooks. Browser and worker startup now await `ensureStorageCapabilityReport()` (`squeak.js`, `vm.worker.host.js`, `vm.worker.entry.js`) so capability reports propagate across threads and emit `storage-capability-report` messages. Automated probe unit tests remain a follow-up task captured in the playbook next steps.
 
 ## 7. Media Access Fallbacks
 - All milestones: ☐ Not started

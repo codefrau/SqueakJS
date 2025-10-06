@@ -80,7 +80,8 @@ Support 64-bit non-Spur images or provide automated conversion.
    - Implement parsing and object reconstruction for at least one non-Spur 64-bit variant.
    - Acceptance: boot legacy test image to Smalltalk prompt in-browser.
 4. **Documentation & migration guide**
-   - Update docs with supported matrices, conversion instructions, and troubleshooting.
+   - Produce an operator-focused migration playbook that consolidates supported image matrices, conversion workflows, and validation checklists.
+   - Acceptance: guide published under `docs/` with runnable examples, troubleshooting trees, and references to automated conversion tooling.
 
 ## 5. Clipboard Reliability
 
@@ -91,6 +92,7 @@ Ensure clipboard operations function consistently even when user-gesture require
 1. **Async Clipboard API integration**
    - Adopt `navigator.clipboard` with permission handling and fallback messaging.
    - Add feature detection tests covering denied permissions.
+   - Publish a clipboard reliability hardening playbook detailing async workflows, telemetry, and acceptance tests.
 2. **Background request queue**
    - Use VM `freeze` continuations to pause Smalltalk processes until clipboard promises resolve.
    - Integration test: clipboard read during modal dialog without losing state.
@@ -107,6 +109,7 @@ Provide robust file services even when IndexedDB is unavailable or quota-limited
 1. **Storage capability detection**
    - Probe IndexedDB, File System Access API, and localStorage availability at startup.
    - Log structured capability reports consumable by automated tests.
+   - Publish a persistent storage resilience playbook outlining capability probes, telemetry, and fallback expectations.
 2. **Service worker-backed VFS**
    - Implement a service worker that mirrors VM file operations into Cache Storage with quota tracking.
    - Acceptance: offline replays of file reads/writes succeed after page reload.

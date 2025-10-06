@@ -46,6 +46,7 @@ import "./vm.files.browser.js";
 import "./vm.input.js";
 import "./vm.input.browser.js";
 import { WorkerVMController } from "./vm.worker.host.js";
+import { ensureStorageCapabilityReport, setStorageCapabilityReport, getStorageCapabilityReport } from "./vm.storage.capabilities.js";
 import "./vm.plugins.js";
 import "./vm.plugins.ffi.js";
 import "./vm.plugins.javascript.js";
@@ -1135,6 +1136,14 @@ var loop; // holds timeout for main loop
 
 SqueakJS.runImage = function(buffer, name, display, options) {
     options = options || {};
+    var capabilityPromise;
+    if (options.storageCapabilityDetection === false) {
+        capabilityPromise = Promise.resolve(getStorageCapabilityReport());
+    } else if (options.storageCapabilities !== undefined) {
+        capabilityPromise = Promise.resolve(setStorageCapabilityReport(options.storageCapabilities));
+    } else {
+        capabilityPromise = ensureStorageCapabilityReport({ timeoutMs: options.storageCapabilityTimeoutMs });
+    }
     var memoryOptions = options.memory || (options.vm && options.vm.memory);
     if (memoryOptions) {
         if (!options.vm || typeof options.vm !== "object") options.vm = {};
@@ -1153,53 +1162,64 @@ SqueakJS.runImage = function(buffer, name, display, options) {
     window.setTimeout(function readImageAsync() {
         var image = new Squeak.Image(name, memoryOptions);
         function startRunning() {
-            display.quitFlag = false;
-            var vm = new Squeak.Interpreter(image, display, options);
-            SqueakJS.vm = vm;
-            Squeak.Settings["squeakImageName"] = name;
-            display.clear();
-            display.showBanner("Starting " + SqueakJS.appName);
-            var spinner = setupSpinner(vm, options);
-            var telemetry = setupMainLoopTelemetry(display, options);
-            var timestampNow = telemetry && telemetry.now ||
-                (typeof performance !== "undefined" && performance.now ? function() { return performance.now(); }
-                    : function() { return Date.now(); });
-            function run() {
-                try {
-                    var loopStart = timestampNow();
-                    if (display.quitFlag) SqueakJS.onQuit(vm, display, options);
-                    else vm.interpret(50, function runAgain(ms) {
-                        var wait = ms;
-                        if (wait == "sleep") wait = 200;
-                        var loopEnd = timestampNow();
-                        if (telemetry) telemetry.record({
-                            start: loopStart,
-                            end: loopEnd,
-                            sleepMs: typeof wait === "number" ? wait : null,
-                        });
-                        if (spinner) updateSpinner(spinner, wait, vm, display);
-                        loop = window.setTimeout(run, wait);
-                    });
-                } catch(error) {
-                    console.error(error);
-                    alert(error);
+            Promise.resolve(capabilityPromise).catch(function(error) {
+                if (typeof console !== "undefined" && console.warn) {
+                    console.warn("[SqueakJS][storage] capability detection failed", error);
                 }
-            }
-            display.runNow = function(event) {
-                window.clearTimeout(loop);
-                display.handlingEvent = event;
+                return null;
+            }).then(function(report) {
+                if (report && (!options.vm || !options.vm.storageCapabilities)) {
+                    if (!options.vm || typeof options.vm !== "object") options.vm = {};
+                    if (!options.vm.storageCapabilities) options.vm.storageCapabilities = report;
+                }
+                display.quitFlag = false;
+                var vm = new Squeak.Interpreter(image, display, options);
+                SqueakJS.vm = vm;
+                Squeak.Settings["squeakImageName"] = name;
+                display.clear();
+                display.showBanner("Starting " + SqueakJS.appName);
+                var spinner = setupSpinner(vm, options);
+                var telemetry = setupMainLoopTelemetry(display, options);
+                var timestampNow = telemetry && telemetry.now ||
+                    (typeof performance !== "undefined" && performance.now ? function() { return performance.now(); }
+                        : function() { return Date.now(); });
+                function run() {
+                    try {
+                        var loopStart = timestampNow();
+                        if (display.quitFlag) SqueakJS.onQuit(vm, display, options);
+                        else vm.interpret(50, function runAgain(ms) {
+                            var wait = ms;
+                            if (wait == "sleep") wait = 200;
+                            var loopEnd = timestampNow();
+                            if (telemetry) telemetry.record({
+                                start: loopStart,
+                                end: loopEnd,
+                                sleepMs: typeof wait === "number" ? wait : null,
+                            });
+                            if (spinner) updateSpinner(spinner, wait, vm, display);
+                            loop = window.setTimeout(run, wait);
+                        });
+                    } catch(error) {
+                        console.error(error);
+                        alert(error);
+                    }
+                }
+                display.runNow = function(event) {
+                    window.clearTimeout(loop);
+                    display.handlingEvent = event;
+                    run();
+                    display.handlingEvent = '';
+                };
+                display.runFor = function(milliseconds, event) {
+                    var stoptime = Date.now() + milliseconds;
+                    do {
+                        if (display.quitFlag) return;
+                        display.runNow(event);
+                    } while (Date.now() < stoptime);
+                };
+                if (options.onStart) options.onStart(vm, display, options);
                 run();
-                display.handlingEvent = '';
-            };
-            display.runFor = function(milliseconds, event) {
-                var stoptime = Date.now() + milliseconds;
-                do {
-                    if (display.quitFlag) return;
-                    display.runNow(event);
-                } while (Date.now() < stoptime);
-            };
-            if (options.onStart) options.onStart(vm, display, options);
-            run();
+            });
         }
         var streamDescriptor = Squeak.normalizeImageStreamSource(buffer);
         var progressHandler = function(value) { display.showProgress(value); };

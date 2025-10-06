@@ -119,6 +119,11 @@
         return Math.max(1, Math.min(channelCount, 2));
     }
 
+    function cloneOptions(options) {
+        if (!options || typeof options !== "object") return {};
+        return Object.assign({}, options);
+    }
+
     class AudioOutputManager {
         constructor(globalScope) {
             this.global = globalScope;
@@ -931,15 +936,61 @@
         },
         startAudioIn: function startAudioIn(thenDo, errorDo, options) {
             var manager = this.ensureAudioInputManager();
-            manager.startSession(options || {}).then(function(result) {
+            var initialOptions = cloneOptions(options || {});
+            var permissionUX = typeof this.ensureMediaPermissionUX === "function"
+                ? this.ensureMediaPermissionUX()
+                : null;
+
+            function handleSuccess(result) {
                 if (typeof thenDo === "function") {
                     thenDo(result.context, result.session);
                 }
-            }).catch(function(err) {
+            }
+
+            function handleError(err) {
                 if (typeof errorDo === "function") {
                     errorDo(err && err.message ? err.message : String(err));
                 }
-            });
+            }
+
+            function attempt(config) {
+                var sessionOptions = cloneOptions(config);
+                return manager.startSession(sessionOptions).catch(function(err) {
+                    if (!permissionUX
+                        || typeof permissionUX.handleMicrophoneError !== "function"
+                        || typeof permissionUX.shouldHandleMicrophoneError !== "function"
+                        || !permissionUX.shouldHandleMicrophoneError(err, sessionOptions)) {
+                        throw err;
+                    }
+                    return permissionUX.handleMicrophoneError({
+                        error: err,
+                        options: sessionOptions,
+                        onRetry: function(extra) {
+                            var next = cloneOptions(sessionOptions);
+                            Object.assign(next, extra || {});
+                            next.mode = "microphone";
+                            return attempt(next);
+                        },
+                        onSelectSynthetic: function(extra) {
+                            var next = cloneOptions(sessionOptions);
+                            Object.assign(next, extra || {});
+                            next.mode = "synthetic";
+                            return attempt(next);
+                        },
+                        onSelectFile: function(extra) {
+                            var next = cloneOptions(sessionOptions);
+                            Object.assign(next, extra || {});
+                            next.mode = "file";
+                            return attempt(next);
+                        },
+                        onCancel: function() {
+                            return Promise.reject(err);
+                        },
+                    });
+                });
+            }
+
+            attempt(initialOptions).then(handleSuccess).catch(handleError);
         },
         stopAudioIn: function stopAudioIn() {
             if (this.audioInputManager) {

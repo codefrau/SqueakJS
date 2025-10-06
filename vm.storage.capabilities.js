@@ -1,3 +1,5 @@
+import { emitStorageCapabilityTelemetry } from "./vm.storage.telemetry.js";
+
 "use strict";
 
 const DEFAULT_TOTAL_TIMEOUT_MS = 120;
@@ -6,7 +8,6 @@ const PROBE_PREFIX = "squeak-capability-";
 
 let cachedReport = null;
 let pendingDetection = null;
-let lastTelemetrySignature = null;
 
 function getGlobalObject() {
     if (typeof globalThis !== "undefined") return globalThis;
@@ -106,31 +107,7 @@ function recordReport(report) {
 }
 
 function emitTelemetry(report) {
-    if (!report) return;
-    var signature;
-    try {
-        signature = JSON.stringify({ probes: report.probes, origin: report.origin });
-    } catch (_) {
-        signature = null;
-    }
-    if (signature && signature === lastTelemetrySignature) return;
-    lastTelemetrySignature = signature || lastTelemetrySignature;
-    var global = getGlobalObject();
-    var squeak = global && global.Squeak;
-    var handled = false;
-    if (squeak && squeak.telemetry && typeof squeak.telemetry.emit === "function") {
-        try {
-            squeak.telemetry.emit("storage.capability", report);
-            handled = true;
-        } catch (error) {
-            if (typeof console !== "undefined" && console.warn) {
-                console.warn("[SqueakJS][storage] telemetry emit failed", error);
-            }
-        }
-    }
-    if (!handled && typeof console !== "undefined" && console.info) {
-        console.info("[SqueakJS][storage] capability report", report);
-    }
+    emitStorageCapabilityTelemetry(report);
 }
 
 function normalizeProbeResult(result) {

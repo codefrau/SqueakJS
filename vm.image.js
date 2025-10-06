@@ -322,96 +322,35 @@ Object.subclass('Squeak.Image',
         };
         this._finalizeImageLoad(finalizeContext, thenDo, progressDo);
     },
-    _finalizeImageLoad: function(context, thenDo, progressDo) {
-        var oopMap = context.oopMap,
-            rawBits = context.rawBits,
-            classPages = context.classPages,
-            specialObjectsOopInt = context.specialObjectsOopInt,
-            littleEndian = context.littleEndian,
-            nativeFloats = context.nativeFloats,
-            is64Bit = context.is64Bit,
-            oopAdjust = context.oopAdjust || {},
-            oldBaseAddr = context.oldBaseAddr || 0;
-
+    _finalizeImageLoad: function(context, thenDo, progressDo, options) {
         this.totalMemory = this.oldSpaceBytes + this.headRoom;
         this.totalMemory = Math.ceil(this.totalMemory / 1000000) * 1000000;
         this._finalizeMemoryPolicyAfterLoad();
 
-        var _splObs = oopMap.get(specialObjectsOopInt),
-            cc = this.isSpur ? this.spurClassTable(oopMap, rawBits, classPages, _splObs)
-                : rawBits.get(oopMap.get(rawBits.get(_splObs.oop)[Squeak.splOb_CompactClasses]).oop);
-        var renamedObj = null,
-            object = this.firstOldObject,
-            prevObj = null;
-        while (object) {
-            prevObj = renamedObj;
-            renamedObj = object.renameFromImage(oopMap, rawBits, cc);
-            if (prevObj) prevObj.nextObject = renamedObj;
-            else this.firstOldObject = renamedObj;
-            oopMap.set(oldBaseAddr + object.oop, renamedObj);
-            object = object.nextObject;
-        }
-        this.lastOldObject = renamedObj;
-        this.lastOldObject.nextObject = null; // Add next object pointer as indicator this is in fact an old object
+        var controller = this._createInstallController(context, {
+            finalizeProgressDo: progressDo,
+            thenDo: thenDo,
+            streaming: options && !!options.streaming,
+            scheduler: options && options.scheduler,
+        });
 
-        var splObs         = oopMap.get(specialObjectsOopInt);
-        var compactClasses = rawBits.get(oopMap.get(rawBits.get(splObs.oop)[Squeak.splOb_CompactClasses]).oop);
-        var floatClass     = oopMap.get(rawBits.get(splObs.oop)[Squeak.splOb_ClassFloat]);
-        if (this.isSpur) {
-            this.initImmediateClasses(oopMap, rawBits, splObs);
-            compactClasses = this.spurClassTable(oopMap, rawBits, classPages, splObs);
-            nativeFloats = this.getCharacter.bind(this);
-            this.initSpurOverrides();
+        if (!controller.streaming) {
+            controller.installAllSync();
+        } else if (options && options.activateStreaming !== false) {
+            controller.activateStreaming();
         }
 
-        var obj = this.firstOldObject,
-            done = 0;
-        var mapSomeObjects = function() {
-            if (obj) {
-                var stop = done + (this.oldSpaceCount / 20 | 0);
-                while (obj && done < stop) {
-                    obj.installFromImage(oopMap, rawBits, compactClasses, floatClass, littleEndian, nativeFloats, is64Bit && {
-                        makeFloat: function makeFloat(bits) {
-                            return this.instantiateFloat(bits);
-                        }.bind(this),
-                        makeLargeFromSmall: function makeLargeFromSmall(hi, lo) {
-                            return this.instantiateLargeFromSmall(hi, lo);
-                        }.bind(this),
-                    });
-                    obj = obj.nextObject;
-                    done++;
-                }
-                if (progressDo) progressDo(done / this.oldSpaceCount);
-                return true;
-            } else {
-                this.specialObjectsArray = splObs;
-                this.decorateKnownObjects();
-                if (this.isSpur) {
-                    this.fixSkippedOops(oopAdjust);
-                    if (is64Bit) this.fixPCs();
-                    this.ensureFullBlockClosureClass(this.specialObjectsArray, compactClasses);
-                } else {
-                    this.fixCompiledMethods();
-                    this.fixCompactOops();
-                }
-                return false;
-            }
-        }.bind(this);
-
-        var mapSomeObjectsAsync = function() {
-            if (mapSomeObjects()) {
-                self.setTimeout(mapSomeObjectsAsync, 0);
-            } else if (thenDo) {
-                thenDo();
-            }
-        };
-
-        if (!progressDo) {
-            while (mapSomeObjects()) {}
-            if (thenDo) thenDo();
-        } else {
-            self.setTimeout(mapSomeObjectsAsync, 0);
+        return controller;
+    },
+    _createInstallController: function(context, options) {
+        options = options || {};
+        if (this._activeInstallController) {
+            this._activeInstallController.updateOptions(options);
+            return this._activeInstallController;
         }
+        var controller = new Squeak.ImageInstallController(this, context, options);
+        this._activeInstallController = controller;
+        return controller;
     },
     _finalizeCompatibilityLoad: function(snapshot, thenDo, progressDo) {
         this.compatibilityMode = snapshot && snapshot.format ? snapshot.format : "legacy-64";
@@ -440,20 +379,35 @@ Object.subclass('Squeak.Image',
         var label = totalBytes ? ' (' + totalBytes + ' bytes)' : '';
         console.log('squeak: streaming ' + this.name + label);
         this.startupTime = Date.now();
-        var loader = new Squeak.StreamingImageLoader(this, descriptor, progressDo, thenDo);
-        var promise = loader.load().then(function(context) {
-            if (context && context.__compatibilityHandled) {
-                return context;
-            }
-            this._finalizeImageLoad(context, thenDo, progressDo);
-        }.bind(this));
-        if (promise && typeof promise.catch === "function") {
-            promise.catch(function(error) {
-                console.error(error);
-                throw error;
-            });
+        var progressAdapter = progressDo ? new Squeak.ImageStreamProgressAdapter(progressDo, {
+            totalBytes: totalBytes,
+        }) : null;
+        var descriptorForLoader = Object.assign({}, descriptor);
+        var existingOnProgress = descriptor.onProgress;
+        if (progressAdapter) {
+            progressAdapter.start();
+            descriptorForLoader.onProgress = function(fetched, capacity) {
+                if (typeof existingOnProgress === "function") existingOnProgress(fetched, capacity);
+                progressAdapter.handleDownload(fetched, capacity);
+            };
         }
-        return promise;
+        var finalizeProgressDo = progressAdapter ? progressAdapter.handleFinalize.bind(progressAdapter) : progressDo;
+        var loader = new Squeak.StreamingImageLoader(this, descriptorForLoader, {
+            thenDo: thenDo,
+            progressAdapter: progressAdapter,
+            finalizeProgressDo: finalizeProgressDo,
+        });
+        var promise = loader.load().then(function(result) {
+            if (progressAdapter) progressAdapter.complete();
+            return result;
+        });
+    if (promise && typeof promise.catch === "function") {
+        promise = promise.catch(function(error) {
+            console.error(error);
+            throw error;
+        });
+    }
+    return promise;
     },
     decorateKnownObjects: function() {
         var splObjs = this.specialObjectsArray.pointers;
@@ -1690,50 +1644,132 @@ Object.subclass('Squeak.Image',
 
 Squeak.normalizeImageStreamSource = function(source) {
     if (!source) return null;
-    if (typeof source[Symbol.asyncIterator] === "function") {
-        return {
-            iterator: source[Symbol.asyncIterator](),
-            totalBytes: typeof source.totalBytes === "number" ? source.totalBytes : null,
+
+    var descriptor = {
+        totalBytes: typeof source.totalBytes === "number" ? source.totalBytes : null,
+    };
+
+    var resumeFactory = null;
+    var maxResumes = typeof source.maxResumes === "number" ? source.maxResumes : null;
+
+    function wrapResume(fn) {
+        if (typeof fn !== "function") return null;
+        return async function(info) {
+            var result = await fn(info || {});
+            if (!result) return null;
+            if (typeof result.next === "function") {
+                return { iterator: result };
+            }
+            if (result.iterator && typeof result.iterator.next === "function") {
+                return result;
+            }
+            return null;
         };
     }
-    if (source.iterator && typeof source.iterator.next === "function") {
-        return {
-            iterator: source.iterator,
-            totalBytes: typeof source.totalBytes === "number" ? source.totalBytes : null,
-        };
+
+    if (typeof source.createIterator === "function") {
+        var iterator = source.createIterator(0);
+        if (!iterator || typeof iterator.next !== "function") return null;
+        descriptor.iterator = iterator;
+        resumeFactory = wrapResume(function(info) {
+            var offset = info && typeof info.offset === "number" ? info.offset : 0;
+            return source.createIterator(offset);
+        });
+    } else if (typeof source[Symbol.asyncIterator] === "function") {
+        descriptor.iterator = source[Symbol.asyncIterator]();
+    } else if (source.iterator && typeof source.iterator.next === "function") {
+        descriptor.iterator = source.iterator;
+    } else if (source.stream && typeof source.stream[Symbol.asyncIterator] === "function") {
+        descriptor.iterator = source.stream[Symbol.asyncIterator]();
+    } else if (typeof source.getIterator === "function") {
+        var iter = source.getIterator();
+        if (!iter || typeof iter.next !== "function") return null;
+        descriptor.iterator = iter;
+    } else {
+        return null;
     }
-    if (source.stream && typeof source.stream[Symbol.asyncIterator] === "function") {
-        return {
-            iterator: source.stream[Symbol.asyncIterator](),
-            totalBytes: typeof source.totalBytes === "number" ? source.totalBytes : null,
-        };
+
+    if (typeof source.resumeFrom === "function") {
+        resumeFactory = wrapResume(function(info) {
+            return source.resumeFrom(info || {});
+        });
+    } else if (typeof source.resume === "function") {
+        resumeFactory = wrapResume(source.resume.bind(source));
+    } else if (typeof source.recover === "function") {
+        resumeFactory = wrapResume(source.recover.bind(source));
     }
-    if (typeof source.getIterator === "function") {
-        return {
-            iterator: source.getIterator(),
-            totalBytes: typeof source.totalBytes === "number" ? source.totalBytes : null,
-        };
+
+    if (resumeFactory) {
+        descriptor.resume = resumeFactory;
+        descriptor.maxResumes = typeof maxResumes === "number" ? maxResumes : 1;
     }
-    return null;
+
+    if (typeof source.onProgress === "function") descriptor.onProgress = source.onProgress.bind(source);
+    if (typeof source.onChunk === "function") descriptor.onChunk = source.onChunk.bind(source);
+    if (typeof source.onRecovery === "function") descriptor.onRecovery = source.onRecovery.bind(source);
+    if (typeof source.onFailure === "function") descriptor.onFailure = source.onFailure.bind(source);
+
+    return descriptor;
 };
 
-Squeak.StreamingImageLoader = function(image, descriptor, progressDo, thenDo) {
+Squeak.StreamingImageLoader = function(image, descriptor, options) {
     this.image = image;
-    this.progressDo = progressDo;
+    options = options || {};
+    this.progressAdapter = options.progressAdapter || null;
+    this.finalizeProgressDo = options.finalizeProgressDo || null;
     this.totalBytes = descriptor.totalBytes || null;
     this.reader = new Squeak.ImageStreamCursor(descriptor.iterator, {
         totalBytes: this.totalBytes,
         onChunk: descriptor.onChunk,
         onProgress: descriptor.onProgress,
+        resume: descriptor.resume,
+        maxResumes: descriptor.maxResumes,
+        onRecovery: descriptor.onRecovery,
     });
-    this.thenDo = thenDo;
+    this.thenDo = options.thenDo;
+    this.scheduler = options.scheduler || null;
+    this.onStreamFailure = typeof descriptor.onFailure === "function" ? descriptor.onFailure : null;
 };
 
 Squeak.StreamingImageLoader.prototype.load = async function() {
+    try {
+        return await this._loadInternal();
+    } catch (error) {
+        var controller = this.image && this.image._activeInstallController;
+        if (controller && typeof controller.abort === "function") {
+            if (typeof controller.whenComplete === "function") {
+                try {
+                    controller.whenComplete().catch(function() {});
+                } catch (promiseError) {
+                    console.warn("image stream completion handler failed", promiseError);
+                }
+            }
+            controller.abort(error);
+        }
+        if (this.onStreamFailure) {
+            try {
+                var attempts = this.reader && typeof this.reader.getResumeAttempts === "function"
+                    ? this.reader.getResumeAttempts()
+                    : undefined;
+                this.onStreamFailure(error, { attempts: attempts });
+            } catch (failureError) {
+                console.warn("image stream failure handler threw", failureError);
+            }
+        }
+        if (this.progressAdapter && typeof this.progressAdapter.fail === "function") {
+            this.progressAdapter.fail(error);
+        }
+        throw error;
+    }
+};
+
+Squeak.StreamingImageLoader.prototype._loadInternal = async function() {
     var reader = this.reader,
         image = this.image,
-        progressDo = this.progressDo,
-        thenDo = this.thenDo;
+        progressAdapter = this.progressAdapter,
+        finalizeProgressDo = this.finalizeProgressDo,
+        thenDo = this.thenDo,
+        scheduler = this.scheduler;
 
     var headerAudit = image.headerAudit;
     if (!headerAudit) {
@@ -1784,7 +1820,8 @@ Squeak.StreamingImageLoader.prototype.load = async function() {
             bytes: captured,
         }) : null;
         if (compatibility) {
-            image._finalizeCompatibilityLoad(compatibility, thenDo, progressDo);
+            image._finalizeCompatibilityLoad(compatibility, thenDo, finalizeProgressDo);
+            if (progressAdapter) progressAdapter.complete();
             return { __compatibilityHandled: true, snapshot: compatibility };
         }
         if (headerAudit) headerAudit.recordIssue("unsupported-nonspur-64", {
@@ -1842,6 +1879,25 @@ Squeak.StreamingImageLoader.prototype.load = async function() {
     var classPages = null;
     var oopAdjust = undefined;
 
+    var finalizeContext = {
+        oopMap: oopMap,
+        rawBits: rawBits,
+        classPages: classPages,
+        specialObjectsOopInt: specialObjectsOopInt,
+        littleEndian: littleEndian,
+        nativeFloats: nativeFloats,
+        is64Bit: is64Bit,
+        oopAdjust: oopAdjust,
+        oldBaseAddr: oldBaseAddr,
+    };
+    var controller = image._createInstallController(finalizeContext, {
+        finalizeProgressDo: finalizeProgressDo,
+        thenDo: thenDo,
+        streaming: true,
+        scheduler: scheduler,
+    });
+    controller.activateStreaming();
+
     image.oldSpaceCount = 0;
     if (!image.isSpur) {
         image.oldSpaceBytes = objectMemorySize;
@@ -1882,6 +1938,7 @@ Squeak.StreamingImageLoader.prototype.load = async function() {
             prevObj = object;
             oopMap.set(oldBaseAddr + oop, object);
             rawBits.set(oop, bits);
+            controller.markObjectAvailable(object);
         }
         image.firstOldObject = oopMap.get(oldBaseAddr + 4);
         image.lastOldObject = object;
@@ -1924,6 +1981,7 @@ Squeak.StreamingImageLoader.prototype.load = async function() {
                     oopMap.set(oldBaseAddr + oop, object);
                     rawBits.set(oop, bits);
                     oopAdjust[oop] = skippedBytes;
+                    controller.markObjectAvailable(object);
                     if (is64Bit) {
                         var overhead = object.overhead64(bits);
                         skippedBytes += overhead.bytes;
@@ -1934,7 +1992,10 @@ Squeak.StreamingImageLoader.prototype.load = async function() {
                     }
                 } else {
                     skippedBytes += reader.bytesReadSinceHeader() - objHeaderStart;
-                    if (classID === 16 && !classPages) classPages = bits;
+                    if (classID === 16 && !classPages) {
+                        classPages = bits;
+                        finalizeContext.classPages = classPages;
+                    }
                     if (classID) oopMap.set(oldBaseAddr + oop, bits);
                 }
             }
@@ -1959,19 +2020,395 @@ Squeak.StreamingImageLoader.prototype.load = async function() {
     }
 
     reader.consumeRemaining();
+    finalizeContext.classPages = classPages;
+    finalizeContext.oopAdjust = oopAdjust;
+    controller.markStreamComplete();
+    return controller.whenComplete();
+};
 
-    var finalizeContext = {
-        oopMap: oopMap,
-        rawBits: rawBits,
-        classPages: classPages,
-        specialObjectsOopInt: specialObjectsOopInt,
-        littleEndian: littleEndian,
-        nativeFloats: nativeFloats,
-        is64Bit: is64Bit,
-        oopAdjust: oopAdjust,
-        oldBaseAddr: oldBaseAddr,
+Squeak.ImageInstallController = function(image, context, options) {
+    options = options || {};
+    this.image = image;
+    this.context = context;
+    this.thenDo = typeof options.thenDo === "function" ? options.thenDo : null;
+    this.finalizeProgressDo = typeof options.finalizeProgressDo === "function" ? options.finalizeProgressDo : null;
+    this.batchSize = options.batchSize && options.batchSize > 0 ? Math.floor(options.batchSize) : 200;
+    this.streaming = !!options.streaming;
+    this.scheduler = typeof options.scheduler === "function" ? options.scheduler : function(fn) {
+        if (typeof self !== "undefined" && self && typeof self.setTimeout === "function") return self.setTimeout(fn, 0);
+        return setTimeout(fn, 0);
     };
-    return finalizeContext;
+    this._installResources = null;
+    this._nativeFloatDecoder = context.nativeFloats;
+    this._cursor = image.firstOldObject;
+    this._renamedTail = null;
+    this._availableTail = null;
+    this._flushScheduled = false;
+    this._streamComplete = !this.streaming;
+    this._completed = false;
+    this._totalObjects = image.oldSpaceCount || 0;
+    this._installedCount = 0;
+    var self = this;
+    this._completionPromise = new Promise(function(resolve, reject) {
+        self._resolveCompletion = resolve;
+        self._rejectCompletion = reject;
+    });
+};
+
+Squeak.ImageInstallController.prototype.updateOptions = function(options) {
+    options = options || {};
+    if (typeof options.finalizeProgressDo === "function") this.finalizeProgressDo = options.finalizeProgressDo;
+    if (typeof options.thenDo === "function") this.thenDo = options.thenDo;
+    if (options.batchSize && options.batchSize > 0) this.batchSize = Math.floor(options.batchSize);
+    if (typeof options.scheduler === "function") this.scheduler = options.scheduler;
+    if (options.streaming !== undefined) this.streaming = !!options.streaming;
+};
+
+Squeak.ImageInstallController.prototype.activateStreaming = function() {
+    this.streaming = true;
+    this._streamComplete = false;
+    this._maybeScheduleFlush();
+};
+
+Squeak.ImageInstallController.prototype.installAllSync = function() {
+    this.streaming = false;
+    this._streamComplete = true;
+    this._markAllAvailable();
+    while (this._consumeBatch(true)) {}
+    this._maybeFinish();
+};
+
+Squeak.ImageInstallController.prototype.whenComplete = function() {
+    return this._completionPromise;
+};
+
+Squeak.ImageInstallController.prototype.abort = function(error) {
+    if (this._completed) {
+        if (error && this._rejectCompletion) {
+            this._rejectCompletion(error);
+            this._rejectCompletion = null;
+        }
+        return;
+    }
+    this._completed = true;
+    this.streaming = false;
+    this._flushScheduled = false;
+    this._cursor = null;
+    this._availableTail = null;
+    this._renamedTail = null;
+    var context = this.context || {};
+    if (context.oopMap && typeof context.oopMap.clear === "function") context.oopMap.clear();
+    if (context.rawBits && typeof context.rawBits.clear === "function") context.rawBits.clear();
+    var image = this.image;
+    if (image) {
+        image.firstOldObject = null;
+        image.lastOldObject = null;
+        image.specialObjectsArray = null;
+        image.oldSpaceCount = 0;
+        image.oldSpaceBytes = 0;
+        image.totalMemory = 0;
+        image.savedHeaderWords = [];
+        image.headerFlags = 0;
+        image._activeInstallController = null;
+    }
+    if (this._rejectCompletion) {
+        this._rejectCompletion(error || new Error("image stream aborted"));
+        this._rejectCompletion = null;
+    }
+};
+
+Squeak.ImageInstallController.prototype.markObjectAvailable = function(object) {
+    if (!object) return;
+    object.__streamParsed = true;
+    this._availableTail = object;
+    this._totalObjects = this.image.oldSpaceCount || this._totalObjects;
+    if (!this._cursor) this._cursor = object;
+    this._maybeScheduleFlush();
+};
+
+Squeak.ImageInstallController.prototype.markStreamComplete = function() {
+    this._streamComplete = true;
+    this._maybeScheduleFlush();
+};
+
+Squeak.ImageInstallController.prototype._markAllAvailable = function() {
+    var object = this.image.firstOldObject;
+    while (object) {
+        object.__streamParsed = true;
+        this._availableTail = object;
+        object = object.nextObject;
+    }
+    if (!this._cursor) this._cursor = this.image.firstOldObject;
+};
+
+Squeak.ImageInstallController.prototype._maybeScheduleFlush = function() {
+    if (!this.streaming) return;
+    if (this._flushScheduled) return;
+    if (!this._cursor || !this._cursor.__streamParsed) return;
+    var self = this;
+    this._flushScheduled = true;
+    this.scheduler(function() {
+        self._flushScheduled = false;
+        try {
+            self._consumeBatch(false);
+            self._maybeFinish();
+        } catch (error) {
+            if (self._completed) throw error;
+            self._completed = true;
+            self.image._activeInstallController = null;
+            if (self._rejectCompletion) self._rejectCompletion(error);
+            else throw error;
+        }
+    });
+};
+
+Squeak.ImageInstallController.prototype._consumeBatch = function(force) {
+    if (!this._ensureInstallResources()) return false;
+    var processed = 0;
+    while (this._cursor && this._cursor.__streamParsed) {
+        if (!force && processed >= this.batchSize) break;
+        if (!this._dependenciesReady(this._cursor)) break;
+        this._installNext();
+        processed++;
+    }
+    if (processed > 0) this._emitFinalizeProgress();
+    if (this.streaming && this._cursor && this._cursor.__streamParsed && processed >= this.batchSize) {
+        this._maybeScheduleFlush();
+    }
+    return processed > 0;
+};
+
+Squeak.ImageInstallController.prototype._installNext = function() {
+    var object = this._cursor;
+    if (!object) return;
+    var next = object.nextObject;
+    var renamed = this._renameObject(object);
+    renamed.nextObject = next;
+    this._linkRenamedObject(renamed);
+    this._installObject(renamed);
+    if (this._installResources && renamed.oop === this.context.specialObjectsOopInt) {
+        this._installResources.specialObjects = renamed;
+    }
+    this._cursor = next;
+    this._installedCount++;
+};
+
+Squeak.ImageInstallController.prototype._ensureInstallResources = function() {
+    if (this._installResources) return true;
+    var context = this.context;
+    var oopMap = context.oopMap;
+    var rawBits = context.rawBits;
+    var specialObjects = oopMap.get(context.specialObjectsOopInt);
+    if (!specialObjects) return false;
+    var classInfo;
+    if (this.image.isSpur) {
+        if (!context.classPages) return false;
+        try {
+            classInfo = this.image.spurClassTable(oopMap, rawBits, context.classPages, specialObjects);
+        } catch (error) {
+            return false;
+        }
+        this.image.initImmediateClasses(oopMap, rawBits, specialObjects);
+        this.image.initSpurOverrides();
+        this._nativeFloatDecoder = this.image.getCharacter.bind(this.image);
+    } else {
+        var splObsBits = rawBits.get(specialObjects.oop);
+        if (!splObsBits) return false;
+        var compactClassesArray = oopMap.get(splObsBits[Squeak.splOb_CompactClasses]);
+        if (!compactClassesArray) return false;
+        classInfo = rawBits.get(compactClassesArray.oop);
+        if (!classInfo) return false;
+    }
+    var splObsBitsForFloat = rawBits.get(specialObjects.oop);
+    if (!splObsBitsForFloat) return false;
+    var floatClass = oopMap.get(splObsBitsForFloat[Squeak.splOb_ClassFloat]);
+    if (!floatClass) return false;
+    this._installResources = {
+        specialObjects: specialObjects,
+        compactClasses: classInfo,
+        floatClass: floatClass,
+    };
+    return true;
+};
+
+Squeak.ImageInstallController.prototype._dependenciesReady = function(object) {
+    var context = this.context;
+    var rawBits = context.rawBits;
+    var oopMap = context.oopMap;
+    var bits = rawBits.get(object.oop);
+    if (!bits) return false;
+    var format = object._format;
+    if (format < 5) {
+        for (var i = 0; i < bits.length; i++) {
+            var oop = bits[i];
+            if (typeof oop === "number") {
+                if ((oop & 1) === 1) continue;
+                if (!oopMap.has(oop)) return false;
+            } else if (!oopMap.has(oop)) {
+                return false;
+            }
+        }
+    } else if (format >= 12 && format < 16) {
+        if (!this._compiledMethodPointersReady(bits)) return false;
+    }
+    return true;
+};
+
+Squeak.ImageInstallController.prototype._compiledMethodPointersReady = function(bits) {
+    if (!bits || bits.length === 0) return true;
+    var context = this.context;
+    var oopMap = context.oopMap;
+    var littleEndian = context.littleEndian;
+    var data = new DataView(bits.buffer, bits.byteOffset, bits.byteLength);
+    var methodHeader = data.getUint32(0, littleEndian);
+    var numLits = (methodHeader >> 10) & 255;
+    for (var i = 1; i <= numLits; i++) {
+        var offset = i * 4;
+        var value = data.getUint32(offset, littleEndian);
+        if ((value & 1) === 1) continue;
+        if (!oopMap.has(value)) return false;
+    }
+    return true;
+};
+
+Squeak.ImageInstallController.prototype._renameObject = function(object) {
+    var context = this.context;
+    var oopMap = context.oopMap;
+    var rawBits = context.rawBits;
+    var classInfo = this._installResources.compactClasses;
+    var renamed = object.renameFromImage(oopMap, rawBits, classInfo);
+    oopMap.set((context.oldBaseAddr || 0) + object.oop, renamed);
+    return renamed;
+};
+
+Squeak.ImageInstallController.prototype._linkRenamedObject = function(renamed) {
+    if (!this.image.firstOldObject || this._installedCount === 0) {
+        this.image.firstOldObject = renamed;
+    }
+    if (this._renamedTail) {
+        this._renamedTail.nextObject = renamed;
+    }
+    this._renamedTail = renamed;
+};
+
+Squeak.ImageInstallController.prototype._installObject = function(object) {
+    var context = this.context;
+    var installResources = this._installResources;
+    var options = context.is64Bit && {
+        makeFloat: this.image.instantiateFloat.bind(this.image),
+        makeLargeFromSmall: this.image.instantiateLargeFromSmall.bind(this.image),
+    };
+    object.installFromImage(
+        context.oopMap,
+        context.rawBits,
+        installResources.compactClasses,
+        installResources.floatClass,
+        context.littleEndian,
+        this._nativeFloatDecoder,
+        options
+    );
+};
+
+Squeak.ImageInstallController.prototype._emitFinalizeProgress = function() {
+    if (!this.finalizeProgressDo) return;
+    if (!this._totalObjects) return;
+    var fraction = this._installedCount / this._totalObjects;
+    if (fraction < 0) fraction = 0;
+    if (fraction > 1) fraction = 1;
+    this.finalizeProgressDo(fraction);
+};
+
+Squeak.ImageInstallController.prototype._maybeFinish = function() {
+    if (this._completed) return;
+    if (this._cursor && (!this._cursor.__streamParsed || !this._dependenciesReady(this._cursor))) return;
+    if (!this._streamComplete) return;
+    if (this._cursor) return;
+    this._completed = true;
+    if (this._renamedTail) {
+        this.image.lastOldObject = this._renamedTail;
+        this.image.lastOldObject.nextObject = null;
+    }
+    var installResources = this._installResources;
+    if (installResources) {
+        this.image.specialObjectsArray = installResources.specialObjects;
+        this.image.decorateKnownObjects();
+        if (this.image.isSpur) {
+            this.image.fixSkippedOops(this.context.oopAdjust || {});
+            if (this.context.is64Bit) this.image.fixPCs();
+            this.image.ensureFullBlockClosureClass(this.image.specialObjectsArray, installResources.compactClasses);
+        } else {
+            this.image.fixCompiledMethods();
+            this.image.fixCompactOops();
+        }
+    }
+    if (this.finalizeProgressDo) this.finalizeProgressDo(1);
+    if (this.thenDo) this.thenDo();
+    if (this._resolveCompletion) this._resolveCompletion();
+    this.image._activeInstallController = null;
+};
+
+Squeak.ImageStreamProgressAdapter = function(progressDo, options) {
+    if (typeof progressDo !== "function") throw Error("progress callback required");
+    options = options || {};
+    this.progressDo = progressDo;
+    this.totalBytes = typeof options.totalBytes === "number" && options.totalBytes > 0
+        ? options.totalBytes : null;
+    var downloadWeight = options.downloadWeight;
+    if (downloadWeight === undefined || downloadWeight === null || !isFinite(downloadWeight)) {
+        downloadWeight = 0.7;
+    }
+    if (downloadWeight < 0) downloadWeight = 0;
+    if (downloadWeight > 1) downloadWeight = 1;
+    this.downloadWeight = downloadWeight;
+    this.finalizeWeight = 1 - downloadWeight;
+    this._lastValue = -Infinity;
+    this._lastDownloadFraction = 0;
+    this._lastFinalizeFraction = 0;
+};
+
+Squeak.ImageStreamProgressAdapter.prototype._emit = function(value) {
+    var clamped = value < 0 ? 0 : (value > 1 ? 1 : value);
+    if (clamped <= this._lastValue) return;
+    this._lastValue = clamped;
+    try {
+        this.progressDo(clamped);
+    } catch (error) {
+        console.warn("image stream progress callback failed", error);
+    }
+};
+
+Squeak.ImageStreamProgressAdapter.prototype.start = function() {
+    this._emit(0);
+};
+
+Squeak.ImageStreamProgressAdapter.prototype.handleDownload = function(fetched, total) {
+    if (typeof total === "number" && total > 0 && !this.totalBytes) {
+        this.totalBytes = total;
+    }
+    var denominator = this.totalBytes;
+    if (!denominator || !isFinite(denominator) || denominator <= 0) return;
+    var fraction = fetched / denominator;
+    if (!isFinite(fraction)) return;
+    if (fraction < 0) fraction = 0;
+    if (fraction > 1) fraction = 1;
+    if (fraction <= this._lastDownloadFraction) return;
+    this._lastDownloadFraction = fraction;
+    this._emit(fraction * this.downloadWeight);
+};
+
+Squeak.ImageStreamProgressAdapter.prototype.handleFinalize = function(fraction) {
+    if (!isFinite(fraction)) return;
+    if (fraction < 0) fraction = 0;
+    if (fraction > 1) fraction = 1;
+    if (fraction <= this._lastFinalizeFraction) return;
+    this._lastFinalizeFraction = fraction;
+    var base = this.downloadWeight;
+    var value = base + fraction * this.finalizeWeight;
+    this._emit(value);
+};
+
+Squeak.ImageStreamProgressAdapter.prototype.complete = function() {
+    this._emit(1);
 };
 
 var IMAGE_HEADER_VERSION_MASK = 0x119EE;
@@ -2355,23 +2792,103 @@ Squeak.ImageStreamCursor = function(iterator, options) {
     this.totalBytes = options && typeof options.totalBytes === "number" ? options.totalBytes : null;
     this.onChunk = options && typeof options.onChunk === "function" ? options.onChunk : null;
     this.onProgress = options && typeof options.onProgress === "function" ? options.onProgress : null;
+    this.resume = options && typeof options.resume === "function" ? options.resume : null;
+    this.maxResumes = options && typeof options.maxResumes === "number"
+        ? options.maxResumes : (this.resume ? 1 : 0);
+    this.onRecovery = options && typeof options.onRecovery === "function" ? options.onRecovery : null;
+    this._resumeAttempts = 0;
 };
 
 Squeak.ImageStreamCursor.prototype.ensure = async function(bytes) {
     while (this._buffered < bytes) {
-        var result = await this.iterator.next();
-        if (result.done) break;
+        var result;
+        try {
+            result = await this.iterator.next();
+        } catch (error) {
+            if (await this._attemptResume({ reason: "error", error: error })) continue;
+            throw error;
+        }
+        if (result.done) {
+            if (await this._attemptResume({ reason: "done" })) continue;
+            break;
+        }
         var chunk = normalizeChunk(result.value);
         if (!chunk || chunk.byteLength === 0) continue;
         if (this.onChunk) this.onChunk(chunk);
         this.buffers.push(chunk);
         this._buffered += chunk.byteLength;
         this._fetched += chunk.byteLength;
-        if (this.onProgress && this.totalBytes) {
-            this.onProgress(this._fetched, this.totalBytes);
-        }
+        if (this.onProgress) this.onProgress(this._fetched, this.totalBytes);
     }
     return this._buffered >= bytes;
+};
+
+Squeak.ImageStreamCursor.prototype.getResumeAttempts = function() {
+    return this._resumeAttempts;
+};
+
+Squeak.ImageStreamCursor.prototype._attemptResume = async function(meta) {
+    if (!this.resume) return false;
+    if (this._resumeAttempts >= this.maxResumes) return false;
+    var info = {
+        attempts: this._resumeAttempts,
+        fetched: this._fetched,
+        consumed: this._consumed,
+        buffered: this._buffered,
+        offset: this._consumed + this._buffered,
+        totalBytes: this.totalBytes,
+        reason: meta && meta.reason ? meta.reason : "unknown",
+        error: meta && meta.error ? meta.error : null,
+    };
+    var result;
+    try {
+        result = await this.resume(info);
+    } catch (error) {
+        if (this.onRecovery) {
+            try { this.onRecovery(Object.assign({}, info, { outcome: "failed", error: error })); }
+            catch (recoveryError) { console.warn("image stream recovery handler failed", recoveryError); }
+        }
+        return false;
+    }
+    if (!result) {
+        if (this.onRecovery) {
+            try { this.onRecovery(Object.assign({}, info, { outcome: "declined" })); }
+            catch (recoveryError2) { console.warn("image stream recovery handler failed", recoveryError2); }
+        }
+        return false;
+    }
+    if (result.reset) {
+        var resetError = new Error(result.message || "image stream reset");
+        resetError.name = "ImageStreamReset";
+        resetError.streamReset = true;
+        resetError.resumeInfo = info;
+        throw resetError;
+    }
+    var iterator = result.iterator || result;
+    if (!iterator || typeof iterator.next !== "function") {
+        if (this.onRecovery) {
+            try { this.onRecovery(Object.assign({}, info, { outcome: "invalid" })); }
+            catch (recoveryError3) { console.warn("image stream recovery handler failed", recoveryError3); }
+        }
+        return false;
+    }
+    this.iterator = iterator;
+    if (typeof result.totalBytes === "number" && result.totalBytes > 0) {
+        this.totalBytes = result.totalBytes;
+    }
+    if (result.dropBuffered) {
+        this.buffers = [];
+        this._buffered = 0;
+    }
+    if (typeof result.adjustFetched === "number" && isFinite(result.adjustFetched)) {
+        this._fetched = result.adjustFetched;
+    }
+    this._resumeAttempts++;
+    if (this.onRecovery) {
+        try { this.onRecovery(Object.assign({}, info, { outcome: "resumed" })); }
+        catch (recoveryError4) { console.warn("image stream recovery handler failed", recoveryError4); }
+    }
+    return true;
 };
 
 Squeak.ImageStreamCursor.prototype.peek = function(bytes, offset) {

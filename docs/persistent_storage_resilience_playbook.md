@@ -48,12 +48,19 @@ concrete deliverables, validation steps, and rollout guidance.
    - Add checksum audits and repair reports accessible via diagnostics UI and CLI utilities.
    - Provide admin workflows for exporting/importing storage snapshots for disaster recovery.
    - Document operational runbooks (alert responses, manual reconciliation steps, rollback procedures).
+   - _Implementation snapshot (2025-11-08):_ `vm.storage.reconcile.js` coordinates background reconciliation runs triggered by service worker manifest updates, repairing missing local files from cached snapshots, re-registering local-only entries, emitting telemetry, and covered by `tests/storage/storage-reconcile.test.mjs` to exercise recovery and scheduling paths.
 
 ## 5. Implementation Tasks
 - [x] Land capability detection module with promise-based probes and structured result schema.
   - ✅ `vm.storage.capabilities.js` orchestrates IndexedDB, Cache Storage, OPFS, File System Access API, and `localStorage` probes, caches reports on `Squeak.BrowserVMState`, and exposes helpers under `Squeak.Storage.Capabilities`.
   - 📄 Implementation design: see `storage_capability_detection_design.md` for module architecture, telemetry schema, and acceptance checklist.
-- [ ] Add storage telemetry channel that emits JSON records for capability states, quota usage, and error events.
+- [x] Add storage telemetry channel that emits JSON records for capability states, quota usage, and error events.
+  - ✅ Introduced `vm.storage.telemetry.js` with helpers that normalize capability, quota-sample, quota-event, and error payloads
+    before routing them through `Squeak.telemetry` or console fallbacks.
+  - ✅ Updated `vm.storage.capabilities.js` and `vm.storage.quota.js` to publish telemetry for capability detections, quota samples,
+    threshold events, eviction plans, and error conditions.
+  - ✅ Added `tests/storage/storage-telemetry.test.mjs` to exercise capability deduping, quota sampling, threshold emission, and
+    error fallback behaviour end-to-end.
 - [x] Extend VM file APIs to delegate through a pluggable backend supporting IndexedDB, Cache Storage, and in-memory modes.
 - [x] Create service worker script with request routing, atomic write protocol, and cache reconciliation logic.
 - [x] Develop integration tests that simulate offline reloads, quota exhaustion, and API permission denials.
@@ -92,8 +99,8 @@ concrete deliverables, validation steps, and rollout guidance.
 
 ## 10. Next Steps
 1. ✅ Ship capability detection module and host/worker integration (`vm.storage.capabilities.js`, `squeak.js`, `vm.worker.host.js`, `vm.worker.entry.js`).
-2. Draft storage telemetry schema and integrate with existing logging infrastructure.
-3. Add automated unit coverage for the capability detection orchestrator (success, failure, timeout scenarios).
+2. ✅ Draft storage telemetry schema and integrate with existing logging infrastructure.
+3. ✅ Add automated unit coverage for the capability detection orchestrator (success, failure, timeout scenarios).
 4. Schedule implementation spikes for service worker VFS and quota monitoring harnesses.
 5. Coordinate with documentation maintainers to publish operator-focused deployment guides alongside code changes.
 

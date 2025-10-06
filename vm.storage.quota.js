@@ -1,3 +1,9 @@
+import {
+    emitStorageQuotaSampleTelemetry,
+    emitStorageQuotaEventTelemetry,
+    emitStorageErrorTelemetry,
+} from "./vm.storage.telemetry.js";
+
 "use strict";
 
 const DEFAULT_THRESHOLDS = {
@@ -152,7 +158,17 @@ function enqueueEvent(event) {
     state.listeners.forEach(function(listener) {
         try { listener(event); } catch (_) {}
     });
+    publishQuotaEvent(event);
     signalWarningSemaphore();
+}
+
+function publishQuotaEvent(event) {
+    const payload = Object.assign({
+        monitorStarted: state.monitorStarted,
+        supported: state.supported,
+        storageEstimateSupported: state.storageEstimateSupported,
+    }, event);
+    emitStorageQuotaEventTelemetry(payload);
 }
 
 function signalWarningSemaphore() {
@@ -239,6 +255,11 @@ function maybeTriggerEviction(estimate, manifestSummary) {
     };
     Promise.resolve(result).catch(function(error) {
         state.lastError = formatError(error);
+        emitStorageErrorTelemetry(error, {
+            scope: "storage.quota.eviction",
+            phase: "handler",
+            plan: plan,
+        });
     }).finally(function() {
         state.evictionInFlight = false;
     });
@@ -318,6 +339,12 @@ function processEstimate(estimate, manifestSummary) {
     recordHistory(sample);
     evaluateThresholds(sample);
     maybeTriggerEviction(estimate, manifestSummary);
+    emitStorageQuotaSampleTelemetry(Object.assign({
+        supported: state.supported,
+        storageEstimateSupported: state.storageEstimateSupported,
+        manifestBytes: manifestSummary.totalBytes,
+        manifestFileCount: manifestSummary.fileCount,
+    }, sample));
     return sample;
 }
 
@@ -416,6 +443,10 @@ function forceSample() {
             estimatePromise = Promise.resolve(navigatorObj.storage.estimate());
         } catch (error) {
             state.lastError = formatError(error);
+            emitStorageErrorTelemetry(error, {
+                scope: "storage.quota.estimate",
+                phase: "schedule",
+            });
             estimatePromise = Promise.resolve({ usage: manifestSummary.totalBytes, quota: manifestSummary.totalBytes });
         }
     } else {
@@ -427,6 +458,10 @@ function forceSample() {
         return sample;
     }).catch(function(error) {
         state.lastError = formatError(error);
+        emitStorageErrorTelemetry(error, {
+            scope: "storage.quota.estimate",
+            phase: "sample",
+        });
         const fallback = normalizeEstimate({}, manifestSummary);
         return processEstimate(fallback, manifestSummary);
     }).finally(function() {

@@ -2089,7 +2089,20 @@ Squeak.StreamingImageLoader.prototype._loadInternal = async function() {
     finalizeContext.classPages = classPages;
     finalizeContext.oopAdjust = oopAdjust;
     controller.markStreamComplete();
-    return controller.whenComplete();
+    var completion = controller.whenComplete();
+    var timeoutMs = 60000;
+    var timeoutId = typeof self !== "undefined" && self && typeof self.setTimeout === "function"
+        ? self.setTimeout(function() {
+            try { controller.abort(new Error("image finalize timeout")); } catch (_) {}
+        }, timeoutMs)
+        : setTimeout(function() {
+            try { controller.abort(new Error("image finalize timeout")); } catch (_) {}
+        }, timeoutMs);
+    completion.finally(function() {
+        if (typeof self !== "undefined" && self && typeof self.clearTimeout === "function") self.clearTimeout(timeoutId);
+        else clearTimeout(timeoutId);
+    });
+    return completion;
 };
 
 Squeak.ImageInstallController = function(image, context, options) {
@@ -2216,8 +2229,24 @@ Squeak.ImageInstallController.prototype._maybeScheduleFlush = function() {
     this.scheduler(function() {
         self._flushScheduled = false;
         try {
-            self._consumeBatch(false);
+            var madeProgress = self._consumeBatch(false);
             self._maybeFinish();
+            if (!madeProgress && self._cursor && self._cursor.__streamParsed && !self._flushScheduled && !self._completed) {
+                self._flushScheduled = true;
+                self.scheduler(function() {
+                    self._flushScheduled = false;
+                    try {
+                        self._consumeBatch(false);
+                        self._maybeFinish();
+                    } catch (e) {
+                        if (self._completed) throw e;
+                        self._completed = true;
+                        self.image._activeInstallController = null;
+                        if (self._rejectCompletion) self._rejectCompletion(e);
+                        else throw e;
+                    }
+                });
+            }
         } catch (error) {
             if (self._completed) throw error;
             self._completed = true;
@@ -2377,8 +2406,12 @@ Squeak.ImageInstallController.prototype._installObject = function(object) {
 
 Squeak.ImageInstallController.prototype._emitFinalizeProgress = function() {
     if (!this.finalizeProgressDo) return;
-    if (!this._totalObjects) return;
-    var fraction = this._installedCount / this._totalObjects;
+    var total = this._totalObjects;
+    if (!total) {
+        if (this.streaming) total = this._installedCount + 1000;
+        else total = 1;
+    }
+    var fraction = total ? (this._installedCount / total) : 0;
     if (fraction < 0) fraction = 0;
     if (fraction > 1) fraction = 1;
     this.finalizeProgressDo(fraction);

@@ -1446,18 +1446,49 @@ Object.subclass('Squeak.Image',
     },
     spurClassTable: function(oopMap, rawBits, classPages, splObjs) {
         var classes = {},
-            nil = this.firstOldObject;
+            nil = this.firstOldObject,
+            audit = this.headerAudit || null;
         // read class table pages
         for (var p = 0; p < 4096; p++) {
-            var page = oopMap.get(classPages[p]);
-            if (page.oop) page = rawBits.get(page.oop); // page was not properly hidden
-            if (page.length === 1024) for (var i = 0; i < 1024; i++) {
-                var entry = oopMap.get(page[i]);
-                if (!entry) throw Error("Invalid class table entry (oop " + page[i] + ")");
-                if (entry !== nil) {
-                    var classIndex = p * 1024 + i;
-                    classes[classIndex] = entry;
+            var pagePointer = classPages[p];
+            if (!pagePointer) continue;
+            var pageObject = oopMap.get(pagePointer);
+            if (!pageObject) {
+                if (audit) {
+                    audit.recordIssue("class-table-page-missing", {
+                        pageIndex: p,
+                        pagePointer: pagePointer >>> 0,
+                    });
                 }
+                continue;
+            }
+            var page = pageObject;
+            if (pageObject.oop && rawBits.has(pageObject.oop)) {
+                var bits = rawBits.get(pageObject.oop);
+                if (bits) page = bits;
+            } else if (Array.isArray(pageObject.pointers)) {
+                page = pageObject.pointers;
+            }
+            if (!page || typeof page.length !== "number") continue;
+            var entryCount = page.length >>> 0;
+            for (var i = 0; i < entryCount; i++) {
+                var entryPointer = page[i];
+                if (!entryPointer) continue;
+                if ((entryPointer & 1) === 1) continue;
+                var entry = oopMap.get(entryPointer);
+                if (!entry) {
+                    if (audit) {
+                        audit.recordIssue("class-table-entry-missing", {
+                            pageIndex: p,
+                            entryIndex: i,
+                            entryPointer: entryPointer >>> 0,
+                        });
+                    }
+                    continue;
+                }
+                if (entry === nil) continue;
+                var classIndex = p * 1024 + i;
+                classes[classIndex] = entry;
             }
         }
         // add known classes which may not be in the table
@@ -2602,6 +2633,23 @@ ImageHeaderAudit.prototype.recordIssue = function(code, details) {
             entry.details = Object.assign({}, issueDetails, {
                 version: issueDetails.version || (this.match && this.match.version ? this.match.version : null),
             });
+            break;
+        case "class-table-page-missing":
+            entry.message = 'Image "' + this.imageName + '" references a missing class table page at index ' + issueDetails.pageIndex + '.';
+            entry.guidance = "Re-download the image or clear cached data before retrying in case the snapshot was truncated.";
+            entry.details = {
+                pageIndex: issueDetails.pageIndex,
+                pagePointer: issueDetails.pagePointer,
+            };
+            break;
+        case "class-table-entry-missing":
+            entry.message = 'Image "' + this.imageName + '" references a missing class definition at page ' + issueDetails.pageIndex + ', slot ' + issueDetails.entryIndex + '.';
+            entry.guidance = "This is usually caused by a corrupt or partial image download. Fetch a fresh copy of the image and try again.";
+            entry.details = {
+                pageIndex: issueDetails.pageIndex,
+                entryIndex: issueDetails.entryIndex,
+                entryPointer: issueDetails.entryPointer,
+            };
             break;
         default:
             entry.message = 'Image "' + this.imageName + '" encountered an unsupported header configuration.';

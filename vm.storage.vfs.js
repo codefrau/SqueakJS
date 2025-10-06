@@ -37,6 +37,7 @@ const state = {
         restored: 0,
         errors: 0,
         lastError: null,
+        pending: false,
     },
 };
 
@@ -44,6 +45,7 @@ let registrationPromise = null;
 let readyRegistration = null;
 let suppressNotifications = false;
 let reconciliationKickstarted = false;
+let replayPendingPromise = null;
 
 function getGlobalObject() {
     if (typeof globalThis !== "undefined") return globalThis;
@@ -171,6 +173,22 @@ function enqueueEviction(paths, metadata) {
     enqueueOperation(payload);
 }
 
+function startReplayFromCache(options) {
+    if (replayPendingPromise) return replayPendingPromise;
+    state.replay.pending = true;
+    const promise = replayFromCache(options).catch(function(error) {
+        state.replay.lastError = formatError(error);
+        return null;
+    }).finally(function() {
+        if (replayPendingPromise === promise) {
+            replayPendingPromise = null;
+        }
+        state.replay.pending = false;
+    });
+    replayPendingPromise = promise;
+    return promise;
+}
+
 function handleServiceWorkerMessage(event) {
     const data = event && event.data;
     if (!data || data.channel !== STORAGE_CHANNEL) return;
@@ -243,13 +261,8 @@ async function ensureStorageVFSRegistration(options) {
         });
     }).then(function(reg) {
         if (options.autoReplay !== false) {
-            return replayFromCache().catch(function(error) {
-                state.replay.lastError = formatError(error);
-                return null;
-            }).then(function() { return reg; });
+            startReplayFromCache();
         }
-        return reg;
-    }).then(function(reg) {
         if (!reconciliationKickstarted) {
             scheduleStorageReconciliation(0, { reason: "registration" });
             reconciliationKickstarted = true;

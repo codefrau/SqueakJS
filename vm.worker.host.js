@@ -1,8 +1,10 @@
 "use strict";
 
 import { ensureStorageCapabilityReport, setStorageCapabilityReport, getStorageCapabilityReport } from "./vm.storage.capabilities.js";
+import { createClipboardBridge, createClipboardRequestQueue } from "./vm.clipboard.js";
 
 const defaultWorkerURL = new URL("./vm.worker.entry.js", import.meta.url);
+const GESTURE_WINDOW_MS = 1200;
 
 function normalizeBuffer(source) {
     if (source instanceof ArrayBuffer) return source;
@@ -32,12 +34,57 @@ export class WorkerVMController {
         };
         this._clipboardState = {
             text: "",
-            lastUpdate: 0,
+            cachedAt: null,
+            lastRead: null,
+            lastWrite: null,
+            lastStatus: null,
+            lastError: null,
+            permission: {
+                read: { state: "unknown", updatedAt: null },
+                write: { state: "unknown", updatedAt: null },
+            },
+            staleDrops: 0,
+            errorCounts: {},
+            metricsKey: null,
+            metricsUpdatedAt: null,
+            queueState: null,
         };
+        this._clipboardBridge = createClipboardBridge({
+            getUserGesture: () => this._isGestureActive(),
+            onStatus: (status) => this._recordClipboardStatus(status),
+        });
+        this._syncClipboardStateFromBridge();
+        var controller = this;
+        this._clipboardQueue = createClipboardRequestQueue({
+            read: function(options) {
+                var requestOptions = Object.assign({ fallbackToCache: true }, options || {});
+                if (requestOptions.requireGesture === undefined) {
+                    requestOptions.requireGesture = controller._isGestureActive();
+                }
+                if (!controller._clipboardBridge || typeof controller._clipboardBridge.readText !== "function") {
+                    var cachedText = typeof controller._clipboardState.text === "string"
+                        ? controller._clipboardState.text
+                        : "";
+                    return Promise.resolve({ text: cachedText, fromCache: true, permission: "unknown" });
+                }
+                return controller._clipboardBridge.readText(requestOptions);
+            },
+            write: function(text, options) {
+                var requestOptions = Object.assign({}, options || {});
+                if (requestOptions.requireGesture === undefined) {
+                    requestOptions.requireGesture = controller._isGestureActive();
+                }
+                if (!controller._clipboardBridge || typeof controller._clipboardBridge.writeText !== "function") {
+                    return Promise.resolve({ text: text, fromCache: true, permission: "unknown" });
+                }
+                return controller._clipboardBridge.writeText(text, requestOptions);
+            },
+        });
         this._pendingClipboard = new Map();
         this._pendingReports = new Map();
         this._nextReportId = 1;
         this._lastFeatureReport = null;
+        this._lastGestureAt = 0;
     }
 
     on(type, handler) {
@@ -66,6 +113,78 @@ export class WorkerVMController {
                 }
             }
         });
+    }
+
+    _recordClipboardStatus(status) {
+        this._clipboardState.lastStatus = status || null;
+        this._syncClipboardStateFromBridge();
+        this.emit("clipboard-status", status);
+    }
+
+    _syncClipboardStateFromBridge(snapshot) {
+        if (!snapshot && this._clipboardBridge && typeof this._clipboardBridge.getState === "function") {
+            snapshot = this._clipboardBridge.getState();
+        }
+        if (!snapshot || typeof snapshot !== "object") return;
+        if (typeof snapshot.cachedText === "string") this._clipboardState.text = snapshot.cachedText;
+        if (snapshot.cachedAt !== undefined) this._clipboardState.cachedAt = snapshot.cachedAt;
+        if (snapshot.lastRead !== undefined) this._clipboardState.lastRead = snapshot.lastRead;
+        if (snapshot.lastWrite !== undefined) this._clipboardState.lastWrite = snapshot.lastWrite;
+        if (snapshot.lastStatus !== undefined) this._clipboardState.lastStatus = snapshot.lastStatus;
+        if (snapshot.lastError !== undefined) this._clipboardState.lastError = snapshot.lastError ? Object.assign({}, snapshot.lastError) : null;
+        if (snapshot.permission !== undefined) {
+            this._clipboardState.permission = {
+                read: Object.assign({}, snapshot.permission.read || {}),
+                write: Object.assign({}, snapshot.permission.write || {}),
+            };
+        }
+        if (snapshot.errorCounts !== undefined) this._clipboardState.errorCounts = Object.assign({}, snapshot.errorCounts);
+        if (snapshot.staleDrops !== undefined) this._clipboardState.staleDrops = snapshot.staleDrops;
+        if (snapshot.metricsKey !== undefined) this._clipboardState.metricsKey = snapshot.metricsKey;
+        if (snapshot.metricsUpdatedAt !== undefined) this._clipboardState.metricsUpdatedAt = snapshot.metricsUpdatedAt;
+    }
+
+    getClipboardDiagnostics() {
+        this._syncClipboardStateFromBridge();
+        var queueState = this._clipboardQueue && typeof this._clipboardQueue.getState === "function"
+            ? this._clipboardQueue.getState()
+            : (this._clipboardState.queueState || { pending: 0, last: null });
+        this._clipboardState.queueState = queueState;
+        var permissions = this._clipboardState.permission || { read: { state: "unknown" }, write: { state: "unknown" } };
+        var preview = this._clipboardState.text || "";
+        if (preview.length > 120) preview = preview.slice(0, 117) + "...";
+        return {
+            text: this._clipboardState.text || "",
+            preview: preview,
+            cachedAt: this._clipboardState.cachedAt,
+            lastRead: this._clipboardState.lastRead,
+            lastWrite: this._clipboardState.lastWrite,
+            permissions: {
+                read: permissions.read && permissions.read.state ? permissions.read.state : "unknown",
+                write: permissions.write && permissions.write.state ? permissions.write.state : "unknown",
+            },
+            permissionDetail: {
+                read: Object.assign({}, permissions.read || {}),
+                write: Object.assign({}, permissions.write || {}),
+            },
+            queuePending: queueState.pending || 0,
+            queueLast: queueState.last || null,
+            lastStatus: this._clipboardState.lastStatus || null,
+            lastError: this._clipboardState.lastError || null,
+            staleDrops: this._clipboardState.staleDrops || 0,
+            errorCounts: Object.assign({}, this._clipboardState.errorCounts || {}),
+            metricsKey: this._clipboardState.metricsKey || null,
+            metricsUpdatedAt: this._clipboardState.metricsUpdatedAt || null,
+        };
+    }
+
+    _markGesture() {
+        this._lastGestureAt = Date.now();
+    }
+
+    _isGestureActive() {
+        if (!this._lastGestureAt) return false;
+        return Date.now() - this._lastGestureAt < GESTURE_WINDOW_MS;
     }
 
     async _ensureWorker() {
@@ -118,8 +237,15 @@ export class WorkerVMController {
         }
         if (data.type === "clipboard-set") {
             if (typeof data.text === "string") {
-                this._clipboardState.text = data.text;
-                this._clipboardState.lastUpdate = Date.now();
+                var timestamp = typeof data.timestamp === "number" && isFinite(data.timestamp) ? data.timestamp : Date.now();
+                if (this._clipboardBridge) {
+                    this._clipboardBridge.setCachedText(data.text, timestamp);
+                    this._syncClipboardStateFromBridge();
+                } else {
+                    this._clipboardState.text = data.text;
+                    this._clipboardState.cachedAt = timestamp;
+                }
+                this._clipboardState.lastWrite = timestamp;
             }
         }
         if (data.type === "clipboard-read-request" || data.type === "clipboard-write-request") {
@@ -182,44 +308,114 @@ export class WorkerVMController {
         var type = data.type;
         if (type === "clipboard-read-request") {
             var requestId = data.requestId;
-            var respond = function(payload) {
-                controller.worker.postMessage(Object.assign({
-                    type: "clipboard-read-response",
-                    requestId: requestId,
-                }, payload || {}));
-            };
-            if (typeof navigator !== "undefined" && navigator.clipboard && typeof navigator.clipboard.readText === "function") {
-                navigator.clipboard.readText().then(function(text) {
-                    controller._clipboardState.text = text;
-                    controller._clipboardState.lastUpdate = Date.now();
-                    respond({ text: text });
-                }).catch(function(error) {
-                    respond({ error: error && error.message ? error.message : String(error), text: controller._clipboardState.text });
+            var basePayload = { type: "clipboard-read-response", requestId: requestId };
+            var handler = this._clipboardQueue.enqueueRead({ fallbackToCache: true });
+            handler.then(function(result) {
+                var payload = result && typeof result === "object" ? Object.assign({}, result) : {};
+                var text = typeof payload.text === "string"
+                    ? payload.text
+                    : (controller._clipboardBridge ? controller._clipboardBridge.getCachedText() : controller._clipboardState.text);
+                if (typeof text !== "string") text = "";
+                payload.text = text;
+                controller._syncClipboardStateFromBridge(result && typeof result === "object" ? result.state : null);
+                controller._clipboardState.text = text;
+                controller._clipboardState.queueState = controller._clipboardQueue.getState();
+                payload.cachedAt = controller._clipboardState.cachedAt;
+                payload.lastRead = controller._clipboardState.lastRead;
+                payload.lastWrite = controller._clipboardState.lastWrite;
+                payload.staleDrops = controller._clipboardState.staleDrops;
+                payload.errorCounts = Object.assign({}, controller._clipboardState.errorCounts || {});
+                payload.permissionDetail = controller._clipboardState.permission;
+                payload.queueState = controller._clipboardState.queueState;
+                if (!payload.state && controller._clipboardBridge && typeof controller._clipboardBridge.getState === "function") {
+                    payload.state = controller._clipboardBridge.getState();
+                }
+                var response = Object.assign({}, basePayload, payload);
+                controller.worker.postMessage(response);
+            }).catch(function(error) {
+                var cachedText = controller._clipboardBridge ? controller._clipboardBridge.getCachedText() : controller._clipboardState.text;
+                if (typeof cachedText !== "string") cachedText = "";
+                controller._clipboardState.text = cachedText;
+                controller._syncClipboardStateFromBridge();
+                controller._clipboardState.queueState = controller._clipboardQueue.getState();
+                var permissionState = controller._clipboardState.permission && controller._clipboardState.permission.read
+                    ? controller._clipboardState.permission.read.state
+                    : "unknown";
+                var formatted = error && error.message ? { name: error.name || "Error", message: error.message } : null;
+                var response = Object.assign({}, basePayload, {
+                    text: cachedText,
+                    fromCache: true,
+                    permission: permissionState,
+                    cachedAt: controller._clipboardState.cachedAt,
+                    lastRead: controller._clipboardState.lastRead,
+                    lastWrite: controller._clipboardState.lastWrite,
+                    staleDrops: controller._clipboardState.staleDrops,
+                    errorCounts: Object.assign({}, controller._clipboardState.errorCounts || {}),
+                    permissionDetail: controller._clipboardState.permission,
+                    queueState: controller._clipboardState.queueState,
+                    state: controller._clipboardBridge && typeof controller._clipboardBridge.getState === "function"
+                        ? controller._clipboardBridge.getState()
+                        : null,
                 });
-            } else {
-                respond({ text: controller._clipboardState.text });
-            }
+                if (formatted) response.error = formatted;
+                controller.worker.postMessage(response);
+            });
             return;
         }
         if (type === "clipboard-write-request") {
             var text = typeof data.text === "string" ? data.text : "";
+            var timestamp = Date.now();
             this._clipboardState.text = text;
-            this._clipboardState.lastUpdate = Date.now();
-            var respondWrite = function(payload) {
-                controller.worker.postMessage(Object.assign({
-                    type: "clipboard-write-response",
-                    requestId: data.requestId,
-                }, payload || {}));
-            };
-            if (typeof navigator !== "undefined" && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
-                navigator.clipboard.writeText(text).then(function() {
-                    respondWrite({ text: text });
-                }).catch(function(error) {
-                    respondWrite({ error: error && error.message ? error.message : String(error), text: text });
-                });
-            } else {
-                respondWrite({ text: text });
+            this._clipboardState.cachedAt = timestamp;
+            this._clipboardState.lastWrite = timestamp;
+            if (this._clipboardBridge) {
+                this._clipboardBridge.setCachedText(text, timestamp);
+                this._syncClipboardStateFromBridge();
             }
+            var basePayload = { type: "clipboard-write-response", requestId: data.requestId };
+            var writePromise = this._clipboardQueue.enqueueWrite(text, {});
+            writePromise.then(function(result) {
+                var payload = result && typeof result === "object" ? Object.assign({}, result) : {};
+                if (payload.text === undefined) payload.text = text;
+                controller._syncClipboardStateFromBridge(result && typeof result === "object" ? result.state : null);
+                controller._clipboardState.queueState = controller._clipboardQueue.getState();
+                payload.cachedAt = controller._clipboardState.cachedAt;
+                payload.lastRead = controller._clipboardState.lastRead;
+                payload.lastWrite = controller._clipboardState.lastWrite;
+                payload.staleDrops = controller._clipboardState.staleDrops;
+                payload.errorCounts = Object.assign({}, controller._clipboardState.errorCounts || {});
+                payload.permissionDetail = controller._clipboardState.permission;
+                payload.queueState = controller._clipboardState.queueState;
+                if (!payload.state && controller._clipboardBridge && typeof controller._clipboardBridge.getState === "function") {
+                    payload.state = controller._clipboardBridge.getState();
+                }
+                var response = Object.assign({}, basePayload, payload);
+                controller.worker.postMessage(response);
+            }).catch(function(error) {
+                controller._syncClipboardStateFromBridge();
+                controller._clipboardState.queueState = controller._clipboardQueue.getState();
+                var permissionState = controller._clipboardState.permission && controller._clipboardState.permission.write
+                    ? controller._clipboardState.permission.write.state
+                    : "unknown";
+                var formatted = error && error.message ? { name: error.name || "Error", message: error.message } : null;
+                var response = Object.assign({}, basePayload, {
+                    text: text,
+                    fromCache: true,
+                    permission: permissionState,
+                    cachedAt: controller._clipboardState.cachedAt,
+                    lastRead: controller._clipboardState.lastRead,
+                    lastWrite: controller._clipboardState.lastWrite,
+                    staleDrops: controller._clipboardState.staleDrops,
+                    errorCounts: Object.assign({}, controller._clipboardState.errorCounts || {}),
+                    permissionDetail: controller._clipboardState.permission,
+                    queueState: controller._clipboardState.queueState,
+                    state: controller._clipboardBridge && typeof controller._clipboardBridge.getState === "function"
+                        ? controller._clipboardBridge.getState()
+                        : null,
+                });
+                if (formatted) response.error = formatted;
+                controller.worker.postMessage(response);
+            });
         }
     }
 
@@ -367,28 +563,43 @@ export class WorkerVMController {
 
     sendInputEvent(eventPayload) {
         if (!this.worker) throw new Error("Worker VM is not started");
+        this._markGesture();
         this.worker.postMessage({ type: "input-event", event: eventPayload });
     }
 
     sendInputEvents(eventPayloads) {
         if (!this.worker) throw new Error("Worker VM is not started");
         if (!Array.isArray(eventPayloads)) return;
+        this._markGesture();
         this.worker.postMessage({ type: "input-events", events: eventPayloads });
     }
 
     setClipboardText(text, options = {}) {
-        this._clipboardState.text = typeof text === "string" ? text : "";
-        this._clipboardState.lastUpdate = Date.now();
+        var normalized = typeof text === "string" ? text : "";
+        var timestamp = typeof options.timestamp === "number" && isFinite(options.timestamp)
+            ? options.timestamp
+            : Date.now();
+        this._clipboardState.text = normalized;
+        this._clipboardState.cachedAt = timestamp;
+        this._clipboardState.lastWrite = timestamp;
+        if (this._clipboardBridge) {
+            this._clipboardBridge.setCachedText(normalized, timestamp);
+            this._syncClipboardStateFromBridge();
+        }
         if (this.worker) {
             this.worker.postMessage({
                 type: "clipboard-set",
                 text: this._clipboardState.text,
                 changed: options.changed === undefined ? true : !!options.changed,
+                timestamp: timestamp,
             });
         }
     }
 
     requestClipboardText() {
+        if (this._clipboardBridge) {
+            return Promise.resolve(this._clipboardBridge.getCachedText());
+        }
         return Promise.resolve(this._clipboardState.text);
     }
 

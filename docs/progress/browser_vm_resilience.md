@@ -149,12 +149,22 @@ last update metadata, and validation evidence.
 ## 5. Clipboard Reliability
 
 ### Milestone 1: Async Clipboard API integration
-- Status: 🚧 In progress
-- Last Updated: 2025-10-24
+- Status: ✅ Completed
+- Last Updated: 2025-10-27
 - Commit: pending (current PR)
-- Notes: Authored the clipboard reliability hardening playbook outlining the async Clipboard API adoption strategy, permission gating, telemetry, and acceptance tests to kick off implementation.
+- Notes: Added a reusable `vm.clipboard.js` bridge that wraps `navigator.clipboard` with permission gating, gesture heuristics, and fallback messaging for both main-thread and worker interpreters. Updated browser and worker hosts to use the bridge, cache stale clipboard data when APIs are denied, and surface structured status events. Landed automated coverage in `tests/worker-input/channel.test.mjs` and `tests/worker-input/clipboard-permissions.test.mjs` to exercise denied-permission flows and cached fallbacks.
 
-- Remaining milestones: ☐ Not started
+### Milestone 2: Background request queue
+- Status: ✅ Completed
+- Last Updated: 2025-10-28
+- Commit: pending (current PR)
+- Notes: Introduced a shared clipboard request queue that serializes read/write operations across the main thread and worker host, automatically reusing freeze continuations so Smalltalk processes pause until asynchronous clipboard promises settle. Browser display handlers now return structured results even outside direct user gestures, worker bridges proxy queued responses, and new coverage in `tests/worker-input/clipboard-queue.test.mjs` verifies queued reads and writes resolve in order without losing cached state.
+
+### Milestone 3: State synchronization
+- Status: ✅ Completed
+- Last Updated: 2025-10-29
+- Commit: pending (current PR)
+- Notes: Clipboard caches now track timestamps across the browser UI, worker host, and worker display so stale updates are discarded and recorded for diagnostics. A `SqueakDebugClipboard` overlay surfaces live permission state, queue depth, cached text previews, and error counters, while the new `primitiveClipboardDiagnostics` primitive exposes the same JSON snapshot for headless automation. Error counts persist to local storage and worker diagnostics mirror host state, with automated coverage in `tests/worker-input/clipboard-state.test.mjs` exercising stale detection and merged snapshots.
 
 ## 6. Persistent Storage Resilience
 
@@ -164,8 +174,40 @@ last update metadata, and validation evidence.
 - Commit: pending (current PR)
 - Notes: Landed `vm.storage.capabilities.js` with sequential probes, caching, and telemetry hooks. Browser and worker startup now await `ensureStorageCapabilityReport()` (`squeak.js`, `vm.worker.host.js`, `vm.worker.entry.js`) so capability reports propagate across threads and emit `storage-capability-report` messages. Automated probe unit tests remain a follow-up task captured in the playbook next steps.
 
+### Milestone 2: Service worker-backed VFS
+- Status: ✅ Completed
+- Last Updated: 2025-10-30
+- Commit: pending (current PR)
+- Notes: Added `vm.storage.vfs.js` and `run/squeak-storage-sw.js` to register a Cache Storage-backed virtual file system, mirror writes/deletes/renames from `vm.files.browser.js`, and replay cached entries before the VM boots. `squeak.js` now waits for VFS registration (with configurable scope/script/cache options) and exposes `SqueakJS.getStorageVFSState()` for diagnostics. `tests/storage/storage-vfs.test.mjs` exercises queue flushing, rename/delete propagation, and replay hydration using a stubbed service worker runtime.
+
+### Milestone 3: Quota monitoring
+- Status: ✅ Completed
+- Last Updated: 2025-10-31
+- Commit: pending (current PR)
+- Notes: Introduced `vm.storage.quota.js` with a polling monitor that normalizes `navigator.storage.estimate` usage, mirrors the VFS manifest, and emits threshold events with optional semaphore signals for Smalltalk. The quota layer now plans LRU- and extension-aware evictions, proxies requests through the VFS queue, and records completion telemetry from the service worker. New primitives expose quota state and event drains, while `tests/storage/storage-quota.test.mjs` drives synthetic pressure to validate threshold notifications, eviction workflows, and manifest updates.
+
 ## 7. Media Access Fallbacks
-- All milestones: ☐ Not started
+
+### Milestone 1: Output abstraction
+- Status: ✅ Completed
+- Last Updated: 2025-11-01
+- Commit: pending (current PR)
+- Notes: Replaced the legacy buffer-source scheduler with an `AudioOutputManager` that prefers an AudioWorklet + SharedArrayBuffer ring buffer, falling back to buffer sources when modules fail or isolation is unavailable. Worker-ready tests simulate worklet success, worklet rejection, and legacy-only browsers to confirm semaphore callbacks fire and buffer accounting matches expectations.
+
+### Milestone 2: Input alternatives
+- Status: ✅ Completed
+- Last Updated: 2025-11-02
+- Commit: pending (current PR)
+- Notes: Introduced an `AudioInputManager` with synthetic tone and file-backed
+  recording sessions that images can select via
+  `snd_primitiveSoundConfigureRecordingSource`. Added JS helpers to register PCM
+  assets, emit diagnostics, and drive ScriptProcessor nodes without
+  `getUserMedia`. Automated coverage in
+  `tests/media/audio-input-manager.test.mjs` records the synthetic generator and
+  verifies looped playback from a registered file buffer.
+
+### Milestone 3: Permission UX
+- Status: ☐ Not started
 
 ## 8. Progressive Image Loading
 - All milestones: ☐ Not started

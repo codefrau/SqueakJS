@@ -17,12 +17,14 @@ class FakeWorker {
     }
 }
 
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 function lastMessage(worker) {
     if (!worker.messages.length) return null;
     return worker.messages[worker.messages.length - 1];
 }
 
-function run() {
+async function run() {
     const controller = new WorkerVMController();
     const fakeWorker = new FakeWorker();
     controller.worker = fakeWorker;
@@ -35,13 +37,33 @@ function run() {
 
     controller.setClipboardText("hello");
     assert.strictEqual(controller._clipboardState.text, "hello");
+    const clipboardSeed = lastMessage(fakeWorker);
+    assert.strictEqual(clipboardSeed.type, "clipboard-set");
+    assert.strictEqual(typeof clipboardSeed.timestamp, "number");
+    fakeWorker.messages.length = 0;
 
     controller._handleMessage({ type: "clipboard-read-request", requestId: 42 });
-    assert.deepStrictEqual(lastMessage(fakeWorker), { type: "clipboard-read-response", requestId: 42, text: "hello" });
+    await tick();
+    const readResponse = lastMessage(fakeWorker);
+    assert.strictEqual(readResponse.type, "clipboard-read-response");
+    assert.strictEqual(readResponse.requestId, 42);
+    assert.strictEqual(readResponse.text, "hello");
+    assert.strictEqual(readResponse.fromCache, true);
+    assert.strictEqual(typeof readResponse.cachedAt, "number");
 
     controller._handleMessage({ type: "clipboard-write-request", requestId: 43, text: "world" });
-    assert.deepStrictEqual(lastMessage(fakeWorker), { type: "clipboard-write-response", requestId: 43, text: "world" });
+    await tick();
+    const writeResponse = lastMessage(fakeWorker);
+    assert.strictEqual(writeResponse.type, "clipboard-write-response");
+    assert.strictEqual(writeResponse.requestId, 43);
+    assert.strictEqual(writeResponse.text, "world");
+    assert.strictEqual(writeResponse.fromCache, true);
     assert.strictEqual(controller._clipboardState.text, "world");
+
+    const diagnostics = controller.getClipboardDiagnostics();
+    assert.strictEqual(diagnostics.text, "world");
+    assert.strictEqual(typeof diagnostics.cachedAt, "number");
+    assert.strictEqual(diagnostics.queuePending, 0);
 
     const reportPromise = controller.requestFeatureReport();
     const reportRequest = lastMessage(fakeWorker);
@@ -59,12 +81,11 @@ function run() {
         },
     });
 
-    return reportPromise.then((payload) => {
-        assert.ok(payload.report);
-        assert.strictEqual(controller.lastFeatureReport, payload.report);
-        controller.terminate();
-        assert.strictEqual(fakeWorker.terminated, true);
-    });
+    const payload = await reportPromise;
+    assert.ok(payload.report);
+    assert.strictEqual(controller.lastFeatureReport, payload.report);
+    controller.terminate();
+    assert.strictEqual(fakeWorker.terminated, true);
 }
 
 await run();

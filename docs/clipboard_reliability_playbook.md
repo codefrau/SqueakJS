@@ -105,6 +105,12 @@ in a support-friendly format.
 4. Persist anonymized error counters to local storage so support teams
    can collect logs after incidents.
 
+**Runtime usage**
+- Toggle `window.SqueakDebugClipboard = true` in the browser to display
+  the diagnostics overlay with live permission and queue data.
+- Invoke the `primitiveClipboardDiagnostics` Smalltalk primitive to
+  retrieve a JSON snapshot of the clipboard state for automated checks.
+
 **Instrumentation**
 - Extend telemetry stream with `clipboard.state` snapshots containing
   permission, lastAction, and failure counts.

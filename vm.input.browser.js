@@ -1,3 +1,5 @@
+import { getStorageQuotaState, drainEventsAsJSON, setStorageQuotaWarningSemaphore } from "./vm.storage.quota.js";
+
 "use strict";
 /*
  * Copyright (c) 2013-2025 Vanessa Freudenberg
@@ -40,9 +42,28 @@ Object.extend(Squeak.Primitives.prototype,
             if (this.display.readFromSystemClipboard) clipBoardPromise = this.display.readFromSystemClipboard();
             if (clipBoardPromise) {
                 var unfreeze = this.vm.freeze();
-                clipBoardPromise
-                    .then(() => this.vm.popNandPush(1, this.makeStString(this.display.clipboardString)))
-                    .catch(() => this.vm.popNandPush(1, this.vm.nilObj))
+                Promise.resolve(clipBoardPromise)
+                    .then((result) => {
+                        var text = result;
+                        if (result && typeof result === "object" && typeof result.text === "string") {
+                            text = result.text;
+                        }
+                        if (typeof text === "string") {
+                            this.display.clipboardString = text;
+                            this.display.clipboardStringChanged = false;
+                            this.vm.popNandPush(1, this.makeStString(text));
+                            return;
+                        }
+                        if (typeof this.display.clipboardString === "string") {
+                            this.vm.popNandPush(1, this.makeStString(this.display.clipboardString));
+                        } else {
+                            this.vm.popNandPush(1, this.vm.nilObj);
+                        }
+                    })
+                    .catch((error) => {
+                        this.display.clipboardLastError = error;
+                        this.vm.popNandPush(1, this.vm.nilObj);
+                    })
                     .finally(unfreeze);
             } else {
                 if (typeof(this.display.clipboardString) !== 'string') return false;
@@ -54,13 +75,62 @@ Object.extend(Squeak.Primitives.prototype,
                 this.display.clipboardString = stringObj.bytesAsString();
                 this.display.clipboardStringChanged = true; // means it should be written to system clipboard
                 if (this.display.writeToSystemClipboard) {
-                    // no need to wait for the promise
-                    this.display.writeToSystemClipboard();
+                    var writePromise = this.display.writeToSystemClipboard();
+                    if (writePromise && typeof writePromise.then === "function") {
+                        var unfreezeWrite = this.vm.freeze();
+                        Promise.resolve(writePromise)
+                            .catch((error) => {
+                                this.display.clipboardLastError = error;
+                            })
+                            .finally(unfreezeWrite);
+                    }
                 }
             }
             this.vm.pop();
         }
         return true;
+    },
+    primitiveClipboardDiagnostics: function(argCount) {
+        if (argCount !== 0) return false;
+        var diagnostics = null;
+        if (this.display && typeof this.display.getClipboardDiagnostics === "function") {
+            try {
+                diagnostics = this.display.getClipboardDiagnostics();
+            } catch (_) {
+                diagnostics = null;
+            }
+        }
+        var json = "{}";
+        if (diagnostics) {
+            try {
+                json = JSON.stringify(diagnostics);
+            } catch (_) {
+                json = "{}";
+            }
+        }
+        return this.popNandPushIfOK(argCount + 1, this.makeStString(json));
+    },
+    primitiveStorageQuotaState: function(argCount) {
+        if (argCount !== 0) return false;
+        var json = "{}";
+        try {
+            json = JSON.stringify(getStorageQuotaState());
+        } catch (_) {
+            json = "{}";
+        }
+        return this.popNandPushIfOK(argCount + 1, this.makeStString(json));
+    },
+    primitiveStorageQuotaDrainEvents: function(argCount) {
+        if (argCount !== 0) return false;
+        var json = drainEventsAsJSON();
+        return this.popNandPushIfOK(argCount + 1, this.makeStString(json));
+    },
+    primitiveStorageQuotaSetSemaphore: function(argCount) {
+        if (argCount !== 1) return false;
+        var index = this.stackInteger(0);
+        if (!this.success) return false;
+        setStorageQuotaWarningSemaphore(index);
+        return this.popNIfOK(argCount);
     },
     primitiveKeyboardNext: function(argCount) {
         return this.popNandPushIfOK(argCount+1, this.ensureSmallInt(this.display.keys.shift()));

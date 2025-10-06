@@ -32,111 +32,70 @@ Object.extend(Squeak.Primitives.prototype,
             stereoFlag = this.stackBoolean(argCount-3),
             semaIndex = argCount > 3 ? this.stackInteger(argCount-4) : 0;
         if (!this.success) return false;
-        this.audioContext = Squeak.startAudioOut();
-        if (!this.audioContext) {
+        var channelCount = stereoFlag ? 2 : 1;
+        var session = Squeak.ensureAudioOutputSession({
+            bufferFrames: bufFrames,
+            sampleRate: samplesPerSec,
+            channels: channelCount,
+            onBufferFreed: function() {
+                if (this.audioSema) this.signalSemaphoreWithIndex(this.audioSema);
+                this.vm.forceInterruptCheck();
+            }.bind(this),
+        });
+        if (!session) {
             this.vm.warnOnce("could not initialize audio");
             return false;
         }
+        this.audioSession = session;
+        this.audioContext = session.context || Squeak.startAudioOut();
         this.audioSema = semaIndex; // signal when ready to accept another buffer of samples
-        this.audioNextTimeSlot = 0;
-        this.audioBuffersReady = [];
-        this.audioBuffersUnused = [
-            this.audioContext.createBuffer(stereoFlag ? 2 : 1, bufFrames, samplesPerSec),
-            this.audioContext.createBuffer(stereoFlag ? 2 : 1, bufFrames, samplesPerSec),
-        ];
-        // console.log("sound: started");
+        this.audioBufferFrames = bufFrames;
+        this.audioChannelCount = channelCount;
         return this.popNIfOK(argCount);
     },
-    snd_playNextBuffer: function() {
-        if (!this.audioContext || this.audioBuffersReady.length === 0)
-            return;
-        var source = this.audioContext.createBufferSource();
-        source.buffer = this.audioBuffersReady.shift();
-        source.connect(this.audioContext.destination);
-        if (this.audioNextTimeSlot < this.audioContext.currentTime) {
-            // if (this.audioNextTimeSlot > 0)
-            //     console.log("sound " + this.audioContext.currentTime.toFixed(3) +
-            //         ": buffer underrun by " + (this.audioContext.currentTime - this.audioNextTimeSlot).toFixed(3) + " s");
-            this.audioNextTimeSlot = this.audioContext.currentTime;
-        }
-        source.start(this.audioNextTimeSlot);
-        //console.log("sound " + this.audioContext.currentTime.toFixed(3) +
-        //    ": scheduling from " + this.audioNextTimeSlot.toFixed(3) +
-        //    " to " + (this.audioNextTimeSlot + source.buffer.duration).toFixed(3));
-        this.audioNextTimeSlot += source.buffer.duration;
-        // source.onended is unreliable, using a timeout instead
-        window.setTimeout(function() {
-            // if the vm was shut down, forceInterruptCheck will be null
-            if (!this.audioContext || !this.vm.forceInterruptCheck) return;
-            // console.log("sound " + this.audioContext.currentTime.toFixed(3) +
-            //    ": done, next time slot " + this.audioNextTimeSlot.toFixed(3));
-            this.audioBuffersUnused.push(source.buffer);
-            if (this.audioSema) this.signalSemaphoreWithIndex(this.audioSema);
-            this.vm.forceInterruptCheck();
-        }.bind(this), (this.audioNextTimeSlot - this.audioContext.currentTime) * 1000);
-        this.snd_playNextBuffer();
-    },
     snd_primitiveSoundAvailableSpace: function(argCount) {
-        if (!this.audioContext) {
+        if (!this.audioSession) {
             console.warn("sound: no audio context");
             return false;
         }
-        var available = 0;
-        if (this.audioBuffersUnused.length > 0) {
-            var buf = this.audioBuffersUnused[0];
-            available = buf.length * buf.numberOfChannels * 2;
-        }
+        var available = this.audioSession.availableByteCount();
         return this.popNandPushIfOK(argCount + 1, available);
     },
     snd_primitiveSoundPlaySamples: function(argCount) {
-        if (!this.audioContext || this.audioBuffersUnused.length === 0) {
-            console.warn("sound: play but no free buffers");
+        if (!this.audioSession) {
+            console.warn("sound: play but no audio session");
             return false;
         }
         var count = this.stackInteger(2),
             sqSamples = this.stackNonInteger(1).wordsAsInt16Array(),
             startIndex = this.stackInteger(0) - 1;
         if (!this.success || !sqSamples) return false;
-        var buffer = this.audioBuffersUnused.shift(),
-            channels = buffer.numberOfChannels;
-        for (var channel = 0; channel < channels; channel++) {
-            var jsSamples = buffer.getChannelData(channel),
-                index = startIndex + channel;
-            for (var i = 0; i < count; i++) {
-                jsSamples[i] = sqSamples[index] / 32768;    // int16 -> float32
-                index += channels;
-            }
+        if (!this.audioSession.enqueueSamples(sqSamples, startIndex, count)) {
+            console.warn("sound: insufficient buffer space for samples");
+            return false;
         }
-        this.audioBuffersReady.push(buffer);
-        this.snd_playNextBuffer();
         return this.popNIfOK(argCount);
     },
     snd_primitiveSoundPlaySilence: function(argCount) {
-        if (!this.audioContext || this.audioBuffersUnused.length === 0) {
-            console.warn("sound: play but no free buffers");
+        if (!this.audioSession) {
+            console.warn("sound: play but no audio session");
             return false;
         }
-        var buffer = this.audioBuffersUnused.shift(),
-            channels = buffer.numberOfChannels,
-            count = buffer.length;
-        for (var channel = 0; channel < channels; channel++) {
-            var jsSamples = buffer.getChannelData(channel);
-            for (var i = 0; i < count; i++)
-                jsSamples[i] = 0;
+        if (!this.audioSession.enqueueSilence(this.audioBufferFrames)) {
+            console.warn("sound: insufficient buffer space for silence");
+            return false;
         }
-        this.audioBuffersReady.push(buffer);
-        this.snd_playNextBuffer();
-        return this.popNandPushIfOK(argCount + 1, count);
+        return this.popNandPushIfOK(argCount + 1, this.audioBufferFrames);
     },
     snd_primitiveSoundStop: function(argCount) {
-        if (this.audioContext) {
-            this.audioContext = null;
-            this.audioBuffersReady = null;
-            this.audioBuffersUnused = null;
-            this.audioNextTimeSlot = 0;
-            this.audioSema = 0;
-            // console.log("sound: stopped");
+        if (this.audioSession) {
+            this.audioSession.stop();
+            this.audioSession = null;
         }
+        this.audioContext = null;
+        this.audioSema = 0;
+        this.audioBufferFrames = 0;
+        this.audioChannelCount = 0;
         return this.popNIfOK(argCount);
     },
     snd_primitiveSoundStartRecording: function(argCount) {
@@ -150,18 +109,15 @@ Object.extend(Squeak.Primitives.prototype,
             unfreeze = this.vm.freeze(),
             self = this;
         Squeak.startAudioIn(
-            function onSuccess(audioContext, source) {
-                // console.log("sound: recording started")
+            function onSuccess(audioContext, session) {
                 self.audioInContext = audioContext;
-                self.audioInSource = source;
+                self.audioInSession = session;
                 self.audioInSema = semaIndex;
                 self.audioInBuffers = [];
                 self.audioInBufferIndex = 0;
                 self.audioInOverSample = 1;
-                // if sample rate is still too high, adjust oversampling
                 while (samplesPerSec * self.audioInOverSample < self.audioInContext.sampleRate)
                     self.audioInOverSample *= 2;
-                // make a buffer of at least 100 ms
                 var bufferSize = self.audioInOverSample * 1024;
                 while (bufferSize / self.audioInContext.sampleRate < 0.1)
                     bufferSize *= 2;
@@ -169,8 +125,14 @@ Object.extend(Squeak.Primitives.prototype,
                 self.audioInProcessor.onaudioprocess = function(event) {
                     self.snd_recordNextBuffer(event.inputBuffer);
                 };
-                self.audioInSource.connect(self.audioInProcessor);
-                self.audioInProcessor.connect(audioContext.destination);
+                if (session && typeof session.connectProcessor === "function") {
+                    session.connectProcessor(self.audioInProcessor);
+                } else if (session && typeof session.connect === "function") {
+                    session.connect(self.audioInProcessor);
+                }
+                if (self.audioInProcessor && typeof self.audioInProcessor.connect === "function") {
+                    self.audioInProcessor.connect(audioContext.destination);
+                }
                 self.vm.popN(argCount);
                 window.setTimeout(unfreeze, 0);
             },
@@ -178,6 +140,10 @@ Object.extend(Squeak.Primitives.prototype,
                 console.warn(msg);
                 self.vm.sendAsPrimitiveFailure(rcvr, method, argCount);
                 window.setTimeout(unfreeze, 0);
+            },
+            {
+                sampleRate: samplesPerSec,
+                channels: stereoFlag ? 2 : 1,
             });
         return true;
     },
@@ -234,12 +200,16 @@ Object.extend(Squeak.Primitives.prototype,
     },
     snd_primitiveSoundStopRecording: function(argCount) {
         if (this.audioInContext) {
-            this.audioInSource.disconnect();
-            this.audioInProcessor.disconnect();
+            if (this.audioInSession && typeof this.audioInSession.stop === "function") {
+                this.audioInSession.stop();
+            }
+            if (this.audioInProcessor && typeof this.audioInProcessor.disconnect === "function") {
+                this.audioInProcessor.disconnect();
+            }
             this.audioInContext = null;
             this.audioInSema = 0;
             this.audioInBuffers = null;
-            this.audioInSource = null;
+            this.audioInSession = null;
             this.audioInProcessor = null;
             console.log("sound recording stopped")
         }
@@ -248,6 +218,24 @@ Object.extend(Squeak.Primitives.prototype,
     },
     snd_primitiveSoundSetRecordLevel: function(argCount) {
         this.vm.warnOnce("sound set record level not supported");
+        return this.popNIfOK(argCount);
+    },
+    snd_primitiveSoundConfigureRecordingSource: function(argCount) {
+        if (argCount < 1 || argCount > 2) return false;
+        var modeObj = this.stackNonInteger(argCount - 1);
+        if (!modeObj || !modeObj.bytesAsString) return false;
+        var mode = modeObj.bytesAsString();
+        var identifier = null;
+        if (argCount === 2) {
+            var idObj = this.stackValue(0);
+            if (idObj !== this.vm.nilObj) {
+                if (!idObj || typeof idObj.bytesAsString !== "function") return false;
+                identifier = idObj.bytesAsString();
+            }
+        }
+        var config = { mode: mode };
+        if (identifier !== null) config.fileId = identifier;
+        Squeak.configureAudioInput(config);
         return this.popNIfOK(argCount);
     },
 });

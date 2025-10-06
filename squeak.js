@@ -47,6 +47,8 @@ import "./vm.input.js";
 import "./vm.input.browser.js";
 import { WorkerVMController } from "./vm.worker.host.js";
 import { ensureStorageCapabilityReport, setStorageCapabilityReport, getStorageCapabilityReport } from "./vm.storage.capabilities.js";
+import { ensureStorageVFSRegistration } from "./vm.storage.vfs.js";
+import { ensureStorageQuotaMonitor } from "./vm.storage.quota.js";
 import "./vm.plugins.js";
 import "./vm.plugins.ffi.js";
 import "./vm.plugins.javascript.js";
@@ -87,6 +89,7 @@ import "./lib/lz-string.js";
 import "./lib/jszip.js";
 import "./lib/FileSaver.js";
 import "./lib/sha1.js";
+import { createClipboardBridge, createClipboardRequestQueue } from "./vm.clipboard.js";
 
 Object.extend(Squeak, {
     vmPath: "/",
@@ -98,6 +101,12 @@ Object.extend(Squeak, {
 // UI namespace
 window.SqueakJS = {};
 window.SqueakJS.WorkerVMController = WorkerVMController;
+window.SqueakJS.getStorageVFSState = function() {
+    if (Squeak.StorageVFS && typeof Squeak.StorageVFS.getState === "function") {
+        return Squeak.StorageVFS.getState();
+    }
+    return null;
+};
 
 //////////////////////////////////////////////////////////////////////////////
 // display & event setup
@@ -398,6 +407,11 @@ function createSqueakDisplay(canvas, options) {
             display.telemetryPanel.parentNode.removeChild(display.telemetryPanel);
         }
         display.telemetryPanel = null;
+        if (display.clipboardPanel && display.clipboardPanel.parentNode) {
+            display.clipboardPanel.parentNode.removeChild(display.clipboardPanel);
+        }
+        display.clipboardPanel = null;
+        display.clipboardState = createEmptyClipboardState();
         display.getNextEvent = function(firstEvtBuf, firstOffset) {
             // might be called from VM to get queued event
             display.eventQueue = []; // create queue on first call
@@ -415,6 +429,245 @@ function createSqueakDisplay(canvas, options) {
         };
     };
     display.reset();
+
+    var permissionsSupported = typeof navigator !== "undefined" && navigator.permissions;
+
+    function createEmptyClipboardState() {
+        return {
+            text: "",
+            cachedAt: null,
+            lastRead: null,
+            lastWrite: null,
+            lastStatus: null,
+            lastErrorDetail: null,
+            permission: {
+                read: { state: "unknown", supported: !!permissionsSupported, updatedAt: null },
+                write: { state: "unknown", supported: !!permissionsSupported, updatedAt: null },
+            },
+            staleDrops: 0,
+            queue: { pending: 0, last: null },
+            errorCounts: {},
+            metricsKey: null,
+            metricsUpdatedAt: null,
+        };
+    }
+
+    function mergePermissionState(target, source) {
+        if (!target) return;
+        if (!target.read) target.read = {};
+        if (!target.write) target.write = {};
+        if (!source || typeof source !== "object") return;
+        if (source.read && typeof source.read === "object") {
+            Object.keys(source.read).forEach(function(key) {
+                target.read[key] = source.read[key];
+            });
+        }
+        if (source.write && typeof source.write === "object") {
+            Object.keys(source.write).forEach(function(key) {
+                target.write[key] = source.write[key];
+            });
+        }
+    }
+
+    display.clipboardState = createEmptyClipboardState();
+
+    display.updateClipboardState = function(partial) {
+        var state = display.clipboardState;
+        if (!state) {
+            state = createEmptyClipboardState();
+            display.clipboardState = state;
+        }
+        if (!partial || typeof partial !== "object") return state;
+        if (partial.state && typeof partial.state === "object" && partial.state !== partial) {
+            display.updateClipboardState(partial.state);
+        }
+        if (partial.cachedText !== undefined) {
+            if (typeof partial.cachedText === "string") state.text = partial.cachedText;
+        }
+        if (partial.text !== undefined) {
+            if (typeof partial.text === "string") state.text = partial.text;
+        }
+        if (partial.cachedAt !== undefined) {
+            if (typeof partial.cachedAt === "number" && isFinite(partial.cachedAt)) state.cachedAt = partial.cachedAt;
+        }
+        if (partial.lastRead !== undefined) state.lastRead = partial.lastRead;
+        if (partial.lastWrite !== undefined) state.lastWrite = partial.lastWrite;
+        if (partial.lastStatus !== undefined) state.lastStatus = partial.lastStatus;
+        if (partial.lastErrorDetail !== undefined) state.lastErrorDetail = partial.lastErrorDetail;
+        else if (partial.lastError !== undefined) state.lastErrorDetail = partial.lastError;
+        if (partial.permissionDetail) mergePermissionState(state.permission, partial.permissionDetail);
+        if (partial.permission && typeof partial.permission === "object" && !Array.isArray(partial.permission)) {
+            mergePermissionState(state.permission, partial.permission);
+        }
+        if (typeof partial.permission === "string") {
+            state.permission.read.state = partial.permission;
+        }
+        if (partial.errorCounts && typeof partial.errorCounts === "object") {
+            state.errorCounts = Object.assign({}, partial.errorCounts);
+        }
+        if (partial.metricsKey !== undefined) state.metricsKey = partial.metricsKey;
+        if (partial.metricsUpdatedAt !== undefined) state.metricsUpdatedAt = partial.metricsUpdatedAt;
+        if (partial.staleDrops !== undefined) state.staleDrops = partial.staleDrops;
+        if (partial.queue && typeof partial.queue === "object") {
+            state.queue = {
+                pending: partial.queue.pending || 0,
+                last: partial.queue.last ? Object.assign({}, partial.queue.last) : null,
+            };
+        }
+        if (partial.queueState && typeof partial.queueState === "object") {
+            state.queue = {
+                pending: partial.queueState.pending || 0,
+                last: partial.queueState.last ? Object.assign({}, partial.queueState.last) : null,
+            };
+        }
+        if (partial.metricsUpdatedAt === undefined && partial.state && partial.state.metricsUpdatedAt !== undefined) {
+            state.metricsUpdatedAt = partial.state.metricsUpdatedAt;
+        }
+        return state;
+    };
+
+    display.collectClipboardState = function() {
+        if (display.clipboardBridge && typeof display.clipboardBridge.getState === "function") {
+            display.updateClipboardState(display.clipboardBridge.getState());
+        }
+        if (display.clipboardQueue && typeof display.clipboardQueue.getState === "function") {
+            display.updateClipboardState({ queue: display.clipboardQueue.getState() });
+        }
+        return display.clipboardState;
+    };
+
+    function formatTimestamp(timestamp) {
+        if (!timestamp && timestamp !== 0) return "never";
+        try {
+            return new Date(timestamp).toISOString();
+        } catch (_) {
+            return String(timestamp);
+        }
+    }
+
+    function formatRelative(timestamp) {
+        if (!timestamp && timestamp !== 0) return "n/a";
+        var now = Date.now();
+        var delta = now - timestamp;
+        if (delta < 0) delta = 0;
+        if (delta < 1000) return delta + " ms";
+        if (delta < 60000) return (delta / 1000).toFixed(1) + " s";
+        if (delta < 3600000) return (delta / 60000).toFixed(1) + " min";
+        return (delta / 3600000).toFixed(1) + " h";
+    }
+
+    display.getClipboardDiagnostics = function() {
+        var state = display.collectClipboardState();
+        var queue = state.queue || { pending: 0, last: null };
+        var permissions = {
+            read: state.permission && state.permission.read ? state.permission.read.state || "unknown" : "unknown",
+            write: state.permission && state.permission.write ? state.permission.write.state || "unknown" : "unknown",
+        };
+        var preview = state.text || "";
+        if (preview.length > 120) preview = preview.slice(0, 117) + "...";
+        return {
+            text: state.text || "",
+            preview: preview,
+            cachedAt: state.cachedAt,
+            cachedAtRelative: formatRelative(state.cachedAt),
+            lastRead: state.lastRead,
+            lastReadRelative: formatRelative(state.lastRead),
+            lastWrite: state.lastWrite,
+            lastWriteRelative: formatRelative(state.lastWrite),
+            permissions: permissions,
+            permissionDetail: state.permission,
+            queuePending: queue.pending || 0,
+            queueLast: queue.last || null,
+            lastStatus: state.lastStatus || null,
+            lastError: state.lastErrorDetail || null,
+            staleDrops: state.staleDrops || 0,
+            errorCounts: Object.assign({}, state.errorCounts || {}),
+            metricsKey: state.metricsKey || null,
+            metricsUpdatedAt: state.metricsUpdatedAt || null,
+        };
+    };
+
+    display.refreshClipboardDiagnostics = function() {
+        if (!display.clipboardPanel) return;
+        var diag = display.getClipboardDiagnostics();
+        var lines = [
+            "Clipboard Diagnostics",
+            "read perm: " + diag.permissions.read,
+            "write perm: " + diag.permissions.write,
+            "cached at: " + formatTimestamp(diag.cachedAt) + " (" + diag.cachedAtRelative + ")",
+            "last read: " + (diag.lastRead ? formatTimestamp(diag.lastRead) + " (" + diag.lastReadRelative + ")" : "never"),
+            "last write: " + (diag.lastWrite ? formatTimestamp(diag.lastWrite) + " (" + diag.lastWriteRelative + ")" : "never"),
+            "queue pending: " + diag.queuePending,
+            "stale drops: " + diag.staleDrops,
+        ];
+        var errorKeys = Object.keys(diag.errorCounts || {});
+        if (errorKeys.length) {
+            lines.push("errors: " + errorKeys.map(function(key) { return key + "=" + diag.errorCounts[key]; }).join(", "));
+        }
+        if (diag.lastStatus) {
+            lines.push("last status: " + (diag.lastStatus.type || "unknown") + " @ " + formatTimestamp(diag.lastStatus.timestamp));
+        }
+        if (diag.lastError && diag.lastError.error) {
+            lines.push("last error: " + (diag.lastError.error.name || "Error") + " - " + (diag.lastError.error.message || ""));
+        }
+        if (diag.preview) {
+            lines.push('preview: "' + diag.preview.replace(/\n/g, "\\n") + '"');
+        }
+        display.clipboardPanel.textContent = lines.join("\n");
+    };
+
+    display.attachClipboardDiagnosticsPanel = function() {
+        if (typeof document === "undefined") return null;
+        if (display.clipboardPanel) return display.clipboardPanel;
+        var host = display.container || document.body;
+        if (!host) return null;
+        if (host.style && (!host.style.position || host.style.position === "")) {
+            host.style.position = "relative";
+        }
+        var panel = document.createElement("div");
+        panel.className = "squeakjs-clipboard-panel";
+        panel.style.position = "absolute";
+        panel.style.left = "12px";
+        panel.style.bottom = display.telemetryPanel ? "132px" : "12px";
+        panel.style.padding = "8px 10px";
+        panel.style.borderRadius = "6px";
+        panel.style.background = "rgba(0, 0, 0, 0.65)";
+        panel.style.color = "#fff";
+        panel.style.fontFamily = "monospace";
+        panel.style.fontSize = "12px";
+        panel.style.lineHeight = "1.4";
+        panel.style.pointerEvents = "none";
+        panel.style.whiteSpace = "pre";
+        panel.style.zIndex = 10001;
+        panel.textContent = "Clipboard Diagnostics\ninitialising";
+        host.appendChild(panel);
+        display.clipboardPanel = panel;
+        display.refreshClipboardDiagnostics();
+        return panel;
+    };
+    display.lastClipboardStatus = null;
+    function handleClipboardStatus(status) {
+        display.lastClipboardStatus = status;
+        if (status) display.updateClipboardState({ lastStatus: status });
+        if (typeof display.onClipboardStatus === "function") {
+            try {
+                display.onClipboardStatus(status);
+            } catch (error) {
+                if (typeof console !== "undefined" && console.warn) {
+                    console.warn("[SqueakJS][clipboard] status handler failed", error);
+                }
+            }
+        }
+        display.refreshClipboardDiagnostics();
+    }
+    var clipboardBridge = createClipboardBridge({
+        getUserGesture: function() { return !!display.handlingEvent; },
+        onStatus: handleClipboardStatus,
+        initialState: Object.assign({}, display.clipboardState),
+        metricsStorageKey: options.clipboardMetricsKey,
+    });
+    display.clipboardBridge = clipboardBridge;
+    display.updateClipboardState(clipboardBridge.getState());
 
     var checkFullscreen = setupFullscreen(display, canvas, options);
     display.fullscreenRequest = function(fullscreen, thenDo) {
@@ -471,13 +724,20 @@ function createSqueakDisplay(canvas, options) {
         if (!display.vm) return true;
         try {
             display.clipboardString = text;
+            if (display.clipboardBridge && typeof display.clipboardBridge.setCachedText === "function") {
+                display.clipboardBridge.setCachedText(text);
+                display.updateClipboardState(display.clipboardBridge.getState());
+                display.refreshClipboardDiagnostics();
+            } else {
+                display.updateClipboardState({ text: text });
+            }
             // simulate paste event for Squeak
             fakeCmdOrCtrlKey('v'.charCodeAt(0), timestamp, display);
         } catch(err) {
             console.error("paste error " + err);
         }
     };
-    display.executeClipboardCopyKey = function(key, timestamp) {
+        display.executeClipboardCopyKey = function(key, timestamp) {
         if (!display.vm) return true;
         // simulate copy event for Squeak so it places its text in clipboard
         display.clipboardStringChanged = false;
@@ -489,6 +749,13 @@ function createSqueakDisplay(canvas, options) {
         if (!display.clipboardStringChanged) return;
         // got it, now copy to the system clipboard
         try {
+            if (display.clipboardBridge && typeof display.clipboardBridge.setCachedText === "function") {
+                display.clipboardBridge.setCachedText(display.clipboardString);
+                display.updateClipboardState(display.clipboardBridge.getState());
+                display.refreshClipboardDiagnostics();
+            } else {
+                display.updateClipboardState({ text: display.clipboardString });
+            }
             return display.clipboardString;
         } catch(err) {
             console.error("copy error " + err);
@@ -937,21 +1204,106 @@ function createSqueakDisplay(canvas, options) {
         }, 250);
     }
     // more copy/paste
-    if (navigator.clipboard) {
-        // new-style copy/paste (all modern browsers)
-        display.readFromSystemClipboard = () => display.handlingEvent &&
-            navigator.clipboard.readText()
-            .then(text => display.clipboardString = text)
-            .catch(err => console.error("readFromSystemClipboard " + err.message));
-        display.writeToSystemClipboard = () => display.handlingEvent &&
-            navigator.clipboard.writeText(display.clipboardString)
-            .then(() => display.clipboardStringChanged = false)
-            .catch(err => console.error("writeToSystemClipboard " + err.message));
+    var asyncClipboardAvailable = typeof navigator !== "undefined" && navigator.clipboard;
+    if (asyncClipboardAvailable) {
+        var clipboardQueue = createClipboardRequestQueue({
+            read: function(options) {
+                return clipboardBridge.readText(options);
+            },
+            write: function(text, options) {
+                return clipboardBridge.writeText(text, options);
+            },
+        });
+        display.clipboardQueue = clipboardQueue;
+        display.updateClipboardState({ queue: clipboardQueue.getState() });
+        display.readFromSystemClipboard = function(options) {
+            var requestOptions = Object.assign({ fallbackToCache: true }, options || {});
+            if (requestOptions.requireGesture === undefined) {
+                requestOptions.requireGesture = !!display.handlingEvent;
+            }
+            var readPromise = clipboardQueue.enqueueRead(requestOptions);
+            display.updateClipboardState({ queue: clipboardQueue.getState() });
+            display.refreshClipboardDiagnostics();
+            return readPromise
+                .then(function(result) {
+                    if (result && typeof result === "object") {
+                        if (result.state) display.updateClipboardState(result.state);
+                        else display.updateClipboardState(result);
+                    } else {
+                        display.updateClipboardState(display.clipboardBridge.getState());
+                    }
+                    var payload = result && typeof result === "object" ? Object.assign({}, result) : {};
+                    var text = typeof payload.text === "string" ? payload.text
+                        : (clipboardBridge ? clipboardBridge.getCachedText() : display.clipboardString);
+                    if (typeof text !== "string") text = typeof display.clipboardString === "string" ? display.clipboardString : "";
+                    payload.text = text;
+                    display.clipboardString = text;
+                    display.clipboardStringChanged = false;
+                    display.updateClipboardState({ queue: clipboardQueue.getState() });
+                    display.refreshClipboardDiagnostics();
+                    return payload;
+                })
+                .catch(function(error) {
+                    display.clipboardLastError = error;
+                    if (typeof console !== "undefined" && console.error) {
+                        var message = error && error.message ? error.message : String(error);
+                        console.error("readFromSystemClipboard " + message);
+                    }
+                    display.updateClipboardState(display.clipboardBridge.getState());
+                    display.updateClipboardState({ queue: clipboardQueue.getState() });
+                    display.refreshClipboardDiagnostics();
+                    throw error;
+                });
+        };
+        display.writeToSystemClipboard = function(options) {
+            var text = typeof display.clipboardString === "string" ? display.clipboardString : "";
+            var requestOptions = Object.assign({}, options || {});
+            if (requestOptions.requireGesture === undefined) {
+                requestOptions.requireGesture = !!display.handlingEvent;
+            }
+            var writePromise = clipboardQueue.enqueueWrite(text, requestOptions);
+            display.updateClipboardState({ queue: clipboardQueue.getState() });
+            display.refreshClipboardDiagnostics();
+            return writePromise
+                .then(function(result) {
+                    var payload = result && typeof result === "object" ? Object.assign({}, result) : {};
+                    if (payload.text === undefined) payload.text = text;
+                    if (!payload.error) display.clipboardStringChanged = false;
+                    if (result && typeof result === "object") {
+                        if (result.state) display.updateClipboardState(result.state);
+                        else display.updateClipboardState(result);
+                    } else {
+                        display.updateClipboardState(display.clipboardBridge.getState());
+                    }
+                    display.updateClipboardState({ queue: clipboardQueue.getState() });
+                    display.refreshClipboardDiagnostics();
+                    return payload;
+                })
+                .catch(function(error) {
+                    display.clipboardLastError = error;
+                    if (typeof console !== "undefined" && console.error) {
+                        var message = error && error.message ? error.message : String(error);
+                        console.error("writeToSystemClipboard " + message);
+                    }
+                    display.updateClipboardState(display.clipboardBridge.getState());
+                    display.updateClipboardState({ queue: clipboardQueue.getState() });
+                    display.refreshClipboardDiagnostics();
+                    throw error;
+                });
+        };
     } else {
+        display.clipboardQueue = null;
         // old-style copy/paste
         document.oncopy = function(evt, key) {
             var text = display.executeClipboardCopyKey(key, evt.timeStamp);
             if (typeof text === 'string') {
+                if (display.clipboardBridge) {
+                    display.clipboardBridge.setCachedText(text);
+                    display.updateClipboardState(display.clipboardBridge.getState());
+                    display.refreshClipboardDiagnostics();
+                } else {
+                    display.updateClipboardState({ text: text });
+                }
                 evt.clipboardData.setData("Text", text);
             }
             evt.preventDefault();
@@ -962,9 +1314,20 @@ function createSqueakDisplay(canvas, options) {
         };
         document.onpaste = function(evt) {
             var text = evt.clipboardData.getData('Text');
+            if (display.clipboardBridge) {
+                display.clipboardBridge.setCachedText(text);
+                display.updateClipboardState(display.clipboardBridge.getState());
+                display.refreshClipboardDiagnostics();
+            } else {
+                display.updateClipboardState({ text: text });
+            }
             display.executeClipboardPasteKey(text, evt.timeStamp);
             evt.preventDefault();
         };
+    }
+    var shouldShowClipboardDiagnostics = (typeof window !== "undefined" && window.SqueakDebugClipboard) || options.clipboardDiagnostics === true;
+    if (shouldShowClipboardDiagnostics) {
+        display.attachClipboardDiagnosticsPanel();
     }
     // do not use addEventListener, we want to replace any previous drop handler
     function dragEventHasFiles(evt) {
@@ -1137,12 +1500,23 @@ var loop; // holds timeout for main loop
 SqueakJS.runImage = function(buffer, name, display, options) {
     options = options || {};
     var capabilityPromise;
+    var vfsPromise;
     if (options.storageCapabilityDetection === false) {
         capabilityPromise = Promise.resolve(getStorageCapabilityReport());
     } else if (options.storageCapabilities !== undefined) {
         capabilityPromise = Promise.resolve(setStorageCapabilityReport(options.storageCapabilities));
     } else {
         capabilityPromise = ensureStorageCapabilityReport({ timeoutMs: options.storageCapabilityTimeoutMs });
+    }
+    if (options.storageVFS === false) {
+        vfsPromise = Promise.resolve(null);
+    } else {
+        var vfsOptions = options.storageVFSOptions || {};
+        if (options.storageVFSScope) vfsOptions.scope = options.storageVFSScope;
+        if (options.storageVFSScriptURL) vfsOptions.scriptURL = options.storageVFSScriptURL;
+        if (options.storageVFSCacheName) vfsOptions.cacheName = options.storageVFSCacheName;
+        if (options.storageVFSReplay === false) vfsOptions.autoReplay = false;
+        vfsPromise = ensureStorageVFSRegistration(vfsOptions);
     }
     var memoryOptions = options.memory || (options.vm && options.vm.memory);
     if (memoryOptions) {
@@ -1162,15 +1536,31 @@ SqueakJS.runImage = function(buffer, name, display, options) {
     window.setTimeout(function readImageAsync() {
         var image = new Squeak.Image(name, memoryOptions);
         function startRunning() {
-            Promise.resolve(capabilityPromise).catch(function(error) {
+            var capabilityResult = Promise.resolve(capabilityPromise).catch(function(error) {
                 if (typeof console !== "undefined" && console.warn) {
                     console.warn("[SqueakJS][storage] capability detection failed", error);
                 }
                 return null;
-            }).then(function(report) {
+            });
+            var vfsResult = Promise.resolve(vfsPromise).catch(function(error) {
+                if (typeof console !== "undefined" && console.warn) {
+                    console.warn("[SqueakJS][storage] VFS registration failed", error);
+                }
+                return null;
+            });
+            Promise.all([capabilityResult, vfsResult]).then(function(results) {
+                var report = results[0];
                 if (report && (!options.vm || !options.vm.storageCapabilities)) {
                     if (!options.vm || typeof options.vm !== "object") options.vm = {};
                     if (!options.vm.storageCapabilities) options.vm.storageCapabilities = report;
+                }
+                if (options.storageQuota !== false) {
+                    var quotaOptions = options.storageQuotaOptions || {};
+                    if (options.storageQuotaThresholds) quotaOptions.thresholds = options.storageQuotaThresholds;
+                    if (options.storageQuotaPollInterval !== undefined) {
+                        quotaOptions.pollInterval = options.storageQuotaPollInterval;
+                    }
+                    ensureStorageQuotaMonitor(quotaOptions);
                 }
                 display.quitFlag = false;
                 var vm = new Squeak.Interpreter(image, display, options);

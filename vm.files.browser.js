@@ -327,11 +327,25 @@ Object.extend(Squeak,
         entry[4] = contents.byteLength || contents.length || 0;
         Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(directory);
         // put file contents (async)
+        var storageVFS = Squeak.StorageVFS;
         this.dbTransaction("readwrite", "put " + filepath,
             function(fileStore) {
                 fileStore.put(contents, path.fullname);
             },
             function transactionComplete() {
+                if (storageVFS && typeof storageVFS.notifyWrite === "function") {
+                    try {
+                        storageVFS.notifyWrite(path.fullname, contents, {
+                            size: entry[4],
+                            updatedAt: now,
+                            directory: path.dirname,
+                        });
+                    } catch (error) {
+                        if (console && console.warn) {
+                            console.warn("[SqueakJS][storage] VFS notifyWrite failed", error);
+                        }
+                    }
+                }
                 if (optSuccess) optSuccess();
             });
         return entry;
@@ -346,8 +360,22 @@ Object.extend(Squeak,
         if (Squeak.debugFiles) console.log("Deleting " + path.fullname);
         if (entryOnly) return true;
         // delete file contents (async)
+        var storageVFS = Squeak.StorageVFS;
         this.dbTransaction("readwrite", "delete " + filepath, function(fileStore) {
             fileStore.delete(path.fullname);
+        }, function transactionComplete() {
+            if (storageVFS && typeof storageVFS.notifyDelete === "function") {
+                try {
+                    storageVFS.notifyDelete(path.fullname, {
+                        updatedAt: Squeak.totalSeconds(),
+                        directory: path.dirname,
+                    });
+                } catch (error) {
+                    if (console && console.warn) {
+                        console.warn("[SqueakJS][storage] VFS notifyDelete failed", error);
+                    }
+                }
+            }
         });
         return true;
     },
@@ -368,9 +396,25 @@ Object.extend(Squeak,
         // move file contents (async)
         this.fileGet(oldpath.fullname,
             function success(contents) {
+                var storageVFS = Squeak.StorageVFS;
                 this.dbTransaction("readwrite", "rename " + oldpath.fullname + " to " + newpath.fullname, function(fileStore) {
                     fileStore.delete(oldpath.fullname);
                     fileStore.put(contents, newpath.fullname);
+                }, function transactionComplete() {
+                    if (storageVFS && typeof storageVFS.notifyRename === "function") {
+                        try {
+                            storageVFS.notifyRename(oldpath.fullname, newpath.fullname, {
+                                contents: contents,
+                                size: entry[4],
+                                updatedAt: Squeak.totalSeconds(),
+                                directory: newpath.dirname,
+                            });
+                        } catch (error) {
+                            if (console && console.warn) {
+                                console.warn("[SqueakJS][storage] VFS notifyRename failed", error);
+                            }
+                        }
+                    }
                 });
             }.bind(this),
             function error(msg) {

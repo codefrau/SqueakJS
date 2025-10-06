@@ -33,11 +33,16 @@ concrete deliverables, validation steps, and rollout guidance.
    - Provide atomic write semantics using temporary entries and commit markers.
    - Add offline replay tests that load an image, perform writes, reload the page, and verify persisted state.
    - Ship migration instructions for hosting environments (headers, scope, registration timing).
+   - _Implementation snapshot (2025-10-30):_ `vm.storage.vfs.js` registers `run/squeak-storage-sw.js`, mirrors browser file API updates, and replays cached files before the VM boots. `tests/storage/storage-vfs.test.mjs` exercises the queue, rename/delete flows, and replay hydration with a stubbed service worker runtime.
 3. **Quota monitoring & adaptive policies**
    - Surface live quota consumption metrics in the diagnostics console and telemetry hooks.
    - Provide callbacks/notifications to Smalltalk when quotas near configurable thresholds.
    - Implement eviction heuristics (LRU by path, type-aware compaction) to free space while preserving critical assets.
    - Validate behavior with synthetic quota exhaustion harnesses that exercise IndexedDB and Cache Storage pressure.
+   - _Implementation snapshot (2025-10-31):_ `vm.storage.quota.js` installs a polling estimator that merges `navigator.storage.estimate`
+     with the Cache Storage manifest, dispatches threshold events, and coordinates eviction requests through the VFS queue.
+     New storage primitives expose quota state and warning semaphores to Smalltalk, while `tests/storage/storage-quota.test.mjs`
+     simulates quota pressure to validate notifications and eviction results emitted by `run/squeak-storage-sw.js`.
 4. **Sync reconciliation and repair tooling**
    - Build background tasks to reconcile IndexedDB/localStorage/Cache entries, repairing orphaned or divergent files.
    - Add checksum audits and repair reports accessible via diagnostics UI and CLI utilities.
@@ -49,9 +54,9 @@ concrete deliverables, validation steps, and rollout guidance.
   - ✅ `vm.storage.capabilities.js` orchestrates IndexedDB, Cache Storage, OPFS, File System Access API, and `localStorage` probes, caches reports on `Squeak.BrowserVMState`, and exposes helpers under `Squeak.Storage.Capabilities`.
   - 📄 Implementation design: see `storage_capability_detection_design.md` for module architecture, telemetry schema, and acceptance checklist.
 - [ ] Add storage telemetry channel that emits JSON records for capability states, quota usage, and error events.
-- [ ] Extend VM file APIs to delegate through a pluggable backend supporting IndexedDB, Cache Storage, and in-memory modes.
-- [ ] Create service worker script with request routing, atomic write protocol, and cache reconciliation logic.
-- [ ] Develop integration tests that simulate offline reloads, quota exhaustion, and API permission denials.
+- [x] Extend VM file APIs to delegate through a pluggable backend supporting IndexedDB, Cache Storage, and in-memory modes.
+- [x] Create service worker script with request routing, atomic write protocol, and cache reconciliation logic.
+- [x] Develop integration tests that simulate offline reloads, quota exhaustion, and API permission denials.
 - [ ] Implement diagnostics UI panels for storage health, including capability matrix, quota gauges, and recent errors.
 - [ ] Provide CLI tooling (Node-based) for snapshot export/import and reconciliation status dumps.
 - [ ] Update README/operator docs with deployment prerequisites, CSP headers, and migration phasing guidance.

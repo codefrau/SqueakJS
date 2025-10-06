@@ -129,6 +129,105 @@ function createDisplay(options) {
         devicePixelRatio: options.devicePixelRatio && options.devicePixelRatio > 0 ? options.devicePixelRatio : 1,
     };
 
+    function createClipboardState() {
+        return {
+            text: "",
+            cachedAt: null,
+            lastRead: null,
+            lastWrite: null,
+            lastStatus: null,
+            lastError: null,
+            permission: {
+                read: { state: "unknown", updatedAt: null },
+                write: { state: "unknown", updatedAt: null },
+            },
+            staleDrops: 0,
+            errorCounts: {},
+            queue: { pending: 0, last: null },
+        };
+    }
+
+    function mergeClipboardPermission(target, source) {
+        if (!target || !source || typeof source !== "object") return;
+        if (!target.read) target.read = {};
+        if (!target.write) target.write = {};
+        if (source.read && typeof source.read === "object") {
+            Object.keys(source.read).forEach(function(key) {
+                target.read[key] = source.read[key];
+            });
+        }
+        if (source.write && typeof source.write === "object") {
+            Object.keys(source.write).forEach(function(key) {
+                target.write[key] = source.write[key];
+            });
+        }
+    }
+
+    display.clipboardState = createClipboardState();
+
+    display.updateClipboardState = function(partial) {
+        if (!partial || typeof partial !== "object") return display.clipboardState;
+        if (partial.state && typeof partial.state === "object" && partial.state !== partial) {
+            display.updateClipboardState(partial.state);
+        }
+        if (partial.cachedText !== undefined && typeof partial.cachedText === "string") {
+            display.clipboardState.text = partial.cachedText;
+        }
+        if (partial.text !== undefined && typeof partial.text === "string") {
+            display.clipboardState.text = partial.text;
+        }
+        if (partial.cachedAt !== undefined) display.clipboardState.cachedAt = partial.cachedAt;
+        if (partial.lastRead !== undefined) display.clipboardState.lastRead = partial.lastRead;
+        if (partial.lastWrite !== undefined) display.clipboardState.lastWrite = partial.lastWrite;
+        if (partial.lastStatus !== undefined) display.clipboardState.lastStatus = partial.lastStatus;
+        if (partial.lastErrorDetail !== undefined) display.clipboardState.lastError = partial.lastErrorDetail;
+        if (partial.lastError !== undefined && typeof partial.lastError === "object") {
+            display.clipboardState.lastError = Object.assign({}, partial.lastError);
+        }
+        if (partial.permissionDetail) mergeClipboardPermission(display.clipboardState.permission, partial.permissionDetail);
+        if (partial.permission && typeof partial.permission === "object" && !Array.isArray(partial.permission)) {
+            mergeClipboardPermission(display.clipboardState.permission, partial.permission);
+        }
+        if (partial.staleDrops !== undefined) display.clipboardState.staleDrops = partial.staleDrops;
+        if (partial.errorCounts && typeof partial.errorCounts === "object") {
+            display.clipboardState.errorCounts = Object.assign({}, partial.errorCounts);
+        }
+        if (partial.queue && typeof partial.queue === "object") {
+            display.clipboardState.queue = {
+                pending: partial.queue.pending || 0,
+                last: partial.queue.last ? Object.assign({}, partial.queue.last) : null,
+            };
+        }
+        if (partial.queueState && typeof partial.queueState === "object") {
+            display.clipboardState.queue = {
+                pending: partial.queueState.pending || 0,
+                last: partial.queueState.last ? Object.assign({}, partial.queueState.last) : null,
+            };
+        }
+        if (partial.lastStatus && typeof partial.lastStatus === "object") {
+            display.clipboardState.lastStatus = partial.lastStatus;
+        }
+        return display.clipboardState;
+    };
+
+    display.getClipboardDiagnostics = function() {
+        return {
+            text: display.clipboardState.text || "",
+            cachedAt: display.clipboardState.cachedAt,
+            lastRead: display.clipboardState.lastRead,
+            lastWrite: display.clipboardState.lastWrite,
+            permission: {
+                read: Object.assign({}, display.clipboardState.permission.read || {}),
+                write: Object.assign({}, display.clipboardState.permission.write || {}),
+            },
+            staleDrops: display.clipboardState.staleDrops,
+            errorCounts: Object.assign({}, display.clipboardState.errorCounts || {}),
+            queue: Object.assign({ pending: 0, last: null }, display.clipboardState.queue || {}),
+            lastStatus: display.clipboardState.lastStatus,
+            lastError: display.clipboardState.lastError,
+        };
+    };
+
     display.reset = function() {
         display.keys = [];
         display.buttons = 0;
@@ -136,22 +235,37 @@ function createDisplay(options) {
         display.eventQueue = [];
         display.eventQueueOffset = null;
         display.signalInputEvent = null;
+        display.clipboardState = createClipboardState();
     };
 
     display.readFromSystemClipboard = function() {
         return handleClipboardReadRequest().then(function(payload) {
-            if (!payload || typeof payload.text !== "string") return;
-            display.clipboardString = payload.text;
-            display.clipboardStringChanged = false;
-            return payload.text;
+            display.lastClipboardPayload = payload || null;
+            if (payload && typeof payload.text === "string") {
+                display.clipboardString = payload.text;
+                display.clipboardStringChanged = false;
+            }
+            if (payload && payload.error) {
+                display.clipboardLastError = payload.error;
+            }
+            if (payload && typeof payload === "object") {
+                display.updateClipboardState(payload.state || payload);
+            }
+            return payload;
         });
     };
 
     display.writeToSystemClipboard = function() {
         var text = typeof display.clipboardString === "string" ? display.clipboardString : "";
-        return handleClipboardWriteRequest(text).then(function() {
-            display.clipboardStringChanged = false;
-            return text;
+        return handleClipboardWriteRequest(text).then(function(payload) {
+            display.lastClipboardPayload = payload || null;
+            if (!payload || !payload.error) {
+                display.clipboardStringChanged = false;
+            }
+            if (payload && typeof payload === "object") {
+                display.updateClipboardState(payload.state || payload);
+            }
+            return payload;
         });
     };
 
@@ -372,10 +486,18 @@ port.onmessage = function(event) {
             if (workerState.display) {
                 workerState.display.clipboardString = data.text || "";
                 workerState.display.clipboardStringChanged = !!data.changed;
+                workerState.display.updateClipboardState({
+                    text: data.text || "",
+                    cachedAt: typeof data.timestamp === "number" ? data.timestamp : undefined,
+                    lastWrite: typeof data.timestamp === "number" ? data.timestamp : undefined,
+                });
             }
             break;
         case "clipboard-read-response":
         case "clipboard-write-response":
+            if (workerState.display && data && typeof data === "object") {
+                workerState.display.updateClipboardState(data.state || data);
+            }
             var resolver = clipboardRequests.get(data.requestId);
             if (resolver) {
                 clipboardRequests.delete(data.requestId);

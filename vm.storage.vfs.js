@@ -3,8 +3,17 @@ import { scheduleStorageReconciliation } from "./vm.storage.reconcile.js";
 
 "use strict";
 
+function resolveDefaultScriptURL() {
+    try {
+        if (typeof import.meta !== "undefined" && import.meta.url) {
+            return new URL("./run/squeak-storage-sw.js", import.meta.url).toString();
+        }
+    } catch (_) {}
+    return "./run/squeak-storage-sw.js";
+}
+
 const DEFAULT_SCOPE = "./";
-const DEFAULT_SCRIPT_URL = "./run/squeak-storage-sw.js";
+const DEFAULT_SCRIPT_URL = resolveDefaultScriptURL();
 const DEFAULT_CACHE_NAME = "squeak-vfs-cache";
 const STORAGE_CHANNEL = "squeak-storage-vfs";
 const VFS_URL_PREFIX = "https://squeak.invalid/vfs/";

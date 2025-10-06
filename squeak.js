@@ -1505,6 +1505,17 @@ SqueakJS.runImage = function(buffer, name, display, options) {
     var capabilityPromise;
     var vfsPromise;
     var resourceCapabilityPromise;
+    function logVMEvent(stage, detail) {
+        if (typeof console === "undefined" || !console.log) return;
+        var prefix = "[SqueakJS][vm] " + stage;
+        if (detail === undefined) {
+            console.log(prefix);
+        } else if (typeof detail === "string") {
+            console.log(prefix + ": " + detail);
+        } else {
+            console.log(prefix, detail);
+        }
+    }
     if (options.storageCapabilityDetection === false) {
         capabilityPromise = Promise.resolve(getStorageCapabilityReport());
     } else if (options.storageCapabilities !== undefined) {
@@ -1547,7 +1558,12 @@ SqueakJS.runImage = function(buffer, name, display, options) {
     display.showProgress(0);
     window.setTimeout(function readImageAsync() {
         var image = new Squeak.Image(name, memoryOptions);
-        function startRunning() {
+        function startRunning(snapshot) {
+            logVMEvent("image load complete", {
+                imageName: name,
+                elapsedMs: image.startupTime ? Date.now() - image.startupTime : undefined,
+                snapshot: !!snapshot,
+            });
             var capabilityResult = Promise.resolve(capabilityPromise).catch(function(error) {
                 if (typeof console !== "undefined" && console.warn) {
                     console.warn("[SqueakJS][storage] capability detection failed", error);
@@ -1567,6 +1583,11 @@ SqueakJS.runImage = function(buffer, name, display, options) {
                 return null;
             });
             Promise.all([capabilityResult, vfsResult, resourceCapabilityResult]).then(function(results) {
+                logVMEvent("capabilities resolved", {
+                    storage: !!results[0],
+                    vfs: !!results[1],
+                    resource: !!results[2],
+                });
                 var report = results[0];
                 if (report && (!options.vm || !options.vm.storageCapabilities)) {
                     if (!options.vm || typeof options.vm !== "object") options.vm = {};
@@ -1601,7 +1622,20 @@ SqueakJS.runImage = function(buffer, name, display, options) {
                     ensureStorageQuotaMonitor(quotaOptions);
                 }
                 display.quitFlag = false;
-                var vm = new Squeak.Interpreter(image, display, options);
+                var vm;
+                try {
+                    vm = new Squeak.Interpreter(image, display, options);
+                    logVMEvent("interpreter initialized", {
+                        imageVersion: image.version,
+                        hasClosures: !!image.hasClosures,
+                    });
+                } catch (error) {
+                    logVMEvent("interpreter initialization failed", error);
+                    if (display && typeof display.showBanner === "function") {
+                        display.showBanner("Failed to initialize " + SqueakJS.appName);
+                    }
+                    throw error;
+                }
                 SqueakJS.vm = vm;
                 Squeak.Settings["squeakImageName"] = name;
                 display.clear();
@@ -1647,14 +1681,41 @@ SqueakJS.runImage = function(buffer, name, display, options) {
                 };
                 if (options.onStart) options.onStart(vm, display, options);
                 run();
+            }).catch(function(error) {
+                logVMEvent("startup failure", error);
+                if (display && typeof display.showBanner === "function") {
+                    display.showBanner("Failed to start " + SqueakJS.appName);
+                }
+                throw error;
             });
         }
         var streamDescriptor = Squeak.normalizeImageStreamSource(buffer);
         var progressHandler = function(value) { display.showProgress(value); };
+        logVMEvent("begin", {
+            imageName: name,
+            hasStream: !!streamDescriptor,
+        });
         if (streamDescriptor) {
-            image.readFromStream(streamDescriptor, startRunning, progressHandler);
+            var streamPromise;
+            try {
+                streamPromise = image.readFromStream(streamDescriptor, startRunning, progressHandler);
+            } catch (error) {
+                logVMEvent("image stream failed", error);
+                throw error;
+            }
+            if (streamPromise && typeof streamPromise.catch === "function") {
+                streamPromise.catch(function(error) {
+                    logVMEvent("image stream failed", error);
+                    throw error;
+                });
+            }
         } else {
-            image.readFromBuffer(buffer, startRunning, progressHandler);
+            try {
+                image.readFromBuffer(buffer, startRunning, progressHandler);
+            } catch (error) {
+                logVMEvent("image buffer load failed", error);
+                throw error;
+            }
         }
     }, 0);
 };

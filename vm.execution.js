@@ -1,11 +1,14 @@
 "use strict";
 
 import {
-    runPrototypeLoop,
     ensureWasmPrototypeInstance,
     binaryIntOpSync,
     binaryCompareOpSync,
     binarySeriesOpSync,
+    createPrototypeInterpreterHarness,
+    getWasmPrototypeOpcodes,
+    getWasmPrototypeLayout,
+    getWasmPrototypePrimitiveNames,
 } from "./vm.interpreter.wasm.js";
 
 export { binarySeriesOpSync } from "./vm.interpreter.wasm.js";
@@ -256,14 +259,17 @@ function createJSInterpreterBackend(vm) {
 function createWasmPrototypeBackend(vm, options) {
     var opts = normalizeOptions(options);
     var prototypeOptions = opts.wasmPrototype || {};
-    var iterations = typeof prototypeOptions.iterations === "number" && prototypeOptions.iterations >= 0
-        ? prototypeOptions.iterations | 0
-        : 0;
     var preferShared = prototypeOptions.preferShared !== false;
-    var pending = null;
     var lastHeap = null;
+    var harness = null;
+    var lastExecution = null;
     var arithmeticMap = { 1: 0, 2: 1, 9: 2 };
     var compareMap = { 3: 0, 4: 1, 5: 2, 6: 3, 7: 4, 8: 5 };
+    try {
+        harness = createPrototypeInterpreterHarness(prototypeOptions.layout);
+    } catch (error) {
+        warnOnce("Failed to create wasm prototype harness: " + error, "wasm-prototype:harness");
+    }
     function syncSharedHeap(forceSync) {
         try {
             lastHeap = ensureSharedHeapForVM(vm, {
@@ -276,15 +282,45 @@ function createWasmPrototypeBackend(vm, options) {
         return lastHeap;
     }
     syncSharedHeap(true);
-    function triggerPrototype(iterationCount) {
-        if (typeof runPrototypeLoop !== "function") return;
-        if (pending) return;
-        pending = runPrototypeLoop(Math.max(0, iterationCount | 0)).catch(function(error) {
-            warnOnce("WASM prototype loop failed: " + error, "wasm-prototype:loop-error");
-        }).finally(function() {
-            pending = null;
+
+    function executeBytecodeSlice(slice) {
+        if (!harness) {
+            throw new Error("WASM prototype harness is not available");
+        }
+        if (!slice || !slice.bytecodes) {
+            throw new TypeError("Bytecode slice with bytecodes is required");
+        }
+        var bytecodes = slice.bytecodes instanceof Uint8Array
+            ? slice.bytecodes
+            : Uint8Array.from(slice.bytecodes);
+        var limit = slice.limit == null ? bytecodes.length : slice.limit | 0;
+        harness.resetContext({
+            pc: slice.pc == null ? harness.layout.bytecodeOffset : slice.pc | 0,
+            stackBase: slice.stackBase == null ? harness.layout.stackOffset : slice.stackBase | 0,
+            stackTop: slice.stackTop == null ? undefined : slice.stackTop | 0,
+            limit: limit,
         });
+        if (slice.stack) {
+            harness.loadStack(slice.stack);
+        }
+        harness.setBytecodes(bytecodes, slice.pc == null ? harness.layout.bytecodeOffset : slice.pc | 0);
+        var result = harness.run(limit);
+        var context = result.context;
+        var stackDepth = Math.max(0, ((context.stackTop - context.stackBase) / 4) | 0);
+        var stackSnapshot = Array.from(harness.stackView.slice(0, stackDepth));
+        lastExecution = {
+            timestamp: Date.now(),
+            context: context,
+            result: result.result,
+            stackDepth: stackDepth,
+        };
+        return {
+            result: result.result,
+            context: context,
+            stack: stackSnapshot,
+        };
     }
+
     function accelerateIntegerPrimitive(vmInstance, request) {
         if (!request || (request.kind && request.kind !== "smallint-primitive")) return null;
         if (request.type !== "int" && request.type !== "bool") return null;
@@ -320,12 +356,21 @@ function createWasmPrototypeBackend(vm, options) {
         name: "wasm-prototype",
         interpret: function(forMilliseconds, thenDo) {
             syncSharedHeap(true);
-            var sliceIterations = iterations;
-            if (sliceIterations === 0 && typeof forMilliseconds === "number" && isFinite(forMilliseconds)) {
-                sliceIterations = Math.max(0, Math.round(forMilliseconds * 1000));
+            if (harness && typeof vm.dequeueWasmPrototypeSlice === "function") {
+                var slice;
+                while ((slice = vm.dequeueWasmPrototypeSlice())) {
+                    try {
+                        executeBytecodeSlice(slice);
+                    } catch (error) {
+                        warnOnce("WASM bytecode slice failed: " + error, "wasm-prototype:dequeue");
+                        break;
+                    }
+                }
             }
-            if (sliceIterations > 0) triggerPrototype(sliceIterations);
             return vm._interpretSliceJS(forMilliseconds, thenDo);
+        },
+        executeBytecodeSlice: function(slice) {
+            return executeBytecodeSlice(slice);
         },
         describe: function() {
             var heap = lastHeap || syncSharedHeap(false);
@@ -340,6 +385,20 @@ function createWasmPrototypeBackend(vm, options) {
                     integerBinary: Object.keys(arithmeticMap).length,
                     integerCompare: Object.keys(compareMap).length,
                 },
+                harness: harness ? {
+                    contextOffset: harness.layout.contextOffset,
+                    stackOffset: harness.layout.stackOffset,
+                    stackCapacity: harness.layout.stackCapacity,
+                    bytecodeOffset: harness.layout.bytecodeOffset,
+                    bytecodeCapacity: harness.layout.bytecodeCapacity,
+                    layout: getWasmPrototypeLayout(),
+                } : null,
+                opcodes: getWasmPrototypeOpcodes(),
+                primitives: {
+                    count: getWasmPrototypePrimitiveNames().length,
+                    names: getWasmPrototypePrimitiveNames(),
+                },
+                lastExecution: lastExecution ? { ...lastExecution } : null,
             };
         },
         dispose: function() {
@@ -376,6 +435,10 @@ const api = {
     invokeIntegerBinaryOpAccelerator,
     ensureWasmPrototypeInstance,
     binarySeriesOpSync,
+    createPrototypeInterpreterHarness,
+    getWasmPrototypeOpcodes,
+    getWasmPrototypeLayout,
+    getWasmPrototypePrimitiveNames,
 };
 
 ensureSqueakNamespace();

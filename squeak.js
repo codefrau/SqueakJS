@@ -38,6 +38,8 @@ import "./vm.instruction.stream.js";
 import "./vm.instruction.stream.sista.js";
 import "./vm.instruction.printer.js";
 import "./vm.primitives.js";
+import { ensureResourceCapabilityReport } from "./vm.resource.capabilities.js";
+import { getDynamicCodeCapability } from "./vm.execution.jit.manager.js";
 import "./jit.js";
 import "./vm.media.permissions.js";
 import "./vm.audio.browser.js";
@@ -1502,6 +1504,7 @@ SqueakJS.runImage = function(buffer, name, display, options) {
     options = options || {};
     var capabilityPromise;
     var vfsPromise;
+    var resourceCapabilityPromise;
     if (options.storageCapabilityDetection === false) {
         capabilityPromise = Promise.resolve(getStorageCapabilityReport());
     } else if (options.storageCapabilities !== undefined) {
@@ -1518,6 +1521,14 @@ SqueakJS.runImage = function(buffer, name, display, options) {
         if (options.storageVFSCacheName) vfsOptions.cacheName = options.storageVFSCacheName;
         if (options.storageVFSReplay === false) vfsOptions.autoReplay = false;
         vfsPromise = ensureStorageVFSRegistration(vfsOptions);
+    }
+    if (options.resourceCapabilityDetection === false) {
+        resourceCapabilityPromise = Promise.resolve(null);
+    } else if (options.resourceCapabilities !== undefined) {
+        resourceCapabilityPromise = Promise.resolve(options.resourceCapabilities);
+    } else {
+        var resourceCapabilityOptions = options.resourceCapabilityOptions || {};
+        resourceCapabilityPromise = ensureResourceCapabilityReport(resourceCapabilityOptions);
     }
     var memoryOptions = options.memory || (options.vm && options.vm.memory);
     if (memoryOptions) {
@@ -1549,11 +1560,37 @@ SqueakJS.runImage = function(buffer, name, display, options) {
                 }
                 return null;
             });
-            Promise.all([capabilityResult, vfsResult]).then(function(results) {
+            var resourceCapabilityResult = Promise.resolve(resourceCapabilityPromise).catch(function(error) {
+                if (typeof console !== "undefined" && console.warn) {
+                    console.warn("[SqueakJS][resource] capability detection failed", error);
+                }
+                return null;
+            });
+            Promise.all([capabilityResult, vfsResult, resourceCapabilityResult]).then(function(results) {
                 var report = results[0];
                 if (report && (!options.vm || !options.vm.storageCapabilities)) {
                     if (!options.vm || typeof options.vm !== "object") options.vm = {};
                     if (!options.vm.storageCapabilities) options.vm.storageCapabilities = report;
+                }
+                var resourceCapabilities = results[2];
+                if (resourceCapabilities) {
+                    if (!options.vm || typeof options.vm !== "object") options.vm = {};
+                    if (!options.vm.resourceCapabilities) options.vm.resourceCapabilities = resourceCapabilities;
+                    if (options.managedJIT !== false) {
+                        if (!options.managedJIT || typeof options.managedJIT !== "object") options.managedJIT = {};
+                        if (!options.managedJIT.capabilities || typeof options.managedJIT.capabilities !== "object") {
+                            options.managedJIT.capabilities = {};
+                        }
+                        if (!options.managedJIT.capabilities.resource) {
+                            options.managedJIT.capabilities.resource = resourceCapabilities;
+                        }
+                        if (!options.managedJIT.capabilities.dynamicCode) {
+                            var dynamicCapability = getDynamicCodeCapability(resourceCapabilities);
+                            if (dynamicCapability) {
+                                options.managedJIT.capabilities.dynamicCode = dynamicCapability;
+                            }
+                        }
+                    }
                 }
                 if (options.storageQuota !== false) {
                     var quotaOptions = options.storageQuotaOptions || {};

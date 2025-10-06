@@ -28,6 +28,9 @@ function normalizeSendEvent(event) {
   if (event.selectorId !== undefined) normalized.selectorId = event.selectorId;
   else if (event.selectorHash !== undefined) normalized.selectorHash = event.selectorHash;
   else if (typeof event.selector === "string" || typeof event.selector === "number") normalized.selectorId = event.selector;
+  if (normalized.selectorId === undefined && normalized.selectorHash === undefined) {
+    return null;
+  }
   if (event.classId !== undefined) normalized.classId = event.classId;
   if (event.receiverClassId !== undefined) normalized.receiverClassId = event.receiverClassId;
   return normalized;
@@ -82,6 +85,9 @@ export function createInlineCacheMonitor(config = {}) {
   function recordProbe(kind, probeDepth, metadata) {
     state.lookups += 1;
     const normalizedDepth = normalizeProbeDepth(probeDepth);
+    if (kind === "hit" && normalizedDepth === null) {
+      return;
+    }
     if (normalizedDepth !== null) {
       state.probeHistogram.set(
         normalizedDepth,

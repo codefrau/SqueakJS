@@ -35,7 +35,14 @@ export function createBytecodeDispatcher(vm, hooks) {
     return originalSend(selector, argCount, isSuper);
   }
 
+  let suppressNextSendSpecialNotification = false;
+
   function sendSpecialWithInstrumentation(index) {
+    if (suppressNextSendSpecialNotification) {
+      suppressNextSendSpecialNotification = false;
+      if (!originalSendSpecial) throw new Error("Interpreter sendSpecial method unavailable");
+      return originalSendSpecial(index);
+    }
     notify("onSendSpecial", { index, vm, opcode: currentOpcode });
     if (!originalSendSpecial) throw new Error("Interpreter sendSpecial method unavailable");
     return originalSendSpecial(index);
@@ -44,7 +51,10 @@ export function createBytecodeDispatcher(vm, hooks) {
   function quickSendOtherWithInstrumentation(receiver, index) {
     if (!originalQuickSendOther) throw new Error("Interpreter quickSendOther unavailable");
     const result = originalQuickSendOther(receiver, index);
-    if (!result) notify("onSendSpecial", { index: (index + 16) | 0, vm, quickFallback: true, opcode: currentOpcode });
+    if (!result) {
+      suppressNextSendSpecialNotification = true;
+      notify("onSendSpecial", { index: (index + 16) | 0, vm, quickFallback: true, opcode: currentOpcode });
+    }
     return result;
   }
 

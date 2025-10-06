@@ -31,8 +31,13 @@
     "build:wasm": "node tools/build-wasm.mjs",
     "test": "node tools/run-tests-with-coverage.js",
     "test:unit": "node --test tests/unit",
+    "test:stress": "node --test tests/stress",
+    "lint:dynamic-code": "node tools/lint-dynamic-code.js",
     "perf:report": "node tools/generate-telemetry-report.js --output dist/telemetry/latest.json",
-    "perf:dashboard": "node tools/render-telemetry-dashboard.js --output dist/telemetry/dashboard.md"
+    "perf:dashboard": "node tools/render-telemetry-dashboard.js --output dist/telemetry/dashboard.md",
+    "perf:profile": "node tools/replay-execution-profile.js",
+    "perf:jit": "node tools/run-managed-jit-benchmark.js",
+    "perf:benchmarks": "node tools/run-performance-benchmarks.js"
   },
   "devDependencies": {
     "http-server": "^14.1.1",

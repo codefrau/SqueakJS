@@ -56,3 +56,46 @@ test("inline cache monitor reset clears accumulated state", () => {
   assert.equal(snapshot.lastOpcode, null);
   assert.equal(snapshot.lastEvent, null);
 });
+
+test("inline cache monitor tracks evictions and handles disabled sampling", () => {
+  const emissions = [];
+  const monitor = createInlineCacheMonitor({ sampleInterval: 0, emit: (...args) => emissions.push(args) });
+
+  monitor.recordHit("not-a-number", { selectorId: "noop" });
+  monitor.recordEviction({ selectorId: "foo", classId: 99 });
+  monitor.recordMiss(3, { selectorId: "bar", classId: 12 });
+  monitor.recordSendSite(null);
+  monitor.recordSendSite({});
+
+  const snapshot = monitor.snapshot();
+  assert.equal(snapshot.lookups, 3);
+  assert.equal(snapshot.evictions, 1);
+  assert.equal(snapshot.misses, 2);
+  assert.equal(snapshot.hits, 0);
+  assert.equal(snapshot.probeHistogram["3"], 1);
+  assert.equal(snapshot.lastEvent.kind, "miss");
+  assert.equal(snapshot.lastEvent.evicted, false);
+  assert.equal(snapshot.recentSendSites.length, 0);
+  assert.deepEqual(emissions, []);
+});
+
+test("inline cache monitor tolerates emitter failures when sampling", () => {
+  let throws = true;
+  const monitor = createInlineCacheMonitor({
+    sampleInterval: 1,
+    emit: () => {
+      if (throws) {
+        throws = false;
+        throw new Error("emit failure");
+      }
+    }
+  });
+
+  monitor.recordMiss(1, { selectorId: "foo" });
+  monitor.recordHit(1, { selectorId: "foo" });
+
+  const snapshot = monitor.snapshot();
+  assert.equal(snapshot.lookups, 2);
+  assert.equal(snapshot.hits, 1);
+  assert.equal(snapshot.misses, 1);
+});

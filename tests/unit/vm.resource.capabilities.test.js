@@ -20,6 +20,8 @@ test("collectResourceCapabilityMatrix handles missing browser APIs", async () =>
   assert.equal(report.groups.clipboard.read.supported, false);
   assert.equal(report.groups.clipboard.read.permission.state, "unknown");
   assert.equal(report.groups.audio.output.supported, false);
+  assert.ok(report.groups.execution);
+  assert.equal(report.groups.execution.dynamicCode.supported, true);
 });
 
 test("collectResourceCapabilityMatrix queries available permission interfaces", async () => {
@@ -81,6 +83,25 @@ test("collectResourceCapabilityMatrix queries available permission interfaces", 
   assert.equal(report.groups.audio.output.supported, true);
   assert.equal(report.groups.power.screenWakeLock.supported, true);
   assert.equal(report.groups.storage.access.permission.state, "prompt");
+  assert.equal(report.groups.execution.dynamicCode.supported, true);
+  assert.equal(report.groups.execution.dynamicCode.details.functionConstructor, true);
+});
+
+test("collectResourceCapabilityMatrix reports dynamic code restrictions", async () => {
+  const now = () => 1722222222222;
+  const global = {
+    Function: function BlockedFunction() {
+      throw Object.assign(new Error("blocked"), { code: "csp" });
+    }
+  };
+
+  const report = await collectResourceCapabilityMatrix({ global, now });
+
+  const capability = report.groups.execution.dynamicCode;
+  assert.equal(capability.supported, false);
+  assert.equal(capability.reason, "dynamic-code-blocked");
+  assert.equal(capability.error.code, "csp");
+  assert.equal(capability.permission.state, "unknown");
 });
 
 test("ensureResourceCapabilityReport caches results and updates browser state", async () => {

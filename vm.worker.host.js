@@ -3,6 +3,7 @@
 import { ensureStorageCapabilityReport, setStorageCapabilityReport, getStorageCapabilityReport } from "./vm.storage.capabilities.js";
 import { createClipboardBridge, createClipboardRequestQueue } from "./vm.clipboard.js";
 import { ensureResourceCapabilityReport, formatResourceCapabilityError } from "./vm.resource.capabilities.js";
+import { configureWorkerTelemetry, recordWorkerFeatureReportEvent } from "./vm.worker.telemetry.js";
 
 const defaultWorkerURL = new URL("./vm.worker.entry.js", import.meta.url);
 const GESTURE_WINDOW_MS = 1200;
@@ -14,6 +15,23 @@ function normalizeBuffer(source) {
         return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
     }
     throw new TypeError("Expected ArrayBuffer or typed array for image data");
+}
+
+function createAbortError(reason) {
+    var error;
+    if (reason instanceof Error) {
+        error = reason;
+    } else if (reason && typeof reason === "object" && typeof reason.message === "string") {
+        error = new Error(String(reason.message));
+    } else if (typeof reason === "string") {
+        error = new Error(reason);
+    } else {
+        error = new Error("Feature report request aborted");
+    }
+    if (!error.name || error.name === "Error") {
+        error.name = "AbortError";
+    }
+    return error;
 }
 
 export class WorkerVMController {
@@ -92,6 +110,29 @@ export class WorkerVMController {
         this._nextReportId = 1;
         this._lastFeatureReport = null;
         this._lastGestureAt = 0;
+        var telemetryOptions = options.telemetry === false
+            ? { record: null }
+            : (options.telemetry || {});
+        var telemetryRecord = typeof telemetryOptions.record === "function"
+            ? telemetryOptions.record
+            : (telemetryOptions.record === null || telemetryOptions.record === false
+                ? null
+                : recordWorkerFeatureReportEvent);
+        if (telemetryOptions.channelConfig && telemetryRecord === recordWorkerFeatureReportEvent) {
+            try {
+                configureWorkerTelemetry(telemetryOptions.channelConfig);
+            } catch (_) {}
+        } else if (telemetryOptions.channelConfig && telemetryRecord && typeof telemetryRecord.configure === "function") {
+            try {
+                telemetryRecord.configure(telemetryOptions.channelConfig);
+            } catch (_) {}
+        }
+        this._telemetry = {
+            record: telemetryRecord,
+            context: telemetryOptions.context,
+            tags: telemetryOptions.tags,
+            channelConfig: telemetryOptions.channelConfig || null
+        };
     }
 
     on(type, handler) {
@@ -289,13 +330,23 @@ export class WorkerVMController {
         var controller = this;
         var ensureReport = this._ensureResourceCapabilityReport || ensureResourceCapabilityReport;
         var formatError = this._formatResourceCapabilityError || formatResourceCapabilityError;
+        var detectionStartedAt = Date.now();
+        var detectionMetrics = {
+            detectionStatus: "success",
+            detectionDurationMs: null,
+            workerErrors: Array.isArray(data && data.errors) ? data.errors.length : 0,
+        };
         Promise.resolve().then(function() {
             return ensureReport();
         }).then(function(report) {
+            detectionMetrics.detectionStatus = "success";
+            detectionMetrics.detectionDurationMs = Date.now() - detectionStartedAt;
             if (data && data.report && report) {
                 data.report.resourceCapabilities = report;
             }
         }).catch(function(error) {
+            detectionMetrics.detectionStatus = "error";
+            detectionMetrics.detectionDurationMs = Date.now() - detectionStartedAt;
             var formatted = formatError(error);
             if (formatted) {
                 if (!data.errors) data.errors = [];
@@ -303,22 +354,96 @@ export class WorkerVMController {
                 data.resourceCapabilityError = formatted;
             }
         }).finally(function() {
-            controller._finalizeFeatureReportMessage(data);
+            if (!Number.isFinite(detectionMetrics.detectionDurationMs)) {
+                detectionMetrics.detectionDurationMs = Date.now() - detectionStartedAt;
+            }
+            controller._finalizeFeatureReportMessage(data, detectionMetrics);
         });
     }
 
-    _finalizeFeatureReportMessage(data) {
+    _finalizeFeatureReportMessage(data, metrics = {}) {
         if (data.report) {
             this._lastFeatureReport = data.report;
         }
+        var now = Date.now();
+        var pendingReport = null;
+        var roundTripMs = null;
         if (typeof data.requestId === "number") {
-            var pendingReport = this._pendingReports.get(data.requestId);
-            if (pendingReport) {
+            pendingReport = this._pendingReports.get(data.requestId);
+            if (pendingReport && Number.isFinite(pendingReport.startedAt)) {
+                roundTripMs = Math.max(0, now - pendingReport.startedAt);
+            }
+        }
+        var detectionDurationMs = Number.isFinite(metrics.detectionDurationMs)
+            ? metrics.detectionDurationMs
+            : null;
+        if (detectionDurationMs === null && pendingReport && Number.isFinite(pendingReport.startedAt)) {
+            detectionDurationMs = Math.max(0, now - pendingReport.startedAt);
+        }
+        var detectionStatus = metrics.detectionStatus || (data.resourceCapabilityError ? "error" : "success");
+        var status = metrics.status || (
+            data.resourceCapabilityError || (Array.isArray(data.errors) && data.errors.length > 0)
+                ? "degraded"
+                : "ok"
+        );
+        var mainThreadDependencyCount = 0;
+        if (data.report && Array.isArray(data.report.mainThreadDependencies)) {
+            mainThreadDependencyCount = data.report.mainThreadDependencies.length;
+        }
+        var telemetryDetail = {
+            requestId: data.requestId,
+            status: status,
+            throttling: data.report && data.report.throttling ? data.report.throttling : null,
+            errors: data.errors,
+            roundTripMs: roundTripMs,
+            detectionDurationMs: detectionDurationMs,
+            detectionStatus: detectionStatus,
+            workerErrors: Number.isFinite(metrics.workerErrors)
+                ? metrics.workerErrors
+                : (Array.isArray(data.errors) ? data.errors.length : 0),
+            resourceCapabilityError: data.resourceCapabilityError,
+            mainThreadDependencyCount: mainThreadDependencyCount
+        };
+        this._emitFeatureReportTelemetry(telemetryDetail, pendingReport && pendingReport.telemetry);
+        if (typeof data.requestId === "number") {
+            var pending = pendingReport || this._pendingReports.get(data.requestId);
+            if (pending) {
                 this._pendingReports.delete(data.requestId);
-                pendingReport.resolve(data);
+                pending.resolve(data);
             }
         }
         this.emit(data.type, data);
+    }
+
+    _emitFeatureReportTelemetry(detail, overrides) {
+        if (!detail) detail = {};
+        var record = this._telemetry && typeof this._telemetry.record === "function"
+            ? this._telemetry.record
+            : null;
+        if (overrides && typeof overrides.record === "function") {
+            record = overrides.record;
+        }
+        if (typeof record !== "function") {
+            return;
+        }
+        var payload = Object.assign({}, detail);
+        if (overrides && Object.prototype.hasOwnProperty.call(overrides, "context")) {
+            payload.context = overrides.context;
+        } else if (this._telemetry && this._telemetry.context !== undefined && payload.context === undefined) {
+            payload.context = this._telemetry.context;
+        }
+        if (overrides && Object.prototype.hasOwnProperty.call(overrides, "tags")) {
+            payload.tags = overrides.tags;
+        } else if (this._telemetry && this._telemetry.tags !== undefined && payload.tags === undefined) {
+            payload.tags = this._telemetry.tags;
+        }
+        try {
+            record(payload);
+        } catch (error) {
+            if (typeof console !== "undefined" && console.warn) {
+                console.warn("[SqueakJS][worker] telemetry emit failed", error);
+            }
+        }
     }
 
     _applyDisplayGeometry(data) {
@@ -643,24 +768,110 @@ export class WorkerVMController {
         var requestId = this._nextReportId++;
         var controller = this;
         return new Promise(function(resolve, reject) {
+            var telemetryOverrides = null;
+            if (options.telemetry && typeof options.telemetry === "object") {
+                telemetryOverrides = {};
+                if (Object.prototype.hasOwnProperty.call(options.telemetry, "context")) {
+                    telemetryOverrides.context = options.telemetry.context;
+                }
+                if (Object.prototype.hasOwnProperty.call(options.telemetry, "tags")) {
+                    telemetryOverrides.tags = options.telemetry.tags;
+                }
+                if (typeof options.telemetry.record === "function") {
+                    telemetryOverrides.record = options.telemetry.record;
+                }
+            }
             var entry = {
                 timer: null,
+                startedAt: Date.now(),
+                telemetry: telemetryOverrides,
+                cleanup: function() {
+                    if (entry.timer) {
+                        clearTimeout(entry.timer);
+                        entry.timer = null;
+                    }
+                    if (entry.abortCleanup) {
+                        entry.abortCleanup();
+                        entry.abortCleanup = null;
+                    }
+                },
                 resolve: function(payload) {
-                    if (entry.timer) clearTimeout(entry.timer);
+                    entry.cleanup();
                     resolve(payload);
                 },
                 reject: function(error) {
-                    if (entry.timer) clearTimeout(entry.timer);
+                    entry.cleanup();
                     reject(error);
                 },
+                abortCleanup: null,
             };
             if (options.timeout && options.timeout > 0) {
                 entry.timer = setTimeout(function() {
                     controller._pendingReports.delete(requestId);
+                    controller._emitFeatureReportTelemetry({
+                        requestId: requestId,
+                        status: "timeout",
+                        errors: [{ message: "Feature report request timed out", code: "feature-report-timeout" }],
+                        roundTripMs: Date.now() - entry.startedAt,
+                        workerErrors: 0,
+                        detectionStatus: "timeout",
+                        timeoutCount: 1
+                    }, telemetryOverrides);
                     entry.reject(new Error("Feature report request timed out"));
                 }, options.timeout);
             }
             controller._pendingReports.set(requestId, entry);
+            var signal = options.signal;
+            if (signal && typeof signal === "object") {
+                var abortHandlerCalled = false;
+                var abortListenerRegistered = false;
+                var previousOnAbort = null;
+                var useOnAbort = false;
+                var abortHandler = function() {
+                    if (abortHandlerCalled) {
+                        return;
+                    }
+                    abortHandlerCalled = true;
+                    controller._pendingReports.delete(requestId);
+                    var abortError = createAbortError(signal.reason);
+                    controller._emitFeatureReportTelemetry({
+                        requestId: requestId,
+                        status: "aborted",
+                        errors: [{
+                            message: abortError && abortError.message ? abortError.message : "Feature report request aborted",
+                            code: "feature-report-aborted"
+                        }],
+                        roundTripMs: Date.now() - entry.startedAt,
+                        workerErrors: 0,
+                        detectionStatus: "cancelled",
+                        detectionDurationMs: Date.now() - entry.startedAt
+                    }, telemetryOverrides);
+                    entry.reject(abortError);
+                };
+                var removeAbortHandler = function() {
+                    if (abortListenerRegistered && typeof signal.removeEventListener === "function") {
+                        signal.removeEventListener("abort", abortHandler);
+                        abortListenerRegistered = false;
+                    } else if (useOnAbort && signal.onabort === abortHandler) {
+                        signal.onabort = previousOnAbort;
+                        previousOnAbort = null;
+                        useOnAbort = false;
+                    }
+                };
+                entry.abortCleanup = removeAbortHandler;
+                if (typeof signal.addEventListener === "function") {
+                    signal.addEventListener("abort", abortHandler, { once: true });
+                    abortListenerRegistered = true;
+                } else if ("onabort" in signal) {
+                    previousOnAbort = signal.onabort;
+                    signal.onabort = abortHandler;
+                    useOnAbort = true;
+                }
+                if (signal.aborted) {
+                    abortHandler();
+                    return;
+                }
+            }
             controller.worker.postMessage({
                 type: "feature-report-request",
                 requestId: requestId,

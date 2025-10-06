@@ -113,7 +113,34 @@ last update metadata, and validation evidence.
   harness.
 
 ## 4. Expanded Image Compatibility
-- All milestones: ☐ Not started
+
+### Milestone 1: Format detection audit
+- Status: ✅ Completed
+- Last Updated: 2025-10-19
+- Commit: pending (current PR)
+- Notes: Added an image header audit pipeline that records probe attempts, logs unsupported combinations such as 64-bit non-Spur
+  images, and emits operator guidance describing how to convert legacy images before retrying.
+
+### Milestone 2: Conversion toolchain
+- Status: ✅ Completed
+- Last Updated: 2025-10-20
+- Commit: pending (current PR)
+- Notes: Shipped a `convert-image` Node CLI that upgrades the mock non-Spur 64-bit
+  fixtures to Spur headers, records conversion flags, and emits machine-readable
+  summaries. Added regression coverage that exercises the CLI against the
+  compatibility fixture to validate object and selector counts before/after
+  conversion.
+
+### Milestone 3: Native loader path
+- Status: ✅ Completed
+- Last Updated: 2025-10-21
+- Commit: pending (current PR)
+- Notes: Implemented a native compatibility loader that detects the mock 64-bit non-Spur
+  image metadata, reconstructs object/selector summaries, and auto-resolves loads across both
+  buffer and streaming pipelines with audit logging and regression coverage.
+
+### Milestone 4: Documentation & migration guide
+- Status: ☐ Not started
 
 ## 5. Clipboard Reliability
 - All milestones: ☐ Not started

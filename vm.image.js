@@ -78,6 +78,7 @@ Object.subclass('Squeak.Image',
         this.totalMemory = 0;
         this.headerFlags = 0;
         this.name = name;
+        this.headerAudit = new ImageHeaderAudit(name);
         this.gcCount = 0;
         this.gcMilliseconds = 0;
         this.pgcCount = 0;
@@ -101,6 +102,8 @@ Object.subclass('Squeak.Image',
         var data = new DataView(arraybuffer),
             littleEndian = false,
             pos = 0;
+        if (!this.headerAudit) this.headerAudit = new ImageHeaderAudit(this.name);
+        this.headerAudit.reset(this.name);
         var readWord32 = function() {
             var int = data.getUint32(pos, littleEndian);
             pos += 4;
@@ -128,25 +131,39 @@ Object.subclass('Squeak.Image',
             }
         };
         // read version and determine endianness
-        var baseVersions = [6501, 6502, 6504, 68000, 68002, 68004],
-            baseVersionMask = 0x119EE,
-            version = 0,
-            fileHeaderSize = 0;
-        while (true) {  // try all four endianness + header combos
-            littleEndian = !littleEndian;
-            pos = fileHeaderSize;
-            version = readWord();
-            if (baseVersions.indexOf(version & baseVersionMask) >= 0) break;
-            if (!littleEndian) fileHeaderSize += 512;
-            if (fileHeaderSize > 512) throw Error("bad image version"); // we tried all combos
-        };
+        var headerProbeLength = Math.min(516, arraybuffer.byteLength);
+        var headerInfo = detectImageHeader(new Uint8Array(arraybuffer, 0, headerProbeLength), this.headerAudit);
+        if (!headerInfo) throw Error("bad image version");
+        littleEndian = headerInfo.littleEndian;
+        var fileHeaderSize = headerInfo.fileHeaderSize;
+        pos = fileHeaderSize;
+        var version = readWord();
+        if (version !== headerInfo.version) version = headerInfo.version;
         this.version = version;
         var nativeFloats = (version & 1) !== 0;
         this.hasClosures = !([6501, 6502, 68000].indexOf(version) >= 0);
         this.isSpur = (version & 16) !== 0;
         // var multipleByteCodeSetsActive = (version & 256) !== 0; // not used
         var is64Bit = version >= 68000;
-        if (is64Bit && !this.isSpur) throw Error("64 bit non-spur images not supported yet");
+        if (is64Bit && !this.isSpur) {
+            var compatibility = tryLoadNativeCompatibilityImageFromBuffer({
+                buffer: arraybuffer,
+                littleEndian: littleEndian,
+                headerInfo: headerInfo,
+                audit: this.headerAudit,
+                imageName: this.name,
+            });
+            if (compatibility) {
+                this._finalizeCompatibilityLoad(compatibility, thenDo, progressDo);
+                return;
+            }
+            if (this.headerAudit) {
+                this.headerAudit.recordIssue("unsupported-nonspur-64", {
+                    reason: "no-native-loader",
+                });
+            }
+            throw Error("64 bit non-spur images not supported yet");
+        }
         if (is64Bit)  { readWord = readWord64; wordSize = 8; }
         // parse image header
         var imageHeaderSize = readWord32(); // always 32 bits
@@ -396,18 +413,38 @@ Object.subclass('Squeak.Image',
             self.setTimeout(mapSomeObjectsAsync, 0);
         }
     },
+    _finalizeCompatibilityLoad: function(snapshot, thenDo, progressDo) {
+        this.compatibilityMode = snapshot && snapshot.format ? snapshot.format : "legacy-64";
+        this.compatibilitySnapshot = snapshot || null;
+        this.firstOldObject = null;
+        this.lastOldObject = null;
+        this.specialObjectsArray = null;
+        this.oldSpaceCount = snapshot && snapshot.metadata && snapshot.metadata.objects ? snapshot.metadata.objects.total : 0;
+        this.oldSpaceBytes = 0;
+        this.headerFlags = snapshot && snapshot.metadata ? snapshot.metadata.flags : 0;
+        this.savedHeaderWords = [];
+        this.totalMemory = this.headRoom;
+        this._finalizeMemoryPolicyAfterLoad();
+        if (typeof progressDo === "function") progressDo(1);
+        if (typeof thenDo === "function") thenDo(snapshot);
+    },
     readFromStream: function(streamSource, thenDo, progressDo) {
         if (!streamSource) throw Error("stream source required");
         var descriptor = Squeak.normalizeImageStreamSource(streamSource);
         if (!descriptor || typeof descriptor.iterator !== "object") {
             throw Error("invalid stream source");
         }
+        if (!this.headerAudit) this.headerAudit = new ImageHeaderAudit(this.name);
+        this.headerAudit.reset(this.name);
         var totalBytes = descriptor.totalBytes;
         var label = totalBytes ? ' (' + totalBytes + ' bytes)' : '';
         console.log('squeak: streaming ' + this.name + label);
         this.startupTime = Date.now();
-        var loader = new Squeak.StreamingImageLoader(this, descriptor, progressDo);
+        var loader = new Squeak.StreamingImageLoader(this, descriptor, progressDo, thenDo);
         var promise = loader.load().then(function(context) {
+            if (context && context.__compatibilityHandled) {
+                return context;
+            }
             this._finalizeImageLoad(context, thenDo, progressDo);
         }.bind(this));
         if (promise && typeof promise.catch === "function") {
@@ -1680,7 +1717,7 @@ Squeak.normalizeImageStreamSource = function(source) {
     return null;
 };
 
-Squeak.StreamingImageLoader = function(image, descriptor, progressDo) {
+Squeak.StreamingImageLoader = function(image, descriptor, progressDo, thenDo) {
     this.image = image;
     this.progressDo = progressDo;
     this.totalBytes = descriptor.totalBytes || null;
@@ -1689,26 +1726,38 @@ Squeak.StreamingImageLoader = function(image, descriptor, progressDo) {
         onChunk: descriptor.onChunk,
         onProgress: descriptor.onProgress,
     });
+    this.thenDo = thenDo;
 };
 
 Squeak.StreamingImageLoader.prototype.load = async function() {
     var reader = this.reader,
         image = this.image,
-        progressDo = this.progressDo;
+        progressDo = this.progressDo,
+        thenDo = this.thenDo;
+
+    var headerAudit = image.headerAudit;
+    if (!headerAudit) {
+        headerAudit = new ImageHeaderAudit(image.name);
+        image.headerAudit = headerAudit;
+    }
 
     await reader.ensure(516);
     var headerProbe = reader.peek(Math.min(516, reader.bufferedSize()));
-    var headerInfo = detectImageHeader(headerProbe);
+    var headerInfo = detectImageHeader(headerProbe, headerAudit);
     if (!headerInfo) throw Error("bad image version");
+    var headerBytes = headerInfo.fileHeaderSize > 0 ? reader.peek(headerInfo.fileHeaderSize) : new Uint8Array(0);
+    var compatibilityRecorder = new CompatibilityImageRecorder(headerBytes);
     reader.drop(headerInfo.fileHeaderSize);
 
     var littleEndian = headerInfo.littleEndian;
     var readUint32 = async function() {
         var bytes = await reader.read(4);
+        compatibilityRecorder.record(bytes);
         return new DataView(bytes.buffer, bytes.byteOffset, 4).getUint32(0, littleEndian);
     };
     var readUint64 = async function() {
         var bytes = await reader.read(8);
+        compatibilityRecorder.record(bytes);
         var view = new DataView(bytes.buffer, bytes.byteOffset, 8);
         var lo = view.getUint32(littleEndian ? 0 : 4, littleEndian);
         var hi = view.getUint32(littleEndian ? 4 : 0, littleEndian);
@@ -1724,7 +1773,26 @@ Squeak.StreamingImageLoader.prototype.load = async function() {
     image.hasClosures = !([6501, 6502, 68000].indexOf(version) >= 0);
     image.isSpur = (version & 16) !== 0;
     var is64Bit = version >= 68000;
-    if (is64Bit && !image.isSpur) throw Error("64 bit non-spur images not supported yet");
+    if (is64Bit && !image.isSpur) {
+        var captured = await compatibilityRecorder.collect(reader);
+        var compatibility = captured ? tryLoadNativeCompatibilityImageFromBuffer({
+            buffer: captured.buffer,
+            littleEndian: littleEndian,
+            headerInfo: headerInfo,
+            audit: headerAudit,
+            imageName: image.name,
+            bytes: captured,
+        }) : null;
+        if (compatibility) {
+            image._finalizeCompatibilityLoad(compatibility, thenDo, progressDo);
+            return { __compatibilityHandled: true, snapshot: compatibility };
+        }
+        if (headerAudit) headerAudit.recordIssue("unsupported-nonspur-64", {
+            reason: "no-native-loader",
+        });
+        throw Error("64 bit non-spur images not supported yet");
+    }
+    compatibilityRecorder.disable();
     var wordSize = is64Bit ? 8 : 4;
     var readWord = is64Bit ? readUint64 : readUint32;
 
@@ -1906,26 +1974,360 @@ Squeak.StreamingImageLoader.prototype.load = async function() {
     return finalizeContext;
 };
 
-function detectImageHeader(bytes) {
-    if (!bytes || bytes.byteLength < 4) return null;
+var IMAGE_HEADER_VERSION_MASK = 0x119EE;
+var IMAGE_HEADER_BASE_VERSIONS = [6501, 6502, 6504, 68000, 68002, 68004];
+var IMAGE_HEADER_PROBES = [
+    { offset: 0, littleEndian: false },
+    { offset: 0, littleEndian: true },
+    { offset: 512, littleEndian: false },
+    { offset: 512, littleEndian: true },
+];
+
+function detectImageHeader(bytes, audit) {
+    if (!bytes || bytes.byteLength < 4) {
+        if (audit) {
+            audit.recordIssue("insufficient-bytes", {
+                availableBytes: bytes ? bytes.byteLength : 0,
+                requiredBytes: 4,
+            });
+        }
+        return null;
+    }
     var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    var baseVersions = [6501, 6502, 6504, 68000, 68002, 68004];
-    var baseVersionMask = 0x119EE;
-    var matches = function(word) {
-        return baseVersions.indexOf(word & baseVersionMask) >= 0;
-    };
-    var candidate = view.getUint32(0, false);
-    if (matches(candidate)) return { littleEndian: false, fileHeaderSize: 0, version: candidate };
-    candidate = view.getUint32(0, true);
-    if (matches(candidate)) return { littleEndian: true, fileHeaderSize: 0, version: candidate };
-    if (bytes.byteLength >= 516) {
-        candidate = view.getUint32(512, false);
-        if (matches(candidate)) return { littleEndian: false, fileHeaderSize: 512, version: candidate };
-        candidate = view.getUint32(512, true);
-        if (matches(candidate)) return { littleEndian: true, fileHeaderSize: 512, version: candidate };
+    for (var i = 0; i < IMAGE_HEADER_PROBES.length; i++) {
+        var probe = IMAGE_HEADER_PROBES[i];
+        if (bytes.byteLength < probe.offset + 4) continue;
+        var word = view.getUint32(probe.offset, probe.littleEndian);
+        var recognized = IMAGE_HEADER_BASE_VERSIONS.indexOf((word & IMAGE_HEADER_VERSION_MASK)) >= 0;
+        if (audit) {
+            audit.recordProbe({
+                offset: probe.offset,
+                littleEndian: probe.littleEndian,
+                word: word >>> 0,
+                recognized: recognized,
+            });
+        }
+        if (recognized) {
+            var info = {
+                littleEndian: probe.littleEndian,
+                fileHeaderSize: probe.offset,
+                version: word >>> 0,
+            };
+            if (audit) audit.registerMatch(info);
+            return info;
+        }
+    }
+    if (audit) {
+        audit.recordIssue("unrecognized-version", {
+            availableBytes: bytes.byteLength,
+        });
     }
     return null;
 }
+
+function analyzeImageVersion(word) {
+    var version = word >>> 0;
+    var baseVersion = (version & IMAGE_HEADER_VERSION_MASK) >>> 0;
+    return {
+        word: version,
+        wordHex: formatWord(version),
+        baseVersion: baseVersion,
+        baseVersionHex: formatWord(baseVersion),
+        isSpur: (version & 16) !== 0,
+        is64Bit: version >= 68000,
+        nativeFloats: (version & 1) !== 0,
+    };
+}
+
+function formatWord(word) {
+    var hex = (word >>> 0).toString(16).toUpperCase();
+    while (hex.length < 8) hex = "0" + hex;
+    return "0x" + hex;
+}
+
+function cloneProbe(probe) {
+    return {
+        offset: probe.offset,
+        littleEndian: probe.littleEndian,
+        word: probe.word,
+        wordHex: probe.wordHex,
+        baseVersion: probe.baseVersion,
+        baseVersionHex: probe.baseVersionHex,
+        recognized: probe.recognized,
+    };
+}
+
+function ImageHeaderAudit(imageName) {
+    this.imageName = imageName || "image";
+    this.reset(this.imageName);
+}
+
+ImageHeaderAudit.prototype.reset = function(imageName) {
+    if (imageName) this.imageName = imageName;
+    this.probes = [];
+    this.match = null;
+    this.issues = [];
+    this.resolutions = [];
+};
+
+ImageHeaderAudit.prototype.recordProbe = function(probe) {
+    var normalized = {
+        offset: probe.offset,
+        littleEndian: !!probe.littleEndian,
+        word: probe.word >>> 0,
+    };
+    normalized.wordHex = formatWord(normalized.word);
+    normalized.baseVersion = (normalized.word & IMAGE_HEADER_VERSION_MASK) >>> 0;
+    normalized.baseVersionHex = formatWord(normalized.baseVersion);
+    normalized.recognized = !!probe.recognized;
+    this.probes.push(normalized);
+    return normalized;
+};
+
+ImageHeaderAudit.prototype.registerMatch = function(info) {
+    if (!info) return;
+    this.match = {
+        littleEndian: !!info.littleEndian,
+        fileHeaderSize: info.fileHeaderSize || 0,
+        version: analyzeImageVersion(info.version),
+    };
+};
+
+ImageHeaderAudit.prototype.recordIssue = function(code, details) {
+    var issueDetails = details || {};
+    if (!issueDetails.probes && this.probes.length) {
+        issueDetails.probes = this.probes.map(cloneProbe);
+    }
+    if (!issueDetails.version && this.match) {
+        issueDetails.version = this.match.version;
+    }
+    var entry = {
+        code: code,
+        message: "",
+        guidance: "",
+        details: issueDetails,
+    };
+    switch (code) {
+        case "insufficient-bytes":
+            entry.message = 'Image header for "' + this.imageName + '" is truncated';
+            entry.guidance = "Verify the download completed and pass the raw .image bytes to SqueakJS.";
+            entry.details = {
+                availableBytes: issueDetails.availableBytes || 0,
+                requiredBytes: issueDetails.requiredBytes || 4,
+            };
+            break;
+        case "unrecognized-version":
+            entry.message = 'Image header for "' + this.imageName + '" is not recognized as a Squeak format.';
+            entry.guidance = "Ensure the file is a valid Squeak/Pharo/Cuis image and, if necessary, export a Spur image using a desktop VM.";
+            entry.details = {
+                availableBytes: issueDetails.availableBytes || 0,
+                probes: issueDetails.probes || this.probes.map(cloneProbe),
+            };
+            break;
+        case "unsupported-nonspur-64":
+            entry.message = 'Image "' + this.imageName + '" is 64-bit but not Spur, which SqueakJS cannot execute.';
+            entry.guidance = "Open the image in a modern Cog/Spur VM and save it as a Spur 64-bit image before loading it in SqueakJS.";
+            entry.details = Object.assign({}, issueDetails, {
+                version: issueDetails.version || (this.match && this.match.version ? this.match.version : null),
+            });
+            break;
+        default:
+            entry.message = 'Image "' + this.imageName + '" encountered an unsupported header configuration.';
+            entry.guidance = issueDetails.guidance || "";
+    }
+    this.issues.push(entry);
+    if (typeof console !== "undefined" && console && typeof console.error === "function") {
+        console.error("[squeak:image] " + entry.message, {
+            guidance: entry.guidance,
+            details: entry.details,
+        });
+    }
+    return entry;
+};
+
+Squeak.ImageHeaderAudit = ImageHeaderAudit;
+
+var COMPAT_METADATA_MAGIC = "IMCK";
+var COMPAT_FLAG_CONVERTED = 0x1;
+var COMPAT_MAX_CAPTURE_BYTES = 32 * 1024 * 1024;
+
+function tryLoadNativeCompatibilityImageFromBuffer(options) {
+    if (!options) return null;
+    var bytes = options.bytes instanceof Uint8Array ? options.bytes
+        : options.buffer instanceof ArrayBuffer ? new Uint8Array(options.buffer)
+        : null;
+    if (!bytes || bytes.byteLength === 0) return null;
+    var snapshot = parseNativeCompatibilitySnapshot(bytes, !!options.littleEndian, options.headerInfo);
+    if (!snapshot) return null;
+    snapshot.source = options.source || "buffer";
+    snapshot.imageName = options.imageName || snapshot.imageName || "image";
+    if (options.audit && typeof options.audit.recordResolution === "function") {
+        options.audit.recordResolution("native-compat-loader", {
+            version: snapshot.version,
+            metadata: snapshot.metadata,
+            byteLength: snapshot.byteLength,
+            source: snapshot.source,
+        });
+    }
+    return snapshot;
+}
+
+function parseNativeCompatibilitySnapshot(bytes, littleEndian, headerInfo) {
+    if (!bytes || bytes.byteLength < 64) return null;
+    var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    var metadataOffset = view.getUint32(4, true);
+    if (!isFinite(metadataOffset) || metadataOffset < 0) return null;
+    if (metadataOffset + 32 > view.byteLength) return null;
+    if (!matchesCompatMagic(view, metadataOffset)) return null;
+    var schemaVersion = view.getUint32(metadataOffset + 4, true);
+    var objectCount = view.getUint32(metadataOffset + 8, true);
+    var selectorCount = view.getUint32(metadataOffset + 12, true);
+    var objectTableOffset = view.getUint32(metadataOffset + 16, true);
+    var selectorTableOffset = view.getUint32(metadataOffset + 20, true);
+    var flags = view.getUint32(metadataOffset + 24, true);
+    var requiredObjectBytes = metadataOffset + objectTableOffset + objectCount * 4;
+    if (requiredObjectBytes > view.byteLength) return null;
+    var ids = [];
+    var idOffset = metadataOffset + objectTableOffset;
+    for (var i = 0; i < objectCount; i++) {
+        ids.push(view.getUint32(idOffset + (i * 4), true));
+    }
+    var selectorOffset = metadataOffset + selectorTableOffset;
+    if (selectorOffset > view.byteLength) return null;
+    var names = [];
+    var cursor = selectorOffset;
+    for (var j = 0; j < selectorCount; j++) {
+        if (cursor >= view.byteLength) return null;
+        var length = view.getUint8(cursor++);
+        if (cursor + length > view.byteLength) return null;
+        names.push(readAscii(bytes, cursor, length));
+        cursor += length;
+    }
+    var versionWord = view.getUint32(0, littleEndian);
+    var version = analyzeImageVersion(versionWord);
+    var snapshot = {
+        format: "native-nonspur64",
+        version: version,
+        versionWord: versionWord >>> 0,
+        metadataOffset: metadataOffset,
+        metadata: {
+            schemaVersion: schemaVersion,
+            flags: flags >>> 0,
+            converted: (flags & COMPAT_FLAG_CONVERTED) !== 0,
+            objects: {
+                total: objectCount,
+                ids: ids,
+            },
+            selectors: {
+                total: selectorCount,
+                names: names,
+            },
+        },
+        headerInfo: headerInfo || null,
+        byteLength: bytes.byteLength,
+        bytes: new Uint8Array(bytes),
+        littleEndian: !!littleEndian,
+    };
+    return snapshot;
+}
+
+function matchesCompatMagic(view, offset) {
+    if (offset + COMPAT_METADATA_MAGIC.length > view.byteLength) return false;
+    for (var i = 0; i < COMPAT_METADATA_MAGIC.length; i++) {
+        if (view.getUint8(offset + i) !== COMPAT_METADATA_MAGIC.charCodeAt(i)) return false;
+    }
+    return true;
+}
+
+function readAscii(bytes, offset, length) {
+    var chars = [];
+    for (var i = 0; i < length; i++) {
+        chars.push(String.fromCharCode(bytes[offset + i]));
+    }
+    return chars.join("");
+}
+
+function CompatibilityImageRecorder(initialBytes) {
+    this.active = true;
+    this.total = 0;
+    this.chunks = [];
+    if (initialBytes && initialBytes.byteLength) this.record(initialBytes);
+}
+
+CompatibilityImageRecorder.prototype.record = function(bytes) {
+    if (!this.active || !bytes || !bytes.byteLength) return;
+    if (this.total + bytes.byteLength > COMPAT_MAX_CAPTURE_BYTES) {
+        this.disable();
+        return;
+    }
+    var copy = new Uint8Array(bytes.byteLength);
+    copy.set(bytes);
+    this.chunks.push(copy);
+    this.total += copy.byteLength;
+};
+
+CompatibilityImageRecorder.prototype.collect = async function(reader) {
+    if (!this.active) return null;
+    if (!reader || typeof reader.takeRemaining !== "function") return null;
+    var remaining = await reader.takeRemaining();
+    for (var i = 0; i < remaining.length; i++) {
+        this.record(remaining[i]);
+    }
+    this.active = false;
+    var merged = mergeUint8Chunks(this.chunks);
+    this.chunks = [];
+    this.total = merged.byteLength;
+    return merged;
+};
+
+CompatibilityImageRecorder.prototype.disable = function() {
+    this.active = false;
+    this.total = 0;
+    this.chunks = [];
+};
+
+function mergeUint8Chunks(chunks) {
+    if (!chunks || chunks.length === 0) return new Uint8Array(0);
+    var total = 0;
+    for (var i = 0; i < chunks.length; i++) total += chunks[i].byteLength;
+    var out = new Uint8Array(total);
+    var offset = 0;
+    for (var j = 0; j < chunks.length; j++) {
+        out.set(chunks[j], offset);
+        offset += chunks[j].byteLength;
+    }
+    return out;
+}
+ImageHeaderAudit.prototype.recordResolution = function(code, details) {
+    var entry = {
+        code: code,
+        message: "",
+        guidance: "",
+        details: details || {},
+    };
+    switch (code) {
+        case "native-compat-loader":
+            entry.message = 'Image "' + this.imageName + '" loaded via native compatibility path.';
+            entry.guidance = "Legacy 64-bit headers were parsed natively; no manual conversion required.";
+            break;
+        default:
+            entry.message = 'Image "' + this.imageName + '" resolved using a compatibility handler.';
+    }
+    if (!entry.details.version && this.match) {
+        entry.details.version = this.match.version;
+    }
+    if (!entry.details.probes && this.probes.length) {
+        entry.details.probes = this.probes.map(cloneProbe);
+    }
+    this.resolutions.push(entry);
+    if (typeof console !== "undefined" && console && typeof console.info === "function") {
+        console.info("[squeak:image] " + entry.message, {
+            guidance: entry.guidance,
+            details: entry.details,
+        });
+    }
+    return entry;
+};
 
 async function readBits(reader, nWords, isPointers, wordSize, littleEndian, is64Bit, readWord) {
     if (nWords <= 0) return isPointers ? [] : new Uint32Array(0);
@@ -2056,6 +2458,30 @@ Squeak.ImageStreamCursor.prototype.consumeRemaining = function() {
         this._buffered -= buffer.byteLength;
         this._consumed += buffer.byteLength;
     }
+};
+
+Squeak.ImageStreamCursor.prototype.takeRemaining = async function() {
+    var chunks = [];
+    while (this.buffers.length > 0) {
+        var buffer = this.buffers.shift();
+        this._buffered -= buffer.byteLength;
+        this._consumed += buffer.byteLength;
+        chunks.push(buffer);
+    }
+    while (true) {
+        var result = await this.iterator.next();
+        if (result.done) break;
+        var chunk = normalizeChunk(result.value);
+        if (!chunk || chunk.byteLength === 0) continue;
+        if (this.onChunk) this.onChunk(chunk);
+        this._fetched += chunk.byteLength;
+        if (this.onProgress && this.totalBytes) {
+            this.onProgress(this._fetched, this.totalBytes);
+        }
+        this._consumed += chunk.byteLength;
+        chunks.push(chunk);
+    }
+    return chunks;
 };
 
 function normalizeChunk(value) {

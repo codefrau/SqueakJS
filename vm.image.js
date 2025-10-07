@@ -2238,6 +2238,10 @@ Squeak.ImageInstallController.prototype._markAllAvailable = function() {
 
 Squeak.ImageInstallController.prototype._maybeScheduleFlush = function() {
     if (!this.streaming) return;
+    if (typeof Squeak !== "undefined" && Squeak.debugFinalize) {
+        try { console.debug("[SqueakJS][finalize] maybeScheduleFlush: scheduled=", !!this._flushScheduled, "completed=", !!this._completed, "installed=", this._installedCount, "total=", this._totalObjects); } catch (_) {}
+    }
+
     if (this._flushScheduled) return;
     if (!this._cursor || !this._cursor.__streamParsed) return;
     var self = this;
@@ -2276,6 +2280,10 @@ Squeak.ImageInstallController.prototype._maybeScheduleFlush = function() {
 Squeak.ImageInstallController.prototype._consumeBatch = function(force) {
     if (!this._ensureInstallResources()) return false;
     var processed = 0;
+    if (typeof Squeak !== "undefined" && Squeak.debugFinalize) {
+        try { console.debug("[SqueakJS][finalize] consumeBatch: streaming=", !!this.streaming, "installed=", this._installedCount, "cursor=", !!this._cursor, "completed=", !!this._completed); } catch (_) {}
+    }
+
     while (this._cursor && this._cursor.__streamParsed) {
         if (!force && processed >= this.batchSize) break;
         if (!this._dependenciesReady(this._cursor)) break;
@@ -2307,6 +2315,10 @@ Squeak.ImageInstallController.prototype._installNext = function() {
 Squeak.ImageInstallController.prototype._ensureInstallResources = function() {
     if (this._installResources) return true;
     var context = this.context;
+    if (typeof Squeak !== "undefined" && Squeak.debugFinalize) {
+        try { console.debug("[SqueakJS][finalize] ensureInstallResources: ready=", !!this._installResources, "completed=", !!this._completed); } catch (_) {}
+    }
+
     var oopMap = context.oopMap;
     var rawBits = context.rawBits;
     var specialObjects = oopMap.get(context.specialObjectsOopInt);
@@ -2346,6 +2358,10 @@ Squeak.ImageInstallController.prototype._dependenciesReady = function(object) {
     var context = this.context;
     var rawBits = context.rawBits;
     var oopMap = context.oopMap;
+    if (typeof Squeak !== "undefined" && Squeak.debugFinalize) {
+        try { console.debug("[SqueakJS][finalize] dependenciesReady: pendingDeps=", !!this._pendingDependencies, "completed=", !!this._completed); } catch (_) {}
+    }
+
     var bits = rawBits.get(object.oop);
     if (!bits) return false;
     var format = object._format;
@@ -2433,6 +2449,10 @@ Squeak.ImageInstallController.prototype._emitFinalizeProgress = function() {
     this.finalizeProgressDo(fraction);
 };
 
+    if (typeof Squeak !== "undefined" && Squeak.debugFinalize) {
+        try { console.debug("[SqueakJS][finalize] progress: installed=", this._installedCount, "total=", this._totalObjects); } catch (_) {}
+    }
+
 Squeak.ImageInstallController.prototype._maybeFinish = function() {
     if (this._completed) return;
     if (this._cursor && (!this._cursor.__streamParsed || !this._dependenciesReady(this._cursor))) return;
@@ -2460,6 +2480,10 @@ Squeak.ImageInstallController.prototype._maybeFinish = function() {
     if (this.thenDo) this.thenDo();
     if (this._resolveCompletion) this._resolveCompletion();
     this.image._activeInstallController = null;
+    if (typeof Squeak !== "undefined" && Squeak.debugFinalize) {
+        try { console.debug("[SqueakJS][finalize] maybeFinish: completed=", !!this._completed, "installed=", this._installedCount, "total=", this._totalObjects); } catch (_) {}
+    }
+
 };
 
 Squeak.ImageStreamProgressAdapter = function(progressDo, options) {

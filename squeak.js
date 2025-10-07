@@ -1547,6 +1547,38 @@ SqueakJS.runImage = function(buffer, name, display, options) {
         if (!options.vm.memory) options.vm.memory = memoryOptions;
     }
     window.onbeforeunload = function(evt) {
+        var startupUnhandledRejectionHandler = null;
+        var addedRejectionGuard = false;
+        (function installStartupGuardAndFlags() {
+            try {
+                var href = (typeof location !== "undefined" && location.href) || "";
+                var finalizeDebug = /(?:[?#&])finalizeDebug(?:=1|=true)?\b/i.test(href);
+                var timeoutMatch = /(?:[?#&])finalizeTimeoutMs=(\d+)/i.exec(href);
+                var finalizeTimeoutMsOverride = timeoutMatch ? +timeoutMatch[1] : null;
+                if (typeof Squeak !== "undefined") {
+                    if (finalizeTimeoutMsOverride && isFinite(finalizeTimeoutMsOverride)) Squeak.finalizeTimeoutMs = finalizeTimeoutMsOverride;
+                    if (finalizeDebug) Squeak.debugFinalize = true;
+                }
+                startupUnhandledRejectionHandler = function(e) {
+                    var reason = e && (e.reason || e);
+                    var msg = reason && reason.message ? String(reason.message) : String(reason);
+                    if (msg && /image finalize timeout|Failed to start|Failed to load image/i.test(msg)) {
+                        if (typeof e.preventDefault === "function") e.preventDefault();
+                        if (display && typeof display.showBanner === "function") {
+                            var banner = "Failed to load image" + (reason && reason.message ? " (" + reason.message + ")" : "");
+                            display.showBanner(banner);
+                            if (typeof display.showProgress === "function") display.showProgress(0);
+                        }
+                    }
+                };
+                if (typeof window !== "undefined" && window && !window.__squeakStartupRejectionGuard) {
+                    window.addEventListener("unhandledrejection", startupUnhandledRejectionHandler);
+                    window.__squeakStartupRejectionGuard = true;
+                    addedRejectionGuard = true;
+                }
+            } catch (_) {}
+        })();
+
         var msg = SqueakJS.appName + " is still running";
         evt.returnValue = msg;
         return msg;
@@ -1680,6 +1712,10 @@ SqueakJS.runImage = function(buffer, name, display, options) {
                     } while (Date.now() < stoptime);
                 };
                 if (options.onStart) options.onStart(vm, display, options);
+                if (typeof window !== "undefined" && window && window.__squeakStartupRejectionGuard && addedRejectionGuard) {
+                    window.removeEventListener("unhandledrejection", startupUnhandledRejectionHandler);
+                    delete window.__squeakStartupRejectionGuard;
+                }
                 run();
             }).catch(function(error) {
                 logVMEvent("startup failure", error);
@@ -1697,6 +1733,7 @@ SqueakJS.runImage = function(buffer, name, display, options) {
             hasStream: !!streamDescriptor,
         });
         if (streamDescriptor) {
+
             var streamPromise;
             try {
                 streamPromise = image.readFromStream(streamDescriptor, startRunning, progressHandler);

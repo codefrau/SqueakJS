@@ -322,7 +322,7 @@ Object.subclass('Squeak.Image',
         };
         var controller = this._finalizeImageLoad(finalizeContext, thenDo, progressDo);
         if (controller && typeof controller.whenComplete === "function") {
-            var timeoutMs = 60000;
+            var timeoutMs = (typeof Squeak !== "undefined" && Squeak && typeof Squeak.finalizeTimeoutMs === "number") ? Squeak.finalizeTimeoutMs : 60000;
             var timeoutId = typeof self !== "undefined" && self && typeof self.setTimeout === "function"
                 ? self.setTimeout(function() {
                     try { controller.abort(new Error("image finalize timeout")); } catch (_) {}
@@ -2106,7 +2106,7 @@ Squeak.StreamingImageLoader.prototype._loadInternal = async function() {
     finalizeContext.oopAdjust = oopAdjust;
     controller.markStreamComplete();
     var completion = controller.whenComplete();
-    var timeoutMs = 60000;
+    var timeoutMs = (typeof Squeak !== "undefined" && Squeak && typeof Squeak.finalizeTimeoutMs === "number") ? Squeak.finalizeTimeoutMs : 60000;
     var timeoutId = typeof self !== "undefined" && self && typeof self.setTimeout === "function"
         ? self.setTimeout(function() {
             try { controller.abort(new Error("image finalize timeout")); } catch (_) {}

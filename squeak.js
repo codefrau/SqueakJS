@@ -1688,7 +1688,6 @@ SqueakJS.runImage = function(buffer, name, display, options) {
                     display.showBanner(msg);
                     if (typeof display.showProgress === "function") display.showProgress(0);
                 }
-                throw error;
             });
         }
         var streamDescriptor = Squeak.normalizeImageStreamSource(buffer);
@@ -1713,7 +1712,6 @@ SqueakJS.runImage = function(buffer, name, display, options) {
                         display.showBanner(msg);
                         if (typeof display.showProgress === "function") display.showProgress(0);
                     }
-                    throw error;
                 });
             }
         } else {
@@ -1732,7 +1730,6 @@ SqueakJS.runImage = function(buffer, name, display, options) {
                         display.showBanner(msg);
                         if (typeof display.showProgress === "function") display.showProgress(0);
                     }
-                    throw error;
                 });
             }
         }

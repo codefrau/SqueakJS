@@ -330,10 +330,12 @@ Object.subclass('Squeak.Image',
                 : setTimeout(function() {
                     try { controller.abort(new Error("image finalize timeout")); } catch (_) {}
                 }, timeoutMs);
-            controller.whenComplete().finally(function() {
+            var completion = controller.whenComplete();
+            completion.finally(function() {
                 if (typeof self !== "undefined" && self && typeof self.clearTimeout === "function") self.clearTimeout(timeoutId);
                 else clearTimeout(timeoutId);
             });
+            return completion;
         }
     },
     _finalizeImageLoad: function(context, thenDo, progressDo, options) {

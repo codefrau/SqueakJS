@@ -320,7 +320,21 @@ Object.subclass('Squeak.Image',
             oopAdjust: oopAdjust,
             oldBaseAddr: oldBaseAddr,
         };
-        this._finalizeImageLoad(finalizeContext, thenDo, progressDo);
+        var controller = this._finalizeImageLoad(finalizeContext, thenDo, progressDo);
+        if (controller && typeof controller.whenComplete === "function") {
+            var timeoutMs = 60000;
+            var timeoutId = typeof self !== "undefined" && self && typeof self.setTimeout === "function"
+                ? self.setTimeout(function() {
+                    try { controller.abort(new Error("image finalize timeout")); } catch (_) {}
+                }, timeoutMs)
+                : setTimeout(function() {
+                    try { controller.abort(new Error("image finalize timeout")); } catch (_) {}
+                }, timeoutMs);
+            controller.whenComplete().finally(function() {
+                if (typeof self !== "undefined" && self && typeof self.clearTimeout === "function") self.clearTimeout(timeoutId);
+                else clearTimeout(timeoutId);
+            });
+        }
     },
     _finalizeImageLoad: function(context, thenDo, progressDo, options) {
         this.totalMemory = this.oldSpaceBytes + this.headRoom;

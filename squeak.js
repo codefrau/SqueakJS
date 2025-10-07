@@ -1684,7 +1684,9 @@ SqueakJS.runImage = function(buffer, name, display, options) {
             }).catch(function(error) {
                 logVMEvent("startup failure", error);
                 if (display && typeof display.showBanner === "function") {
-                    display.showBanner("Failed to start " + SqueakJS.appName);
+                    var msg = "Failed to start " + SqueakJS.appName + (error && error.message ? " (" + error.message + ")" : "");
+                    display.showBanner(msg);
+                    if (typeof display.showProgress === "function") display.showProgress(0);
                 }
                 throw error;
             });
@@ -1706,6 +1708,11 @@ SqueakJS.runImage = function(buffer, name, display, options) {
             if (streamPromise && typeof streamPromise.catch === "function") {
                 streamPromise.catch(function(error) {
                     logVMEvent("image stream failed", error);
+                    if (display && typeof display.showBanner === "function") {
+                        var msg = "Failed to load image stream" + (error && error.message ? " (" + error.message + ")" : "");
+                        display.showBanner(msg);
+                        if (typeof display.showProgress === "function") display.showProgress(0);
+                    }
                     throw error;
                 });
             }

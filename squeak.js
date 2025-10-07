@@ -1717,11 +1717,23 @@ SqueakJS.runImage = function(buffer, name, display, options) {
                 });
             }
         } else {
+            var bufferPromise;
             try {
-                image.readFromBuffer(buffer, startRunning, progressHandler);
+                bufferPromise = image.readFromBuffer(buffer, startRunning, progressHandler);
             } catch (error) {
                 logVMEvent("image buffer load failed", error);
                 throw error;
+            }
+            if (bufferPromise && typeof bufferPromise.catch === "function") {
+                bufferPromise.catch(function(error) {
+                    logVMEvent("image buffer load failed", error);
+                    if (display && typeof display.showBanner === "function") {
+                        var msg = "Failed to load image" + (error && error.message ? " (" + error.message + ")" : "");
+                        display.showBanner(msg);
+                        if (typeof display.showProgress === "function") display.showProgress(0);
+                    }
+                    throw error;
+                });
             }
         }
     }, 0);

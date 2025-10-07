@@ -2447,11 +2447,10 @@ Squeak.ImageInstallController.prototype._emitFinalizeProgress = function() {
     if (fraction < 0) fraction = 0;
     if (fraction > 1) fraction = 1;
     this.finalizeProgressDo(fraction);
-};
-
     if (typeof Squeak !== "undefined" && Squeak.debugFinalize) {
         try { console.debug("[SqueakJS][finalize] progress: installed=", this._installedCount, "total=", this._totalObjects); } catch (_) {}
     }
+};
 
 Squeak.ImageInstallController.prototype._maybeFinish = function() {
     if (this._completed) return;

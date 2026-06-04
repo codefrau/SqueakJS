@@ -45,6 +45,12 @@ Object.extend(Squeak.Primitives.prototype,
         var delimitor = this.emulateMac ? ':' : '/';
         return this.popNandPushIfOK(1, this.charFromInt(delimitor.charCodeAt(0)));
     },
+    primitiveGetWorkingDirectory: function(argCount) {
+        // Newer images (e.g. Cuis 7.9) ask the VM for its working directory during startup;
+        // answer the same path as the VM-path primitive (142) so it stays consistent with our
+        // virtual file system. Failing this primitive aborts startup with "primWorkingDirectory failed".
+        return this.popNandPushIfOK(argCount + 1, this.makeStString(this.filenameToSqueak(Squeak.vmPath)));
+    },
     primitiveDirectoryEntry: function(argCount) {
         var dirNameObj = this.stackNonInteger(1),
             fileNameObj = this.stackNonInteger(0);

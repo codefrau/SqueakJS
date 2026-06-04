@@ -241,6 +241,7 @@ Object.subclass('Squeak.Primitives',
             case 149: return this.primitiveGetAttribute(argCount);
             // File Primitives (150-169)
             case 150: if (this.oldPrims) return this.primitiveFileAtEnd(argCount);
+                else return this.popNandPushFloatIfOK(argCount+1, Math.cos(this.stackFloat(0))); // Float cos (newer images)
             case 151: if (this.oldPrims) return this.primitiveFileClose(argCount);
             case 152: if (this.oldPrims) return this.primitiveFileGetPosition(argCount);
             case 153: if (this.oldPrims) return this.primitiveFileOpen(argCount);
@@ -416,6 +417,14 @@ Object.subclass('Squeak.Primitives',
             case 551: return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveDecodeStereo', argCount);
             case 552: return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveEncodeMono', argCount);
             case 553: return this.namedPrimitive('ADPCMCodecPlugin', 'primitiveEncodeStereo', argCount);
+            // SmallFloat64 math primitives (newer images), mirror of Float prims 54-59 and 150
+            case 554: return this.popNandPushFloatIfOK(argCount+1, this.ldexp(this.stackFloat(1), this.stackFloat(0))); // SmallFloat64 timesTwoPower:
+            case 555: return this.popNandPushFloatIfOK(argCount+1, Math.sqrt(this.stackFloat(0))); // SmallFloat64 sqrt
+            case 556: return this.popNandPushFloatIfOK(argCount+1, Math.sin(this.stackFloat(0))); // SmallFloat64 sin
+            case 557: return this.popNandPushFloatIfOK(argCount+1, Math.atan(this.stackFloat(0))); // SmallFloat64 arcTan
+            case 558: return this.popNandPushFloatIfOK(argCount+1, Math.log(this.stackFloat(0))); // SmallFloat64 ln
+            case 559: return this.popNandPushFloatIfOK(argCount+1, Math.exp(this.stackFloat(0))); // SmallFloat64 exp
+            case 560: return this.popNandPushFloatIfOK(argCount+1, Math.cos(this.stackFloat(0))); // SmallFloat64 cos
             // External primitive support primitives (570-574)
             // case 570: return this.primitiveFlushExternalPrimitives(argCount);
             case 571: return this.primitiveUnloadModule(argCount);
@@ -1040,6 +1049,8 @@ Object.subclass('Squeak.Primitives',
         if (array.isWords()) // words...
             if (info.convertChars) return this.charFromInt(array.words[index-1] & 0x3FFFFFFF);
             else return this.pos32BitIntFor(array.words[index-1]);
+        if (array.isShorts()) // 16-bit shorts (unsigned, always a SmallInteger)
+            return array.wordsAsUint16Array()[index-1];
         if (array.isBytes()) // bytes...
             if (info.convertChars) return this.charFromInt(array.bytes[index-1] & 0xFF);
             else return array.bytes[index-1] & 0xFF;
@@ -1091,6 +1102,14 @@ Object.subclass('Squeak.Primitives',
                 intToPut = this.stackPos32BitInt(0);
             }
             if (this.success) array.words[index-1] = intToPut;
+            return objToPut;
+        }
+        if (array.isShorts()) {  // 16-bit shorts...
+            intToPut = this.stackInteger(0);
+            if (this.success) {
+                if (intToPut < 0 || intToPut > 0xFFFF) {this.success = false; return objToPut;}
+                array.wordsAsUint16Array()[index-1] = intToPut;
+            }
             return objToPut;
         }
         // bytes...

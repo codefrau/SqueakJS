@@ -198,6 +198,9 @@ Object.subclass('Squeak.Object',
     isWords: function() {
         return this._format === 6;
     },
+    isShorts: function() {
+        return false; // pre-Spur images have no dedicated 16-bit format
+    },
     isBytes: function() {
         var fmt = this._format;
         return fmt >= 8 && fmt <= 11;

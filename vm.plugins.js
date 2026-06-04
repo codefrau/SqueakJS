@@ -26,7 +26,7 @@ Object.extend(Squeak.Primitives.prototype,
     initPlugins: function() {
         Object.extend(this.builtinModules, {
             JavaScriptPlugin:       this.findPluginFunctions("js_"),
-            FilePlugin:             this.findPluginFunctions("", "primitive(Disable)?(File|Directory)"),
+            FilePlugin:             this.findPluginFunctions("", "primitive((Disable)?(File|Directory)|GetWorkingDirectory)"),
             DropPlugin:             this.findPluginFunctions("", "primitiveDropRequest"),
             SoundPlugin:            this.findPluginFunctions("snd_"),
             JPEGReadWriter2Plugin:  this.findPluginFunctions("jpeg2_"),

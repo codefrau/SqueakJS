@@ -228,7 +228,8 @@ Object.subclass('Squeak.Image',
                         format = (formatAndClass >>> 24) & 0x1F,
                         classID = formatAndClass & 0x003FFFFF,
                         hash = sizeAndHash & 0x003FFFFF;
-                    var bits = readBits(size, format < 10 && classID > 0);
+                    // Spur pointer formats are 0-5; format 9 (64-bit) and up are raw, non-pointer bits
+                    var bits = readBits(size, format < 6 && classID > 0);
                     // align on 8 bytes, min size 16 bytes
                     pos += is64Bit
                       ? (size < 1 ? 1 - size : 0) * 8

@@ -543,7 +543,7 @@ to single-step.
                     break;
                 case 0x5E: this.generateBlockReturn();
                     break;
-                case 0x5F: break; // nop
+                case 0x5F: this.generateLabel(); break; // nop (still needs a label so following jump targets line up)
                 case 0x60: case 0x61: case 0x62: case 0x63: case 0x64: case 0x65: case 0x66: case 0x67:
                 case 0x68: case 0x69: case 0x6A: case 0x6B: case 0x6C: case 0x6D: case 0x6E: case 0x6F:
                     this.generateNumericOp(b);

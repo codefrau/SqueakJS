@@ -31,7 +31,10 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             instSize = instSpec & 0xFFFF,
             format = (instSpec>>16) & 0x1F
         this._format = format;
-        if (format < 12) {
+        if (format === 9) { // 64-bit, stored as 32-bit words (2 words each)
+            if (indexableSize > 0)
+                this.words = new Uint32Array(indexableSize * 2);
+        } else if (format < 12) {
             if (format < 10) {
                 if (instSize + indexableSize > 0)
                     this.pointers = this.fillArray(instSize + indexableSize, nilObj);
@@ -42,6 +45,12 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                         this.float = 0.0;
                     } else
                         this.words = new Uint32Array(indexableSize);
+        } else if (format < 16) { // 16-bit shorts, stored as 32-bit words (2 shorts each)
+            // normalize to the 32-bit image convention (12 = even, 13 = odd number of shorts)
+            this._format = 12 + (indexableSize & 1);
+            if (indexableSize > 0) {
+                this.words = new Uint32Array((indexableSize + 1) >> 1);
+            }
         } else // Bytes
             if (indexableSize > 0) {
                 // this._format |= -indexableSize & 3;       //deferred to writeTo()
@@ -87,6 +96,12 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                     this.pointers = this.decodePointers(nWords, oops, oopMap, getCharacter, is64Bit);
                 }
                 break;
+            case 9: // 64 bit array (e.g. Float64Array, DoubleWordArray)
+                // stored as 32-bit words, two per 64-bit element (no padding, 8-byte aligned)
+                if (nWords > 0) {
+                    this.words = this.decodeWords(nWords, bits, littleEndian);
+                }
+                break;
             case 11: // 32 bit array (odd length in 64 bits)
                 nWords--;
                 this._format = 10;
@@ -100,8 +115,18 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                 }
                 break;
             case 12: // 16 bit array
-            case 13: // 16 bit array (odd length)
-                throw Error("16 bit arrays not supported yet");
+            case 13: // 16 bit array (one 16-bit slot of padding in last word)
+            case 14: // 16 bit array (two 16-bit slots of padding, only in 64 bit images)
+            case 15: // 16 bit array (three 16-bit slots of padding, only in 64 bit images)
+                // the low 2 format bits count unused 16-bit slots in the last allocation unit
+                var numShorts = nWords * 2 - (this._format & 3);
+                nWords = (numShorts + 1) >> 1; // 32-bit words needed to hold the shorts
+                // normalize to the 32-bit image convention (12 = even, 13 = odd number of shorts)
+                this._format = 12 + (numShorts & 1);
+                if (numShorts > 0) {
+                    this.words = this.decodeWords(nWords, bits, littleEndian);
+                }
+                break;
             case 20: // 8 bit array, length-4 (64 bit image)
             case 21: // ... length-5
             case 22: // ... length-6
@@ -301,10 +326,16 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
         if (fmt === 3 && primHandler.vm.isContext(this))
             return this.pointers[Squeak.Context_stackPointer]; // no access beyond top of stacks
         if (fmt < 6) return this.pointersSize() - this.instSize(); // pointers
+        if (fmt === 9) return this.wordsSize() >> 1; // 64-bit: two 32-bit words per element
         if (fmt < 12) return this.wordsSize(); // words
         if (fmt < 16) return this.shortsSize(); // shorts
         if (fmt < 24) return this.bytesSize(); // bytes
         return 4 * this.pointersSize() + this.bytesSize(); // methods
+    },
+    shortsSize: function() {
+        // 16-bit shorts are packed two per 32-bit word; the odd-length format (13)
+        // means the last short slot is unused padding
+        return this.words ? this.words.length * 2 - (this._format & 1) : 0;
     },
     snapshotSize: function() {
         // words of extra object header and body this object would take up in image snapshot
@@ -387,6 +418,10 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
     },
     isWords: function() {
         return this._format === 10;
+    },
+    isShorts: function() {
+        var fmt = this._format;
+        return fmt >= 12 && fmt <= 15;
     },
     isWordsOrBytes: function() {
         var fmt = this._format;

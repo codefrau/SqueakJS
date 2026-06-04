@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Cuis VectorEngine — JS port demo &amp; benchmark</title>
+<style>
+  body { font: 14px/1.5 -apple-system, Helvetica, Arial, sans-serif; margin: 20px; color: #222; }
+  h1 { font-size: 18px; }
+  #wrap { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+  canvas { border: 1px solid #ccc; image-rendering: pixelated; background: #fff; }
+  #stats { font-family: ui-monospace, Menlo, monospace; white-space: pre; background: #111; color: #0f0; padding: 12px; border-radius: 6px; min-width: 360px; }
+  button { font-size: 14px; padding: 6px 12px; }
+  .muted { color: #666; }
+</style>
+</head>
+<body>
+<h1>Cuis <code>VectorEngine</code> — faithful JS port (fill + stroke)</h1>
+<p class="muted">Anti-aliased vector shapes rasterized by a method-for-method JavaScript port of
+Cuis' <code>VectorEnginePlugin</code> (Juan Vuletich), running natively in the browser — no Squeak VM.
+Geometry → transform → line/quadratic/cubic flattening → 3-channel sub-pixel coverage →
+<code>blendFillOnly</code> / <code>blendStrokeAndFill</code> / <code>blendStrokeOnly</code>.
+Bands: filled · fill+stroke · stars · stroke-only spirals.</p>
+<div id="wrap">
+  <canvas id="cv" width="640" height="480"></canvas>
+  <div>
+    <div id="stats">running…</div>
+    <p><button id="bench">Run benchmark</button> <button id="redraw">Redraw</button></p>
+    <p class="muted" id="note"></p>
+  </div>
+</div>
+
+<script src="ve-core.js"></script>
+<script>
+const W = 640, H = 480, PIX = W*H;
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const imgData = ctx.createImageData(W, H);
+
+// shared engine + buffers (allocated once)
+const ve = new VectorEngineCore();
+const targetBits = new Uint32Array(PIX);
+const edgeCounts = new Uint32Array(PIX);
+const alphaMask  = new Uint32Array(PIX);
+const morphIds   = new Uint32Array(PIX);
+const contour    = new Float32Array(H*2);
+ve.setTarget(targetBits, morphIds, edgeCounts, alphaMask, contour, W, H);
+ve.antiAliasingWidthSubPixelDeltaHopLength(1.0, 0.0, 0.75); // subPixelDelta 0 → clean grayscale AA
+ve.setStrokeWidth(0.0);                                     // fill-only
+ve.geometryTx(1,0,0, 0,1,0);
+ve.currentMorph(1, false);
+
+const KAPPA = 0.5522847498307936;
+
+// emit a closed circle path (4 cubic beziers) — caller sets colors/stroke + blends
+function circlePath(cx, cy, r) {
+  ve.initializePath();
+  ve.newTrajectoryFragment();
+  const k = r*KAPPA;
+  ve.pvt_cubicBezierFromXY(cx+r, cy,   cx,   cy+r, cx+r, cy+k, cx+k, cy+r);
+  ve.pvt_cubicBezierFromXY(cx,   cy+r, cx-r, cy,   cx-k, cy+r, cx-r, cy+k);
+  ve.pvt_cubicBezierFromXY(cx-r, cy,   cx,   cy-r, cx-r, cy-k, cx-k, cy-r);
+  ve.pvt_cubicBezierFromXY(cx,   cy-r, cx+r, cy,   cx+k, cy-r, cx+r, cy-k);
+  ve.updateContourLastLine();
+}
+
+// fill a circle
+function fillCircle(cx, cy, r, R, G, B, A) {
+  ve.setStrokeWidth(0.0);
+  ve.fillRGBA(R, G, B, A);
+  circlePath(cx, cy, r);
+  clampedBlend(false);
+}
+
+// fill + stroke a circle (interior fill, anti-aliased outline)
+function fillStrokeCircle(cx, cy, r, fR,fG,fB,fA, sR,sG,sB,sA, sw) {
+  ve.setStrokeWidth(sw);
+  ve.fillRGBA(fR,fG,fB,fA);
+  ve.strokeRGBA(sR,sG,sB,sA);
+  circlePath(cx, cy, r);
+  clampedBlend(true); // stroke+fill
+}
+
+// stroke-only open path: a poly-line spiral (no interior fill)
+function strokeSpiral(cx, cy, turns, maxR, sR,sG,sB,sA, sw) {
+  ve.setStrokeWidth(sw);
+  ve.fillRGBA(0,0,0,0);            // fillA = 0 → no winding/edge counts, stroke only
+  ve.strokeRGBA(sR,sG,sB,sA);
+  ve.initializePath();
+  ve.newTrajectoryFragment();
+  const steps = turns*40;
+  let px = cx, py = cy;
+  for (let i=1;i<=steps;i++){
+    const a = i/steps*turns*2*Math.PI;
+    const rr = maxR*i/steps;
+    const x = cx + Math.cos(a)*rr, y = cy + Math.sin(a)*rr;
+    ve.pvt_lineFromXY(px, py, x, y);
+    px = x; py = y;
+  }
+  ve.updateContourLastLine();
+  clampedBlend(2); // stroke only
+}
+
+// fill a polygon (closed) from [x0,y0,x1,y1,...]
+function fillPolygon(pts, R, G, B, A) {
+  ve.setStrokeWidth(0.0);
+  ve.fillRGBA(R, G, B, A);
+  ve.initializePath();
+  ve.newTrajectoryFragment();
+  const n = pts.length/2;
+  for (let i=0;i<n;i++){
+    const ax=pts[i*2], ay=pts[i*2+1], j=(i+1)%n, bx=pts[j*2], by=pts[j*2+1];
+    ve.pvt_lineFromXY(ax, ay, bx, by);
+  }
+  ve.updateContourLastLine();
+  clampedBlend();
+}
+
+// mode: false=fill only, true=stroke+fill, 2=stroke only
+function clampedBlend(mode) {
+  let l = ve.spanLeftPx(),  t = ve.spanTopPx();
+  let r = ve.spanRightPx(), b = ve.spanBottomPx();
+  if (l < 0) l = 0; if (t < 0) t = 0;
+  if (r > W-1) r = W-1; if (b > H-1) b = H-1;
+  if (r < l || b < t) return;
+  if (mode === 2)      ve.blendStrokeOnly(l, t, r, b);
+  else if (mode)       ve.blendStrokeAndFill(l, t, r, b);
+  else                 ve.blendFillOnly(l, t, r, b);
+}
+
+// build a representative, curve-heavy scene
+function drawScene() {
+  targetBits.fill(0xFF202840);   // opaque dark-blue background (0xAARRGGBB)
+  let shapes = 0;
+  // Band 1: translucent filled circles
+  for (let gx=0; gx<8; gx++) {
+    const cx = 44 + gx*78, cy = 46, r = 26 + ((gx*7)%14);
+    const [R,G,B] = hsl((gx*40)%360, 0.7, 0.6);
+    fillCircle(cx, cy, r, R, G, B, 0.75); shapes++;
+  }
+  // Band 2: fill + anti-aliased stroke outline
+  for (let gx=0; gx<8; gx++) {
+    const cx = 44 + gx*78, cy = 138, r = 24 + ((gx*5)%16);
+    const [R,G,B]  = hsl((gx*47+20)%360, 0.65, 0.62);
+    const [sr,sg,sb] = hsl((gx*47+20)%360, 0.9, 0.25);
+    fillStrokeCircle(cx, cy, r, R,G,B,0.85, sr,sg,sb,1.0, 3.0); shapes++;
+  }
+  // Band 3: filled + stroked stars
+  for (let i=0;i<8;i++){
+    const cx = 50 + i*74, cy = 232, rr = 26 + (i*5)%16;
+    const pts = [], spokes = 5;
+    for (let s=0;s<spokes*2;s++){
+      const ang = s*Math.PI/spokes - Math.PI/2, rad = (s%2===0)? rr : rr*0.45;
+      pts.push(cx + Math.cos(ang)*rad, cy + Math.sin(ang)*rad);
+    }
+    ve.setStrokeWidth(2.5);
+    ve.fillRGBA(...hsl((i*36)%360,0.8,0.6), 0.9);
+    ve.strokeRGBA(1,1,1,0.95);
+    ve.initializePath(); ve.newTrajectoryFragment();
+    for (let k=0;k<spokes*2;k++){ const j=(k+1)%(spokes*2); ve.pvt_lineFromXY(pts[k*2],pts[k*2+1],pts[j*2],pts[j*2+1]); }
+    ve.updateContourLastLine();
+    clampedBlend(true); shapes++;
+  }
+  // Band 4: stroke-only spirals (open paths)
+  for (let i=0;i<6;i++){
+    const cx = 70 + i*100, cy = 360, [sr,sg,sb]=hsl((i*60)%360,0.85,0.6);
+    strokeSpiral(cx, cy, 3.5, 38, sr,sg,sb,0.95, 2.0); shapes++;
+  }
+  return shapes;
+}
+
+function hsl(h,s,l){ // -> [r,g,b] in 0..1
+  h/=360; const a=s*Math.min(l,1-l);
+  const f=n=>{const k=(n+h*12)%12; return l-a*Math.max(-1,Math.min(k-3,9-k,1));};
+  return [f(0),f(8),f(4)];
+}
+
+function blit() {
+  const d = imgData.data;
+  for (let i=0;i<PIX;i++){
+    const w = targetBits[i];
+    d[i*4]   = (w>>>16)&255;
+    d[i*4+1] = (w>>>8)&255;
+    d[i*4+2] = w&255;
+    d[i*4+3] = (w>>>24)&255;
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+const shapeCount = drawScene();
+blit();
+
+function runBenchmark() {
+  document.getElementById('stats').textContent = "benchmarking…";
+  setTimeout(() => {
+    // warm up
+    for (let i=0;i<10;i++) drawScene();
+    const FRAMES = 200;
+    const t0 = performance.now();
+    for (let i=0;i<FRAMES;i++) drawScene();
+    const t1 = performance.now();
+    blit();
+    const ms = (t1-t0)/FRAMES;
+    const fps = 1000/ms;
+    const mpix = (PIX/1e6) / (ms/1000);            // full-frame pixels touched / s (lower bound: only spans are blended)
+    const shapesPerSec = (shapeCount*FRAMES)/((t1-t0)/1000);
+    document.getElementById('stats').textContent =
+`VectorEngine JS port — benchmark
+--------------------------------
+canvas        : ${W} x ${H}  (${(PIX/1e3)|0}k px)
+shapes/frame  : ${shapeCount}  (fill, fill+stroke, stars, stroke-only spirals)
+frames timed  : ${FRAMES}
+--------------------------------
+ms / frame    : ${ms.toFixed(3)} ms
+frames / sec  : ${fps.toFixed(1)} fps
+shapes / sec  : ${(shapesPerSec/1000).toFixed(1)}k
+throughput    : ${mpix.toFixed(1)} Mpx/s (frame area)
+--------------------------------
+RESULT_MS=${ms.toFixed(3)} RESULT_FPS=${fps.toFixed(1)} RESULT_SHAPES_PER_S=${shapesPerSec.toFixed(0)}`;
+    window.__veResult = { ms, fps, shapesPerSec, shapeCount };
+  }, 50);
+}
+
+document.getElementById('bench').onclick = runBenchmark;
+document.getElementById('redraw').onclick = () => { drawScene(); blit(); };
+document.getElementById('note').textContent =
+  "The same algorithm runs in Cuis today as interpreted Smalltalk (VectorEngineSmalltalk) when no plugin is present.";
+
+// auto-run benchmark shortly after load (for headless capture)
+window.__autobench = setTimeout(runBenchmark, 300);
+</script>
+</body>
+</html>

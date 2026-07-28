@@ -139,6 +139,11 @@ Object.subclass('Squeak.Image',
         var is64Bit = version >= 68000;
         if (is64Bit && !this.isSpur) throw Error("64 bit non-spur images not supported yet");
         if (is64Bit)  { readWord = readWord64; wordSize = 8; }
+        // remember the image word size (4 or 8). NB: pcs and CompiledMethod at:-indexing use
+        // 4 bytes/literal regardless — 64-bit pcs are normalized at load (fixPCs) and
+        // Smalltalk wordSize is hacked to answer 4 (see hackImage) so in-image math matches.
+        this.is64Bit = is64Bit;
+        this.wordSize = wordSize;
         // parse image header
         var imageHeaderSize = readWord32(); // always 32 bits
         var objectMemorySize = readWord(); //first unused location in heap
@@ -440,9 +445,13 @@ Object.subclass('Squeak.Image',
             obj = this.firstOldObject;
         while (obj) {
             if (obj.sqClass === clsMethodContext) {
-                obj.pointers[pc] -= obj.pointers[method].pointers.length * 4;
+                // terminated contexts store nil as their ip — leave those alone
+                // (nil - n would turn them into NaN)
+                if (typeof obj.pointers[pc] === "number")
+                    obj.pointers[pc] -= obj.pointers[method].pointers.length * 4;
             } else if (obj.sqClass === clsBlockClosure) {
-                obj.pointers[startpc] -= obj.pointers[outerContext].pointers[method].pointers.length * 4;
+                if (typeof obj.pointers[startpc] === "number")
+                    obj.pointers[startpc] -= obj.pointers[outerContext].pointers[method].pointers.length * 4;
             }
             obj = obj.nextObject;
         }
@@ -760,10 +769,24 @@ Object.subclass('Squeak.Image',
     },
     instantiateClass: function(aClass, indexableSize, filler) {
         var newObject = new (aClass.classInstProto()); // Squeak.Object
-        var hash = this.registerObject(newObject);
+        var hash = aClass === this.contextClass() ? this.registerContext(newObject)
+            : this.registerObject(newObject);
         newObject.initInstanceOf(aClass, indexableSize, hash, filler);
         this.hasNewInstances[aClass.oop] = true;   // need GC to find all instances
         return newObject;
+    },
+    contextClass: function() {
+        return this.specialObjectsArray.pointers[Squeak.splOb_ClassMethodContext];
+    },
+    registerContext: function(obj) {
+        // like registerObject, but contexts draw their identity hashes from a
+        // separate stream: their allocation pattern is an implementation detail
+        // (recycling, or stack-zone frames that materialize contexts lazily),
+        // and interleaving them into the main stream would make every other
+        // object's identity hash depend on it
+        obj.oop = -(++this.newSpaceCount);
+        this.lastContextHash = (13849 + (27181 * (this.lastContextHash || 999))) & 0xFFFFFFFF;
+        return this.lastContextHash & 0xFFF;
     },
     clone: function(object) {
         var newObject = new (object.sqClass.classInstProto()); // Squeak.Object

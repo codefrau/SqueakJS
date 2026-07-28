@@ -200,6 +200,18 @@ to single-step.
         // if a compiler does not support single-stepping, return false
         return true;
     },
+    activationCheck: function() {
+        // expression that is true when the send/jump above switched activations
+        return this.vm.useStackZone
+            ? "vm.fp !== fp || vm.zonePage !== page"
+            : "context !== vm.activeContext";
+    },
+    tempIndex: function(n) {
+        // index expression for temp n inside this.source:
+        // context mode: constant (temps at homeContext.pointers[6+n]);
+        // stack-zone mode: frame-relative (temps at vm.temps[tempBase+n], tempBase per activation)
+        return this.vm.useStackZone ? "tB + " + n : Squeak.Context_tempFrameStart + n;
+    },
     functionNameFor: function(cls, sel) {
         if (cls === undefined || cls === '?') {
             var isMethod = this.method.sqClass === this.vm.specialObjects[Squeak.splOb_ClassCompiledMethod];
@@ -234,11 +246,15 @@ to single-step.
             this.source.push("// ", optClass, ">>", optSel, "\n");
         this.instVarNames = optInstVarNames;
         this.allVars = ['context', 'stack', 'rcvr', 'inst[', 'temp[', 'lit['];
-        this.sourcePos['context']    = this.source.length; this.source.push("var context = vm.activeContext;\n");
-        this.sourcePos['stack']      = this.source.length; this.source.push("var stack = context.pointers;\n");
+        this.sourcePos['context']    = this.source.length; this.source.push(this.vm.useStackZone
+            ? "var fp = vm.fp, page = vm.zonePage;\n"
+            : "var context = vm.activeContext;\n");
+        this.sourcePos['stack']      = this.source.length; this.source.push("var stack = vm.stack;\n");
         this.sourcePos['rcvr']       = this.source.length; this.source.push("var rcvr = vm.receiver;\n");
         this.sourcePos['inst[']      = this.source.length; this.source.push("var inst = rcvr.pointers;\n");
-        this.sourcePos['temp[']      = this.source.length; this.source.push("var temp = vm.homeContext.pointers;\n");
+        this.sourcePos['temp[']      = this.source.length; this.source.push(this.vm.useStackZone
+            ? "var temp = vm.temps, tB = vm.tempOffset;\n"
+            : "var temp = vm.temps;\n");
         this.sourcePos['lit[']       = this.source.length; this.source.push("var lit = vm.method.pointers;\n");
         this.sourcePos['loop-start'] = this.source.length; this.source.push("while (true) switch (vm.pc) {\ncase 0:\n");
         if (this.sista) this.generateSista(method);
@@ -267,7 +283,7 @@ to single-step.
                     break;
                 // load temp var
                 case 0x10: case 0x18:
-                    this.generatePush("temp[", 6 + (byte & 0xF), "]");
+                    this.generatePush("temp[", this.tempIndex((byte & 0xF)), "]");
                     break;
                 // loadLiteral
                 case 0x20: case 0x28: case 0x30: case 0x38:
@@ -283,7 +299,7 @@ to single-step.
                     break;
                 // storeAndPop temp var
                 case 0x68:
-                    this.generatePopInto("temp[", 6 + (byte & 0x07), "]");
+                    this.generatePopInto("temp[", this.tempIndex((byte & 0x07)), "]");
                     break;
                 // Quick push
                 case 0x70:
@@ -361,7 +377,7 @@ to single-step.
                 byte2 = this.method.bytes[this.pc++];
                 switch (byte2 >> 6) {
                     case 0: this.generatePush("inst[", byte2 & 0x3F, "]"); return;
-                    case 1: this.generatePush("temp[", 6 + (byte2 & 0x3F), "]"); return;
+                    case 1: this.generatePush("temp[", this.tempIndex((byte2 & 0x3F)), "]"); return;
                     case 2: this.generatePush("lit[", 1 + (byte2 & 0x3F), "]"); return;
                     case 3: this.generatePush("lit[", 1 + (byte2 & 0x3F), "].pointers[1]"); return;
                 }
@@ -370,7 +386,7 @@ to single-step.
                 byte2 = this.method.bytes[this.pc++];
                 switch (byte2 >> 6) {
                     case 0: this.generateStoreInto("inst[", byte2 & 0x3F, "]"); return;
-                    case 1: this.generateStoreInto("temp[", 6 + (byte2 & 0x3F), "]"); return;
+                    case 1: this.generateStoreInto("temp[", this.tempIndex((byte2 & 0x3F)), "]"); return;
                     case 2: throw Error("illegal store into literal");
                     case 3: this.generateStoreInto("lit[", 1 + (byte2 & 0x3F), "].pointers[1]"); return;
                 }
@@ -380,7 +396,7 @@ to single-step.
                 byte2 = this.method.bytes[this.pc++];
                 switch (byte2 >> 6) {
                     case 0: this.generatePopInto("inst[", byte2 & 0x3F, "]"); return;
-                    case 1: this.generatePopInto("temp[", 6 + (byte2 & 0x3F), "]"); return;
+                    case 1: this.generatePopInto("temp[", this.tempIndex((byte2 & 0x3F)), "]"); return;
                     case 2: throw Error("illegal pop into literal");
                     case 3: this.generatePopInto("lit[", 1 + (byte2 & 0x3F), "].pointers[1]"); return;
                 }
@@ -444,19 +460,19 @@ to single-step.
             case 0x8C:
                 byte2 = this.method.bytes[this.pc++];
                 byte3 = this.method.bytes[this.pc++];
-                this.generatePush("temp[", 6 + byte3, "].pointers[", byte2, "]");
+                this.generatePush("temp[", this.tempIndex(byte3), "].pointers[", byte2, "]");
                 return;
             // remote store into temp vector
             case 0x8D:
                 byte2 = this.method.bytes[this.pc++];
                 byte3 = this.method.bytes[this.pc++];
-                this.generateStoreInto("temp[", 6 + byte3, "].pointers[", byte2, "]");
+                this.generateStoreInto("temp[", this.tempIndex(byte3), "].pointers[", byte2, "]");
                 return;
             // remote store and pop into temp vector
             case 0x8E:
                 byte2 = this.method.bytes[this.pc++];
                 byte3 = this.method.bytes[this.pc++];
-                this.generatePopInto("temp[", 6 + byte3, "].pointers[", byte2, "]");
+                this.generatePopInto("temp[", this.tempIndex(byte3), "].pointers[", byte2, "]");
                 return;
             // pushClosureCopy
             case 0x8F:
@@ -502,10 +518,10 @@ to single-step.
                     break;
                 // load temporary variable
                 case 0x40: case 0x41: case 0x42: case 0x43: case 0x44: case 0x45: case 0x46: case 0x47:
-                    this.generatePush("temp[", 6 + (b & 0x07), "]");
+                    this.generatePush("temp[", this.tempIndex((b & 0x07)), "]");
                     break;
                 case 0x48: case 0x49: case 0x4A: case 0x4B:
-                    this.generatePush("temp[", 6 + (b & 0x03) + 8, "]");
+                    this.generatePush("temp[", this.tempIndex((b & 0x03) + 8), "]");
                     break;
                 case 0x4C: this.generatePush("rcvr");
                     break;
@@ -577,7 +593,7 @@ to single-step.
                     this.generatePopInto("inst[", b & 0x07, "]");
                     break;
                 case 0xD0: case 0xD1: case 0xD2: case 0xD3: case 0xD4: case 0xD5: case 0xD6: case 0xD7:
-                    this.generatePopInto("temp[", 6 + (b & 0x07), "]");
+                    this.generatePopInto("temp[", this.tempIndex((b & 0x07)), "]");
                     break;
                 case 0xD8: this.generateInstruction("pop", "vm.sp--");
                     break;
@@ -609,7 +625,7 @@ to single-step.
                     break;
                 case 0xE5:
                     b2 = bytes[this.pc++];
-                    this.generatePush("temp[", 6 + b2, "]");
+                    this.generatePush("temp[", this.tempIndex(b2), "]");
                     break;
                 case 0xE6:
                     throw Error("unusedBytecode 0xE6");
@@ -662,7 +678,7 @@ to single-step.
                     break;
                 case 0xF2:
                     b2 = bytes[this.pc++];
-                    this.generatePopInto("temp[", 6 + b2, "]");
+                    this.generatePopInto("temp[", this.tempIndex(b2), "]");
                     break;
                 case 0xF3:
                     b2 = bytes[this.pc++];
@@ -674,7 +690,7 @@ to single-step.
                     break;
                 case 0xF5:
                     b2 = bytes[this.pc++];
-                    this.generateStoreInto("temp[", 6 + b2, "]");
+                    this.generateStoreInto("temp[", this.tempIndex(b2), "]");
                     break;
                 case 0xF6: case 0xF7:
                     throw Error("unusedBytecode " + b);
@@ -702,17 +718,17 @@ to single-step.
                 case 0xFB:
                     b2 = bytes[this.pc++];
                     b3 = bytes[this.pc++];
-                    this.generatePush("temp[", 6 + b3, "].pointers[", b2, "]");
+                    this.generatePush("temp[", this.tempIndex(b3), "].pointers[", b2, "]");
                     break;
                 case 0xFC:
                     b2 = bytes[this.pc++];
                     b3 = bytes[this.pc++];
-                    this.generateStoreInto("temp[", 6 + b3, "].pointers[", b2, "]");
+                    this.generateStoreInto("temp[", this.tempIndex(b3), "].pointers[", b2, "]");
                     break;
                 case 0xFD:
                     b2 = bytes[this.pc++];
                     b3 = bytes[this.pc++];
-                    this.generatePopInto("temp[", 6 + b3, "].pointers[", b2, "]");
+                    this.generatePopInto("temp[", this.tempIndex(b3), "].pointers[", b2, "]");
                     break;
                 case 0xFE: case 0xFF:
                     throw Error("unusedBytecode " + b);
@@ -742,6 +758,16 @@ to single-step.
         this.generateLabel();
         this.needsVar[target] = true;
         this.needsVar['stack'] = true;
+        if (this.vm.useStackZone && target === "inst[") {
+            // un store a un context casado-vivo debe pasar por write-through
+            // (flush + escritura sobre el context real); pc fresco para el resume
+            this.needsVar['context'] = true; // fp/page
+            this.source.push(
+                "if (rcvr.sqClass !== vm.contextClass_ || rcvr.frame == null) { inst[", arg1, "] = stack[vm.sp]; rcvr.dirty = true; }\n",
+                "else { vm.pc = ", this.pc, "; vm.storeToMarriedContext(rcvr, ", arg1, ", stack[vm.sp]); if (vm.fp !== fp || vm.zonePage !== page) return; }\n");
+            this.needsLabel[this.pc] = true;
+            return;
+        }
         this.source.push(target);
         if (arg1 !== undefined) {
             this.source.push(arg1, suffix1);
@@ -757,6 +783,15 @@ to single-step.
         this.generateLabel();
         this.needsVar[target] = true;
         this.needsVar['stack'] = true;
+        if (this.vm.useStackZone && target === "inst[") {
+            this.needsVar['context'] = true; // fp/page
+            this.source.push(
+                "var iv = stack[vm.sp--];\n",
+                "if (rcvr.sqClass !== vm.contextClass_ || rcvr.frame == null) { inst[", arg1, "] = iv; rcvr.dirty = true; }\n",
+                "else { vm.pc = ", this.pc, "; vm.storeToMarriedContext(rcvr, ", arg1, ", iv); if (vm.fp !== fp || vm.zonePage !== page) return; }\n");
+            this.needsLabel[this.pc] = true;
+            return;
+        }
         this.source.push(target);
         if (arg1 !== undefined) {
             this.source.push(arg1, suffix1);
@@ -786,7 +821,7 @@ to single-step.
         // actually stack === context.pointers but that would look weird
         this.needsVar['context'] = true;
         this.source.push(
-            "vm.pc = ", this.pc, "; vm.doReturn(", retVal, ", context.pointers[0]); return;\n");
+            "vm.pc = ", this.pc, "; vm.doBlockReturn(", retVal, "); return;\n");
         this.needsBreak = false; // returning anyway
         this.done = this.pc > this.endPC;
     },
@@ -799,7 +834,7 @@ to single-step.
         if (distance < 0) this.source.push(
             "\nif (vm.interruptCheckCounter-- <= 0) {\n",
             "   vm.checkForInterrupts();\n",
-            "   if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return;\n",
+            "   if (", this.activationCheck(), " || vm.breakOutOfInterpreter !== false) return;\n",
             "}\n");
         if (this.singleStep) this.source.push("\nif (vm.breakOutOfInterpreter) return;\n");
         this.source.push("continue;\n");
@@ -831,16 +866,28 @@ to single-step.
                     "var a, b; if ((a=stack[vm.sp-1]).sqClass === vm.specialObjects[7] && a.pointers && typeof (b=stack[vm.sp]) === 'number' && b>0 && b<=a.pointers.length) {\n",
                     "  stack[--vm.sp] = a.pointers[b-1];",
                     "} else { var c = vm.primHandler.objectAt(true,true,false); if (vm.primHandler.success) stack[--vm.sp] = c; else {\n",
-                    "  vm.pc = ", this.pc, "; vm.sendSpecial(16); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return; }}\n");
+                    "  vm.pc = ", this.pc, "; vm.sendSpecial(16); if (", this.activationCheck(), " || vm.breakOutOfInterpreter !== false) return; }}\n");
                 this.needsLabel[this.pc] = true;
                 return;
             case 0x1: // at:put:
                 this.needsVar['stack'] = true;
+                if (this.vm.useStackZone) {
+                    this.needsVar['context'] = true; // fp/page
+                    this.source.push(
+                        "var a, b; if ((a=stack[vm.sp-2]).sqClass === vm.specialObjects[7] && a.pointers && typeof (b=stack[vm.sp-1]) === 'number' && b>0 && b<=a.pointers.length) {\n",
+                        "  var c = stack[vm.sp]; stack[vm.sp-=2] = a.pointers[b-1] = c; a.dirty = true;",
+                        "} else { var c = stack[vm.sp]; vm.pc = ", this.prevPC, "; vm.primHandler.objectAtPut(true,true,false); if (vm.fp !== fp || vm.zonePage !== page) return;\n",
+                        "  if (vm.primHandler.success) stack[vm.sp-=2] = c; else {\n",
+                        "  vm.pc = ", this.pc, "; vm.sendSpecial(17); if (", this.activationCheck(), " || vm.breakOutOfInterpreter !== false) return; }}\n");
+                    this.needsLabel[this.prevPC] = true;
+                    this.needsLabel[this.pc] = true;
+                    return;
+                }
                 this.source.push(
                     "var a, b; if ((a=stack[vm.sp-2]).sqClass === vm.specialObjects[7] && a.pointers && typeof (b=stack[vm.sp-1]) === 'number' && b>0 && b<=a.pointers.length) {\n",
                     "  var c = stack[vm.sp]; stack[vm.sp-=2] = a.pointers[b-1] = c; a.dirty = true;",
                     "} else { vm.primHandler.objectAtPut(true,true,false); if (vm.primHandler.success) stack[vm.sp-=2] = c; else {\n",
-                    "  vm.pc = ", this.pc, "; vm.sendSpecial(17); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return; }}\n");
+                    "  vm.pc = ", this.pc, "; vm.sendSpecial(17); if (", this.activationCheck(), " || vm.breakOutOfInterpreter !== false) return; }}\n");
                 this.needsLabel[this.pc] = true;
                 return;
             case 0x2: // size
@@ -848,7 +895,7 @@ to single-step.
                 this.source.push(
                     "if (stack[vm.sp].sqClass === vm.specialObjects[7]) stack[vm.sp] = stack[vm.sp].pointersSize();\n",     // Array
                     "else if (stack[vm.sp].sqClass === vm.specialObjects[6]) stack[vm.sp] = stack[vm.sp].bytesSize();\n",   // ByteString
-                    "else { vm.pc = ", this.pc, "; vm.sendSpecial(18); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return; }\n");
+                    "else { vm.pc = ", this.pc, "; vm.sendSpecial(18); if (", this.activationCheck(), " || vm.breakOutOfInterpreter !== false) return; }\n");
                 this.needsLabel[this.pc] = true;
                 return;
             //case 0x3: return false; // next
@@ -889,7 +936,7 @@ to single-step.
         this.source.push(
             "vm.pc = ", this.pc, "; if (!vm.primHandler.quickSendOther(rcvr, ", (byte & 0x0F), "))",
             " vm.sendSpecial(", ((byte & 0x0F) + 16), ");\n",
-            "if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return;\n");
+            "if (", this.activationCheck(), " || vm.breakOutOfInterpreter !== false) return;\n");
         this.needsBreak = false; // already checked
         // if falling back to a full send we need a label for coming back
         this.needsLabel[this.pc] = true;
@@ -906,42 +953,42 @@ to single-step.
                 this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
                 "   stack[--vm.sp] = vm.primHandler.signed32BitIntegerFor(a + b);\n",
-                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(0); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
+                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(0); if (", this.activationCheck(), " || vm.breakOutOfInterpreter !== false) return}\n");
                 return;
             case 0x1: // MINUS -
                 this.needsVar['stack'] = true;
                 this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
                 "   stack[--vm.sp] = vm.primHandler.signed32BitIntegerFor(a - b);\n",
-                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(1); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
+                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(1); if (", this.activationCheck(), " || vm.breakOutOfInterpreter !== false) return}\n");
                 return;
             case 0x2: // LESS <
                 this.needsVar['stack'] = true;
                 this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
                 "   stack[--vm.sp] = a < b ? vm.trueObj : vm.falseObj;\n",
-                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(2); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
+                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(2); if (", this.activationCheck(), " || vm.breakOutOfInterpreter !== false) return}\n");
                 return;
             case 0x3: // GRTR >
                 this.needsVar['stack'] = true;
                 this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
                 "   stack[--vm.sp] = a > b ? vm.trueObj : vm.falseObj;\n",
-                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(3); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
+                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(3); if (", this.activationCheck(), " || vm.breakOutOfInterpreter !== false) return}\n");
                 return;
             case 0x4: // LEQ <=
                 this.needsVar['stack'] = true;
                 this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
                 "   stack[--vm.sp] = a <= b ? vm.trueObj : vm.falseObj;\n",
-                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(4); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
+                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(4); if (", this.activationCheck(), " || vm.breakOutOfInterpreter !== false) return}\n");
                 return;
             case 0x5: // GEQ >=
                 this.needsVar['stack'] = true;
                 this.source.push("var a = stack[vm.sp - 1], b = stack[vm.sp];\n",
                 "if (typeof a === 'number' && typeof b === 'number') {\n",
                 "   stack[--vm.sp] = a >= b ? vm.trueObj : vm.falseObj;\n",
-                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(5); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
+                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(5); if (", this.activationCheck(), " || vm.breakOutOfInterpreter !== false) return}\n");
                 return;
             case 0x6: // EQU =
                 this.needsVar['stack'] = true;
@@ -950,7 +997,7 @@ to single-step.
                 "   stack[--vm.sp] = a === b ? vm.trueObj : vm.falseObj;\n",
                 "} else if (a === b && a.float === a.float) {\n",   // NaN check
                 "   stack[--vm.sp] = vm.trueObj;\n",
-                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(6); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
+                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(6); if (", this.activationCheck(), " || vm.breakOutOfInterpreter !== false) return}\n");
                 return;
             case 0x7: // NEQ ~=
                 this.needsVar['stack'] = true;
@@ -959,7 +1006,7 @@ to single-step.
                 "   stack[--vm.sp] = a !== b ? vm.trueObj : vm.falseObj;\n",
                 "} else if (a === b && a.float === a.float) {\n",   // NaN check
                 "   stack[--vm.sp] = vm.falseObj;\n",
-                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(7); if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return}\n");
+                "} else { vm.pc = ", this.pc, "; vm.sendSpecial(7); if (", this.activationCheck(), " || vm.breakOutOfInterpreter !== false) return}\n");
                 return;
             case 0x8: // TIMES *
                 this.source.push("vm.success = true; vm.resultIsFloat = false; if(!vm.pop2AndPushNumResult(vm.stackIntOrFloat(1) * vm.stackIntOrFloat(0))) { vm.pc = ", this.pc, "; vm.sendSpecial(8); return}\n");
@@ -1002,7 +1049,7 @@ to single-step.
         } else {
             this.source.push("; vm.send(", prefix, num, suffix, ", ", numArgs, ", ", superSend, "); ");
         }
-        this.source.push("if (context !== vm.activeContext || vm.breakOutOfInterpreter !== false) return;\n");
+        this.source.push("if (", this.activationCheck(), " || vm.breakOutOfInterpreter !== false) return;\n");
         this.needsBreak = false; // already checked
         // need a label for coming back after send
         this.needsLabel[this.pc] = true;
@@ -1028,7 +1075,7 @@ to single-step.
         this.needsVar['stack'] = true;
         this.source.push(
             "var closure = vm.instantiateClass(vm.specialObjects[36], ", numCopied, ");\n",
-            "closure.pointers[0] = context; vm.reclaimableContextCount = 0;\n",
+            "closure.pointers[0] = vm.activeContextObj(); vm.reclaimableContextCount = 0;\n",
             "closure.pointers[1] = ", from + this.method.pointers.length * 4 + 1, ";\n",  // encodeSqueakPC
             "closure.pointers[2] = ", numArgs, ";\n");
         if (numCopied > 0) {

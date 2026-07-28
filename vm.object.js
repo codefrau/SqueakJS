@@ -75,6 +75,8 @@ Object.subclass('Squeak.Object',
         } else {
             if (original.pointers) this.pointers = original.pointers.slice(0);   // copy
             if (original.words) this.words = new Uint32Array(original.words);    // copy
+            if (original.words16) this.words16 = new Uint16Array(original.words16); // copy
+            if (original.words64) this.words64 = new BigUint64Array(original.words64); // copy
             if (original.bytes) this.bytes = new Uint8Array(original.bytes);     // copy
         }
     },
@@ -174,6 +176,14 @@ Object.subclass('Squeak.Object',
             bytes = new Uint8Array(nBytes);
         bytes.set(wordsAsBytes);
         return bytes;
+    },
+    decodeShorts: function(nWords, theBits, fmtLowBits) {
+        // 16-bit indexable words (format 12-15). Adjust length for odd low bits, make a copy.
+        var nShorts = (nWords * 2) - fmtLowBits,
+            wordsAsShorts = new Uint16Array(theBits.buffer, theBits.byteOffset, nShorts),
+            shorts = new Uint16Array(nShorts);
+        shorts.set(wordsAsShorts);
+        return shorts;
     },
     decodeFloat: function(theBits, littleEndian, nativeFloats) {
         var data = new DataView(theBits.buffer, theBits.byteOffset);
@@ -292,6 +302,12 @@ Object.subclass('Squeak.Object',
     wordsSize: function() {
         return this.isFloat ? 2 : this.words ? this.words.length : 0;
     },
+    words16Size: function() {
+        return this.words16 ? this.words16.length : 0;
+    },
+    words64Size: function() {
+        return this.words64 ? this.words64.length : 0;
+    },
     instSize: function() {//same as class.classInstSize, but faster from format
         var fmt = this._format;
         if (fmt > 4 || fmt === 2) return 0;      //indexable fields only
@@ -322,6 +338,7 @@ Object.subclass('Squeak.Object',
     },
     wordsAsFloat64Array: function() {
         return this.float64Array
+            || (this.words64 && (this.float64Array = new Float64Array(this.words64.buffer)))
             || (this.words && (this.float64Array = new Float64Array(this.words.buffer)));
     },
     wordsAsInt32Array: function() {
@@ -330,6 +347,7 @@ Object.subclass('Squeak.Object',
     },
     wordsAsInt16Array: function() {
         return this.int16Array
+            || (this.words16 && (this.int16Array = new Int16Array(this.words16.buffer)))
             || (this.words && (this.int16Array = new Int16Array(this.words.buffer)));
     },
     wordsAsUint16Array: function() {
@@ -481,6 +499,30 @@ Object.subclass('Squeak.Object',
     },
     classInstProto: function(className) {
         if (this.instProto) return this.instProto;
+        // Monomorfización (default desde 2026-07-12): un ÚNICO constructor
+        // compartido para todos los objetos → V8 ve pocos maps (~4-5, por formato
+        // pointers/bytes/words/float) en vez de cientos (uno por clase). Medido con
+        // la vara honesta (tiempo hasta renderizar el resultado, no microbench):
+        // **6.6% más rápido** en el workload real de Dialogo (best-of-5 intercalado:
+        // 4022 vs 4307 ms, más rápido en las 5 corridas), semántica byte-idéntica
+        // (trace + dibujo + ctx≡frames en V3 y Cuis). Mecanismo (verificado por
+        // perfil A/B, NO es "matar el LoadIC" como se dijo primero): las operaciones
+        // IC MEGAMÓRFICAS caen a monomórficas — StoreIC de initInstanceOf (sqClass=,
+        // hash=, _format=, pointers=) y LoadIC_Megamorphic. El LoadIC regular
+        // (loads de `.pointers`/`.sqClass`) QUEDA como costo residual top (~18%): los
+        // loads siguen ocurriendo, ahora baratos pero no gratis; eliminarlos del
+        // todo requiere objetos en memoria lineal (WASM). Distinto del intento "flat
+        // shape" previo (−7%, shape con TODOS los campos, medido send-heavy): acá los
+        // campos por-formato se mantienen, solo se comparte el constructor. Opt-out
+        // (nombres por clase en devtools): Squeak.perClassShape = true.
+        if (Squeak.perClassShape !== true) {
+            if (!Squeak.sharedInstProto) {
+                Squeak.sharedInstProto = new Function("return function SqueakObject() { this.oop = 0; this.hash = 0; this.dirty = false; this.mark = false; this.nextObject = null; };")();
+                Squeak.sharedInstProto.prototype = this.defaultInst().prototype;
+            }
+            Object.defineProperty(this, 'instProto', { value: Squeak.sharedInstProto });
+            return Squeak.sharedInstProto;
+        }
         var proto = this.defaultInst();  // in case below fails
         try {
             if (!className) className = this.className();
@@ -490,7 +532,7 @@ Object.subclass('Squeak.Object',
             else if (safeName === "False") safeName = "false_";
             else safeName = ((/^[AEIOU]/.test(safeName)) ? 'an' : 'a') + safeName;
             // fail okay if no eval()
-            proto = new Function("return function " + safeName + "() {};")();
+            proto = new Function("return function " + safeName + "() { this.oop = 0; this.hash = 0; this.dirty = false; this.mark = false; this.nextObject = null; };")();
             proto.prototype = this.defaultInst().prototype;
         } catch(e) {}
         Object.defineProperty(this, 'instProto', { value: proto });

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>SqueakJS en Web Worker — spike</title>
+<style>
+  body { font-family: sans-serif; margin: 8px; }
+  #c { border: 1px solid #888; image-rendering: pixelated; }
+  #status { font-family: monospace; margin: 6px 0; }
+  .alive { color: green; font-weight: bold; }
+</style>
+</head>
+<body>
+<div id="status">arrancando…</div>
+<div id="alive" class="alive">main thread: —</div>
+<div id="rec-bar" style="margin:6px 0;font-family:monospace;">
+  <button id="rec-reset">● reiniciar grabación</button>
+  <button id="rec-dl">⬇ descargar eventos (<span id="rec-n">0</span>)</button>
+  <span id="rec-hint" style="color:#666;"> — grabá abriendo un proyecto y descargá el JSON para el test</span>
+</div>
+<canvas id="c" width="1024" height="768"></canvas>
+<script>
+var canvas = document.getElementById("c");
+var statusEl = document.getElementById("status");
+var aliveEl = document.getElementById("alive");
+
+// El indicador de responsiveness: si el main thread estuviera bloqueado por el VM,
+// este contador (actualizado por requestAnimationFrame) se congelaría. Si sigue
+// subiendo fluido mientras el worker trabaja al 100%, la UI NO está bloqueada.
+var frames = 0, lastT = performance.now(), fps = 0;
+function tick(t) {
+    frames++;
+    if (t - lastT > 500) { fps = Math.round(frames * 1000 / (t - lastT)); frames = 0; lastT = t; }
+    aliveEl.textContent = "main thread VIVO — rAF fps: " + fps + " (t=" + Math.round(t) + ")";
+    requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+// imagen y tamaño configurables por la URL: #image=/otra.image&w=1024&h=768
+// (fijar el tamaño ANTES de transferir el canvas al worker)
+var params = new URLSearchParams((location.hash || "#").slice(1));
+var imageUrl = params.get("image") || "/Dialogo.32bits.image";
+var W = parseInt(params.get("w") || "1024", 10), H = parseInt(params.get("h") || "768", 10);
+canvas.width = W; canvas.height = H;
+var offscreen = canvas.transferControlToOffscreen();
+// usa el worker genérico de la raíz; le pasamos config de Dialogo (imagen por URL +
+// templates del directorio de proyectos) vía el mensaje init.
+var worker = new Worker("../../squeak_worker.js", { type: "module" });
+worker.postMessage({ type: "init", canvas: offscreen, width: W, height: H,
+    image: imageUrl, name: "Dialogo",
+    templates: params.has("notemplates") ? null : { root: "/", url: "/dialogo-fs" },
+    nostream: params.has("nostream") }, [offscreen]);
+
+var frameCount = 0, buildInfo = "";
+worker.onmessage = function(e) {
+    var m = e.data;
+    if (m.type === "ready") buildInfo = "[" + m.build + "] ";
+    else if (m.type === "cursor") {
+        // la imagen definió el cursor → lo aplicamos como cursor CSS nativo (hardware,
+        // tracking perfecto). Convertimos el ImageBitmap a data URL vía un canvas temporal.
+        var tc = document.createElement("canvas"); tc.width = m.bitmap.width; tc.height = m.bitmap.height;
+        tc.getContext("2d").drawImage(m.bitmap, 0, 0);
+        canvas.style.cursor = "url(" + tc.toDataURL() + ") " + m.hotX + " " + m.hotY + ", auto";
+    }
+    else if (m.type === "sound-start") { window.__sndRate = m.samplesPerSec || 22050; }
+    else if (m.type === "sound-play") { // spike has no audio; echo sound-done after the buffer duration so the image's sound loop doesn't stall
+        setTimeout(function() { worker.postMessage({ type: "sound-done" }); }, m.count / (window.__sndRate || 22050) * 1000);
+    }
+    else if (m.type === "frame") { frameCount++; }
+    else if (m.type === "tick") { frameCount++; statusEl.textContent = buildInfo + "sends: " + m.sends; }
+    else if (m.type === "error") { statusEl.textContent = "ERROR worker: " + m.msg.split("\n")[0]; console.error("worker error:", m.msg); }
+};
+worker.onerror = function(e) { statusEl.textContent = "WORKER ONERROR: " + e.message; console.error(e); };
+
+// mapeo de botones/modificadores igual que vm.input del browser
+// botones Squeak: Red=4 (izq), Yellow=2 (medio), Blue=1 (der); mods: shift8 ctrl16 alt32 cmd64
+function mods(e) { return (e.shiftKey?8:0)|(e.ctrlKey?16:0)|(e.altKey?32:0)|(e.metaKey?64:0); }
+function buttonsFrom(e, downButton) {
+    if (downButton !== undefined) {
+        var b = downButton === 0 ? 4 : downButton === 1 ? 2 : downButton === 2 ? 1 : 0;
+        if (b === 4 && (e.altKey || e.metaKey)) b = 2; // alt/cmd-click = middle (menú)
+        return b;
+    }
+    return (e.buttons & 1 ? 4 : 0) | (e.buttons & 2 ? 1 : 0) | (e.buttons & 4 ? 2 : 0);
+}
+// grabación de eventos: cada evento se envía al worker Y se guarda con timestamp,
+// en el mismo formato que consume el harness ({width,height,events:[{at,ev}]}), para
+// poder reproducir headless (ej. abrir un proyecto y provocar el OOM) y validar fixes.
+var recording = [], recN = document.getElementById("rec-n");
+function sendEv(ev) {
+    worker.postMessage({ type: "event", ev: ev });
+    recording.push({ at: Date.now(), ev: ev });
+    recN.textContent = recording.length;
+}
+function mouseEv(e, x, y, buttons) {
+    var r = canvas.getBoundingClientRect();
+    var cx = Math.round((x - r.left) * canvas.width / r.width);
+    var cy = Math.round((y - r.top) * canvas.height / r.height);
+    sendEv([1, Date.now(), cx, cy, buttons, mods(e)]);
+}
+// hook de replay headless: reproduce una grabación posteando los eventos al worker con
+// el timing real (deltas de `at`, capeados). Lo usa perf/worker/replay.js vía puppeteer.
+window.__replayEvents = function(events) {
+    var t0 = events.length ? events[0].at : 0;
+    events.forEach(function(e) {
+        setTimeout(function() { worker.postMessage({ type: "event", ev: e.ev }); }, Math.min(Math.max(0, e.at - t0), 120000));
+    });
+    return events.length;
+};
+document.getElementById("rec-reset").onclick = function() { recording = []; recN.textContent = 0; };
+document.getElementById("rec-dl").onclick = function() {
+    var data = JSON.stringify({ width: W, height: H, events: recording });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([data], { type: "application/json" }));
+    a.download = "dialogo-worker-events.json";
+    a.click();
+};
+canvas.addEventListener("mousemove", function(e) { mouseEv(e, e.clientX, e.clientY, buttonsFrom(e)); });
+canvas.addEventListener("mousedown", function(e) { e.preventDefault(); mouseEv(e, e.clientX, e.clientY, buttonsFrom(e, e.button)); });
+canvas.addEventListener("mouseup", function(e) { mouseEv(e, e.clientX, e.clientY, 0); });
+canvas.addEventListener("contextmenu", function(e) { e.preventDefault(); }); // botón derecho = Squeak, no menú del browser
+// teclado (foco en el canvas)
+canvas.tabIndex = 0;
+function keyEv(down, e) {
+    var uni = e.key.length === 1 ? e.key.charCodeAt(0)
+        : e.key === "Enter" ? 13 : e.key === "Backspace" ? 8 : e.key === "Tab" ? 9 : e.key === "Escape" ? 27
+        : e.key === "ArrowLeft" ? 28 : e.key === "ArrowRight" ? 29 : e.key === "ArrowUp" ? 30 : e.key === "ArrowDown" ? 31 : 0;
+    if (!uni) return;
+    var mac = uni < 128 ? uni : 0;
+    // EventTypeKeyboard=2, ts, macCode, EventKeyChar=0, mods, unicode
+    sendEv([2, Date.now(), mac, 0, mods(e), uni]);
+}
+canvas.addEventListener("keydown", function(e) { if (e.key.length === 1 || ["Enter","Backspace","Tab","Escape","ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].indexOf(e.key) >= 0) { e.preventDefault(); keyEv(true, e); } });
+canvas.focus();
+</script>
+</body>
+</html>

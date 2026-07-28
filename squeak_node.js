@@ -40,6 +40,14 @@ var ignoreQuit = processArgs[0] === "-ignoreQuit";
 if (ignoreQuit) {
     processArgs = processArgs.slice(1);
 }
+var stackZone = processArgs[0] === "-stackZone";
+if (stackZone) {
+    processArgs = processArgs.slice(1);
+}
+var jit2 = processArgs[0] === "-jit2";
+if (jit2) {
+    processArgs = processArgs.slice(1);
+}
 var fullName = processArgs[0];
 if (!fullName) {
     console.error("No image name specified.");
@@ -90,6 +98,8 @@ require("./vm.instruction.stream.sista.js");
 require("./vm.instruction.printer.js");
 require("./vm.primitives.js");
 require("./jit.js");
+require("./vm.stackzone.js");
+require("./jit2.js");
 require("./vm.display.js");
 require("./vm.display.headless.js");    // use headless display to prevent image crashing/becoming unresponsive
 require("./vm.input.js");
@@ -133,7 +143,7 @@ fs.readFile(root + imageName + ".image", function(error, data) {
 
         // Create fake display and create interpreter
         var display = { vmOptions: [ "-vm-display-null", "-nodisplay" ] };
-        var vm = new Squeak.Interpreter(image, display);
+        var vm = new Squeak.Interpreter(image, display, stackZone ? { stackZone: true, jit2: jit2 } : {});
         function run() {
             try {
                 vm.interpret(200, function runAgain(ms) {

@@ -98,6 +98,26 @@ Object.extend(Squeak.Primitives.prototype,
         this.popNandPushIfOK(argCount + 1, this.makeStArray(handles));
         return true;
     },
+    primitiveFileDescriptorType: function(argCount) {
+        // Pharo probes stdio at startup: fileDescriptorIsAvailable: is
+        // (fileDescriptorType: fd) between: 1 and: 3 (1=tty, 2=pipe, 3=file).
+        // Under Node stdio is real — report stdin/stdout/stderr as pipes.
+        var fd = this.stackInteger(0);
+        if (!this.success) return false;
+        var type = (fd >= 0 && fd <= 2) ? 2 : 0;
+        return this.popNandPushIfOK(argCount + 1, type);
+    },
+    primitiveGetWorkingDirectory: function(argCount) {
+        // see vm.plugins.file.browser.js — Pharo/Cuis read the cwd at startup
+        var cwd = Squeak.workingDirectory || Squeak.vmPath || "/";
+        return this.popNandPushIfOK(argCount + 1, this.makeStString(this.filenameToSqueak(cwd)));
+    },
+    primitiveSetWorkingDirectory: function(argCount) {
+        var dirNameObj = this.stackNonInteger(0);
+        if (!this.success) return false;
+        Squeak.workingDirectory = this.filenameFromSqueak(dirNameObj.bytesAsString());
+        return this.popNIfOK(argCount);
+    },
     primitiveFileOpen: function(argCount) {
         var writeFlag = this.stackBoolean(0),
             fileNameObj = this.stackNonInteger(1);

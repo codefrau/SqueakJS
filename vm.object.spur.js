@@ -87,6 +87,24 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                     this.pointers = this.decodePointers(nWords, oops, oopMap, getCharacter, is64Bit);
                 }
                 break;
+            case 9: // 64 bit array (words64, only in 64 bit images)
+                if (nWords > 0) {
+                    // reassemble each 64-bit element from the image words (either a JS number
+                    // or a [hi, lo] pair for values wider than 53 bits; see word64FromUint32)
+                    var w64 = new Uint32Array(nWords * 2);
+                    for (var i = 0; i < nWords; i++) {
+                        var hiLoOrValue = bits[i];
+                        if (typeof hiLoOrValue === "number") {
+                            w64[i*2] = hiLoOrValue >>> 0;
+                            w64[i*2+1] = hiLoOrValue / 0x100000000 >>> 0;
+                        } else {
+                            w64[i*2] = hiLoOrValue[1];
+                            w64[i*2+1] = hiLoOrValue[0];
+                        }
+                    }
+                    this.words64 = new BigUint64Array(w64.buffer);
+                }
+                break;
             case 11: // 32 bit array (odd length in 64 bits)
                 nWords--;
                 this._format = 10;
@@ -99,9 +117,15 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
                     this.words = this.decodeWords(nWords, bits, littleEndian);
                 }
                 break;
+            case 14: // 16 bit array (odd length in 64 bit images)
+            case 15:
+                nWords--;
+                this._format -= 2;
             case 12: // 16 bit array
             case 13: // 16 bit array (odd length)
-                throw Error("16 bit arrays not supported yet");
+                if (nWords > 0)
+                    this.words16 = this.decodeShorts(nWords, bits, this._format & 1);
+                break;
             case 20: // 8 bit array, length-4 (64 bit image)
             case 21: // ... length-5
             case 22: // ... length-6
@@ -302,8 +326,11 @@ Squeak.Object.subclass('Squeak.ObjectSpur',
             return this.pointers[Squeak.Context_stackPointer]; // no access beyond top of stacks
         if (fmt < 6) return this.pointersSize() - this.instSize(); // pointers
         if (fmt < 12) return this.wordsSize(); // words
-        if (fmt < 16) return this.shortsSize(); // shorts
+        if (fmt < 16) return this.words16Size(); // shorts
         if (fmt < 24) return this.bytesSize(); // bytes
+        // methods: 4 bytes per literal slot even in 64-bit images — SqueakJS normalizes all
+        // pcs to 4 bytes/literal at load (vm.image.js fixPCs) and hacks Smalltalk wordSize
+        // to answer 4, so in-image initialPC math matches this indexing.
         return 4 * this.pointersSize() + this.bytesSize(); // methods
     },
     snapshotSize: function() {

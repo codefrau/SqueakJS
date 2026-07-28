@@ -26,7 +26,8 @@ Object.extend(Squeak.Primitives.prototype,
     initPlugins: function() {
         Object.extend(this.builtinModules, {
             JavaScriptPlugin:       this.findPluginFunctions("js_"),
-            FilePlugin:             this.findPluginFunctions("", "primitive(Disable)?(File|Directory)"),
+            FilePlugin:             this.findPluginFunctions("", "primitive(Disable)?(File|Directory|(Get|Set)WorkingDirectory)"),
+            FileAttributesPlugin:   this.findPluginFunctions("fileAttributes_", "prim"),
             DropPlugin:             this.findPluginFunctions("", "primitiveDropRequest"),
             SoundPlugin:            this.findPluginFunctions("snd_"),
             JPEGReadWriter2Plugin:  this.findPluginFunctions("jpeg2_"),
@@ -38,6 +39,15 @@ Object.extend(Squeak.Primitives.prototype,
             },
             LocalePlugin: {
                 primitiveTimezoneOffset: this.fakePrimitive.bind(this, "LocalePlugin.primitiveTimezoneOffset", 0),
+            },
+            // Pharo probes for a native SDL2 display and an MD5 plugin at startup. We have
+            // neither — report "not available" so Pharo uses its own fallbacks (the SqueakJS
+            // display, in-image MD5) instead of erroring.
+            SDL2DisplayPlugin: {
+                primitiveHasDisplayPlugin: this.fakePrimitive.bind(this, "SDL2DisplayPlugin.primitiveHasDisplayPlugin", false),
+            },
+            MD5Plugin: {
+                primitivePluginAvailable: this.fakePrimitive.bind(this, "MD5Plugin.primitivePluginAvailable", false),
             },
         });
         Object.extend(this.patchModules, {

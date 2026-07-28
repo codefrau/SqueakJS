@@ -38,6 +38,8 @@ import "./vm.instruction.stream.sista.js";
 import "./vm.instruction.printer.js";
 import "./vm.primitives.js";
 import "./jit.js";
+import "./vm.stackzone.js";
+import "./jit2.js";
 import "./vm.display.js";
 import "./vm.display.headless.js";      // use headless display to prevent image crashing/becoming unresponsive
 import "./vm.input.js";

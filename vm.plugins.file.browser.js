@@ -97,6 +97,22 @@ Object.extend(Squeak.Primitives.prototype,
     primitiveDirectorySetMacTypeAndCreator: function(argCount) {
         return this.popNIfOK(argCount);
     },
+    primitiveGetWorkingDirectory: function(argCount) {
+        // Cuis 7.x reads the VM's working directory at startup (DirectoryEntry
+        // workingDirectory → userBaseDirectory → readAndApplyUserPrefs). Our FilePlugin
+        // has a single virtual root, so report it as a UTF-8 String; without this the
+        // primitive fails and Cuis opens a debugger before the world is even up.
+        var cwd = Squeak.workingDirectory || Squeak.vmPath || "/";
+        return this.popNandPushIfOK(argCount + 1, this.makeStString(this.filenameToSqueak(cwd)));
+    },
+    primitiveSetWorkingDirectory: function(argCount) {
+        // accept a new working directory (UTF-8 path). We keep the image/sources/changes
+        // lookup anchored at vmPath, so remember the cwd separately for the getter only.
+        var dirNameObj = this.stackNonInteger(0);
+        if (!this.success) return false;
+        Squeak.workingDirectory = this.filenameFromSqueak(dirNameObj.bytesAsString());
+        return this.popNIfOK(argCount);
+    },
     primitiveFileAtEnd: function(argCount) {
         var handle = this.stackNonInteger(0);
         if (!this.success || !handle.file) return false;
@@ -220,6 +236,17 @@ Object.extend(Squeak.Primitives.prototype,
         ];
         this.popNandPushIfOK(argCount + 1, this.makeStArray(handles));
         return true;
+    },
+    primitiveFileDescriptorType: function(argCount) {
+        // Pharo probes stdio at startup: File>>fileDescriptorIsAvailable: is
+        // (self fileDescriptorType: fd) between: 1 and: 3  (1=tty, 2=pipe, 3=file).
+        // stdout(1)/stderr(2) are backed by the console (pipe-like → 2); stdin(0)
+        // and any other descriptor are unavailable → 0. Not implementing this made
+        // the primitive fail and Pharo opened a debugger during boot.
+        var fd = this.stackInteger(0);
+        if (!this.success) return false;
+        var type = (fd === 1 || fd === 2) ? 2 : 0;
+        return this.popNandPushIfOK(argCount + 1, type);
     },
     primitiveFileTruncate: function(argCount) {
         var pos = this.stackPos32BitInt(0),

@@ -2,15 +2,56 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-<title>SqueakJS</title>
+<title>Smalltalk in your browser — Squeak · Pharo · Cuis</title>
 <link rel="icon" type="image/png" href="squeakjs.png">
 <link rel="stylesheet" href="../lib/gh-fork-ribbon.css">
 <link rel="stylesheet" href="squeakjs.css">
 <script type="module" src="../squeak.js"></script>
 <script>
+    // Loading overlay: localized staged label (adapts to the browser language) with a
+    // heartbeat while big images (Pharo!) boot — the canvas stays hidden until the image
+    // paints its first real frame, so there's no stray black rectangle or long black screen.
+    var L10N = (navigator.language || "").toLowerCase().indexOf("es") === 0 ? {
+        downloading: "Descargando la imagen…",
+        starting: "Arrancando la imagen…",
+        firstRun: "la primera vez puede tardar uno o dos minutos",
+        working: "trabajando: ",
+    } : {
+        downloading: "Downloading the image…",
+        starting: "Starting the image…",
+        firstRun: "the first run can take a minute or two",
+        working: "working: ",
+    };
+    function setLoadingStage(stage, extra) {
+        if (!sqSpinner) return;
+        if (stage === null) {
+            sqSpinner.style.display = "none";
+            return;
+        }
+        sqSpinner.style.display = "block";
+        document.body.classList.add("sq-loading");
+        var label = stage === "downloading" ? L10N.downloading
+                  : stage === "starting" ? L10N.starting + " — " + L10N.firstRun : stage;
+        if (extra) label += "  ·  " + extra;
+        sqSpinner.setAttribute("data-label", label);
+    }
     function runSqueak(imageName) {
         // Squeak.debugFiles = true;
         sqText.style.display = "none";
+        // Run the VM in a Web Worker (off the main thread) by default, so the page stays
+        // responsive (no freeze / ruedita). Handles local images (IndexedDB), images from
+        // the internet (image=<url> or url=BASE&files=[...]) and zip bundles (zip=<url>).
+        // Falls back to the main-thread VM only if the browser lacks OffscreenCanvas, or on
+        // #nomain=... to force it.
+        var params = new URLSearchParams(location.hash.slice(1));
+        imageName = imageName || params.get("image");
+        var canWorker = ("transferControlToOffscreen" in HTMLCanvasElement.prototype) && typeof Worker !== "undefined";
+        if (canWorker && !params.has("nomain") && (imageName || params.has("url") || params.has("zip"))) {
+            // the canvas stays hidden until the image paints its first frame (see
+            // "first-frame" below); until then the loading overlay explains the wait
+            setLoadingStage(params.has("zip") ? "downloading" : "starting");
+            return runSqueakInWorker(imageName, params);
+        }
         sqCanvas.style.display = "block";
         SqueakJS.runSqueak(imageName, sqCanvas,{
             spinner: sqSpinner,
@@ -27,6 +68,318 @@
                     location.href = location.href.replace(/\?.*/, "");
                 }, 0);
             },
+        });
+    }
+    // --- #worker mode: run the VM in a Web Worker rendering to an OffscreenCanvas ---
+    function runSqueakInWorker(imageName, params) {
+        if (params.has("zip")) return runZipInWorker(params);
+        var urlBase = params.get("url"), isHttp = imageName && /^https?:\/\//i.test(imageName);
+        if (urlBase || isHttp) {
+            // image from the internet: image=<full url>, or url=BASE&files=[img,changes,sources]
+            var files = (params.get("files") || "").replace(/^\[|\]$/g, "").split(",").map(function(s){ return s.trim(); }).filter(Boolean);
+            if (imageName && !isHttp && files.indexOf(imageName) < 0) files.unshift(imageName);
+            var toUrl = function(f) { return /^https?:\/\//i.test(f) ? f : (urlBase || "").replace(/\/+$/, "") + "/" + f; };
+            var imageFile = isHttp ? imageName : (files.filter(function(f){ return /\.image$/i.test(f); })[0] || files[0]);
+            // download the non-image files (changes/sources) into the FS at "/basename",
+            // then boot from the image URL. The image name must be the full path WITH the
+            // .image extension (e.g. "/Cuis6.2-32.image") so the image's directory resolves
+            // to "/" and it finds its changes/sources there — exactly like the main thread
+            // (runImage(data, options.root + image.name)). Otherwise the name has no dir and
+            // Squeak falls back to a default (/SqueakJS/), where the files aren't.
+            var aux = files.filter(function(f){ return f !== imageFile; }), pending = aux.length;
+            function boot() { startWorker("/" + (imageFile || "image").replace(/.*\//, ""), toUrl(imageFile)); }
+            if (!pending) return boot();
+            aux.forEach(function(f) {
+                fetch(toUrl(f)).then(function(r){ return r.arrayBuffer(); }).then(function(buf){
+                    Squeak.filePut("/" + f.replace(/.*\//, ""), buf, function(){ if (--pending === 0) boot(); });
+                }).catch(function(){ if (--pending === 0) boot(); });
+            });
+            return;
+        }
+        // local image from IndexedDB; if it isn't there, treat the name as a URL to fetch
+        var path = Squeak.splitFilePath(imageName);
+        Squeak.fileGet(path.fullname, function(buffer) {
+            startWorker(path.fullname, buffer);
+        }, function() {
+            startWorker(path.fullname, imageName);
+        });
+    }
+    // zip bundle(s) → download + unzip on the main thread (JSZip, loaded by squeak.js), store
+    // the aux files (changes/sources) in the shared FS, pick the image, and boot it in the
+    // worker. If a bundle ships several .image files and one is a 32-bit build, prefer it;
+    // otherwise take the first (SqueakJS reads 64-bit Spur images natively — no conversion).
+    function runZipInWorker(params) {
+        if (typeof JSZip === "undefined") return alert("JSZip not loaded");
+        var base = params.get("url") || "";
+        var toUrl = function(u){ return /^https?:\/\//i.test(u) ? u : base.replace(/\/+$/, "") + "/" + u; };
+        var zipUrls = params.get("zip").replace(/^\[|\]$/g, "").split(",").map(function(s){ return s.trim(); }).filter(Boolean);
+        // skip macOS metadata and desktop-bundle binaries the VM never reads (a Dialogo.zip
+        // ships a 22MB .exe etc.) — keep .image/.changes/.sources and the image's data files.
+        var skip = function(fn){ return fn.indexOf("__MACOSX/") === 0 || /(\.DS_Store|\.exe|\.dll|\.dylib|\.so|\.app|\.dmg|\.sh|\.bat|\.command)$/i.test(fn); };
+        var putFile = function(path, data){
+            var dir = path.replace(/\/[^\/]*$/, ""); // filePut needs the parent dir to exist
+            if (dir) Squeak.dirCreate(dir, true);     // create the whole hierarchy
+            return new Promise(function(res){ if (!Squeak.filePut(path, data, res)) res(); });
+        };
+        setLoadingStage("downloading");
+        // process sequentially: unzipping + IndexedDB-writing ~hundreds of files concurrently
+        // overwhelms IndexedDB and never settles.
+        (async function() {
+            try {
+                var entries = [], images = [];
+                for (var i = 0; i < zipUrls.length; i++) {
+                    var r = await fetch(toUrl(zipUrls[i]));
+                    if (!r.ok) throw new Error("HTTP " + r.status);
+                    var zip = await JSZip.loadAsync(await r.arrayBuffer(), { createFolders: true });
+                    zip.forEach(function(fn, meta){ if (!meta.dir && !skip(fn)) entries.push({ fn: fn, zip: zip }); });
+                }
+                for (var j = 0; j < entries.length; j++) {
+                    var fn = entries[j].fn, data = await entries[j].zip.file(fn).async("arraybuffer");
+                    if (/\.image$/i.test(fn)) images.push({ name: "/" + fn, data: data });
+                    else await putFile("/" + fn, data);
+                }
+                if (!images.length) throw new Error("the zip has no .image");
+                var pick = images.filter(function(c){ return /32/.test(c.name); })[0] || images[0];
+                for (var k = 0; k < images.length; k++) if (images[k] !== pick) await putFile(images[k].name, images[k].data);
+                startWorker(pick.name, pick.data);
+            } catch (err) {
+                setLoadingStage(null);
+                alert("Could not load the zip: " + err.message);
+            }
+        })();
+    }
+    function startWorker(name, imageSource) {
+        var W = window.innerWidth, H = window.innerHeight;
+        var audioCtx = null, audioNextTime = 0, audioSampleRate = 0;
+        sqCanvas.width = W; sqCanvas.height = H;
+        sqCanvas.tabIndex = 0;
+        // the canvas is position:fixed with no offsets, so it lands at its static position
+        // (offset by the body's 8px margin) and overflows the viewport. Pin it to 0,0 and
+        // kill scrolling so it fills the screen exactly. (Worker mode only.)
+        sqCanvas.style.left = "0"; sqCanvas.style.top = "0";
+        document.documentElement.style.overflow = "hidden";
+        document.body.style.overflow = "hidden";
+        var offscreen = sqCanvas.transferControlToOffscreen();
+        var worker = new Worker("../squeak_worker.js", { type: "module" });
+        // image can be bytes (local, transfer it) or a URL string (worker fetches it)
+        var image = imageSource, transfer = [offscreen];
+        if (imageSource instanceof ArrayBuffer) transfer.push(imageSource);
+        else if (imageSource && imageSource.buffer instanceof ArrayBuffer) { image = imageSource.buffer; transfer.push(image); }
+        // A worker can't read localStorage, where the FilePlugin keeps its directory
+        // structure — so pass a snapshot in (file contents are in the shared IndexedDB).
+        var settings = {};
+        for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); settings[k] = localStorage.getItem(k); }
+        // the image name is a full FS path WITH .image (e.g. "/Cuis6.2-32.image") so the
+        // image finds its changes/sources in its own directory (see runSqueakInWorker)
+        var imgName = name && name[0] === "/" ? name : "/" + (name || "image");
+        worker.postMessage({ type: "init", canvas: offscreen, width: W, height: H,
+            image: image, name: imgName, settings: settings, downloadOnSave: true }, transfer);
+        var stillLoading = true;
+        worker.onmessage = function(e) {
+            var m = e.data;
+            if (m.type === "ready") { if (stillLoading) setLoadingStage("starting"); }
+            else if (m.type === "tick") {
+                // heartbeat while a big image (Pharo) boots: show the VM is alive
+                if (stillLoading && m.sends) setLoadingStage("starting", L10N.working + Math.round(m.sends / 1e6) + "M");
+            }
+            else if (m.type === "first-frame") {
+                // the image painted — reveal it and drop the overlay
+                stillLoading = false;
+                setLoadingStage(null);
+                document.body.classList.remove("sq-loading");
+                sqCanvas.style.display = "block";
+            }
+            else if (m.type === "cursor") {
+                var tc = document.createElement("canvas"); tc.width = m.bitmap.width; tc.height = m.bitmap.height;
+                tc.getContext("2d").drawImage(m.bitmap, 0, 0);
+                sqCanvas.style.cursor = "url(" + tc.toDataURL() + ") " + m.hotX + " " + m.hotY + ", auto";
+            }
+            else if (m.type === "settings") {
+                // persist FS changes the worker made back to localStorage (so new projects
+                // survive a reload). Update/add its keys, and delete only "squeak:" dir keys
+                // it removed — never touch other keys.
+                var incoming = m.settings;
+                for (var key in incoming) { if (localStorage.getItem(key) !== incoming[key]) localStorage.setItem(key, incoming[key]); }
+                for (var j = localStorage.length - 1; j >= 0; j--) {
+                    var lk = localStorage.key(j);
+                    if (lk.indexOf("squeak:") === 0 && !(lk in incoming)) localStorage.removeItem(lk);
+                }
+            }
+            else if (m.type === "download") {
+                // the image saved a file → download it to the user's Downloads folder
+                var blob = new Blob([m.bytes], { type: "application/octet-stream" });
+                var a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = m.name || "download";
+                document.body.appendChild(a); a.click(); a.remove();
+                setTimeout(function() { URL.revokeObjectURL(a.href); }, 2000);
+            }
+            else if (m.type === "clipboard-write") {
+                // the image copied text → write it to the system clipboard
+                if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(m.text || "").catch(function(){});
+            }
+            else if (m.type === "sound-start") { audioStart(m); }
+            else if (m.type === "sound-play") { audioPlay(worker, m); }
+            else if (m.type === "sound-stop") { audioStop(); }
+            else if (m.type === "error") { console.error("worker error:", m.msg); }
+        };
+        // Web Audio playback for the worker: the VM streams sample buffers, we schedule them
+        // back-to-back and tell the worker when each one drains (see squeak_worker.js).
+        function audioStart(m) {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === "suspended") audioCtx.resume();
+            audioSampleRate = m.samplesPerSec; audioNextTime = 0;
+        }
+        function audioPlay(worker, m) {
+            if (!audioCtx) audioStart({ samplesPerSec: 22050 });
+            var count = m.count, channels = m.channels || 1;
+            var buffer = audioCtx.createBuffer(channels, count, audioSampleRate || 22050);
+            if (!m.silence) {
+                var s = new Int16Array(m.samples);
+                for (var ch = 0; ch < channels; ch++) {
+                    var cd = buffer.getChannelData(ch);
+                    for (var i = 0; i < count; i++) cd[i] = s[i * channels + ch] / 32768;
+                }
+            }
+            var src = audioCtx.createBufferSource();
+            src.buffer = buffer; src.connect(audioCtx.destination);
+            if (audioNextTime < audioCtx.currentTime) audioNextTime = audioCtx.currentTime;
+            src.start(audioNextTime);
+            audioNextTime += buffer.duration;
+            setTimeout(function() { worker.postMessage({ type: "sound-done" }); }, Math.max(0, (audioNextTime - audioCtx.currentTime) * 1000));
+        }
+        function audioStop() { if (audioCtx) { try { audioCtx.close(); } catch (e) {} audioCtx = null; } }
+        worker.onerror = function(e) { console.error("worker onerror:", e.message || e); };
+        wireWorkerInput(worker);
+        wireWorkerResizeAndDrop(worker);
+        // browsers start an AudioContext suspended until a user gesture — resume on the
+        // first pointer/touch so sound isn't silently blocked
+        var resumeAudio = function() { if (audioCtx && audioCtx.state === "suspended") audioCtx.resume(); };
+        sqCanvas.addEventListener("pointerdown", resumeAudio);
+        sqCanvas.addEventListener("touchstart", resumeAudio);
+        sqCanvas.focus();
+    }
+    // dynamic resize + drag/drop of files onto the running environment (worker mode)
+    function wireWorkerResizeAndDrop(worker) {
+        var resizeTimer;
+        window.addEventListener("resize", function() {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(function() {
+                worker.postMessage({ type: "resize", width: window.innerWidth, height: window.innerHeight });
+            }, 250);
+        });
+        function hasFiles(evt) {
+            var t = evt.dataTransfer && evt.dataTransfer.types;
+            for (var i = 0; t && i < t.length; i++) if (t[i] === "Files") return true;
+            return false;
+        }
+        function dragCoords(evt) {
+            var r = sqCanvas.getBoundingClientRect();
+            return [Math.round((evt.clientX - r.left) * sqCanvas.width / r.width),
+                    Math.round((evt.clientY - r.top) * sqCanvas.height / r.height)];
+        }
+        function postDrag(dragType, evt, numFiles) {
+            var c = dragCoords(evt);
+            worker.postMessage({ type: "event", ev: [3, Date.now(), dragType, c[0], c[1], 0, numFiles] });
+        }
+        // stopPropagation so these don't reach the page's import-to-FS drop handler
+        sqCanvas.addEventListener("dragenter", function(evt) { if (hasFiles(evt)) { evt.preventDefault(); evt.stopPropagation(); postDrag(1, evt, 1); } });
+        sqCanvas.addEventListener("dragover", function(evt) { if (hasFiles(evt)) { evt.preventDefault(); evt.stopPropagation(); evt.dataTransfer.dropEffect = "copy"; postDrag(2, evt, 1); } });
+        sqCanvas.addEventListener("dragleave", function(evt) { if (hasFiles(evt)) { evt.stopPropagation(); postDrag(3, evt, 0); } });
+        sqCanvas.addEventListener("drop", function(evt) {
+            if (!hasFiles(evt)) return;
+            evt.preventDefault(); evt.stopPropagation();
+            var c = dragCoords(evt);
+            handleWorkerFiles(worker, evt.dataTransfer.files, c[0], c[1]);
+        });
+        // "open file" button/input — the way to bring a file in on mobile (no drag-drop
+        // there): opens the native file browser (Files/Downloads). Drops the file at the
+        // screen center via the same drop path, so the image handles it identically.
+        var openBtn = document.getElementById("sqOpenBtn"), fileInput = document.getElementById("sqFileOpen");
+        var showOpenBtn = new URLSearchParams(location.hash.slice(1)).has("openbtn");
+        if (openBtn && fileInput && showOpenBtn) {
+            openBtn.style.display = "block";
+            openBtn.onclick = function() { fileInput.value = ""; fileInput.click(); };
+            fileInput.onchange = function() {
+                handleWorkerFiles(worker, fileInput.files, sqCanvas.width >> 1, sqCanvas.height >> 1);
+            };
+        }
+    }
+    // store dropped/opened files in the shared IndexedDB, then hand their paths + a Squeak
+    // drag-drop event to the worker; the image decides whether to load or reject each one.
+    function handleWorkerFiles(worker, fileList, cx, cy) {
+        var files = [].slice.call(fileList);
+        if (!files.length) return;
+        var paths = [], loaded = 0;
+        files.forEach(function(f) {
+            var path = "/" + f.name; paths.push(path);
+            var reader = new FileReader();
+            reader.onload = function() {
+                Squeak.filePut(path, this.result, function() {
+                    if (++loaded < files.length) return;
+                    var settings = {};
+                    for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); settings[k] = localStorage.getItem(k); }
+                    worker.postMessage({ type: "drop", files: paths, settings: settings, ev: [3, Date.now(), 4, cx, cy, 0, paths.length] });
+                });
+            };
+            reader.readAsArrayBuffer(f);
+        });
+    }
+    // forward mouse/keyboard to the worker in Squeak event format
+    // buttons: Red=4 (left), Yellow=2 (middle), Blue=1 (right); mods: shift8 ctrl16 alt32 cmd64
+    function wireWorkerInput(worker) {
+        function mods(e) { return (e.shiftKey?8:0)|(e.ctrlKey?16:0)|(e.altKey?32:0)|(e.metaKey?64:0); }
+        function buttonsFrom(e, downButton) {
+            if (downButton !== undefined) {
+                var b = downButton === 0 ? 4 : downButton === 1 ? 2 : downButton === 2 ? 1 : 0;
+                if (b === 4 && (e.altKey || e.metaKey)) b = 2; // alt/cmd-click = middle (menu)
+                return b;
+            }
+            return (e.buttons & 1 ? 4 : 0) | (e.buttons & 2 ? 1 : 0) | (e.buttons & 4 ? 2 : 0);
+        }
+        function mouseEv(e, buttons) {
+            var r = sqCanvas.getBoundingClientRect();
+            var cx = Math.round((e.clientX - r.left) * sqCanvas.width / r.width);
+            var cy = Math.round((e.clientY - r.top) * sqCanvas.height / r.height);
+            worker.postMessage({ type: "event", ev: [1, Date.now(), cx, cy, buttons, mods(e)] });
+        }
+        sqCanvas.addEventListener("mousemove", function(e) { mouseEv(e, buttonsFrom(e)); });
+        sqCanvas.addEventListener("mousedown", function(e) { e.preventDefault(); sqCanvas.focus(); mouseEv(e, buttonsFrom(e, e.button)); });
+        sqCanvas.addEventListener("mouseup", function(e) { mouseEv(e, 0); });
+        sqCanvas.addEventListener("contextmenu", function(e) { e.preventDefault(); });
+        sqCanvas.addEventListener("keydown", function(e) {
+            // paste: navigator.clipboard is main-thread + gesture-only, so on cmd/ctrl-V we
+            // read it here (in the gesture), push it into the worker, and only then send the
+            // keystroke — so the image reads the fresh clipboard when it handles the paste.
+            if ((e.metaKey || e.ctrlKey) && (e.key === "v" || e.key === "V") && navigator.clipboard && navigator.clipboard.readText) {
+                e.preventDefault();
+                navigator.clipboard.readText()
+                    .then(function(text) { worker.postMessage({ type: "clipboard-set", text: text }); })
+                    .catch(function() {})
+                    .then(function() { worker.postMessage({ type: "event", ev: [2, Date.now(), 118, 0, mods(e), 118] }); });
+                return;
+            }
+            var special = { Enter:13, Backspace:8, Tab:9, Escape:27, ArrowLeft:28, ArrowRight:29, ArrowUp:30, ArrowDown:31, Delete:127, Home:1, End:4, PageUp:11, PageDown:12 };
+            // Keyboard event modifiers use the VM's char-event encoding (shift=1, ctrl=2,
+            // alt=4, cmd=8) — NOT the Keyboard_* button bits (8/16/32/64) that mods() returns
+            // for mouse. Set BOTH ctrl+cmd when either is pressed, since we don't know whether
+            // the image keymaps to Ctrl (unix/win, e.g. Pharo) or Cmd (mac, e.g. classic Squeak).
+            var isCmd = e.metaKey || e.ctrlKey;
+            var km = (e.shiftKey ? 1 : 0) | (e.altKey ? 4 : 0) | (isCmd ? (2 | 8) : 0);
+            var uni, code;
+            if (e.key.length === 1) {
+                uni = code = e.key.charCodeAt(0);
+                if (isCmd) { // command shortcut: use the lowercase letter; ctrl-<key> → control char
+                    code = e.key.toLowerCase().charCodeAt(0);
+                    if (e.ctrlKey && code >= 96 && code < 127) code &= 0x1F;
+                    uni = code;
+                }
+            } else {
+                uni = code = special[e.key] || 0;
+            }
+            if (!code) return;
+            e.preventDefault();
+            worker.postMessage({ type: "event", ev: [2, Date.now(), code < 128 ? code : 0, 0, km, uni] });
         });
     }
     function importItems(items) {
@@ -117,6 +470,14 @@
         params.set("image", imageName);
         return params.toString();
     }
+    // launch a local image (worker mode is the default), honoring the 📂-button checkbox
+    function launchImage(imageName) {
+        var params = new URLSearchParams(location.hash.slice(1));
+        params.set("image", imageName);
+        if (openBtnToggle && openBtnToggle.checked) params.set("openbtn", ""); else params.delete("openbtn");
+        location.hash = "#" + params.toString();
+        return false;
+    }
     function showFiles() {
         var imgList = [],
             fileList = [],
@@ -131,7 +492,7 @@
                 var entry = entries[f],
                     path = dir + '/' + f;
                 if (!entry[3] && f.match(/\.image$/))
-                    imgList.push('<li><a href="#' + paramsForImage(path) + '">' + path + '</a> (' + (entry[4]/1000000).toFixed(1) + ' MB)</li>');
+                    imgList.push('<li><a href="#' + paramsForImage(path) + '" onclick="return launchImage(\'' + path + '\')">' + path + '</a> (' + (entry[4]/1000000).toFixed(1) + ' MB)</li>');
                 if (entry[3]) {
                     dirs.push(path);
                     nDirs++;
@@ -206,104 +567,81 @@
 </head>
 <body>
     <div id="sqText">
-        <h1><img id="logo" src="squeakjs.png">SqueakJS</h1>
+        <h1><img id="logo" src="squeakjs.png">Smalltalk in your browser</h1>
         <div class="github-fork-ribbon-wrapper right">
             <div class="github-fork-ribbon">
-                <a href="https://github.com/codefrau/SqueakJS" target="_blank">Fork me on GitHub</a>
+                <a href="https://github.com/agustincico/SqueakJS" target="_blank">Fork me on GitHub</a>
             </div>
         </div>
-        SqueakJS is an HTML5 runtime engine for <a href="http://squeak.org/" target="_blank">Squeak</a> Smalltalk written in pure JavaScript by Vanessa Freudenberg.
-        See the <a href="../" target="_blank">SqueakJS Project</a> page for more information.
-
-        <h2>Run Squeak images from your local machine</h2>
-        Use drag-and-drop to run a Squeak image from your machine: drop the image (perhaps together with a changes and sources file) into this page.
-        <div id="images"></div>
-        All images and related files are stored persistently in a database inside your browser.
-        The box below shows the files that are currently in your database.  Inside Squeak, you can use a FileList
-        to manage them.
-        <div id="drop">Drop Squeak images and other files here, or <input id="fileInput" type="file" multiple>
-            <div id="files" class="filelist"></div>
-            <div id="filestats"></div>
+        <p class="tagline">Run <b>Squeak</b>, <b>Pharo</b> and <b>Cuis</b> images right in the browser — pure JavaScript, powered by <a href="https://github.com/codefrau/SqueakJS" target="_blank">SqueakJS</a> (the engine by Vanessa Freudenberg) with a Web-Worker runtime and usability additions by Agustín Martínez.</p>
+        <div class="added">
+            <strong>What you get</strong>
+            <ul>
+                <li>The VM runs off the main thread, so the page stays responsive and never freezes (no spinner / “ruedita”), even under heavy work.</li>
+                <li>Image-managed cursor, flicker-free rendering, dynamic resize, sound, and system clipboard.</li>
+                <li><b>Save straight to Downloads</b>, and open files by drag-and-drop or a 📂 button (works on mobile too).</li>
+            </ul>
         </div>
-        Clicking on a name in the box will export that file to your browser's downloads folder.
 
-        <h2>Run Squeak images from the internet</h2>
-        Construct a URL linking to this page and pass the image and options.
-        <em>Beware that the server needs to allow script access via <a href="http://enable-cors.org/server.html" target="_blank">CORS</a>.</em>
-        <br>Here are a few examples:
+        <h2>Run an image from your device</h2>
+        <div class="card">
+            <p>Drag a Smalltalk image onto this page (together with its changes and sources files, if any) to run it.</p>
+            <div class="opts">
+                <label><input id="openBtnToggle" type="checkbox"> <span>Show a 📂 button to open files — needed on mobile, where drag-and-drop isn't available.</span></label>
+            </div>
+            <div id="images"></div>
+            <div id="drop">Drop images and other files here, or <input id="fileInput" type="file" multiple>
+                <div id="files" class="filelist"></div>
+                <div id="filestats"></div>
+            </div>
+            <p class="muted">Files are stored in your browser's database; clicking a name above exports it to your Downloads.</p>
+        </div>
+
+        <h2>Or run one of these from the internet</h2>
+        <div class="card">
         <ul>
-        <li>Squeak 1.13 (1996) <a href="#url=https://freudenbergs.de/vanessa/squeakjs&files=[Squeak1.13u.image,Squeak1.13u.changes,SqueakV1.sources]&swapButtons=true">link</a></li>
-        <li>Squeak 2.8 (2000) <a href="#url=https://freudenbergs.de/vanessa/squeakjs&files=[Squeak2.8.image,Squeak2.8.changes,SqueakV2.sources]&swapButtons=true">link</a></li>
-        <li>Squeak 3.8 (2006) <a href="#url=https://freudenbergs.de/vanessa/squeakjs&files=[Squeak3.8.1-6747full.image,Squeak3.8.1-6747full.changes,SqueakV3.sources]&swapButtons=true">link</a></li>
-        <li>Squeak 3.9 (2008) <a href="#url=https://freudenbergs.de/vanessa/squeakjs&files=[Squeak3.9.1-final-7075.image,Squeak3.9.1-final-7075.changes,SqueakV39.sources]&swapButtons=true">link</a></li>
-        <li>Pharo 1.0 (2010) <a href="#unix&zip=[https://files.pharo.org/image/10/latest.zip,https://files.pharo.org/sources/PharoV10.sources.zip]">link</a></li>
-        <li>Squeak 4.5 (2014) <a href="#url=https://freudenbergs.de/vanessa/squeakjs&files=[Squeak4.5-13680.image,Squeak4.5-13680.changes,SqueakV41.sources]">link</a></li>
-        <li>Squeak 5.0 (2015) <a href="#url=https://freudenbergs.de/vanessa/squeakjs&zip=[Squeak5.0-15113.zip,SqueakV50.sources.zip]">link</a></li>
-        <li>SpeechPlugin Demo (2016) <a href="#zip=https://www.hpi.uni-potsdam.de/hirschfeld/artefacts/squeakjs/SpeechPluginDemo.zip">link</a></li>
-        <li>Squeak 6.0 64 bit (2022) <a href="#zip=https://files.squeak.org/6.0/Squeak6.0-22104-64bit/Squeak6.0-22104-64bit.zip&wizard=false">link</a></li>
-        <li>Cuis 6.2 (2023) <a href="#highdpi&url=https://cdn.jsdelivr.net/gh/Cuis-Smalltalk/Cuis6-2@6f984e8c/CuisImage&files=[32BitImages/Cuis6.2-32.image,32BitImages/Cuis6.2-32.changes,Cuis6.2.sources]">link</a></li>
-        <li>Squeak Trunk 6.1α (2024) <a href="#zip=https://files.squeak.org/6.1alpha/Squeak6.1alpha-22998-32bit/Squeak6.1alpha-22998-32bit.zip&wizard=false">link</a></li>
-        <li>Squeak Trunk 6.1α (hi-res: save image after first load for faster startup) <a href="#highdpi&zip=https://files.squeak.org/6.1alpha/Squeak6.1alpha-22998-32bit/Squeak6.1alpha-22998-32bit.zip&wizard=false">link</a></li>
+        <li><b>Squeak</b> — <a href="#zip=https://dialog.ar/Squeak.zip">6.0</a></li>
+        <li><b>Cuis</b> — <a href="#url=https://raw.githubusercontent.com/Cuis-Smalltalk/Cuis7-8/master/CuisImage/32BitsImage&files=[Cuis7.8-32.image,Cuis7.8-32.changes,Cuis7.8.sources]">7.8</a> <span class="muted">(from the official repo)</span></li>
+        <li><b>Pharo</b> — <a href="#zip=https://dialog.ar/Pharo.zip">10 (32-bit)</a> · <a href="#zip=https://dialog.ar/Pharo64.zip">10 (64-bit)</a> · <a href="#zip=https://dialog.ar/Pharo-demo.zip">live Morphic demo</a></li>
+        <li><b>Dialog.ar</b> — <a href="#zip=https://dialog.ar/Dialogo.zip">example drawing app for kids</a></li>
         </ul>
-        On the first run these will be stored locally. Subsequent starts are much faster since there is no download.
+        <p class="muted">First run downloads and caches the image in your browser; later starts are much faster. If a bundle ships both a 32- and 64-bit image, the 32-bit build is used. <em>Cuis loads straight from its official GitHub repository. Squeak and Pharo are mirrored on dialog.ar because files.squeak.org and files.pharo.org don't send CORS headers, so browsers refuse to download from them directly.</em></p>
+        <p class="muted"><b>About Pharo:</b> both builds boot to a clean, fully interactive world. Pharo's git/Iceberg integration needs native FFI (unavailable in the browser), so SqueakJS skips that startup step instead of letting it open a debugger — Pharo simply runs without git, exactly as on a machine without libgit2. Pharo's <b>64-bit</b> builds ship SDL2-only and dropped the classic display/input classes, so their bundle carries a compatibility <code>startup.st</code> that restores them; to run your own 64-bit image, keep that file next to it. The <b>live Morphic demo</b> is the 32-bit image opening a small self-contained app at startup — the full IDE stays one menu-bar click away.</p>
+        </div>
 
-        <h2>Run SqueakJS apps</h2>
-        SqueakJS can be used to run Squeak apps. Here are some examples.
-        Note how they differ when you resize the browser window—Etoys is scaled,
-        whereas Scratch is resized.
-        The apps are configured to use template files (e.g. example projects and artwork)
-        that are loaded from a server on demand.
-        <ul>
-            <li><a href="../etoys/" target="_blank">Etoys</a></li>
-            <li><a href="../scratch/" target="_blank">Scratch</a></li>
-            <li>demo of the <a href="../demo/simple.html#document=JSBridge.st" target="_blank">JavaScript bridge</a> (not really an app)</li>
-            <li><a href="https://codefrau.github.io/jasmine/" target="_blank">Croquet Jasmine</a> (2004)</li>
-        </ul>
-        On some mobile devices you can save these apps to the home screen, and run them like a real app.
+        <h2>Embed it on your own site</h2>
+        <div class="card">
+            <p>This <code>run/</code> launcher is the reference: copy it and point it at your image. It runs the VM in a Web Worker and wires input, cursor, clipboard, sound, save-to-Downloads and the file picker. At its core:</p>
+            <pre>&lt;canvas id="sq"&gt;&lt;/canvas&gt;
+&lt;script type="module"&gt;
+  const canvas = document.getElementById("sq");
+  canvas.width = innerWidth; canvas.height = innerHeight;
+  const offscreen = canvas.transferControlToOffscreen();
+  const worker = new Worker("squeak_worker.js", { type: "module" });
+  worker.postMessage({
+    type: "init", canvas: offscreen,
+    width: canvas.width, height: canvas.height,
+    image: "my.image",   // a URL, or the image bytes (ArrayBuffer)
+    name:  "/my.image",  // full path, including .image
+  }, [offscreen]);
+  // then forward mouse/keyboard and handle cursor/clipboard/sound —
+  // see run/index.html for the complete wiring.
+&lt;/script&gt;</pre>
+            <p class="muted">For a classic single-thread embed you can still use <code>SqueakJS.runSqueak("my.image", canvas, {…})</code> from <code>squeak.js</code>.</p>
+        </div>
 
-        <h2>Use SqueakJS on your own website</h2>
-        Instead of passing options by URL to this page, you can
-        <a href="https://github.com/codefrau/SqueakJS">download SqueakJS</a>
-        from GitHub and use it on your own website like this:
-        <pre>
-        &lt;html&gt;
-            &lt;head&gt;
-                &lt;script src=&quot;squeak.js&quot;&gt;&lt;/script&gt;
-                &lt;script&gt;
-                    window.onload = function() {
-                        SqueakJS.runSqueak(&quot;my.image&quot;, sqCanvas, { /*put options here*/ });
-                    }
-                &lt;/script&gt;
-            &lt;/head&gt;
-            &lt;body&gt;
-                &lt;canvas id=&quot;sqCanvas&quot;&gt;&lt;/canvas&gt;
-            &lt;/body&gt;
-        &lt;/html&gt;
-        </pre>
-        Options include display resolution, template file URLs, etc.
-        For example usage take a look at the demo pages included in the GitHub repo:
-        <a href="../etoys/" target="_blank">Etoys</a>
-        (<a href="https://github.com/codefrau/SqueakJS/tree/master/etoys" target="_blank">source</a>) or
-        <a href="../scratch/" target="_blank">Scratch</a>
-        (<a href="https://github.com/codefrau/SqueakJS/tree/master/scratch" target="_blank">source</a>)
+        <h2>Credits &amp; source</h2>
+        <div class="card">
+            <p>SqueakJS is free software (MIT). The engine is by <a href="https://github.com/codefrau/SqueakJS" target="_blank">Vanessa Freudenberg</a>; the Web Worker mode and usability additions live in <a href="https://github.com/agustincico/SqueakJS" target="_blank">this fork</a> by Agustín Martínez. Bug reports and pull requests welcome.</p>
+        </div>
 
-        <h2>Modify SqueakJS</h2>
-        I am developing SqueakJS using “Lively”, a browser-based development environment for JavaScript inspired by Smalltalk.
-        Instead of having to constantly reload the page after every source code change,
-        I am executing Squeak in my <a href= "https://smalltalkzoo.thechm.org/HOPL-Squeak.html">Lively SqueakJS Debugger</a>
-        and can change its code while it is running.
-        That's why the SqueakJS source code has a somewhat unusual layout, it fits the Lively way of developing.
-        You can still use a plain text editor if you feel that's simpler.
-
-        <h2>Contribute to SqueakJS</h2>
-        SqueakJS is free software (MIT license).
-        You're very welcome to <a href="http://lists.squeakfoundation.org/mailman/listinfo/vm-dev">discuss</a>,
-        <a href="https://github.com/codefrau/SqueakJS/issues">report bugs</a>,
-        and <a href="https://github.com/codefrau/SqueakJS/">contribute code</a>.
-
-        <p>Have fun! — Vanessa Freudenberg</p>
+        <p class="muted" style="margin-top:22px">Have fun! — engine by Vanessa Freudenberg · usability additions by Agustín Martínez</p>
     </div>
     <canvas id="sqCanvas"></canvas>
     <div id="sqSpinner"><div></div></div>
+    <!-- worker mode: open a file from the device (the cross-platform way on mobile, where
+         drag-drop isn't available). Reuses the drop path so the image handles it the same. -->
+    <button id="sqOpenBtn" title="Abrir archivo">📂</button>
+    <input id="sqFileOpen" type="file" multiple style="display:none">
 </body>
 </html>

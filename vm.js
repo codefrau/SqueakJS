@@ -31,7 +31,7 @@ Object.extend(Squeak,
     vmFile: "vm.js",
     vmMakerVersion: "[VMMakerJS-bf.17 VMMaker-bf.353]", // for Smalltalk vmVMMakerVersion
     vmInterpreterVersion: "JSInterpreter VMMaker.js-codefrau.1", // for Smalltalk interpreterVMMakerVersion
-    platformName: "JS",
+    platformName: "unix",               // emulated env is Unix-like ("/" paths); "JS" matched no OSPlatform in strict images (Pharo)
     platformSubtype: "unknown",         // Replaced at runtime
     osVersion: "unknown",               // Replaced at runtime
     windowSystem: "unknown",            // Replaced at runtime

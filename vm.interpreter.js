@@ -32,9 +32,16 @@ Object.subclass('Squeak.Interpreter',
         this.primHandler = new Squeak.Primitives(this, display);
         this.loadImageState();
         this.initVMState();
+        // presencia del flag alcanza: el launcher puede reescribir #stackZone
+        // como stackZone= (valor string vacío, falsy)
+        if (this.options.stackZone !== undefined && this.options.stackZone !== false
+            && this.enableStackZone) this.enableStackZone();
         this.loadInitialContext();
         this.hackImage();
         this.initCompiler();
+        if (this.useStackZone && this.options.jit2 !== undefined && this.options.jit2 !== false
+            && this.compiler && Squeak.Compiler2)
+            this.compiler = new Squeak.Compiler2(this); // stack-to-register jit (WIP, opt-in)
         console.log('squeak: ready');
     },
     loadImageState: function() {
@@ -55,6 +62,20 @@ Object.subclass('Squeak.Interpreter',
     initVMState: function() {
         this.byteCodeCount = 0;
         this.sendCount = 0;
+        this.stack = null; // operand stack array (activeContext.pointers; a zone page once stack frames land)
+        this.temps = null; // temp base array (homeContext.pointers; a zone page once stack frames land)
+        this.tempOffset = Squeak.Context_tempFrameStart; // index of temp 0 in this.temps
+        // stack-zone state, declared here for stable object shape even when unused
+        this.jsDepth = 0; // profundidad de llamadas JS directas (modo frames)
+        this.LEAF_DEOPT_ = null;
+        this.jit2LeafHook = null;
+        this.nLeafCalls = 0;
+        this.nLeafDeopts = 0;
+        this.useStackZone = false;
+        this.zonePages = null;
+        this.zonePage = null;
+        this.fp = -1;
+        this.contextClass_ = null; // set by enableStackZone; gates married-context probes
         this.interruptCheckCounter = 0;
         this.interruptCheckCounterFeedBackReset = 1000;
         this.interruptChecksEveryNms = 3;
@@ -163,6 +184,10 @@ Object.subclass('Squeak.Interpreter',
             //{method: "String>>translatedInAllDomains", primitive: returnSelf, enabled: true},
             // 64 bit Squeak does not flush word size on snapshot
             {method: "SmalltalkImage>>wordSize", literal: {index: 1, old: 8, hack: 4, skip: this.nilObj}, enabled: true},
+            // Pharo caches it in VirtualMachine's WordSize class var instead (SmalltalkImage>>wordSize
+            // just delegates to it). Same stale-8 problem, same fix: we normalize all 64-bit pcs to
+            // 4 bytes/literal at load (see fixPCs), so in-image initialPC math must use 4 as well.
+            {method: "VirtualMachine>>wordSize", literal: {index: 1, old: 8, hack: 4, skip: this.nilObj}, enabled: true},
             // Squeak 5.3 disable wizard by replacing #open send with pop
             {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: !sista & this.options.wizard===false},
             // Squeak 6.0 disable wizard by replacing #openWelcomeWorkspacesWith: send with pop
@@ -175,6 +200,15 @@ Object.subclass('Squeak.Interpreter',
             {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 50, old: 0x44, hack: 0x48}, enabled: this.image.isSpur && !sista},
             // New FFI can't detect platform – pretend to be 32 bit intel
             {method: "FFIPlatformDescription>>abi", literal: { index: 21, old_str: 'UNKNOWN_ABI', new_str: 'IA32'}, enabled: sista},
+            // Pharo: at startup Iceberg initializes libgit2 through the FFI, which SqueakJS
+            // has no backend for. The failure is re-raised (LGitLibrary>>initializeLibGit2
+            // does `ex pass`) and Pharo shows a post-mortem debugger ("Cannot locate libgit2"
+            // in 32-bit / FFICallout subclassResponsibility in 64-bit) over an otherwise fresh
+            // world — the "FFI errors on open" users hit. There is no git in the browser, so
+            // make the startup a no-op: Iceberg then simply runs git-less, exactly as on a
+            // machine without libgit2. LGitLibrary only exists in Pharo, so this is a no-op
+            // elsewhere. Same landmine in 32- and 64-bit images.
+            {method: "LGitLibrary class>>startUp:", neuter: true, enabled: true},
         ].forEach(function(each) {
             try {
                 var m = each.enabled && this.findMethod(each.method);
@@ -184,7 +218,14 @@ Object.subclass('Squeak.Interpreter',
                         lit = each.literal,
                         hacked = true;
                     if (byte && byte.closure) m = m.pointers[byte.closure];
-                    if (prim) m.pointers[0] |= prim;
+                    if (each.neuter) {
+                        // Make the method a no-op (^self) by overwriting its first bytecode
+                        // with return-receiver (Sista 0x58 / V3 0x78). Only safe when the
+                        // method has no primitive (else bytes[0..] is the callPrimitive).
+                        if (m.methodPrimitiveIndex() !== 0) hacked = false;
+                        else { m.bytes[0] = m.methodSignFlag() ? 0x58 : 0x78; m.compiled = null; }
+                    }
+                    else if (prim) m.pointers[0] |= prim;
                     else if (byte && m.bytes[byte.pc] === byte.old) m.bytes[byte.pc] = byte.hack;
                     else if (byte && m.bytes[byte.pc] === byte.hack) hacked = false; // already there
                     else if (lit && lit.old_str && m.pointers[lit.index].bytesAsString() === lit.old_str) m.pointers[lit.index] = this.primHandler.makeStString(lit.new_str);
@@ -231,7 +272,7 @@ Object.subclass('Squeak.Interpreter',
             // load temporary variable
             case 0x10: case 0x11: case 0x12: case 0x13: case 0x14: case 0x15: case 0x16: case 0x17:
             case 0x18: case 0x19: case 0x1A: case 0x1B: case 0x1C: case 0x1D: case 0x1E: case 0x1F:
-                this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&0xF)]); return;
+                this.push(this.temps[this.tempOffset+(b&0xF)]); return;
 
             // loadLiteral
             case 0x20: case 0x21: case 0x22: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27:
@@ -250,9 +291,9 @@ Object.subclass('Squeak.Interpreter',
             // storeAndPop rcvr, temp
             case 0x60: case 0x61: case 0x62: case 0x63: case 0x64: case 0x65: case 0x66: case 0x67:
                 this.receiver.dirty = true;
-                this.receiver.pointers[b&7] = this.pop(); return;
+                this.storeInstVar(b&7, this.pop()); return;
             case 0x68: case 0x69: case 0x6A: case 0x6B: case 0x6C: case 0x6D: case 0x6E: case 0x6F:
-                this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&7)] = this.pop(); return;
+                this.temps[this.tempOffset+(b&7)] = this.pop(); return;
 
             // Quick push
             case 0x70: this.push(this.receiver); return;
@@ -270,7 +311,7 @@ Object.subclass('Squeak.Interpreter',
             case 0x7A: this.doReturn(this.falseObj); return;
             case 0x7B: this.doReturn(this.nilObj); return;
             case 0x7C: this.doReturn(this.pop()); return;
-            case 0x7D: this.doReturn(this.pop(), this.activeContext.pointers[Squeak.BlockContext_caller]); return; // blockReturn
+            case 0x7D: this.doBlockReturn(this.pop()); return; // blockReturn
             case 0x7E: this.nono(); return;
             case 0x7F: this.nono(); return;
             // Sundry
@@ -295,15 +336,15 @@ Object.subclass('Squeak.Interpreter',
             case 0x8B: this.callPrimBytecode(0x81);
                 return;
             case 0x8C: b2 = this.nextByte(); // remote push from temp vector
-                this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2]);
+                this.push(this.temps[this.tempOffset+this.nextByte()].pointers[b2]);
                 return;
             case 0x8D: b2 = this.nextByte(); // remote store into temp vector
-                var vec = this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()];
+                var vec = this.temps[this.tempOffset+this.nextByte()];
                 vec.pointers[b2] = this.top();
                 vec.dirty = true;
                 return;
             case 0x8E: b2 = this.nextByte(); // remote store and pop into temp vector
-                var vec = this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()];
+                var vec = this.temps[this.tempOffset+this.nextByte()];
                 vec.pointers[b2] = this.pop();
                 vec.dirty = true;
                 return;
@@ -410,9 +451,9 @@ Object.subclass('Squeak.Interpreter',
 
             // load temporary variable
             case 0x40: case 0x41: case 0x42: case 0x43: case 0x44: case 0x45: case 0x46: case 0x47:
-                this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&0x7)]); return;
+                this.push(this.temps[this.tempOffset+(b&0x7)]); return;
             case 0x48: case 0x49: case 0x4A: case 0x4B:
-                this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&0x3)+8]); return;
+                this.push(this.temps[this.tempOffset+(b&0x3)+8]); return;
 
             case 0x4C: this.push(this.receiver); return;
             case 0x4D: this.push(this.trueObj); return;
@@ -433,10 +474,10 @@ Object.subclass('Squeak.Interpreter',
             case 0x5A: this.doReturn(this.falseObj); return;
             case 0x5B: this.doReturn(this.nilObj); return;
             case 0x5C: this.doReturn(this.pop()); return;
-            case 0x5D: this.doReturn(this.nilObj, this.activeContext.pointers[Squeak.BlockContext_caller]); return; // blockReturn nil
+            case 0x5D: this.doBlockReturn(this.nilObj); return; // blockReturn nil
             case 0x5E:
                 if (extA == 0) {
-                    this.doReturn(this.pop(), this.activeContext.pointers[Squeak.BlockContext_caller]); return; // blockReturn
+                    this.doBlockReturn(this.pop()); return; // blockReturn
                 } else {
                     this.nono(); return;
                 }
@@ -507,9 +548,9 @@ Object.subclass('Squeak.Interpreter',
             // storeAndPop rcvr, temp
             case 0xC8: case 0xC9: case 0xCA: case 0xCB: case 0xCC: case 0xCD: case 0xCE: case 0xCF:
                 this.receiver.dirty = true;
-                this.receiver.pointers[b&7] = this.pop(); return;
+                this.storeInstVar(b&7, this.pop()); return;
             case 0xD0: case 0xD1: case 0xD2: case 0xD3: case 0xD4: case 0xD5: case 0xD6: case 0xD7:
-                this.homeContext.pointers[Squeak.Context_tempFrameStart+(b&7)] = this.pop(); return;
+                this.temps[this.tempOffset+(b&7)] = this.pop(); return;
 
             case 0xD8: this.pop(); return;  // pop
             case 0xD9: this.nono(); return; // FIXME: Unconditional trap
@@ -529,7 +570,7 @@ Object.subclass('Squeak.Interpreter',
             case 0xE4:
                 b2 = this.nextByte(); this.push(this.method.methodGetLiteral(b2 + (extA << 8))); return;
             case 0xE5:
-                b2 = this.nextByte(); this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+b2]); return;
+                b2 = this.nextByte(); this.push(this.temps[this.tempOffset+b2]); return;
             case 0xE6: this.nono(); return; // unused
             case 0xE7: this.pushNewArray(this.nextByte()); return; // create new temp vector
             case 0xE8: b2 = this.nextByte(); this.push(b2 + (extB << 8)); return; // push SmallInteger
@@ -558,7 +599,7 @@ Object.subclass('Squeak.Interpreter',
                 this.jumpIfFalse(this.nextByte() + (extB << 8)); return;
             case 0xF0: // pop into receiver
                 this.receiver.dirty = true;
-                this.receiver.pointers[this.nextByte() + (extA << 8)] = this.pop();
+                this.storeInstVar(this.nextByte() + (extA << 8), this.pop());
                 return;
             case 0xF1: // pop into literal
                 var assoc = this.method.methodGetLiteral(this.nextByte() + (extA << 8));
@@ -566,11 +607,11 @@ Object.subclass('Squeak.Interpreter',
                 assoc.pointers[Squeak.Assn_value] = this.pop();
                 return;
             case 0xF2: // pop into temp
-                this.homeContext.pointers[Squeak.Context_tempFrameStart + this.nextByte()] = this.pop();
+                this.temps[this.tempOffset + this.nextByte()] = this.pop();
                 return;
             case 0xF3: // store into receiver
                 this.receiver.dirty = true;
-                this.receiver.pointers[this.nextByte() + (extA << 8)] = this.top();
+                this.storeInstVar(this.nextByte() + (extA << 8), this.top());
                 return;
             case 0xF4: // store into literal
                 var assoc = this.method.methodGetLiteral(this.nextByte() + (extA << 8));
@@ -578,7 +619,7 @@ Object.subclass('Squeak.Interpreter',
                 assoc.pointers[Squeak.Assn_value] = this.top();
                 return;
             case 0xF5: // store into temp
-                this.homeContext.pointers[Squeak.Context_tempFrameStart + this.nextByte()] = this.top();
+                this.temps[this.tempOffset + this.nextByte()] = this.top();
                 return;
             case 0xF6: case 0xF7: this.nono(); return; // unused
 
@@ -588,15 +629,15 @@ Object.subclass('Squeak.Interpreter',
             case 0xF9: this.pushFullClosure(extA); return;
             case 0xFA: this.pushClosureCopyExtended(extA, extB); return;
             case 0xFB: b2 = this.nextByte(); // remote push from temp vector
-                this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()].pointers[b2]);
+                this.push(this.temps[this.tempOffset+this.nextByte()].pointers[b2]);
                 return;
             case 0xFC: b2 = this.nextByte(); // remote store into temp vector
-                var vec = this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()];
+                var vec = this.temps[this.tempOffset+this.nextByte()];
                 vec.pointers[b2] = this.top();
                 vec.dirty = true;
                 return;
             case 0xFD: b2 = this.nextByte(); // remote store and pop into temp vector
-                var vec = this.homeContext.pointers[Squeak.Context_tempFrameStart+this.nextByte()];
+                var vec = this.temps[this.tempOffset+this.nextByte()];
                 vec.pointers[b2] = this.pop();
                 vec.dirty = true;
                 return;
@@ -728,7 +769,7 @@ Object.subclass('Squeak.Interpreter',
         var lobits = nextByte & 63;
         switch (nextByte>>6) {
             case 0: this.push(this.receiver.pointers[lobits]);break;
-            case 1: this.push(this.homeContext.pointers[Squeak.Context_tempFrameStart+lobits]); break;
+            case 1: this.push(this.temps[this.tempOffset+lobits]); break;
             case 2: this.push(this.method.methodGetLiteral(lobits)); break;
             case 3: this.push(this.method.methodGetLiteral(lobits).pointers[Squeak.Assn_value]); break;
         }
@@ -738,10 +779,10 @@ Object.subclass('Squeak.Interpreter',
         switch (nextByte>>6) {
             case 0:
                 this.receiver.dirty = true;
-                this.receiver.pointers[lobits] = this.top();
+                this.storeInstVar(lobits, this.top());
                 break;
             case 1:
-                this.homeContext.pointers[Squeak.Context_tempFrameStart+lobits] = this.top();
+                this.temps[this.tempOffset+lobits] = this.top();
                 break;
             case 2:
                 this.nono();
@@ -758,10 +799,10 @@ Object.subclass('Squeak.Interpreter',
         switch (nextByte>>6) {
             case 0:
                 this.receiver.dirty = true;
-                this.receiver.pointers[lobits] = this.pop();
+                this.storeInstVar(lobits, this.pop());
                 break;
             case 1:
-                this.homeContext.pointers[Squeak.Context_tempFrameStart+lobits] = this.pop();
+                this.temps[this.tempOffset+lobits] = this.pop();
                 break;
             case 2:
                 this.nono();
@@ -781,8 +822,8 @@ Object.subclass('Squeak.Interpreter',
             case 2: this.push(this.receiver.pointers[byte3]); break;
             case 3: this.push(this.method.methodGetLiteral(byte3)); break;
             case 4: this.push(this.method.methodGetLiteral(byte3).pointers[Squeak.Assn_value]); break;
-            case 5: this.receiver.dirty = true; this.receiver.pointers[byte3] = this.top(); break;
-            case 6: this.receiver.dirty = true; this.receiver.pointers[byte3] = this.pop(); break;
+            case 5: this.receiver.dirty = true; this.storeInstVar(byte3, this.top()); break;
+            case 6: this.receiver.dirty = true; this.storeInstVar(byte3, this.pop()); break;
             case 7: var assoc = this.method.methodGetLiteral(byte3);
                 assoc.dirty = true;
                 assoc.pointers[Squeak.Assn_value] = this.top(); break;
@@ -816,6 +857,13 @@ Object.subclass('Squeak.Interpreter',
         }
     },
     getErrorObjectFromPrimFailCode: function() {
+        // a primitive may hand back a specific error object (e.g. FileAttributesPlugin
+        // fails with a PrimitiveError whose errorCode Pharo maps to an exception class)
+        if (this.primFailErrorObject) {
+            var errObj = this.primFailErrorObject;
+            this.primFailErrorObject = null;
+            return errObj;
+        }
         var primErrTable = this.specialObjects[Squeak.splOb_PrimErrTableIndex];
         if (primErrTable && primErrTable.pointers) {
             var errorObject = primErrTable.pointers[this.primFailCode - 1];
@@ -847,7 +895,7 @@ Object.subclass('Squeak.Interpreter',
             blockSize = blockSizeHigh * 256 + this.nextByte(),
             initialPC = this.encodeSqueakPC(this.pc, this.method),
             closure = this.newClosure(numArgs, initialPC, numCopied);
-        closure.pointers[Squeak.Closure_outerContext] = this.activeContext;
+        closure.pointers[Squeak.Closure_outerContext] = this.activeContextObj();
         this.reclaimableContextCount = 0; // The closure refers to thisContext so it can't be reclaimed
         if (numCopied > 0) {
             for (var i = 0; i < numCopied; i++)
@@ -865,7 +913,7 @@ Object.subclass('Squeak.Interpreter',
             blockSize = byteB + (extB << 8),
             initialPC = this.encodeSqueakPC(this.pc, this.method),
             closure = this.newClosure(numArgs, initialPC, numCopied);
-        closure.pointers[Squeak.Closure_outerContext] = this.activeContext;
+        closure.pointers[Squeak.Closure_outerContext] = this.activeContextObj();
         this.reclaimableContextCount = 0; // The closure refers to thisContext so it can't be reclaimed
         if (numCopied > 0) {
             for (var i = 0; i < numCopied; i++)
@@ -884,7 +932,7 @@ Object.subclass('Squeak.Interpreter',
         if ((byteB >> 6 & 1) == 1) {
             context = this.vm.nilObj;
         } else {
-            context = this.activeContext;
+            context = this.activeContextObj();
         }
         var compiledBlock = this.method.methodGetLiteral(literalIndex);
         var closure = this.newFullClosure(context, numCopied, compiledBlock);
@@ -1023,7 +1071,7 @@ Object.subclass('Squeak.Interpreter',
             var indent = ' ';
             var ctx = this.activeContext;
             while (!ctx.isNil) { indent += '| '; ctx = ctx.pointers[Squeak.Context_sender]; }
-            var args = this.activeContext.pointers.slice(this.sp + 1 - argumentCount, this.sp + 1);
+            var args = this.stack.slice(this.sp + 1 - argumentCount, this.sp + 1);
             console.log(this.sendCount + indent + this.printMethod(newMethod, optClass, optSel, args));
         }
         if (this.breakOnContextChanged) {
@@ -1043,7 +1091,7 @@ Object.subclass('Squeak.Interpreter',
         newContext.pointers[Squeak.Context_sender] = this.activeContext;
         //Copy receiver and args to new context
         //Note this statement relies on the receiver slot being contiguous with args...
-        this.arrayCopy(this.activeContext.pointers, this.sp-argumentCount, newContext.pointers, Squeak.Context_tempFrameStart-1, argumentCount+1);
+        this.arrayCopy(this.stack, this.sp-argumentCount, newContext.pointers, Squeak.Context_tempFrameStart-1, argumentCount+1);
         //...and fill the remaining temps with nil
         this.arrayFill(newContext.pointers, Squeak.Context_tempFrameStart+argumentCount, Squeak.Context_tempFrameStart+tempCount, this.nilObj);
         this.popN(argumentCount+1);
@@ -1057,6 +1105,9 @@ Object.subclass('Squeak.Interpreter',
         this.method = newMethod;
         this.pc = newPC;
         this.sp = newSP;
+        this.stack = newContext.pointers;
+        this.temps = newContext.pointers; // home === newContext for method activations
+        this.tempOffset = Squeak.Context_tempFrameStart;
         this.receiver = newContext.pointers[Squeak.Context_receiver];
         if (this.receiver !== newRcvr)
             throw Error("receivers don't match");
@@ -1117,6 +1168,22 @@ Object.subclass('Squeak.Interpreter',
             this.breakNow();
         }
     },
+    doBlockReturn: function(returnValue) {
+        // return from block to its caller (stack-zone mode rebinds this)
+        this.doReturn(returnValue, this.activeContext.pointers[Squeak.BlockContext_caller]);
+    },
+    activeContextObj: function() {
+        // the active context as an object (stack-zone mode rebinds this to marry the frame)
+        return this.activeContext;
+    },
+    storeInstVar: function(index, value) {
+        // receiver inst-var store from a bytecode; in stack-zone mode a store
+        // into a married-live context must go through the write-through path
+        var rcvr = this.receiver;
+        if (rcvr.sqClass === this.contextClass_ && rcvr.frame != null)
+            return this.storeToMarriedContext(rcvr, index, value);
+        rcvr.pointers[index] = value;
+    },
     aboutToReturnThrough: function(resultObj, aContext) {
         this.push(this.exportThisContext());
         this.push(resultObj);
@@ -1167,7 +1234,7 @@ Object.subclass('Squeak.Interpreter',
         //Bundle up receiver, args and selector as a messageObject
         var message = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassMessage], 0);
         var argArray = this.instantiateClass(this.specialObjects[Squeak.splOb_ClassArray], argCount);
-        this.arrayCopy(this.activeContext.pointers, this.sp-argCount+1, argArray.pointers, 0, argCount); //copy args from stack
+        this.arrayCopy(this.stack, this.sp-argCount+1, argArray.pointers, 0, argCount); //copy args from stack
         message.pointers[Squeak.Message_selector] = selector;
         message.pointers[Squeak.Message_arguments] = argArray;
         if (message.pointers.length > Squeak.Message_lookupClass) //Early versions don't have lookupClass
@@ -1183,7 +1250,7 @@ Object.subclass('Squeak.Interpreter',
             // selector has been found, rearrange stack
             if (entry.argCount !== trueArgCount)
                 return false;
-        var stack = this.activeContext.pointers; // slide eveything down...
+        var stack = this.stack; // slide eveything down...
             var selectorIndex = this.sp - trueArgCount;
         this.arrayCopy(stack, selectorIndex+1, stack, selectorIndex, trueArgCount);
         this.sp--; // adjust sp accordingly
@@ -1215,7 +1282,7 @@ Object.subclass('Squeak.Interpreter',
             // selector has been found, rearrange stack
             if (entry.argCount !== trueArgCount)
                 return false;
-        var stack = this.activeContext.pointers;
+        var stack = this.stack;
             var selectorIndex = this.sp - (argCount - 1);
             stack[selectorIndex - 1] = rcvr;
         this.arrayCopy(args.pointers, 0, stack, selectorIndex, trueArgCount);
@@ -1329,6 +1396,9 @@ Object.subclass('Squeak.Interpreter',
         this.method = meth;
         this.pc = this.decodeSqueakPC(ctxt.pointers[Squeak.Context_instructionPointer], meth);
         this.sp = this.decodeSqueakSP(ctxt.pointers[Squeak.Context_stackPointer]);
+        this.stack = ctxt.pointers; // operand stack array; sp indexes into it
+        this.temps = this.homeContext.pointers; // temp access: temps[tempOffset+n]
+        this.tempOffset = Squeak.Context_tempFrameStart;
     },
     storeContextRegisters: function() {
         //Save pc, sp into activeContext object, prior to change of context
@@ -1392,25 +1462,25 @@ Object.subclass('Squeak.Interpreter',
 'stack access', {
     pop: function() {
         //Note leaves garbage above SP.  Cleaned out by fullGC.
-        return this.activeContext.pointers[this.sp--];
+        return this.stack[this.sp--];
     },
     popN: function(nToPop) {
         this.sp -= nToPop;
     },
     push: function(object) {
-        this.activeContext.pointers[++this.sp] = object;
+        this.stack[++this.sp] = object;
     },
     popNandPush: function(nToPop, object) {
-        this.activeContext.pointers[this.sp -= nToPop - 1] = object;
+        this.stack[this.sp -= nToPop - 1] = object;
     },
     top: function() {
-        return this.activeContext.pointers[this.sp];
+        return this.stack[this.sp];
     },
     stackTopPut: function(object) {
-        this.activeContext.pointers[this.sp] = object;
+        this.stack[this.sp] = object;
     },
     stackValue: function(depthIntoStack) {
-        return this.activeContext.pointers[this.sp - depthIntoStack];
+        return this.stack[this.sp - depthIntoStack];
     },
     stackInteger: function(depthIntoStack) {
         return this.checkSmallInt(this.stackValue(depthIntoStack));
@@ -1858,7 +1928,7 @@ Object.subclass('Squeak.Interpreter',
         console.log(this.printStack()
             + this.printActiveContext() + '\n\n'
             + this.printByteCodes(this.method, '   ', '=> ', this.pc),
-            this.activeContext.pointers.slice(0, this.sp + 1));
+            this.stack.slice(0, this.sp + 1));
     },
     willSendOrReturn: function() {
         // Answer whether the next bytecode corresponds to a Smalltalk

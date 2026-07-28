@@ -124,7 +124,10 @@ Object.extend(Squeak,
             if (whenDone) whenDone(stats);
         }
     },
-    dbTransaction: function(mode, description, transactionFunc, completionFunc) {
+    // optErrorFunc, if given, is called when the transaction fails instead of the
+    // default handling, so the caller can undo whatever it recorded outside the
+    // database (see filePut). Without it, behavior is unchanged.
+    dbTransaction: function(mode, description, transactionFunc, completionFunc, optErrorFunc) {
         // File contents is stored in the IndexedDB named "squeak" in object store "files"
         // and directory entries in localStorage with prefix "squeak:"
         function fakeTransaction() {
@@ -140,9 +143,13 @@ Object.extend(Squeak,
             var trans = SqueakDB.transaction("files", mode),
                 fileStore = trans.objectStore("files");
             trans.oncomplete = function(e) { if (completionFunc) completionFunc(); }
-            trans.onerror = function(e) { console.error("Transaction error during " + description, e); }
+            trans.onerror = function(e) {
+                console.error("Transaction error during " + description, e);
+                if (optErrorFunc) optErrorFunc(e);
+            }
             trans.onabort = function(e) {
                 console.error("Transaction error: aborting " + description, e);
+                if (optErrorFunc) return optErrorFunc(e);
                 // fall back to local/memory storage
                 transactionFunc(Squeak.dbFake());
                 if (completionFunc) completionFunc();
@@ -333,6 +340,21 @@ Object.extend(Squeak,
             },
             function transactionComplete() {
                 if (optSuccess) optSuccess();
+            },
+            function transactionFailed(e) {
+                // The contents never reached IndexedDB — typically the origin's storage
+                // quota is exhausted (several image bundles add up to hundreds of MB).
+                // The directory entry above was already written, synchronously, into
+                // localStorage, which does not fail. Leaving it would strand a "ghost"
+                // file: listed with a size, but unreadable on every future load, and the
+                // image reports it much later as a baffling "File read failed". So undo
+                // it — the file is then simply absent and gets fetched again next time.
+                delete directory[path.basename];
+                Squeak.Settings["squeak:" + path.dirname] = JSON.stringify(directory);
+                console.warn("Could not store " + path.fullname + " (" + entry[4] +
+                    " bytes), storage quota exceeded? Removed its directory entry so it" +
+                    " will be fetched again instead of failing to read from now on.");
+                if (optSuccess) optSuccess(); // don't stall callers awaiting the write
             });
         return entry;
     },

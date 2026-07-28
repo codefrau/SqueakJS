@@ -1,59 +1,208 @@
-body {
-    background-color: #eae6d1;
-    font-family: sans-serif;
+:root {
+    --accent: #F90;
+    --accent-dark: #d97e00;
+    --bg1: #f6f8fb;
+    --bg2: #e8edf3;
+    --card: #ffffff;
+    --text: #262930;
+    --muted: #6b7280;
+    --border: #e3e7ec;
 }
-canvas {
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: linear-gradient(180deg, var(--bg1), var(--bg2)) no-repeat;
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.65;
+    font-size: 16px;
+}
+#sqText {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 28px 20px 72px;
+}
+h1 {
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 2.3rem;
+    font-weight: 700;
+    margin: 4px 0 2px;
+}
+#logo {
+    width: 58px;
+    height: 58px;
+    border-radius: 15px;
+    box-shadow: 0 4px 14px rgba(255, 153, 0, .35);
+}
+.tagline { color: var(--muted); margin: 0 0 20px; font-size: 1.03rem; }
+h2 {
+    color: var(--text);
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin: 28px 0 12px;
+    padding-left: 12px;
+    border-left: 4px solid var(--accent);
+}
+a { color: var(--accent-dark); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 22px;
+    margin: 14px 0;
+    box-shadow: 0 1px 4px rgba(20, 30, 50, .05);
+}
+.added {
+    background: #fff7eb;
+    border: 1px solid #ffdfac;
+    border-radius: 14px;
+    padding: 16px 20px;
+    margin: 16px 0 10px;
+}
+.added strong { color: var(--accent-dark); }
+.added ul { margin: 8px 0 0; }
+.opts { margin: 6px 0 14px; }
+.opts label {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 7px 0;
+    cursor: pointer;
+}
+.opts input[type=checkbox] { margin-top: 4px; width: 16px; height: 16px; accent-color: var(--accent); flex: none; }
+.muted { color: var(--muted); font-size: .9rem; }
+ul { padding-left: 22px; }
+li { margin: 5px 0; }
+em { color: var(--muted); }
+pre {
+    background: #1f2430;
+    color: #e7ebf0;
+    padding: 16px 18px;
+    border-radius: 10px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.5;
+}
+code {
+    background: #eef1f5;
+    padding: 1px 6px;
+    border-radius: 5px;
+    font-size: .9em;
+}
+pre code { background: none; padding: 0; }
+#drop {
+    color: var(--muted);
+    border: 2px dashed #c3cbd4;
+    border-radius: 12px;
+    min-height: 54px;
+    margin: 12px 0;
+    padding: 14px 16px;
+    background: #fbfcfe;
+    transition: border-color .15s, background .15s;
+}
+input[type=file] { font-size: .92rem; }
+.filelist > ul {
+    max-height: 120px;
+    overflow: auto;
+    margin: 10px 0 0;
+    padding: 10px 12px;
+    background: #f6f8fb;
+    border-radius: 8px;
+    font-size: .9rem;
+}
+#filestats { color: var(--muted); font-size: .85rem; margin-top: 6px; }
+
+/* --- functional styles for the running VM (worker + main-thread) --- */
+#sqCanvas {
+    display: none;
     position: fixed;
     background: #000;
     user-select: none;
     -webkit-user-select: none;
     -moz-user-select: none;
 }
-canvas.pixelated {
+#sqCanvas.pixelated {
     image-rendering: -moz-crisp-edges;
     image-rendering: -webkit-optimize-contrast;
     image-rendering: pixelated;
     -ms-interpolation-mode: nearest-neighbor;
 }
-h1 {
-    color: #F90;
-}
-#logo {
-    border-radius: 20px;
-    box-shadow: 0 0 5px 5px #F90;
-    margin: 0 20px 0 5px;
-}
+/* Loading indicator (worker boot / zip download). Deliberately NOT the old rotating
+   "ruedita" — a slim linear indeterminate bar with a label, so it reads as modern
+   progress and never as the freeze it replaced. */
 div#sqSpinner {
     position: fixed;
-    margin: auto; top: 0; left: 0; bottom: 0; right: 0;
-    width: 100px;
-    height: 100px;
-    border-radius: 50px;
-    background: rgba(0, 0, 0, 0.3);
-    box-shadow: 0 0 5px 5px #F90;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    padding: 16px 22px 18px;
+    border-radius: 12px;
+    background: rgba(18, 18, 22, 0.72);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    color: #fff;
+    font: 500 14px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+    letter-spacing: .01em;
     display: none;
-    transform: rotate(30deg);
+    z-index: 30;
+}
+div#sqSpinner::before {
+    /* the label is set from JS (localized to the browser language, staged:
+       downloading → starting + heartbeat); empty by default */
+    content: attr(data-label);
+    display: block;
+    text-align: center;
+    margin-bottom: 12px;
+    opacity: .9;
+    max-width: 70vw;
+}
+/* while an image loads, the page goes dark (no white flash, no stray black rect —
+   the canvas itself stays hidden until the image paints its first frame) */
+body.sq-loading {
+    background: #16161a;
 }
 div#sqSpinner > div {
+    position: relative;
+    width: 170px;
+    height: 3px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.16);
+    overflow: hidden;
+}
+div#sqSpinner > div::after {
+    content: "";
     position: absolute;
-    top: 45px;
-    left: 5px;
-    width: 90px;
-    height: 10px;
-    border-radius: 5px;
-    box-shadow: 0 0 5px 5px #F90;
+    top: 0; left: 0;
+    width: 40%;
+    height: 100%;
+    border-radius: 3px;
+    background: var(--accent);
+    animation: sqLoadSlide 1.15s ease-in-out infinite;
 }
-#drop {
-    color: #9b988a;
-    border: 6px dashed #9b988a;
-    min-height: 50px;
-    max-width: 600px;
-    margin: 10px 0;
-    padding: 10px;
+@keyframes sqLoadSlide {
+    0%   { left: -40%; }
+    100% { left: 100%; }
 }
-.filelist > ul {
-    max-height: 75px;
-    overflow: scroll;
-    margin: 10px 0;
-    padding: 10px;
+/* worker-mode "open file" button (shown only while a worker image is running) */
+#sqOpenBtn {
+    display: none;
+    position: fixed;
+    top: 2px;
+    right: 2px;
+    z-index: 10;
+    font-size: 22px;
+    line-height: 1;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.45);
+    color: #fff;
+    cursor: pointer;
+    opacity: 0.5;
 }
+#sqOpenBtn:hover { opacity: 1; }

@@ -102,24 +102,24 @@ Object.subclass('Squeak.Primitives',
             case 19: return false;                                 // Guard primitive for simulation -- *must* fail
             // LargeInteger Primitives (20-39)
             // 32-bit logic is aliased to Integer prims above
-            case 20: this.vm.warnOnce("missing primitive: 20 (primitiveRemLargeIntegers)"); return false;
-            case 21: this.vm.warnOnce("missing primitive: 21 (primitiveAddLargeIntegers)"); return false;
-            case 22: this.vm.warnOnce("missing primitive: 22 (primitiveSubtractLargeIntegers)"); return false;
+            case 20: return this.primitiveRemLargeIntegers(argCount);
+            case 21: return this.primitiveAddLargeIntegers(argCount);
+            case 22: return this.primitiveSubtractLargeIntegers(argCount);
             case 23: return this.primitiveLessThanLargeIntegers(argCount);
             case 24: return this.primitiveGreaterThanLargeIntegers(argCount);
             case 25: return this.primitiveLessOrEqualLargeIntegers(argCount);
             case 26: return this.primitiveGreaterOrEqualLargeIntegers(argCount);
             case 27: return this.primitiveEqualLargeIntegers(argCount);
             case 28: return this.primitiveNotEqualLargeIntegers(argCount);
-            case 29: this.vm.warnOnce("missing primitive: 29 (primitiveMultiplyLargeIntegers)"); return false;
-            case 30: this.vm.warnOnce("missing primitive: 30 (primitiveDivideLargeIntegers)"); return false;
-            case 31: this.vm.warnOnce("missing primitive: 31 (primitiveModLargeIntegers)"); return false;
-            case 32: this.vm.warnOnce("missing primitive: 32 (primitiveDivLargeIntegers)"); return false;
-            case 33: this.vm.warnOnce("missing primitive: 33 (primitiveQuoLargeIntegers)"); return false;
-            case 34: this.vm.warnOnce("missing primitive: 34 (primitiveBitAndLargeIntegers)"); return false;
-            case 35: this.vm.warnOnce("missing primitive: 35 (primitiveBitOrLargeIntegers)"); return false;
-            case 36: this.vm.warnOnce("missing primitive: 36 (primitiveBitXorLargeIntegers)"); return false;
-            case 37: this.vm.warnOnce("missing primitive: 37 (primitiveBitShiftLargeIntegers)"); return false;
+            case 29: return this.primitiveMultiplyLargeIntegers(argCount);
+            case 30: return this.primitiveDivideLargeIntegers(argCount);
+            case 31: return this.primitiveModLargeIntegers(argCount);
+            case 32: return this.primitiveDivLargeIntegers(argCount);
+            case 33: return this.primitiveQuoLargeIntegers(argCount);
+            case 34: return this.primitiveBitAndLargeIntegers(argCount);
+            case 35: return this.primitiveBitOrLargeIntegers(argCount);
+            case 36: return this.primitiveBitXorLargeIntegers(argCount);
+            case 37: return this.primitiveBitShiftLargeIntegers(argCount);
             case 38: return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,false)); // Float basicAt
             case 39: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,false)); // Float basicAtPut
             // Float Primitives (40-59)
@@ -149,9 +149,9 @@ Object.subclass('Squeak.Primitives',
             case 62: return this.popNandPushIfOK(argCount+1, this.objectSize(false)); // size
             case 63: return this.popNandPushIfOK(argCount+1, this.objectAt(false,true,false)); // String.basicAt:
             case 64: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,true,false)); // String.basicAt:put:
-            case 65: this.vm.warnOnce("missing primitive: 65 (primitiveNext)"); return false;
-            case 66: this.vm.warnOnce("missing primitive: 66 (primitiveNextPut)"); return false;
-            case 67: this.vm.warnOnce("missing primitive: 67 (primitiveAtEnd)"); return false;
+            case 65: return this.primitiveStreamNext(argCount); // primitiveNext
+            case 66: return this.primitiveStreamNextPut(argCount); // primitiveNextPut
+            case 67: return this.primitiveStreamAtEnd(argCount); // primitiveAtEnd
             // StorageManagement Primitives (68-79)
             case 68: return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,true)); // Method.objectAt:
             case 69: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,true)); // Method.objectAt:put:
@@ -463,12 +463,20 @@ Object.subclass('Squeak.Primitives',
         return this.success;
     },
     doNamedPrimitive: function(argCount, primMethod) {
-        if (primMethod.pointersSize() < 2) return false;
-        var firstLiteral = primMethod.pointers[1]; // skip method header
-        if (firstLiteral.pointersSize() !== 4) return false;
+        // Los nombres de módulo/función viven en el 1er literal y NO cambian para
+        // un método dado. Decodificarlos con bytesAsString EN CADA llamada era ~10%
+        // del trabajo en workloads con muchos primitivos-117 (medido en profile del
+        // browser, modo ctx). Se cachean en el método (el modo frames ya cachea la
+        // función resuelta vía primFn; esto es el equivalente mínimo para ctx).
+        var moduleName = primMethod._primModName, functionName = primMethod._primFuncName;
+        if (moduleName === undefined) {
+            if (primMethod.pointersSize() < 2) return false;
+            var firstLiteral = primMethod.pointers[1]; // skip method header
+            if (firstLiteral.pointersSize() !== 4) return false;
+            moduleName = primMethod._primModName = firstLiteral.pointers[0].bytesAsString();
+            functionName = primMethod._primFuncName = firstLiteral.pointers[1].bytesAsString();
+        }
         this.primMethod = primMethod;
-        var moduleName = firstLiteral.pointers[0].bytesAsString();
-        var functionName = firstLiteral.pointers[1].bytesAsString();
         return this.namedPrimitive(moduleName, functionName, argCount);
     },
     fakePrimitive: function(prim, retVal, argCount) {
@@ -812,6 +820,113 @@ Object.subclass('Squeak.Primitives',
     primitiveNotEqualLargeIntegers: function(argCount) {
         return this.popNandPushBoolIfOK(argCount+1, this.stackSigned53BitInt(1) !== this.stackSigned53BitInt(0));
     },
+    // --- Aritmética LargeInteger (21,22,29,30-33,20) y bit-ops (34-37) ---
+    // Faltaban en SqueakJS: cada operación caía a la implementación en Smalltalk
+    // (cientos de sends: digitAdd:, normalize, ...). Acá se hacen con BigInt, que
+    // es exacto para cualquier tamaño y respeta las semánticas de Squeak. Los
+    // operandos pueden ser SmallInteger o LargeInteger; el resultado se normaliza
+    // a SmallInteger si entra en rango. Toggle: primHandler.largeIntPrims=false
+    // restaura el fallback (para medir A/B).
+    bigIntFromStackInt: function(nDeep) {
+        var v = this.vm.stackValue(nDeep);
+        if (typeof v === "number") return BigInt(v);       // SmallInteger
+        var isPos = this.isA(v, Squeak.splOb_ClassLargePositiveInteger);
+        if ((isPos || this.isA(v, Squeak.splOb_ClassLargeNegativeInteger)) && v.bytes) {
+            var bytes = v.bytes, val = 0n;
+            for (var i = bytes.length - 1; i >= 0; i--) val = (val << 8n) | BigInt(bytes[i]);
+            return isPos ? val : -val;
+        }
+        this.success = false;
+        return 0n;
+    },
+    squeakIntFromBigInt: function(b) {
+        if (b >= BigInt(Squeak.MinSmallInt) && b <= BigInt(Squeak.MaxSmallInt)) return Number(b);
+        var neg = b < 0n, mag = neg ? -b : b, bytes = [];
+        while (mag > 0n) { bytes.push(Number(mag & 255n)); mag >>= 8n; }
+        if (bytes.length === 0) bytes.push(0);
+        var cls = this.vm.specialObjects[neg ? Squeak.splOb_ClassLargeNegativeInteger : Squeak.splOb_ClassLargePositiveInteger],
+            obj = this.vm.instantiateClass(cls, bytes.length);
+        for (var i = 0; i < bytes.length; i++) obj.bytes[i] = bytes[i];
+        return obj;
+    },
+    primitiveAddLargeIntegers: function(argCount) {
+        if (this.largeIntPrims === false) return false;
+        var a = this.bigIntFromStackInt(1), b = this.bigIntFromStackInt(0);
+        if (!this.success) return false;
+        return this.popNandPushIfOK(argCount+1, this.squeakIntFromBigInt(a + b));
+    },
+    primitiveSubtractLargeIntegers: function(argCount) {
+        if (this.largeIntPrims === false) return false;
+        var a = this.bigIntFromStackInt(1), b = this.bigIntFromStackInt(0);
+        if (!this.success) return false;
+        return this.popNandPushIfOK(argCount+1, this.squeakIntFromBigInt(a - b));
+    },
+    primitiveMultiplyLargeIntegers: function(argCount) {
+        if (this.largeIntPrims === false) return false;
+        var a = this.bigIntFromStackInt(1), b = this.bigIntFromStackInt(0);
+        if (!this.success) return false;
+        return this.popNandPushIfOK(argCount+1, this.squeakIntFromBigInt(a * b));
+    },
+    primitiveDivideLargeIntegers: function(argCount) { // 30: / exacto (falla si no divide)
+        if (this.largeIntPrims === false) return false;
+        var a = this.bigIntFromStackInt(1), b = this.bigIntFromStackInt(0);
+        if (!this.success || b === 0n || a % b !== 0n) return false;
+        return this.popNandPushIfOK(argCount+1, this.squeakIntFromBigInt(a / b));
+    },
+    primitiveDivLargeIntegers: function(argCount) { // 32: // división con piso
+        if (this.largeIntPrims === false) return false;
+        var a = this.bigIntFromStackInt(1), b = this.bigIntFromStackInt(0);
+        if (!this.success || b === 0n) return false;
+        var q = a / b, r = a % b;
+        if (r !== 0n && ((r < 0n) !== (b < 0n))) q -= 1n;
+        return this.popNandPushIfOK(argCount+1, this.squeakIntFromBigInt(q));
+    },
+    primitiveModLargeIntegers: function(argCount) { // 31: \\ módulo con piso (signo del divisor)
+        if (this.largeIntPrims === false) return false;
+        var a = this.bigIntFromStackInt(1), b = this.bigIntFromStackInt(0);
+        if (!this.success || b === 0n) return false;
+        var r = a % b;
+        if (r !== 0n && ((r < 0n) !== (b < 0n))) r += b;
+        return this.popNandPushIfOK(argCount+1, this.squeakIntFromBigInt(r));
+    },
+    primitiveQuoLargeIntegers: function(argCount) { // 33: quo: truncado hacia cero
+        if (this.largeIntPrims === false) return false;
+        var a = this.bigIntFromStackInt(1), b = this.bigIntFromStackInt(0);
+        if (!this.success || b === 0n) return false;
+        return this.popNandPushIfOK(argCount+1, this.squeakIntFromBigInt(a / b));
+    },
+    primitiveRemLargeIntegers: function(argCount) { // 20: rem: (signo del dividendo)
+        if (this.largeIntPrims === false) return false;
+        var a = this.bigIntFromStackInt(1), b = this.bigIntFromStackInt(0);
+        if (!this.success || b === 0n) return false;
+        return this.popNandPushIfOK(argCount+1, this.squeakIntFromBigInt(a % b));
+    },
+    primitiveBitAndLargeIntegers: function(argCount) { // 34
+        if (this.largeIntPrims === false) return false;
+        var a = this.bigIntFromStackInt(1), b = this.bigIntFromStackInt(0);
+        if (!this.success || a < 0n || b < 0n) return false; // negativos: two's complement infinito, fallback
+        return this.popNandPushIfOK(argCount+1, this.squeakIntFromBigInt(a & b));
+    },
+    primitiveBitOrLargeIntegers: function(argCount) { // 35
+        if (this.largeIntPrims === false) return false;
+        var a = this.bigIntFromStackInt(1), b = this.bigIntFromStackInt(0);
+        if (!this.success || a < 0n || b < 0n) return false;
+        return this.popNandPushIfOK(argCount+1, this.squeakIntFromBigInt(a | b));
+    },
+    primitiveBitXorLargeIntegers: function(argCount) { // 36
+        if (this.largeIntPrims === false) return false;
+        var a = this.bigIntFromStackInt(1), b = this.bigIntFromStackInt(0);
+        if (!this.success || a < 0n || b < 0n) return false;
+        return this.popNandPushIfOK(argCount+1, this.squeakIntFromBigInt(a ^ b));
+    },
+    primitiveBitShiftLargeIntegers: function(argCount) { // 37
+        if (this.largeIntPrims === false) return false;
+        var a = this.bigIntFromStackInt(1), shift = this.vm.stackValue(0);
+        if (typeof shift !== "number" || a < 0n) { this.success = false; return false; }
+        if (!this.success) return false;
+        var s = BigInt(shift), res = s >= 0n ? (a << s) : (a >> -s);
+        return this.popNandPushIfOK(argCount+1, this.squeakIntFromBigInt(res));
+    },
 },
 'utils', {
     floatOrInt: function(obj) {
@@ -1014,6 +1129,65 @@ Object.subclass('Squeak.Primitives',
     },
 },
 'indexing', {
+    // Stream primitives 65/66/67 (PositionableStream). Como el VM real de Squeak,
+    // solo manejan colecciones Array o String; ante cualquier otra cosa o borde
+    // (índice fuera de límite, tipos raros) devuelven false → fallback a Smalltalk,
+    // que es siempre correcto. Antes de mutar la posición validamos TODO, así un
+    // fallback nunca la doble-avanza. writeLimit es el instVar 3 (WriteStream).
+    primitiveStreamNext: function(argCount) {
+        if (this.streamPrims === false) return false;
+        var stream = this.stackNonInteger(0);
+        if (!stream.pointers || stream.pointers.length <= Squeak.Stream_limit) return false;
+        var array = stream.pointers[Squeak.Stream_array],
+            index = stream.pointers[Squeak.Stream_position],
+            limit = stream.pointers[Squeak.Stream_limit];
+        if (typeof index !== "number" || typeof limit !== "number") return false;
+        if (index >= limit || !array || !array.sqClass) return false;
+        var result;
+        if (array.sqClass === this.vm.specialObjects[Squeak.splOb_ClassArray]) {
+            if (!array.pointers || index >= array.pointers.length) return false;
+            result = array.pointers[index];
+        } else if (array.sqClass === this.vm.specialObjects[Squeak.splOb_ClassString]) {
+            if (!array.bytes || index >= array.bytes.length) return false;
+            result = this.charFromInt(array.bytes[index] & 0xFF);
+        } else return false;
+        if (result === undefined || result === null) return false;
+        stream.pointers[Squeak.Stream_position] = index + 1;
+        return this.popNandPushIfOK(argCount + 1, result);
+    },
+    primitiveStreamNextPut: function(argCount) {
+        if (this.streamPrims === false) return false;
+        var value = this.vm.stackValue(0),
+            stream = this.stackNonInteger(1);
+        if (!stream.pointers || stream.pointers.length <= 3) return false;
+        var array = stream.pointers[Squeak.Stream_array],
+            index = stream.pointers[Squeak.Stream_position],
+            limit = stream.pointers[3]; // writeLimit
+        if (typeof index !== "number" || typeof limit !== "number") return false;
+        if (index >= limit || !array || !array.sqClass) return false;
+        if (array.sqClass === this.vm.specialObjects[Squeak.splOb_ClassArray]) {
+            if (!array.pointers || index >= array.pointers.length) return false;
+            array.pointers[index] = value;
+            array.dirty = true;
+        } else if (array.sqClass === this.vm.specialObjects[Squeak.splOb_ClassString]) {
+            if (!array.bytes || index >= array.bytes.length) return false;
+            if (!value || value.sqClass !== this.vm.specialObjects[Squeak.splOb_ClassCharacter]) return false;
+            var ascii = this.charToInt(value);
+            if (typeof ascii !== "number" || ascii < 0 || ascii > 255) return false;
+            array.bytes[index] = ascii;
+        } else return false;
+        stream.pointers[Squeak.Stream_position] = index + 1;
+        return this.popNandPushIfOK(argCount + 1, value);
+    },
+    primitiveStreamAtEnd: function(argCount) {
+        if (this.streamPrims === false) return false;
+        var stream = this.stackNonInteger(0);
+        if (!stream.pointers || stream.pointers.length <= Squeak.Stream_limit) return false;
+        var index = stream.pointers[Squeak.Stream_position],
+            limit = stream.pointers[Squeak.Stream_limit];
+        if (typeof index !== "number" || typeof limit !== "number") return false;
+        return this.popNandPushIfOK(argCount + 1, index >= limit ? this.vm.trueObj : this.vm.falseObj);
+    },
     objectAt: function(cameFromBytecode, convertChars, includeInstVars) {
         //Returns result of at: or sets success false
         var array = this.stackNonInteger(1);
@@ -1043,7 +1217,8 @@ Object.subclass('Squeak.Primitives',
         if (array.isBytes()) // bytes...
             if (info.convertChars) return this.charFromInt(array.bytes[index-1] & 0xFF);
             else return array.bytes[index-1] & 0xFF;
-        // methods must simulate Squeak's method indexing
+        // methods must simulate Squeak's method indexing (4 bytes/literal even in 64-bit
+        // images — pcs are normalized at load, see vm.image.js fixPCs)
         var offset = array.pointersSize() * 4;
         if (index-1-offset < 0) {this.success = false; return array;} //reading lits as bytes
         return array.bytes[index-1-offset] & 0xFF;
@@ -1107,7 +1282,8 @@ Object.subclass('Squeak.Primitives',
         if (intToPut<0 || intToPut>255) {this.success = false; return objToPut;}
         if (array.isBytes())  // bytes...
             {array.bytes[index-1] = intToPut; return objToPut;}
-        // methods must simulate Squeak's method indexing
+        // methods must simulate Squeak's method indexing (4 bytes/literal even in 64-bit
+        // images — pcs are normalized at load, see vm.image.js fixPCs)
         var offset = array.pointersSize() * 4;
         if (index-1-offset < 0) {this.success = false; return array;} //writing lits as bytes
         array.bytes[index-1-offset] = intToPut;
@@ -1344,7 +1520,7 @@ Object.subclass('Squeak.Primitives',
             primIdx = this.stackInteger(1);
         if (!this.success) return false;
         var arraySize = argumentArray.pointersSize(),
-            cntxSize = this.vm.activeContext.pointersSize();
+            cntxSize = this.vm.activeContextObj().pointersSize();
         if (this.vm.sp + arraySize >= cntxSize) return false;
         // Pop primIndex and argArray, then push args in place...
         this.vm.popN(2);
@@ -1365,7 +1541,7 @@ Object.subclass('Squeak.Primitives',
             primMethod = this.stackNonInteger(2);
         if (!this.success) return false;
         var arraySize = argumentArray.pointersSize(),
-            cntxSize = this.vm.activeContext.pointersSize();
+            cntxSize = this.vm.activeContextObj().pointersSize();
         if (this.vm.sp + arraySize >= cntxSize) return false;
         // Pop primIndex, rcvr, and argArray, then push new receiver and args in place...
         this.vm.popN(3);
@@ -1470,6 +1646,11 @@ Object.subclass('Squeak.Primitives',
         if (argCount > 1) copyHash = this.stackBoolean(argCount-2);
         if (!this.success) return false;
         this.success = this.vm.image.bulkBecome(rcvr.pointers, arg.pointers, doBothWays, copyHash);
+        // become may have swapped the active context's pointers array
+        if (!this.vm.useStackZone) {
+            this.vm.stack = this.vm.activeContext.pointers;
+            this.vm.temps = this.vm.homeContext.pointers;
+        }
         return this.popNIfOK(argCount);
     },
     doStringReplace: function() {
@@ -1584,11 +1765,11 @@ Object.subclass('Squeak.Primitives',
         if (typeof blockArgCount !== "number") return false;
         if (blockArgCount != argCount) return false;
         if (!block.pointers[Squeak.BlockContext_caller].isNil) return false;
-        this.vm.arrayCopy(this.vm.activeContext.pointers, this.vm.sp-argCount+1, block.pointers, Squeak.Context_tempFrameStart, argCount);
+        this.vm.arrayCopy(this.vm.stack, this.vm.sp-argCount+1, block.pointers, Squeak.Context_tempFrameStart, argCount);
         var initialIP = block.pointers[Squeak.BlockContext_initialIP];
         block.pointers[Squeak.Context_instructionPointer] = initialIP;
         block.pointers[Squeak.Context_stackPointer] = argCount;
-        block.pointers[Squeak.BlockContext_caller] = this.vm.activeContext;
+        block.pointers[Squeak.BlockContext_caller] = this.vm.activeContextObj();
         this.vm.popN(argCount+1);
         this.vm.newActiveContext(block);
         if (this.vm.interruptCheckCounter-- <= 0) this.vm.checkForInterrupts();
@@ -1607,7 +1788,7 @@ Object.subclass('Squeak.Primitives',
         var initialIP = block.pointers[Squeak.BlockContext_initialIP];
         block.pointers[Squeak.Context_instructionPointer] = initialIP;
         block.pointers[Squeak.Context_stackPointer] = blockArgCount;
-        block.pointers[Squeak.BlockContext_caller] = this.vm.activeContext;
+        block.pointers[Squeak.BlockContext_caller] = this.vm.activeContextObj();
         this.vm.popN(argCount+1);
         this.vm.newActiveContext(block);
         if (this.vm.interruptCheckCounter-- <= 0) this.vm.checkForInterrupts();
@@ -1770,7 +1951,7 @@ Object.subclass('Squeak.Primitives',
         var oldProc = sched.pointers[Squeak.ProcSched_activeProcess];
         sched.pointers[Squeak.ProcSched_activeProcess] = newProc;
         sched.dirty = true;
-        oldProc.pointers[Squeak.Proc_suspendedContext] = this.vm.activeContext;
+        oldProc.pointers[Squeak.Proc_suspendedContext] = this.vm.activeContextObj();
         oldProc.dirty = true;
         this.vm.newActiveContext(newProc.pointers[Squeak.Proc_suspendedContext]);
         newProc.pointers[Squeak.Proc_suspendedContext] = this.vm.nilObj;
@@ -2146,10 +2327,39 @@ Object.subclass('Squeak.Primitives',
         this.vm.popN(argCount);
         return true;
     },
+    primitiveInterpreterSourceVersion: function(argCount) {
+        // Pharo parses this via (version splitOn: 'Date: ') second asDate, and
+        // DiskStore>>checkVMVersion requires that date >= 2019-01-05 — otherwise the
+        // error aborts DiskStore's startUp before it sets its working directory
+        // (breaking FileSystem workingDirectory and startup scripts). Use the same
+        // "<version> Date: <iso date>" shape the real VM (and our attribute 1009) uses.
+        return this.popNandPushIfOK(argCount + 1, this.makeStString(Squeak.vmVersion + " Date: " + Squeak.vmDate));
+    },
+    primitiveGetCurrentWorkingDirectory: function(argCount) {
+        // Pharo's working-directory primitive (empty-module VM primitive, distinct
+        // from Cuis's FilePlugin.primitiveGetWorkingDirectory). Report our virtual
+        // FS root as a UTF-8 String.
+        var cwd = Squeak.workingDirectory || Squeak.vmPath || "/";
+        return this.popNandPushIfOK(argCount + 1, this.makeStString(this.filenameToSqueak(cwd)));
+    },
+    primitiveGetenv: function(argCount) {
+        // Pharo's UnixResolver reads HOME / TEMP / USER at startup to locate its
+        // work directories ("origin"). We expose a Unix-like FS rooted at "/", so
+        // hand back "/" for the home/temp vars (nil for the rest → Pharo derives
+        // XDG_* etc. from HOME). Without this it errors: "Can't find the requested origin".
+        var nameObj = this.stackNonInteger(0);
+        if (!this.success) return false;
+        var name = nameObj.bytesAsString();
+        var env = { HOME: "/", PWD: "/", TEMP: "/", TMP: "/", TMPDIR: "/",
+                    USER: "squeak", LOGNAME: "squeak" };
+        var val = env.hasOwnProperty(name) ? env[name] : null;
+        var result = val == null ? this.vm.nilObj : this.makeStString(val);
+        return this.popNandPushIfOK(argCount + 1, result);
+    },
     primitiveSnapshot: function(argCount) {
         this.vm.popNandPush(1, this.vm.trueObj);        // put true on stack for saved snapshot
         this.vm.storeContextRegisters();                // store current state for snapshot
-        this.activeProcess().pointers[Squeak.Proc_suspendedContext] = this.vm.activeContext; // store initial context
+        this.activeProcess().pointers[Squeak.Proc_suspendedContext] = this.vm.activeContextObj(); // store initial context
         this.vm.image.fullGC("snapshot");               // before cleanup so traversal works
         var buffer = this.vm.image.writeToBuffer();
         // Write snapshot if files are supported

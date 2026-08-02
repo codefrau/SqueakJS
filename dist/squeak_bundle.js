@@ -2919,10 +2919,15 @@
                 {method: "SmalltalkImage>>wordSize", literal: {index: 1, old: 8, hack: 4, skip: this.nilObj}, enabled: true},
                 // Squeak 5.3 disable wizard by replacing #open send with pop
                 {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {pc: 28, old: 0xD8, hack: 0x87}, enabled: !sista & this.options.wizard===false},
-                // Squeak 6.0 disable wizard by replacing #openWelcomeWorkspacesWith: send with pop
+                // Squeak 6.0 disable wizard by replacing #open send with pop
                 {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {closure: 9, pc: 5, old: 0x81, hack: 0xD8}, enabled: sista & this.options.wizard===false},
-                // Squeak 6.0 disable welcome workspace by replacing #open send with pop
+                // Squeak 6.1 disable wizard by replacing #open send with pop
+                {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {closure: 9, pc: 24, old: 0x89, hack: 0xD8}, enabled: sista & this.options.wizard===false},
+                // Squeak 6.0 disable welcome workspace by replacing #openWelcomeWorkspacesWith: send with pop
                 {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {closure: 9, pc: 2, old: 0x90, hack: 0xD8}, enabled: sista & this.options.welcome===false},
+                // Squeak 6.1 disable welcome workspaces by replacing #openWelcomeWorkspacesWith: and #openObjectlandStarter sends with pop
+                {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {closure: 9, pc: 15, old: 0x93, hack: 0xD8}, enabled: sista & this.options.welcome===false},
+                {method: "ReleaseBuilder class>>prepareEnvironment", bytecode: {closure: 9, pc: 18, old: 0x85, hack: 0xD8}, enabled: sista & this.options.welcome===false},
                 // Squeak source file should use UTF8 not MacRoman (both V3 and Sista)
                 {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 53, old: 0x45, hack: 0x49}, enabled: !this.image.isSpur},
                 {method: "Latin1Environment class>>systemConverterClass", bytecode: {pc: 38, old: 0x16, hack: 0x13}, enabled: this.image.isSpur && sista},

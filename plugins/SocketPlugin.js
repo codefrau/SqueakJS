@@ -225,7 +225,7 @@ function SocketPlugin() {
           // Remove request from send buffer
           var endOfRequestIndex = this.sendBuffer.findIndex(function(element, index, array) {
             // Check for presence of "\r\n\r\n" denoting the end of the request (do simplistic but fast check)
-            return array[index] === "\r" && array[index + 2] === "\r" && array[index + 1] === "\n" && array[index + 3] === "\n";
+            return array[index] === 13 && array[index + 2] === 13 && array[index + 1] === 10 && array[index + 3] === 10;
           });
           if (endOfRequestIndex >= 0) {
             this.sendBuffer = this.sendBuffer.subarray(endOfRequestIndex + 4);
@@ -761,7 +761,7 @@ function SocketPlugin() {
       } else {
 
         // Perform DNS request
-        var dnsQueryURL = "https://9.9.9.9:5053/dns-query?name=" + encodeURIComponent(this.lastLookup) + "&type=A";
+        var dnsQueryURL = "https://one.one.one.one/dns-query?name=" + encodeURIComponent(this.lastLookup) + "&type=A";
         var queryStarted = false;
         if (self.fetch) {
           var thisHandle = this;
